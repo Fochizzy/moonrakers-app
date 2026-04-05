@@ -1,0 +1,78 @@
+import { useMemo } from 'react';
+
+import { useStore } from '@/store/useStore';
+
+import { generateInsights } from './insights';
+import { predictWinProbability } from './predict';
+import { rankPlayers } from './ranking';
+import { selectPlayerStats } from './selectors';
+import { buildStatHistory } from './statHistory';
+
+export function useAnalytics(playerId?: string) {
+  const games = useStore((s) => s.games);
+  const players = useStore((s) => s.players);
+  const selectedPlayers = useStore((s) => s.selectedPlayers);
+
+  ////////////////////////////////////////////////////////////////////////////
+  // 🎯 CURRENT PLAYER
+  ////////////////////////////////////////////////////////////////////////////
+  const player = players.find((p) => p.id === playerId);
+
+  ////////////////////////////////////////////////////////////////////////////
+  // 📊 STATS
+  ////////////////////////////////////////////////////////////////////////////
+  const stats = useMemo(() => {
+    if (!playerId) return null;
+    return selectPlayerStats(games, playerId);
+  }, [games, playerId]);
+
+  ////////////////////////////////////////////////////////////////////////////
+  // 📈 HISTORY
+  ////////////////////////////////////////////////////////////////////////////
+  const history = useMemo(() => {
+    if (!playerId) return [];
+    return buildStatHistory(games, playerId);
+  }, [games, playerId]);
+
+  ////////////////////////////////////////////////////////////////////////////
+  // 🧠 INSIGHTS
+  ////////////////////////////////////////////////////////////////////////////
+  const insights = useMemo(() => {
+    if (!playerId) return [];
+    return generateInsights(games, playerId);
+  }, [games, playerId]);
+
+  ////////////////////////////////////////////////////////////////////////////
+  // 🏆 RANKINGS
+  ////////////////////////////////////////////////////////////////////////////
+  const rankings = useMemo(() => {
+    return rankPlayers(players);
+  }, [players]);
+
+  ////////////////////////////////////////////////////////////////////////////
+  // 🎯 WIN PROBABILITY
+  ////////////////////////////////////////////////////////////////////////////
+  const winProbability = useMemo(() => {
+    if (!player) return 0;
+
+    const lobby = players.filter((p) =>
+      selectedPlayers.includes(p.id)
+    );
+
+    return predictWinProbability({
+      player,
+      players: lobby,
+    });
+  }, [player, selectedPlayers, players]);
+
+  ////////////////////////////////////////////////////////////////////////////
+  // 🚀 RETURN
+  ////////////////////////////////////////////////////////////////////////////
+  return {
+    stats,
+    history,
+    insights,
+    rankings,
+    winProbability,
+  };
+}
