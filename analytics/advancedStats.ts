@@ -379,7 +379,7 @@ export function buildCorrelationResults(
 
   const results: CorrelationResult[] = [
     {
-      label: 'Turn Position vs Total Prestige',
+      label: 'Turn Position vs Prestige',
       value: correlation(turnOrders, totalPrestiges),
       strength: getStrengthLabel(correlation(turnOrders, totalPrestiges)),
     },

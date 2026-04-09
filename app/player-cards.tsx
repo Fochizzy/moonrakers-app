@@ -5,12 +5,15 @@ import { useRouter } from 'expo-router';
 import { useStore } from '@/store/useStore';
 import StarryNight from '@/components/ui/StarryNight';
 import Text from '@/components/ui/Text';
-import ColorPlayerCard from '@/app/ColorPlayerCard';
+import ColorPlayerCard from '@/components/ColorPlayerCard';
 
 type PlayerLike = {
   id: string;
   name: string;
   color?: string;
+  initials?: string;
+  assignedCardArtIndex?: number;
+  artIndex?: number;
   elo?: number;
   rating?: number;
   wins?: number;
@@ -249,3 +252,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+

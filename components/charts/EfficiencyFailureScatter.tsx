@@ -1,514 +1,239 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, { Circle, G, Line, Rect, Text as SvgText } from 'react-native-svg';
+import React, { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+import Svg, { Circle, Line, Rect, Text as SvgText } from "react-native-svg";
+import Text from "@/components/ui/Text";
+import { getChartMetricValue } from "@/utils/chartMetricValue";
 
-import Text from '@/components/ui/Text';
-import ChartShell from './ChartShell';
-import ChartLegend from './ChartLegend';
-import { chartColors, withAlpha } from '@/utils/chartTheme';
-
-type Player = { id: string; name: string; color?: string };
-
-type Totals = {
-  totalPrestige?: number;
-  prestige?: number;
-  directPrestige?: number;
-  assistPrestigeReceived?: number;
-  objectivePrestige?: number;
-  assists?: number;
-  assistsGiven?: number;
-  assistPrestigeGiven?: number;
-  failures?: number;
-  contracts?: number;
-  score?: number;
-  winRate?: number;
-  earlyLeadFrequency?: number;
-  finalWinRate?: number;
-  assistedEfficiency?: number;
-  assistEfficiency?: number;
-  efficiency?: number;
+type Player = { id: string; name?: string; color?: string };
+type SnapshotPoint = {
+  round?: number;
+  gameIndex?: number;
+  label?: string;
+  snapshot: Record<string, Record<string, number> | unknown>;
 };
-
-type Game = {
-  id?: string | number;
-  players?: Array<{ id: string; name?: string }>;
-  totals?: Record<string, Totals>;
-  winnerId?: string;
-  selectedWinnerId?: string;
-  manualWinnerId?: string;
-};
-
-type AggregateMetric = {
-  playerId: string;
-  name: string;
-  color?: string;
-  efficiency: number;
-  contractFailureRatio: number;
-  winRate: number;
-  gamesPlayed: number;
-  assistedEfficiency?: number;
-  assistsGivenPerGame?: number;
-  assistsReceivedPerGame?: number;
-  earlyLeadFrequency?: number;
-  finalWinRate?: number;
-};
-
 type Props = {
-  metrics?: AggregateMetric[];
-  games?: Game[];
+  data?: SnapshotPoint[];
   players?: Player[];
-  initiallySelectedPlayerId?: string | null;
+  scopedPlayerIds?: string[];
+  xMetric?: string;
+  yMetric?: string;
   title?: string;
+  subtitle?: string;
 };
 
-type ScatterModeKey =
-  | 'efficiency_vs_winRate'
-  | 'assistedEfficiency_vs_winRate'
-  | 'contractFailure_vs_winRate'
-  | 'assistsGiven_vs_winRate'
-  | 'assistsReceived_vs_winRate'
-  | 'earlyLead_vs_finalWinRate';
+const W = 340;
+const H = 260;
+const PAD = 30;
 
-type ScatterModeConfig = {
-  label: string;
-  xKey: keyof AggregateMetric;
-  yKey: keyof AggregateMetric;
-  xLabel: string;
-  yLabel: string;
-  xPercent?: boolean;
-  yPercent?: boolean;
-  quadrantLabels: {
-    topLeft: string;
-    topRight: string;
-    bottomLeft: string;
-    bottomRight: string;
-  };
+const COLORS = {
+  card: "rgba(12,18,38,0.92)",
+  cardAlt: "rgba(16,24,48,0.95)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  border: "rgba(255,255,255,0.08)",
 };
 
-type ScatterPoint = {
-  id: string;
-  name: string;
-  colorValue: string;
-  x: number;
-  y: number;
-  gamesPlayed: number;
-  efficiency: number;
-  contractFailureRatio: number;
-  winRate: number;
-  assistedEfficiency: number;
-  assistsGivenPerGame: number;
-  assistsReceivedPerGame: number;
-  earlyLeadFrequency: number;
-  finalWinRate: number;
-};
-
-const MODES: Record<ScatterModeKey, ScatterModeConfig> = {
-  efficiency_vs_winRate: {
-    label: 'Efficiency vs Win Rate',
-    xKey: 'efficiency',
-    yKey: 'winRate',
-    yPercent: true,
-    xLabel: 'All Contracts Efficiency',
-    yLabel: 'Win Rate',
-    quadrantLabels: {
-      topLeft: 'Efficient, not closing',
-      topRight: 'Elite closer',
-      bottomLeft: 'Low pressure value',
-      bottomRight: 'Volatile scorer',
-    },
-  },
-  assistedEfficiency_vs_winRate: {
-    label: 'Assisted Efficiency vs Win Rate',
-    xKey: 'assistedEfficiency',
-    yKey: 'winRate',
-    yPercent: true,
-    xLabel: 'Assisted Efficiency',
-    yLabel: 'Win Rate',
-    quadrantLabels: {
-      topLeft: 'System value',
-      topRight: 'Team engine',
-      bottomLeft: 'Disconnected',
-      bottomRight: 'Fed but not finishing',
-    },
-  },
-  contractFailure_vs_winRate: {
-    label: 'Failure Ratio vs Win Rate',
-    xKey: 'contractFailureRatio',
-    yKey: 'winRate',
-    yPercent: true,
-    xPercent: true,
-    xLabel: 'Contract Failure Ratio',
-    yLabel: 'Win Rate',
-    quadrantLabels: {
-      topLeft: 'Messy but winning',
-      topRight: 'High-risk table winner',
-      bottomLeft: 'Low-impact safety',
-      bottomRight: 'Risk without payoff',
-    },
-  },
-  assistsGiven_vs_winRate: {
-    label: 'Assists Given / Game vs Win Rate',
-    xKey: 'assistsGivenPerGame',
-    yKey: 'winRate',
-    yPercent: true,
-    xLabel: 'Assists Given / Game',
-    yLabel: 'Win Rate',
-    quadrantLabels: {
-      topLeft: 'Creator, not converting',
-      topRight: 'Playmaking winner',
-      bottomLeft: 'Quiet facilitator',
-      bottomRight: 'Empty volume',
-    },
-  },
-  assistsReceived_vs_winRate: {
-    label: 'Assists Received / Game vs Win Rate',
-    xKey: 'assistsReceivedPerGame',
-    yKey: 'winRate',
-    yPercent: true,
-    xLabel: 'Assists Received / Game',
-    yLabel: 'Win Rate',
-    quadrantLabels: {
-      topLeft: 'Supported but capped',
-      topRight: 'Great finisher',
-      bottomLeft: 'Low involvement',
-      bottomRight: 'Fed but inefficient',
-    },
-  },
-  earlyLead_vs_finalWinRate: {
-    label: 'Early Lead vs Final Win Rate',
-    xKey: 'earlyLeadFrequency',
-    yKey: 'finalWinRate',
-    xPercent: true,
-    yPercent: true,
-    xLabel: 'Early Lead Frequency',
-    yLabel: 'Final Win Rate',
-    quadrantLabels: {
-      topLeft: 'Late closer',
-      topRight: 'Front-runner',
-      bottomLeft: 'Slow starter',
-      bottomRight: 'Fast fade',
-    },
-  },
-};
-
-const W = 344;
-const H = 286;
-const PAD_L = 42;
-const PAD_R = 18;
-const PAD_T = 18;
-const PAD_B = 36;
-
-function n(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function getColor(color?: string, index = 0) {
+  if (typeof color === "string" && color.trim()) return color.trim();
+  const fallback = ["#A855F7", "#3B82F6", "#22C55E", "#3B82F6", "#EF4444"];
+  return fallback[index % fallback.length];
 }
 
-function safeRatio(numerator: number, denominator: number): number {
-  return denominator > 0 ? numerator / denominator : 0;
-}
-
-function getWinnerId(game?: Game): string | null {
-  return game?.manualWinnerId ?? game?.selectedWinnerId ?? game?.winnerId ?? null;
-}
-
-function getPlayerColor(color?: string): string {
-  return typeof color === 'string' && color.trim() ? color : chartColors.purple;
-}
-
-function mean(values: number[]): number {
-  const clean = values.filter(Number.isFinite);
-  return clean.length ? clean.reduce((s, v) => s + v, 0) / clean.length : 0;
-}
-
-function correlation(xs: number[], ys: number[]): number {
-  if (xs.length !== ys.length || xs.length < 2) return 0;
-  const mx = mean(xs);
-  const my = mean(ys);
-  let numerator = 0;
-  let xSpread = 0;
-  let ySpread = 0;
-  for (let i = 0; i < xs.length; i += 1) {
-    const dx = xs[i] - mx;
-    const dy = ys[i] - my;
-    numerator += dx * dy;
-    xSpread += dx * dx;
-    ySpread += dy * dy;
-  }
-  const denominator = Math.sqrt(xSpread * ySpread);
-  return denominator > 0 ? numerator / denominator : 0;
-}
-
-function formatMetric(value: number, percent = false): string {
-  if (percent) return `${(value * 100).toFixed(1)}%`;
-  return value.toFixed(2);
-}
-
-function buildMetricsFromGames(players: Player[], games: Game[]): AggregateMetric[] {
-  return players.map((player) => {
-    let gamesPlayed = 0;
-    let wins = 0;
-    let totalPrestige = 0;
-    let directPrestige = 0;
-    let assistReceived = 0;
-    let assistsGiven = 0;
-    let contracts = 0;
-    let failures = 0;
-    let earlyLeads = 0;
-
-    for (const game of games) {
-      const totals = game.totals?.[player.id];
-      if (!totals) continue;
-      gamesPlayed += 1;
-      if (getWinnerId(game) === player.id) wins += 1;
-
-      const playerTotalPrestige = n(totals.totalPrestige) || n(totals.prestige) || (n(totals.directPrestige) + n(totals.assistPrestigeReceived) + n(totals.objectivePrestige));
-      totalPrestige += playerTotalPrestige;
-      directPrestige += n(totals.directPrestige);
-      assistReceived += n(totals.assistPrestigeReceived);
-      assistsGiven += n(totals.assistsGiven) || n(totals.assists) || n(totals.assistPrestigeGiven);
-      contracts += n(totals.contracts);
-      failures += n(totals.failures);
-
-      const gamePlayers = (game.players ?? []).map((entry) => entry.id);
-      const leaderPrestige = Math.max(
-        0,
-        ...gamePlayers.map((id) => {
-          const current = game.totals?.[id];
-          return n(current?.totalPrestige) || n(current?.prestige) || (n(current?.directPrestige) + n(current?.assistPrestigeReceived) + n(current?.objectivePrestige));
-        }),
-      );
-      if (playerTotalPrestige > 0 && playerTotalPrestige >= leaderPrestige) {
-        earlyLeads += 1;
-      }
-    }
-
-    const allContractsEfficiency = safeRatio(totalPrestige, contracts + assistsGiven);
-    const assistedEfficiency = safeRatio(assistReceived, assistsGiven);
-    const contractFailureRatio = safeRatio(failures, failures + contracts);
-    const winRate = safeRatio(wins, gamesPlayed);
-    const assistsGivenPerGame = safeRatio(assistsGiven, gamesPlayed);
-    const assistsReceivedPerGame = safeRatio(assistReceived, gamesPlayed);
-    const earlyLeadFrequency = safeRatio(earlyLeads, gamesPlayed);
-
-    return {
-      playerId: player.id,
-      name: player.name,
-      color: player.color,
-      efficiency: n((gamesPlayed && allContractsEfficiency) || n((gamesPlayed && 0))) || allContractsEfficiency,
-      contractFailureRatio,
-      winRate,
-      gamesPlayed,
-      assistedEfficiency: n((gamesPlayed && assistedEfficiency) || 0) || n(undefined) || assistedEfficiency,
-      assistsGivenPerGame,
-      assistsReceivedPerGame,
-      earlyLeadFrequency,
-      finalWinRate: winRate,
-    };
-  }).filter((entry) => entry.gamesPlayed > 0);
-}
-
-function quadrantLabel(point: ScatterPoint | null, meanX: number, meanY: number, mode: ScatterModeConfig): string {
-  if (!point) return 'No selection';
-  if (point.x >= meanX && point.y >= meanY) return mode.quadrantLabels.topRight;
-  if (point.x < meanX && point.y >= meanY) return mode.quadrantLabels.topLeft;
-  if (point.x < meanX && point.y < meanY) return mode.quadrantLabels.bottomLeft;
-  return mode.quadrantLabels.bottomRight;
-}
-
-function normalizePoints(metrics: AggregateMetric[], mode: ScatterModeConfig): ScatterPoint[] {
-  return metrics
-    .map((metric) => ({
-      id: metric.playerId,
-      name: metric.name,
-      colorValue: getPlayerColor(metric.color),
-      x: n(metric[mode.xKey]),
-      y: n(metric[mode.yKey]),
-      gamesPlayed: n(metric.gamesPlayed),
-      efficiency: n(metric.efficiency),
-      contractFailureRatio: n(metric.contractFailureRatio),
-      winRate: n(metric.winRate),
-      assistedEfficiency: n(metric.assistedEfficiency),
-      assistsGivenPerGame: n(metric.assistsGivenPerGame),
-      assistsReceivedPerGame: n(metric.assistsReceivedPerGame),
-      earlyLeadFrequency: n(metric.earlyLeadFrequency),
-      finalWinRate: n(metric.finalWinRate),
-    }))
-    .filter((row) => row.id && Number.isFinite(row.x) && Number.isFinite(row.y));
+function compact(value: number) {
+  if (Math.abs(value) >= 100) return `${Math.round(value)}`;
+  return value.toFixed(1).replace(/\.0$/, "");
 }
 
 export default function EfficiencyFailureScatter({
-  metrics,
-  games = [],
+  data = [],
   players = [],
-  initiallySelectedPlayerId = null,
-  title = 'Efficiency / Failure Scatter',
+  scopedPlayerIds,
+  xMetric = "failures",
+  yMetric = "efficiency",
+  title = "Efficiency vs Failures",
+  subtitle = "Average per-player positioning across unified snapshots.",
 }: Props) {
-  const aggregateMetrics = useMemo(() => {
-    if (Array.isArray(metrics) && metrics.length) return metrics;
-    return buildMetricsFromGames(players, games);
-  }, [metrics, players, games]);
+  const visiblePlayers = useMemo(() => {
+    if (!scopedPlayerIds?.length) return players;
+    const allowed = new Set(scopedPlayerIds.map(String));
+    return players.filter((p) => allowed.has(String(p.id)));
+  }, [players, scopedPlayerIds]);
 
-  const [modeKey, setModeKey] = useState<ScatterModeKey>('efficiency_vs_winRate');
-  const [selectedId, setSelectedId] = useState<string | null>(initiallySelectedPlayerId);
+  const points = useMemo(
+    () =>
+      visiblePlayers.map((p, index) => {
+        let x = 0;
+        let y = 0;
+        let count = 0;
 
-  const mode = MODES[modeKey];
-  const points = useMemo(() => normalizePoints(aggregateMetrics, mode), [aggregateMetrics, mode]);
+        for (const snap of data) {
+          const entry = snap?.snapshot?.[p.id];
+          if (entry == null) continue;
+          x += getChartMetricValue(entry, xMetric);
+          y += getChartMetricValue(entry, yMetric);
+          count += 1;
+        }
 
-  useEffect(() => {
-    if (!points.length) {
-      setSelectedId(null);
-      return;
-    }
-    if (!points.some((point) => point.id === selectedId)) {
-      setSelectedId(initiallySelectedPlayerId ?? points[0].id);
-    }
-  }, [points, selectedId, initiallySelectedPlayerId]);
+        return {
+          id: p.id,
+          name: p.name || `Player ${index + 1}`,
+          color: getColor(p.color, index),
+          x: count ? x / count : 0,
+          y: count ? y / count : 0,
+        };
+      }),
+    [data, visiblePlayers, xMetric, yMetric]
+  );
 
-  const selected = points.find((point) => point.id === selectedId) ?? points[0] ?? null;
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const maxX = Math.max(1, ...xs, 0);
-  const maxY = Math.max(1, ...ys, 0);
-  const meanX = mean(xs);
-  const meanY = mean(ys);
-  const corr = correlation(xs, ys);
+  const maxX = Math.max(1, ...points.map((p) => p.x));
+  const maxY = Math.max(1, ...points.map((p) => p.y));
+  const meanX = points.reduce((s, p) => s + p.x, 0) / Math.max(points.length, 1);
+  const meanY = points.reduce((s, p) => s + p.y, 0) / Math.max(points.length, 1);
+  const chartW = W - PAD * 2;
+  const chartH = H - PAD * 2;
 
-  const chartW = W - PAD_L - PAD_R;
-  const chartH = H - PAD_T - PAD_B;
-  const xPos = (value: number) => PAD_L + (value / maxX) * chartW;
-  const yPos = (value: number) => PAD_T + chartH - (value / maxY) * chartH;
-
-  const legendItems = points.map((point) => ({
-    key: point.id,
-    label: point.name,
-    color: point.colorValue,
-    value: `${point.gamesPlayed}g`,
-  }));
-
-  const topStats = selected
-    ? [
-        { label: mode.xLabel, value: formatMetric(selected.x, !!mode.xPercent) },
-        { label: mode.yLabel, value: formatMetric(selected.y, !!mode.yPercent) },
-        { label: 'Games', value: String(selected.gamesPlayed) },
-        { label: 'Quadrant', value: quadrantLabel(selected, meanX, meanY, mode) },
-      ]
-    : undefined;
+  const xPos = (v: number) => PAD + (v / maxX) * chartW;
+  const yPos = (v: number) => PAD + chartH - (v / maxY) * chartH;
 
   if (!points.length) {
     return (
-      <ChartShell
-        title={title}
-        subtitle="Mode-driven scatter for efficiency, support, failure pressure, and conversion."
-        explanation="Each point is a player built from merged saved and imported game totals."
-        meaning="Point size grows with sample size."
-      >
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Not enough data for scatter plot yet.</Text>
-        </View>
-      </ChartShell>
+      <View style={styles.sectionCompact}>
+        <Text style={styles.emptyTitle}>No scatter data yet</Text>
+        <Text style={styles.emptyText}>
+          Add games or scope more players to render the scatter chart.
+        </Text>
+      </View>
     );
   }
 
   return (
-    <ChartShell
-      title={title}
-      subtitle="Mode-driven scatter for efficiency, support, failure pressure, and conversion."
-      playerColor={selected?.colorValue}
-      badge={`${points.length} players`}
-      topStats={topStats}
-      explanation="The X axis changes with the selected mode. The Y axis is either win rate or final win rate."
-      meaning="Upper-right is usually the healthiest quadrant for the selected relationship."
-      legend={<ChartLegend items={legendItems} activeKey={selected?.id ?? null} onPressItem={setSelectedId} />}
-    >
-      <View style={styles.modeRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modeRowContent}>
-          {(Object.entries(MODES) as Array<[ScatterModeKey, ScatterModeConfig]>).map(([key, config]) => {
-            const active = key === modeKey;
-            return (
-              <Pressable key={key} onPress={() => setModeKey(key)} style={[styles.modePill, active && styles.modePillActive]}>
-                <Text style={[styles.modePillText, active && styles.modePillTextActive]}>{config.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+    <View style={styles.container}>
+      <View style={styles.sectionCompact}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={styles.sectionSub}>
+            {xMetric} × {yMetric}
+          </Text>
+        </View>
+        <Text style={styles.subtitle}>{subtitle}</Text>
       </View>
 
-      <Svg width={W} height={H}>
-        <Rect x={0} y={0} width={W} height={H} rx={18} fill={chartColors.panelBg} stroke={chartColors.borderStrong} />
-        <Line x1={PAD_L} y1={PAD_T + chartH} x2={PAD_L + chartW} y2={PAD_T + chartH} stroke={chartColors.borderStrong} />
-        <Line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T + chartH} stroke={chartColors.borderStrong} />
-        <Line x1={xPos(meanX)} y1={PAD_T} x2={xPos(meanX)} y2={PAD_T + chartH} stroke={withAlpha(chartColors.text, 0.18)} strokeDasharray="4 4" />
-        <Line x1={PAD_L} y1={yPos(meanY)} x2={PAD_L + chartW} y2={yPos(meanY)} stroke={withAlpha(chartColors.text, 0.18)} strokeDasharray="4 4" />
+      <View style={styles.sectionCompact}>
+        <Svg width={W} height={H}>
+          <Rect
+            x={0}
+            y={0}
+            width={W}
+            height={H}
+            rx={16}
+            fill={COLORS.cardAlt}
+            stroke={COLORS.border}
+          />
 
-        <SvgText x={PAD_L + chartW / 2} y={H - 10} fill={chartColors.subtext} fontSize="11" textAnchor="middle">{mode.xLabel}</SvgText>
-        <SvgText x={16} y={PAD_T + chartH / 2} fill={chartColors.subtext} fontSize="11" textAnchor="middle" rotation={-90} origin="16,143">{mode.yLabel}</SvgText>
+          <Line
+            x1={PAD}
+            y1={H - PAD}
+            x2={W - PAD}
+            y2={H - PAD}
+            stroke="rgba(255,255,255,0.18)"
+          />
+          <Line
+            x1={PAD}
+            y1={PAD}
+            x2={PAD}
+            y2={H - PAD}
+            stroke="rgba(255,255,255,0.18)"
+          />
 
-        <SvgText x={PAD_L + 4} y={PAD_T + 12} fill={chartColors.subtext} fontSize="10">{mode.quadrantLabels.topLeft}</SvgText>
-        <SvgText x={PAD_L + chartW - 4} y={PAD_T + 12} fill={chartColors.subtext} fontSize="10" textAnchor="end">{mode.quadrantLabels.topRight}</SvgText>
-        <SvgText x={PAD_L + 4} y={PAD_T + chartH - 6} fill={chartColors.subtext} fontSize="10">{mode.quadrantLabels.bottomLeft}</SvgText>
-        <SvgText x={PAD_L + chartW - 4} y={PAD_T + chartH - 6} fill={chartColors.subtext} fontSize="10" textAnchor="end">{mode.quadrantLabels.bottomRight}</SvgText>
+          <Line
+            x1={xPos(meanX)}
+            y1={PAD}
+            x2={xPos(meanX)}
+            y2={H - PAD}
+            stroke="rgba(255,255,255,0.10)"
+            strokeDasharray="4 4"
+          />
+          <Line
+            x1={PAD}
+            y1={yPos(meanY)}
+            x2={W - PAD}
+            y2={yPos(meanY)}
+            stroke="rgba(255,255,255,0.10)"
+            strokeDasharray="4 4"
+          />
 
-        {points.map((point) => {
-          const cx = xPos(point.x);
-          const cy = yPos(point.y);
-          const active = point.id === selected?.id;
-          const radius = Math.max(5, Math.min(12, 4 + point.gamesPlayed * 0.4));
-          return (
-            <G key={point.id}>
-              {active ? <Circle cx={cx} cy={cy} r={radius + 5} fill={withAlpha(point.colorValue, 0.18)} /> : null}
-              <Circle cx={cx} cy={cy} r={radius} fill={point.colorValue} stroke="#ffffff" strokeWidth={active ? 2 : 1} onPress={() => setSelectedId(point.id)} />
-              <SvgText x={cx} y={cy - radius - 5} fill={active ? chartColors.text : chartColors.subtext} fontSize="10" fontWeight={active ? '700' : '500'} textAnchor="middle">{point.name}</SvgText>
-            </G>
-          );
-        })}
-      </Svg>
+          <SvgText x={PAD} y={H - 8} fill={COLORS.sub} fontSize="10">
+            0
+          </SvgText>
+          <SvgText x={W - PAD} y={H - 8} fill={COLORS.sub} fontSize="10" textAnchor="end">
+            {compact(maxX)}
+          </SvgText>
+          <SvgText x={12} y={PAD + 4} fill={COLORS.sub} fontSize="10">
+            {compact(maxY)}
+          </SvgText>
 
-      {selected ? (
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>{selected.name}</Text>
-          <Text style={styles.summaryText}>
-            {quadrantLabel(selected, meanX, meanY, mode)} · correlation {corr >= 0 ? '+' : ''}{corr.toFixed(2)}
-          </Text>
-          <View style={styles.metricGrid}>
-            <View style={styles.metricBox}><Text style={styles.metricLabel}>Efficiency</Text><Text style={styles.metricValue}>{selected.efficiency.toFixed(2)}</Text></View>
-            <View style={styles.metricBox}><Text style={styles.metricLabel}>Assisted Eff.</Text><Text style={styles.metricValue}>{selected.assistedEfficiency.toFixed(2)}</Text></View>
-            <View style={styles.metricBox}><Text style={styles.metricLabel}>Failure Ratio</Text><Text style={styles.metricValue}>{formatMetric(selected.contractFailureRatio, true)}</Text></View>
-            <View style={styles.metricBox}><Text style={styles.metricLabel}>Win Rate</Text><Text style={styles.metricValue}>{formatMetric(selected.winRate, true)}</Text></View>
-          </View>
-        </View>
-      ) : null}
-    </ChartShell>
+          {points.map((point) => (
+            <React.Fragment key={point.id}>
+              <Circle cx={xPos(point.x)} cy={yPos(point.y)} r={5} fill={point.color} />
+              <SvgText
+                x={xPos(point.x)}
+                y={yPos(point.y) - 10}
+                fill={COLORS.text}
+                fontSize="10"
+                textAnchor="middle"
+              >
+                {point.name}
+              </SvgText>
+            </React.Fragment>
+          ))}
+        </Svg>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  modeRow: { marginBottom: 10 },
-  modeRowContent: { gap: 8, paddingRight: 12 },
-  modePill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    backgroundColor: chartColors.panelBg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  modePillActive: { borderColor: chartColors.purple, backgroundColor: withAlpha(chartColors.purple, 0.18) },
-  modePillText: { color: chartColors.subtext, fontSize: 12, fontWeight: '800' },
-  modePillTextActive: { color: chartColors.text },
-  emptyCard: { borderRadius: 16, padding: 18, backgroundColor: chartColors.panelBg, borderWidth: 1, borderColor: chartColors.borderStrong },
-  emptyText: { color: chartColors.subtext, fontSize: 13, fontWeight: '700' },
-  summaryCard: {
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
+  container: {
     gap: 10,
   },
-  summaryTitle: { color: chartColors.text, fontSize: 16, fontWeight: '900' },
-  summaryText: { color: chartColors.subtext, fontSize: 12, lineHeight: 18 },
-  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  metricBox: { minWidth: 120, flexGrow: 1, borderRadius: 12, padding: 10, backgroundColor: withAlpha(chartColors.text, 0.04) },
-  metricLabel: { color: chartColors.subtext, fontSize: 11, fontWeight: '700', marginBottom: 4 },
-  metricValue: { color: chartColors.text, fontSize: 15, fontWeight: '900' },
+  sectionCompact: {
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  sectionSub: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  subtitle: {
+    color: COLORS.sub,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  emptyTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  emptyText: {
+    color: COLORS.sub,
+    fontSize: 12,
+    lineHeight: 18,
+  },
 });
+

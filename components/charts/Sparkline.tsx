@@ -1,148 +1,36 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
 
-import Text from '@/components/ui/Text';
-import { chartColors, withAlpha } from '@/utils/chartTheme';
+import Text from "@/components/ui/Text";
+import { chartColors, withAlpha } from "@/utils/chartTheme";
+import {
+  PLAYER_METRICS,
+  type MetricCategory,
+  type MetricDefinition,
+} from "@/utils/metricMap";
 
-type SparkDatum = number | { value: number; label?: string };
+import {
+  buildComparisonNarrative,
+  buildGeometry,
+  buildNarrative,
+  clamp,
+  computeMetrics,
+  defaultCompactValueFormatter,
+  defaultPercentFormatter,
+  defaultSelectionFormatter,
+  defaultValueFormatter,
+  getInitialIndex,
+  mergeDomain,
+  normalizeData,
+} from "./sparklineAnalytics";
 
-type NormalizedSparkDatum = {
-  value: number;
-  label?: string;
-};
-
-type SparkPoint = {
-  index: number;
-  value: number;
-  label?: string;
-  x: number;
-  y: number;
-};
-
-type SparklineGeometry = {
-  path: string;
-  points: SparkPoint[];
-  baselineY: number;
-};
-
-type TrendDirection = 'rising' | 'falling' | 'flat';
-type VolatilityLevel = 'low' | 'medium' | 'high';
-
-type SparklineMetrics = {
-  current: number;
-  previous: number | null;
-  first: number;
-  min: number;
-  minIndex: number;
-  max: number;
-  maxIndex: number;
-  average: number;
-  median: number;
-  range: number;
-  sum: number;
-  changeFromStart: number;
-  percentChangeFromStart: number | null;
-  changeFromPrevious: number | null;
-  percentChangeFromPrevious: number | null;
-  trendDirection: TrendDirection;
-  slope: number;
-  volatilityValue: number;
-  volatilityLevel: VolatilityLevel;
-  distanceFromPeak: number;
-  percentBelowPeak: number | null;
-  currentVsAverage: number;
-  currentPercentVsAverage: number | null;
-  risingSteps: number;
-  fallingSteps: number;
-  directionChanges: number;
-  latestPercentile: number;
-  recentAverage: number;
-  recentChange: number;
-  recentTrendDirection: TrendDirection;
-};
-
-type SparklineNarrative = {
-  headline: string;
-  bullets: string[];
-  tags: string[];
-};
-
-type ComparisonNarrative = {
-  headline: string;
-  bullets: string[];
-  tags: string[];
-};
-
-type SelectionPoint = {
-  index: number;
-  value: number;
-  label?: string;
-};
-
-export type SparkMetricOption = {
-  key: string;
-  label: string;
-  shortLabel?: string;
-};
-
-export const DEFAULT_SPARK_METRIC_OPTIONS: SparkMetricOption[] = [
-  { key: 'prestige', shortLabel: 'Prestige', label: 'Total Prestige' },
-  { key: 'score', shortLabel: 'Score', label: 'Score' },
-  { key: 'assists', shortLabel: 'Assists', label: 'Assists' },
-  { key: 'contracts', shortLabel: 'Contracts', label: 'Contracts' },
-  { key: 'failures', shortLabel: 'Failures', label: 'Failures' },
-  { key: 'efficiency', shortLabel: 'Efficiency', label: 'Efficiency' },
-  { key: 'winRate', shortLabel: 'Win %', label: 'Win Rate' },
-  { key: 'directPrestige', shortLabel: 'Direct', label: 'Direct Prestige' },
-  { key: 'assistPrestige', shortLabel: 'Assist', label: 'Assisted Prestige' },
-  { key: 'objectivePrestige', shortLabel: 'Objective', label: 'Objective Prestige' },
-];
-
-type SparklineProps = Readonly<{
-  data?: readonly SparkDatum[];
-  comparisonData?: readonly SparkDatum[];
-
-  metricOptions?: readonly SparkMetricOption[];
-  metricSeriesMap?: Record<string, readonly SparkDatum[] | undefined>;
-  comparisonMetricSeriesMap?: Record<string, readonly SparkDatum[] | undefined>;
-  activeMetricKey?: string;
-  defaultMetricKey?: string;
-  onChangeMetric?: (metricKey: string) => void;
-  showMetricSelector?: boolean;
-  metricTitle?: string;
-
-  color?: string;
-  comparisonColor?: string;
-  primaryLabel?: string;
-  comparisonLabel?: string;
-  height?: number;
-  width?: number;
-  strokeWidth?: number;
-  padding?: number;
-  pointRadius?: number;
-  selectedPointRadius?: number;
-  pointHitRadius?: number;
-  recentWindow?: number;
-  showBaseline?: boolean;
-  showLatestButton?: boolean;
-  hideLatestWhenSelected?: boolean;
-  showValueLabel?: boolean;
-  showSummary?: boolean;
-  showStatsRow?: boolean;
-  showNarrative?: boolean;
-  showHowItWorks?: boolean;
-  selectedIndex?: number | null;
-  defaultSelectedIndex?: number | null;
-  onSelectIndex?: (index: number, point: { value: number; label?: string }) => void;
-  valueFormatter?: (value: number) => string;
-  compactValueFormatter?: (value: number) => string;
-  percentFormatter?: (value: number) => string;
-  selectionFormatter?: (point: SelectionPoint, metrics: SparklineMetrics) => string;
-  latestButtonLabel?: string;
-  emptyLabel?: string;
-  narrativeTitle?: string;
-}>;
+import type {
+  SelectionPoint,
+  SparkDatum,
+  SparkMetricOption,
+  SparklineProps,
+} from "./sparklineTypes";
 
 const DEFAULT_HEIGHT = 56;
 const DEFAULT_WIDTH = 280;
@@ -153,548 +41,110 @@ const DEFAULT_SELECTED_POINT_RADIUS = 4.5;
 const DEFAULT_POINT_HIT_RADIUS = 14;
 const DEFAULT_RECENT_WINDOW = 3;
 
-function toFiniteNumber(value: unknown, fallback = 0): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
+const COLORS = {
+  card: "rgba(12,18,38,0.92)",
+  cardAlt: "rgba(16,24,48,0.95)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  muted: "#64748B",
+  accent: "#A855F7",
+  accentSoft: "rgba(168,85,247,0.18)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  green: "#22C55E",
+  greenSoft: "rgba(34,197,94,0.16)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  border: "rgba(255,255,255,0.08)",
+  whiteSoft: "rgba(255,255,255,0.06)",
+};
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function normalizeData(data: readonly SparkDatum[]): NormalizedSparkDatum[] {
-  return data.map((entry) =>
-    typeof entry === 'number'
-      ? { value: toFiniteNumber(entry) }
-      : {
-          value: toFiniteNumber(entry?.value),
-          label: entry?.label,
-        }
-  );
-}
-
-function average(values: readonly number[]): number {
-  if (!values.length) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function median(values: readonly number[]): number {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
-}
-
-function standardDeviation(values: readonly number[]): number {
-  if (values.length <= 1) return 0;
-  const mean = average(values);
-  const variance =
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
-}
-
-function getDomain(values: readonly number[]): { min: number; max: number } {
-  if (!values.length) {
-    return { min: -1, max: 1 };
-  }
-
-  let min = values[0];
-  let max = values[0];
-
-  for (const value of values) {
-    if (value < min) min = value;
-    if (value > max) max = value;
-  }
-
-  if (min === max) {
-    const pad = min === 0 ? 1 : Math.max(1, Math.abs(min) * 0.15);
-    return { min: min - pad, max: max + pad };
-  }
-
-  return { min, max };
-}
-
-function mergeDomain(
-  first: readonly number[],
-  second: readonly number[]
-): { min: number; max: number } {
-  return getDomain([...first, ...second]);
-}
-
-function buildGeometry(args: {
-  values: readonly NormalizedSparkDatum[];
-  width: number;
-  height: number;
-  padding: number;
-  domain: { min: number; max: number };
-}): SparklineGeometry {
-  const { values, width, height, padding, domain } = args;
-
-  if (!values.length) {
-    return {
-      path: '',
-      baselineY: height / 2,
-      points: [],
-    };
-  }
-
-  const left = padding;
-  const right = Math.max(left + 1, width - padding);
-  const top = padding;
-  const bottom = Math.max(top + 1, height - padding);
-  const innerWidth = Math.max(1, right - left);
-  const innerHeight = Math.max(1, bottom - top);
-  const range = Math.max(1e-9, domain.max - domain.min);
-
-  const getX = (index: number) =>
-    values.length <= 1 ? left + innerWidth / 2 : left + (index / (values.length - 1)) * innerWidth;
-
-  const getY = (value: number) =>
-    bottom - ((value - domain.min) / range) * innerHeight;
-
-  const points: SparkPoint[] = values.map((entry, index) => ({
-    index,
-    value: entry.value,
-    label: entry.label,
-    x: getX(index),
-    y: getY(entry.value),
+function buildDefaultMetricOptions(): SparkMetricOption[] {
+  return PLAYER_METRICS.map((metric) => ({
+    key: metric.key,
+    label: metric.label,
+    shortLabel:
+      metric.label.length > 16
+        ? metric.label
+            .replace(" Prestige", "")
+            .replace(" Estimate", "")
+            .replace(" Average ", " Avg ")
+        : metric.label,
   }));
-
-  const path = points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-    .join(' ');
-
-  const baselineValue = domain.min <= 0 && domain.max >= 0 ? 0 : domain.min;
-
-  return {
-    path,
-    baselineY: getY(baselineValue),
-    points,
-  };
 }
 
-function defaultValueFormatter(value: number): string {
-  return value.toFixed(2);
-}
+function buildMetricCategories(metrics: MetricDefinition[]) {
+  const seen = new Set<string>();
+  const categories: string[] = ["All"];
 
-function defaultCompactValueFormatter(value: number): string {
-  if (Math.abs(value) >= 100) return value.toFixed(0);
-  if (Math.abs(value) >= 10) return value.toFixed(1);
-  return value.toFixed(2);
-}
-
-function defaultPercentFormatter(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
-}
-
-function getInitialIndex(length: number, defaultSelectedIndex?: number | null): number | null {
-  if (!length) return null;
-  if (defaultSelectedIndex != null) return clamp(defaultSelectedIndex, 0, length - 1);
-  return length - 1;
-}
-
-function getTrendDirection(change: number, rangeReference: number): TrendDirection {
-  const threshold = Math.max(1e-9, rangeReference * 0.05);
-  if (change > threshold) return 'rising';
-  if (change < -threshold) return 'falling';
-  return 'flat';
-}
-
-function getVolatilityLevel(stdDev: number, avgAbsValue: number): VolatilityLevel {
-  const denominator = Math.max(1, avgAbsValue);
-  const ratio = stdDev / denominator;
-
-  if (ratio < 0.12) return 'low';
-  if (ratio < 0.3) return 'medium';
-  return 'high';
-}
-
-function percentileRank(values: readonly number[], value: number): number {
-  if (!values.length) return 0;
-  const belowOrEqual = values.filter((entry) => entry <= value).length;
-  return (belowOrEqual / values.length) * 100;
-}
-
-function computeMetrics(values: readonly number[], recentWindow: number): SparklineMetrics | null {
-  if (!values.length) return null;
-
-  let min = values[0];
-  let max = values[0];
-  let minIndex = 0;
-  let maxIndex = 0;
-  let risingSteps = 0;
-  let fallingSteps = 0;
-  let directionChanges = 0;
-  let previousStepDirection = 0;
-
-  for (let index = 0; index < values.length; index += 1) {
-    const value = values[index];
-
-    if (value < min) {
-      min = value;
-      minIndex = index;
+  metrics.forEach((metric) => {
+    if (!seen.has(metric.category)) {
+      seen.add(metric.category);
+      categories.push(metric.category);
     }
+  });
 
-    if (value > max) {
-      max = value;
-      maxIndex = index;
-    }
-
-    if (index > 0) {
-      const delta = value - values[index - 1];
-      const stepDirection = delta > 0 ? 1 : delta < 0 ? -1 : 0;
-
-      if (delta > 0) risingSteps += 1;
-      if (delta < 0) fallingSteps += 1;
-
-      if (
-        stepDirection !== 0 &&
-        previousStepDirection !== 0 &&
-        stepDirection !== previousStepDirection
-      ) {
-        directionChanges += 1;
-      }
-
-      if (stepDirection !== 0) {
-        previousStepDirection = stepDirection;
-      }
-    }
-  }
-
-  const current = values[values.length - 1];
-  const previous = values.length > 1 ? values[values.length - 2] : null;
-  const first = values[0];
-  const avg = average(values);
-  const med = median(values);
-  const sum = values.reduce((acc, value) => acc + value, 0);
-  const range = max - min;
-  const changeFromStart = current - first;
-  const percentChangeFromStart =
-    Math.abs(first) > 1e-9 ? (changeFromStart / first) * 100 : null;
-  const changeFromPrevious = previous == null ? null : current - previous;
-  const percentChangeFromPrevious =
-    previous != null && Math.abs(previous) > 1e-9
-      ? ((current - previous) / previous) * 100
-      : null;
-  const slope = values.length <= 1 ? 0 : (current - first) / (values.length - 1);
-  const volatilityValue = standardDeviation(values);
-  const avgAbsValue = average(values.map((value) => Math.abs(value)));
-  const volatilityLevel = getVolatilityLevel(volatilityValue, avgAbsValue);
-  const distanceFromPeak = max - current;
-  const percentBelowPeak =
-    Math.abs(max) > 1e-9 ? ((max - current) / Math.abs(max)) * 100 : null;
-  const currentVsAverage = current - avg;
-  const currentPercentVsAverage =
-    Math.abs(avg) > 1e-9 ? ((current - avg) / Math.abs(avg)) * 100 : null;
-  const latestPercentile = percentileRank(values, current);
-
-  const safeRecentWindow = Math.max(2, Math.min(recentWindow, values.length));
-  const recentValues = values.slice(-safeRecentWindow);
-  const recentAverage = average(recentValues);
-  const recentChange = recentValues[recentValues.length - 1] - recentValues[0];
-  const recentTrendDirection = getTrendDirection(
-    recentChange,
-    range || Math.abs(current) || 1
-  );
-
-  const trendDirection = getTrendDirection(
-    changeFromStart,
-    range || Math.abs(current) || 1
-  );
-
-  return {
-    current,
-    previous,
-    first,
-    min,
-    minIndex,
-    max,
-    maxIndex,
-    average: avg,
-    median: med,
-    range,
-    sum,
-    changeFromStart,
-    percentChangeFromStart,
-    changeFromPrevious,
-    percentChangeFromPrevious,
-    trendDirection,
-    slope,
-    volatilityValue,
-    volatilityLevel,
-    distanceFromPeak,
-    percentBelowPeak,
-    currentVsAverage,
-    currentPercentVsAverage,
-    risingSteps,
-    fallingSteps,
-    directionChanges,
-    latestPercentile,
-    recentAverage,
-    recentChange,
-    recentTrendDirection,
-  };
+  return categories;
 }
 
-function formatSignedValue(value: number, formatter: (value: number) => string): string {
-  return `${value >= 0 ? '+' : '-'}${formatter(Math.abs(value))}`;
+function toneStyles(category: MetricCategory) {
+  switch (category) {
+    case "Core":
+    case "Elo":
+      return { bg: COLORS.blueSoft, value: COLORS.blue };
+    case "Support":
+    case "Style":
+      return { bg: COLORS.greenSoft, value: COLORS.green };
+    case "Execution":
+    case "Pressure":
+    case "Conversion":
+      return { bg: COLORS.blueSoft, value: COLORS.blue };
+    case "Projection":
+    case "Derived":
+    case "Context":
+    case "Tempo":
+    case "Outcome":
+    case "Efficiency":
+    case "Position":
+    default:
+      return { bg: COLORS.accentSoft, value: COLORS.accent };
+  }
 }
 
-function quickTrendLabel(direction: TrendDirection): string {
-  if (direction === 'rising') return 'Going Up';
-  if (direction === 'falling') return 'Going Down';
-  return 'Mostly Flat';
-}
-
-function quickMovementLabel(level: VolatilityLevel): string {
-  if (level === 'low') return 'Steady';
-  if (level === 'medium') return 'Moves Around';
-  return 'Up and Down';
-}
-
-function defaultSelectionFormatter(point: SelectionPoint, metrics: SparklineMetrics): string {
-  const pointLabel = point.label ?? `Point ${point.index + 1}`;
-
-  if (point.index === metrics.maxIndex) {
-    return `${pointLabel}: Best at ${defaultValueFormatter(point.value)}`;
-  }
-
-  if (point.index === metrics.minIndex) {
-    return `${pointLabel}: Lowest at ${defaultValueFormatter(point.value)}`;
-  }
-
-  return `${pointLabel}: ${defaultValueFormatter(point.value)}`;
-}
-
-function buildNarrative(
-  metrics: SparklineMetrics,
-  compactValueFormatter: (value: number) => string,
-  percentFormatter: (value: number) => string
-): SparklineNarrative {
-  const tags: string[] = [];
-  const bullets: string[] = [];
-
-  const tolerance = Math.max(1e-9, metrics.range * 0.03);
-  const aboveAverage = metrics.currentVsAverage > tolerance;
-  const belowAverage = metrics.currentVsAverage < -tolerance;
-  const nearPeak = metrics.distanceFromPeak <= Math.max(1e-9, metrics.range * 0.15);
-
-  if (aboveAverage) tags.push('Above Usual');
-  if (belowAverage) tags.push('Below Usual');
-  if (metrics.trendDirection === 'rising') tags.push('Going Up');
-  if (metrics.trendDirection === 'falling') tags.push('Going Down');
-  if (metrics.recentTrendDirection === 'rising') tags.push('Up Lately');
-  if (metrics.recentTrendDirection === 'falling') tags.push('Down Lately');
-  if (metrics.volatilityLevel === 'low') tags.push('Steady');
-  if (metrics.volatilityLevel === 'high') tags.push('Up and Down');
-  if (nearPeak) tags.push('Near Best');
-  if (metrics.current === metrics.max) tags.push('Best So Far');
-
-  let headline = 'This is about normal right now.';
-
-  if (aboveAverage && nearPeak) {
-    headline = 'This is doing better than usual and is close to its best point.';
-  } else if (aboveAverage) {
-    headline = 'This is doing better than usual right now.';
-  } else if (belowAverage) {
-    headline = 'This is a little below its usual level right now.';
-  }
-
-  if (metrics.current === metrics.max) {
-    headline = 'This is at its best point so far.';
-  } else if (metrics.current === metrics.min) {
-    headline = 'This is at its lowest point so far.';
-  }
-
-  bullets.push(
-    metrics.trendDirection === 'rising'
-      ? 'It has been going up overall.'
-      : metrics.trendDirection === 'falling'
-      ? 'It has been going down overall.'
-      : 'It has stayed mostly flat overall.'
+function UnderlineOption({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={styles.underlineTabButton} onPress={onPress}>
+      <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
+        {label}
+      </Text>
+      <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
+    </Pressable>
   );
-
-  bullets.push(
-    metrics.recentTrendDirection === 'rising'
-      ? 'Lately, it has been moving up.'
-      : metrics.recentTrendDirection === 'falling'
-      ? 'Lately, it has been moving down.'
-      : 'Lately, it has stayed fairly steady.'
-  );
-
-  bullets.push(
-    metrics.volatilityLevel === 'low'
-      ? 'It has been very steady.'
-      : metrics.volatilityLevel === 'medium'
-      ? 'It has moved around a little.'
-      : 'It has moved up and down a lot.'
-  );
-
-  if (metrics.percentChangeFromStart != null) {
-    bullets.push(
-      `It is ${percentFormatter(metrics.percentChangeFromStart)} compared with the start.`
-    );
-  } else {
-    bullets.push(
-      `It is ${metrics.changeFromStart >= 0 ? 'up' : 'down'} ${compactValueFormatter(
-        Math.abs(metrics.changeFromStart)
-      )} from the start.`
-    );
-  }
-
-  return {
-    headline,
-    bullets: bullets.slice(0, 4),
-    tags: Array.from(new Set(tags)).slice(0, 5),
-  };
-}
-
-function buildComparisonNarrative(args: {
-  primaryMetrics: SparklineMetrics;
-  comparisonMetrics: SparklineMetrics;
-  primaryLabel: string;
-  comparisonLabel: string;
-  compactValueFormatter: (value: number) => string;
-  percentFormatter: (value: number) => string;
-}): ComparisonNarrative {
-  const {
-    primaryMetrics,
-    comparisonMetrics,
-    primaryLabel,
-    comparisonLabel,
-    compactValueFormatter,
-    percentFormatter,
-  } = args;
-
-  const tags: string[] = [];
-  const bullets: string[] = [];
-
-  const currentGap = primaryMetrics.current - comparisonMetrics.current;
-  const peakGap = primaryMetrics.max - comparisonMetrics.max;
-  const growthGap = primaryMetrics.changeFromStart - comparisonMetrics.changeFromStart;
-  const recentGap = primaryMetrics.recentChange - comparisonMetrics.recentChange;
-  const steadierPrimary =
-    primaryMetrics.volatilityValue < comparisonMetrics.volatilityValue;
-  const steadierComparison =
-    comparisonMetrics.volatilityValue < primaryMetrics.volatilityValue;
-
-  let headline = `${primaryLabel} and ${comparisonLabel} are close right now.`;
-
-  if (Math.abs(currentGap) < 1e-9) {
-    headline = `${primaryLabel} and ${comparisonLabel} are tied right now.`;
-    tags.push('Tied Now');
-  } else if (currentGap > 0) {
-    headline = `${primaryLabel} is ahead of ${comparisonLabel} right now.`;
-    tags.push(`${primaryLabel} Ahead`);
-  } else {
-    headline = `${comparisonLabel} is ahead of ${primaryLabel} right now.`;
-    tags.push(`${comparisonLabel} Ahead`);
-  }
-
-  if (Math.abs(peakGap) > 1e-9) {
-    if (peakGap > 0) {
-      tags.push(`${primaryLabel} Better Best`);
-    } else {
-      tags.push(`${comparisonLabel} Better Best`);
-    }
-  }
-
-  if (Math.abs(growthGap) > 1e-9) {
-    if (growthGap > 0) {
-      tags.push(`${primaryLabel} Grew More`);
-    } else {
-      tags.push(`${comparisonLabel} Grew More`);
-    }
-  }
-
-  if (steadierPrimary) {
-    tags.push(`${primaryLabel} Steadier`);
-  } else if (steadierComparison) {
-    tags.push(`${comparisonLabel} Steadier`);
-  }
-
-  bullets.push(
-    Math.abs(currentGap) < 1e-9
-      ? `${primaryLabel} and ${comparisonLabel} are at the same level right now.`
-      : currentGap > 0
-      ? `${primaryLabel} is ahead of ${comparisonLabel} right now by ${compactValueFormatter(
-          Math.abs(currentGap)
-        )}.`
-      : `${comparisonLabel} is ahead of ${primaryLabel} right now by ${compactValueFormatter(
-          Math.abs(currentGap)
-        )}.`
-  );
-
-  bullets.push(
-    Math.abs(peakGap) < 1e-9
-      ? `${primaryLabel} and ${comparisonLabel} reached the same best level.`
-      : peakGap > 0
-      ? `${primaryLabel} reached a higher best point than ${comparisonLabel}.`
-      : `${comparisonLabel} reached a higher best point than ${primaryLabel}.`
-  );
-
-  bullets.push(
-    Math.abs(growthGap) < 1e-9
-      ? `${primaryLabel} and ${comparisonLabel} changed by about the same amount from the start.`
-      : growthGap > 0
-      ? `${primaryLabel} improved more from the start than ${comparisonLabel}.`
-      : `${comparisonLabel} improved more from the start than ${primaryLabel}.`
-  );
-
-  bullets.push(
-    Math.abs(recentGap) < 1e-9
-      ? `Lately, ${primaryLabel} and ${comparisonLabel} have been moving about the same.`
-      : recentGap > 0
-      ? `Lately, ${primaryLabel} has been stronger than ${comparisonLabel}.`
-      : `Lately, ${comparisonLabel} has been stronger than ${primaryLabel}.`
-  );
-
-  if (steadierPrimary) {
-    bullets.push(`${primaryLabel} has been steadier overall than ${comparisonLabel}.`);
-  } else if (steadierComparison) {
-    bullets.push(`${comparisonLabel} has been steadier overall than ${primaryLabel}.`);
-  } else {
-    bullets.push(`${primaryLabel} and ${comparisonLabel} have moved around by about the same amount.`);
-  }
-
-  if (
-    primaryMetrics.percentChangeFromStart != null &&
-    comparisonMetrics.percentChangeFromStart != null
-  ) {
-    bullets.push(
-      `From the start, ${primaryLabel} is ${percentFormatter(
-        primaryMetrics.percentChangeFromStart
-      )}, while ${comparisonLabel} is ${percentFormatter(
-        comparisonMetrics.percentChangeFromStart
-      )}.`
-    );
-  }
-
-  return {
-    headline,
-    bullets: bullets.slice(0, 4),
-    tags: Array.from(new Set(tags)).slice(0, 5),
-  };
 }
 
 function Sparkline({
   data = [],
   comparisonData,
-
-  metricOptions = DEFAULT_SPARK_METRIC_OPTIONS,
+  metricOptions,
   metricSeriesMap,
   comparisonMetricSeriesMap,
   activeMetricKey,
   defaultMetricKey,
   onChangeMetric,
   showMetricSelector = true,
-  metricTitle = 'Metric',
-
+  metricTitle = "Metric",
   color = chartColors.purple,
-  comparisonColor = chartColors.blue ?? '#5aa9ff',
-  primaryLabel = 'Series A',
-  comparisonLabel = 'Series B',
+  comparisonColor = chartColors.blue,
+  primaryLabel = "Primary",
+  comparisonLabel = "Comparison",
   height = DEFAULT_HEIGHT,
   width = DEFAULT_WIDTH,
   strokeWidth = DEFAULT_STROKE_WIDTH,
@@ -705,83 +155,105 @@ function Sparkline({
   recentWindow = DEFAULT_RECENT_WINDOW,
   showBaseline = true,
   showLatestButton = true,
-  hideLatestWhenSelected = false,
+  hideLatestWhenSelected = true,
   showValueLabel = true,
   showSummary = true,
   showStatsRow = true,
   showNarrative = true,
-  showHowItWorks = true,
-  selectedIndex: controlledSelectedIndex,
+  showHowItWorks = false,
+  selectedIndex,
   defaultSelectedIndex,
   onSelectIndex,
   valueFormatter = defaultValueFormatter,
   compactValueFormatter = defaultCompactValueFormatter,
   percentFormatter = defaultPercentFormatter,
   selectionFormatter = defaultSelectionFormatter,
-  latestButtonLabel = 'Now',
-  emptyLabel = 'No data',
-  narrativeTitle = 'Quick Summary',
+  latestButtonLabel = "Latest",
+  emptyLabel = "No data",
+  narrativeTitle = "Narrative",
 }: SparklineProps) {
-  const metricKeys = useMemo(() => {
-    if (metricSeriesMap) {
-      const keys = Object.keys(metricSeriesMap).filter(
-        (key) => Array.isArray(metricSeriesMap[key]) && (metricSeriesMap[key]?.length ?? 0) > 0
-      );
-      if (keys.length) return keys;
-    }
-    return [];
-  }, [metricSeriesMap]);
-
-  const hasMetricMap = metricKeys.length > 0;
-  const isMetricControlled = activeMetricKey !== undefined;
-  const resolvedInitialMetricKey =
-    defaultMetricKey ??
-    metricKeys[0] ??
-    metricOptions[0]?.key ??
-    'default';
-
-  const [uncontrolledMetricKey, setUncontrolledMetricKey] = useState<string>(
-    resolvedInitialMetricKey
+  const registryMetrics = useMemo(() => PLAYER_METRICS, []);
+  const defaultRegistryMetricOptions = useMemo(() => buildDefaultMetricOptions(), []);
+  const resolvedMetricOptions = useMemo(
+    () => metricOptions ?? defaultRegistryMetricOptions,
+    [metricOptions, defaultRegistryMetricOptions]
   );
 
+  const metricKeys = useMemo(
+    () =>
+      metricSeriesMap
+        ? Object.keys(metricSeriesMap).filter((key) => Array.isArray(metricSeriesMap[key]))
+        : [],
+    [metricSeriesMap]
+  );
+
+  const hasMetricMap = metricKeys.length > 0;
+  const isMetricControlled = activeMetricKey != null;
+
+  const availableRegistryMetrics = useMemo(() => {
+    if (!hasMetricMap) return registryMetrics;
+    const keySet = new Set(metricKeys);
+    return registryMetrics.filter((metric) => keySet.has(metric.key));
+  }, [hasMetricMap, metricKeys, registryMetrics]);
+
+  const metricCategories = useMemo(
+    () => buildMetricCategories(availableRegistryMetrics),
+    [availableRegistryMetrics]
+  );
+
+  const initialMetricKey = useMemo(() => {
+    if (defaultMetricKey && metricKeys.includes(defaultMetricKey)) return defaultMetricKey;
+    if (metricKeys.length > 0) return metricKeys[0];
+    return defaultMetricKey ?? "default";
+  }, [defaultMetricKey, metricKeys]);
+
+  const [uncontrolledMetricKey, setUncontrolledMetricKey] = useState(initialMetricKey);
+  const [activeCategory, setActiveCategory] = useState<string>("All");
+
   useEffect(() => {
-    if (isMetricControlled) return;
-    if (hasMetricMap) {
-      const currentExists = metricKeys.includes(uncontrolledMetricKey);
-      if (!currentExists) {
-        setUncontrolledMetricKey(resolvedInitialMetricKey);
-      }
+    if (!isMetricControlled) {
+      setUncontrolledMetricKey(initialMetricKey);
     }
+  }, [initialMetricKey, isMetricControlled]);
+
+  const currentMetricKey = isMetricControlled ? activeMetricKey! : uncontrolledMetricKey;
+
+  const visibleMetricOptions = useMemo(() => {
+    const keySet = new Set(metricKeys);
+    const base = resolvedMetricOptions.filter((option) => keySet.has(option.key));
+
+    if (activeCategory === "All") return base;
+
+    const categoryLookup = new Map(
+      availableRegistryMetrics.map((metric) => [metric.key, metric.category])
+    );
+
+    return base.filter((option) => categoryLookup.get(option.key) === activeCategory);
   }, [
-    hasMetricMap,
-    isMetricControlled,
+    activeCategory,
+    availableRegistryMetrics,
     metricKeys,
-    resolvedInitialMetricKey,
-    uncontrolledMetricKey,
+    resolvedMetricOptions,
   ]);
 
-  const currentMetricKey = hasMetricMap
-    ? isMetricControlled
-      ? activeMetricKey && metricKeys.includes(activeMetricKey)
-        ? activeMetricKey
-        : metricKeys[0]
-      : uncontrolledMetricKey
-    : 'default';
+  const currentMetricMeta = useMemo(
+    () => availableRegistryMetrics.find((metric) => metric.key === currentMetricKey) ?? null,
+    [availableRegistryMetrics, currentMetricKey]
+  );
 
   const resolvedData = useMemo(() => {
-    if (!hasMetricMap) return data;
-    return metricSeriesMap?.[currentMetricKey] ?? [];
+    if (hasMetricMap && metricSeriesMap?.[currentMetricKey]) {
+      return metricSeriesMap[currentMetricKey] ?? [];
+    }
+    return data;
   }, [currentMetricKey, data, hasMetricMap, metricSeriesMap]);
 
   const resolvedComparisonData = useMemo(() => {
-    if (!hasMetricMap) return comparisonData;
-    return comparisonMetricSeriesMap?.[currentMetricKey] ?? [];
+    if (hasMetricMap && comparisonMetricSeriesMap?.[currentMetricKey]) {
+      return comparisonMetricSeriesMap[currentMetricKey] ?? [];
+    }
+    return comparisonData;
   }, [comparisonData, comparisonMetricSeriesMap, currentMetricKey, hasMetricMap]);
-
-  const currentMetricOption = useMemo(
-    () => metricOptions.find((option) => option.key === currentMetricKey) ?? null,
-    [currentMetricKey, metricOptions]
-  );
 
   const normalizedData = useMemo(() => normalizeData(resolvedData), [resolvedData]);
   const normalizedComparisonData = useMemo(
@@ -789,64 +261,17 @@ function Sparkline({
     [resolvedComparisonData]
   );
 
-  const values = useMemo(() => normalizedData.map((entry) => entry.value), [normalizedData]);
+  const dataValues = useMemo(() => normalizedData.map((item) => item.value), [normalizedData]);
   const comparisonValues = useMemo(
-    () => normalizedComparisonData.map((entry) => entry.value),
+    () => normalizedComparisonData.map((item) => item.value),
     [normalizedComparisonData]
   );
 
-  const dataLength = normalizedData.length;
-  const comparisonLength = normalizedComparisonData.length;
-  const hasComparison = comparisonLength > 0;
-
-  const isControlled = controlledSelectedIndex !== undefined;
-
-  const [uncontrolledSelectedIndex, setUncontrolledSelectedIndex] = useState<number | null>(() =>
-    getInitialIndex(dataLength, defaultSelectedIndex)
-  );
-
-  useEffect(() => {
-    if (isControlled) return;
-
-    if (!dataLength) {
-      setUncontrolledSelectedIndex(null);
-      return;
-    }
-
-    setUncontrolledSelectedIndex((current) => {
-      if (current == null) {
-        return getInitialIndex(dataLength, defaultSelectedIndex);
-      }
-
-      return clamp(current, 0, dataLength - 1);
-    });
-  }, [dataLength, defaultSelectedIndex, isControlled, currentMetricKey]);
-
-  const activeSelectedIndex = useMemo(() => {
-    if (!dataLength) return null;
-
-    if (isControlled) {
-      if (controlledSelectedIndex == null) return null;
-      return clamp(controlledSelectedIndex, 0, dataLength - 1);
-    }
-
-    if (uncontrolledSelectedIndex == null) return null;
-    return clamp(uncontrolledSelectedIndex, 0, dataLength - 1);
-  }, [controlledSelectedIndex, dataLength, isControlled, uncontrolledSelectedIndex]);
-
-  const metrics = useMemo(
-    () => computeMetrics(values, recentWindow),
-    [recentWindow, values]
-  );
-
-  const comparisonMetrics = useMemo(
-    () => (hasComparison ? computeMetrics(comparisonValues, recentWindow) : null),
-    [comparisonValues, hasComparison, recentWindow]
-  );
+  const hasComparison = normalizedComparisonData.length > 0;
 
   const domain = useMemo(
-    () => mergeDomain(values, comparisonValues),
-    [values, comparisonValues]
+    () => mergeDomain(dataValues, comparisonValues),
+    [comparisonValues, dataValues]
   );
 
   const geometry = useMemo(
@@ -858,7 +283,7 @@ function Sparkline({
         padding,
         domain,
       }),
-    [domain, height, normalizedData, padding, width]
+    [normalizedData, width, height, padding, domain]
   );
 
   const comparisonGeometry = useMemo(
@@ -870,86 +295,80 @@ function Sparkline({
         padding,
         domain,
       }),
-    [domain, height, normalizedComparisonData, padding, width]
+    [normalizedComparisonData, width, height, padding, domain]
   );
 
+  const metrics = useMemo(
+    () => computeMetrics(dataValues, recentWindow),
+    [dataValues, recentWindow]
+  );
+
+  const comparisonMetrics = useMemo(
+    () => (hasComparison ? computeMetrics(comparisonValues, recentWindow) : null),
+    [comparisonValues, hasComparison, recentWindow]
+  );
+
+  const dataLength = normalizedData.length;
+  const isControlled = selectedIndex != null;
+
+  const [uncontrolledSelectedIndex, setUncontrolledSelectedIndex] = useState<number | null>(() =>
+    getInitialIndex(dataLength, defaultSelectedIndex)
+  );
+
+  useEffect(() => {
+    if (!isControlled) {
+      setUncontrolledSelectedIndex(getInitialIndex(dataLength, defaultSelectedIndex));
+    }
+  }, [dataLength, defaultSelectedIndex, isControlled, currentMetricKey]);
+
+  const activeSelectedIndex = isControlled
+    ? dataLength > 0 && selectedIndex != null
+      ? clamp(selectedIndex, 0, dataLength - 1)
+      : null
+    : uncontrolledSelectedIndex;
+
   const selectedPoint =
-    activeSelectedIndex == null ? null : (geometry.points[activeSelectedIndex] ?? null);
+    activeSelectedIndex != null ? geometry.points[activeSelectedIndex] ?? null : null;
 
   const selectionText = useMemo(() => {
     if (!showValueLabel || !selectedPoint || !metrics) return null;
-
-    const seriesLabel = currentMetricOption?.label ?? primaryLabel;
-
-    const parts = [
-      `${seriesLabel}: ${selectionFormatter(
-        {
-          index: selectedPoint.index,
-          value: selectedPoint.value,
-          label: selectedPoint.label,
-        },
-        metrics
-      )}`,
-    ];
-
-    if (hasComparison && activeSelectedIndex != null) {
-      const otherPoint = normalizedComparisonData[activeSelectedIndex];
-      if (otherPoint) {
-        parts.push(
-          `${comparisonLabel}: ${valueFormatter(otherPoint.value)}`
-        );
-      }
-    }
-
-    return parts.join(' · ');
-  }, [
-    activeSelectedIndex,
-    comparisonLabel,
-    currentMetricOption,
-    hasComparison,
-    metrics,
-    normalizedComparisonData,
-    primaryLabel,
-    selectedPoint,
-    selectionFormatter,
-    showValueLabel,
-    valueFormatter,
-  ]);
+    return selectionFormatter(
+      {
+        index: selectedPoint.index,
+        value: selectedPoint.value,
+        label: selectedPoint.label,
+      } as SelectionPoint,
+      metrics
+    );
+  }, [metrics, selectedPoint, selectionFormatter, showValueLabel]);
 
   const summaryText = useMemo(() => {
     if (!showSummary || !metrics) return null;
 
-    const metricLabel = currentMetricOption?.label ?? primaryLabel;
+    const metricLabel = currentMetricMeta?.label ?? currentMetricKey;
 
     if (hasComparison && comparisonMetrics) {
-      const currentGap = metrics.current - comparisonMetrics.current;
-      const primaryNow = compactValueFormatter(metrics.current);
-      const comparisonNow = compactValueFormatter(comparisonMetrics.current);
+      const delta = metrics.current - comparisonMetrics.current;
+      const leader =
+        delta > 0 ? primaryLabel : delta < 0 ? comparisonLabel : "Neither side";
+      const leadText =
+        delta === 0
+          ? "Both series are even right now."
+          : `${leader} leads by ${compactValueFormatter(Math.abs(delta))}.`;
 
-      if (Math.abs(currentGap) < 1e-9) {
-        return `${metricLabel} is tied right now at ${primaryNow}.`;
-      }
-
-      if (currentGap > 0) {
-        return `${primaryLabel} is ahead in ${metricLabel.toLowerCase()} right now, ${primaryNow} to ${comparisonNow}.`;
-      }
-
-      return `${comparisonLabel} is ahead in ${metricLabel.toLowerCase()} right now, ${comparisonNow} to ${primaryNow}.`;
+      return `${metricLabel}: ${leadText}`;
     }
 
-    return `${metricLabel} is at ${compactValueFormatter(metrics.current)} right now and is ${quickTrendLabel(
-      metrics.trendDirection
-    ).toLowerCase()}, while overall movement has been ${quickMovementLabel(
-      metrics.volatilityLevel
-    ).toLowerCase()}.`;
+    return `${metricLabel}: ${primaryLabel} is at ${compactValueFormatter(metrics.current)} right now.`;
   }, [
     compactValueFormatter,
-    comparisonLabel,
     comparisonMetrics,
-    currentMetricOption,
+    currentMetricKey,
+    currentMetricMeta?.label,
     hasComparison,
     metrics,
     primaryLabel,
+    comparisonLabel,
     showSummary,
   ]);
 
@@ -959,59 +378,37 @@ function Sparkline({
     if (hasComparison && comparisonMetrics) {
       return [
         {
-          label: `${primaryLabel} Now`,
-          value: compactValueFormatter(metrics.current),
+          label: `${primaryLabel} Avg`,
+          value: compactValueFormatter(metrics.average),
         },
         {
-          label: `${comparisonLabel} Now`,
-          value: compactValueFormatter(comparisonMetrics.current),
+          label: `${comparisonLabel} Avg`,
+          value: compactValueFormatter(comparisonMetrics.average),
         },
         {
-          label: 'Gap',
-          value: compactValueFormatter(Math.abs(metrics.current - comparisonMetrics.current)),
+          label: "Current Gap",
+          value: compactValueFormatter(metrics.current - comparisonMetrics.current),
         },
         {
-          label: 'Steadier',
-          value:
-            metrics.volatilityValue < comparisonMetrics.volatilityValue
-              ? primaryLabel
-              : comparisonMetrics.volatilityValue < metrics.volatilityValue
-              ? comparisonLabel
-              : 'Same',
-        },
-        {
-          label: 'Recent',
-          value: compactValueFormatter(metrics.recentAverage),
-        },
-        {
-          label: 'Range',
-          value: compactValueFormatter(metrics.range),
+          label: "Trend Gap",
+          value: compactValueFormatter(
+            metrics.changeFromStart - comparisonMetrics.changeFromStart
+          ),
         },
       ];
     }
 
     return [
-      { label: 'Current', value: compactValueFormatter(metrics.current) },
-      { label: 'Lowest', value: compactValueFormatter(metrics.min) },
-      { label: 'Usual', value: compactValueFormatter(metrics.average) },
-      { label: 'Best', value: compactValueFormatter(metrics.max) },
-      { label: 'Range', value: compactValueFormatter(metrics.range) },
-      { label: 'Recent Avg', value: compactValueFormatter(metrics.recentAverage) },
-      { label: 'Median', value: compactValueFormatter(metrics.median) },
-      {
-        label: 'Since Start',
-        value:
-          metrics.percentChangeFromStart != null
-            ? percentFormatter(metrics.percentChangeFromStart)
-            : formatSignedValue(metrics.changeFromStart, compactValueFormatter),
-      },
+      { label: "Current", value: compactValueFormatter(metrics.current) },
+      { label: "Average", value: compactValueFormatter(metrics.average) },
+      { label: "Best", value: compactValueFormatter(metrics.max) },
+      { label: "Range", value: compactValueFormatter(metrics.range) },
     ];
   }, [
     compactValueFormatter,
     comparisonMetrics,
     hasComparison,
     metrics,
-    percentFormatter,
     primaryLabel,
     comparisonLabel,
     showStatsRow,
@@ -1093,189 +490,209 @@ function Sparkline({
   return (
     <View style={[styles.wrap, { width }]}>
       {showMetricSelector && hasMetricMap ? (
-        <View style={styles.metricCard}>
-          <Text style={styles.metricTitle}>
-            {metricTitle}: <Text style={styles.metricValue}>{currentMetricOption?.label ?? currentMetricKey}</Text>
-          </Text>
+        <>
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Category</Text>
+              <Text style={styles.sectionSub}>Filter the metric selector</Text>
+            </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.metricPillsRow}
-          >
-            {metricOptions
-              .filter((option) => metricKeys.includes(option.key))
-              .map((option) => {
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.underlineSelectorRowScroll}
+            >
+              {metricCategories.map((category) => (
+                <UnderlineOption
+                  key={category}
+                  label={category}
+                  active={activeCategory === category}
+                  onPress={() => setActiveCategory(category)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>{metricTitle}</Text>
+              <Text style={styles.sectionSub}>
+                {currentMetricMeta?.label ?? currentMetricKey}
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.underlineSelectorRowScroll}
+            >
+              {visibleMetricOptions.map((option) => {
                 const active = option.key === currentMetricKey;
                 return (
-                  <Pressable
+                  <UnderlineOption
                     key={option.key}
+                    label={option.shortLabel ?? option.label}
+                    active={active}
                     onPress={() => handleChangeMetric(option.key)}
-                    style={[
-                      styles.metricPill,
-                      active && styles.metricPillActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.metricPillText,
-                        active && styles.metricPillTextActive,
-                      ]}
-                    >
-                      {option.shortLabel ?? option.label}
-                    </Text>
-                  </Pressable>
+                  />
                 );
               })}
-          </ScrollView>
-        </View>
+            </ScrollView>
+          </View>
+        </>
       ) : null}
 
       {showHowItWorks ? (
-        <View style={styles.explainerCard}>
-          <Text style={styles.explainerTitle}>How this sparkline works</Text>
+        <View style={styles.sectionCompact}>
+          <Text style={styles.explainerTitle}>How it works</Text>
           <Text style={styles.explainerText}>
-            A sparkline is a very small line chart. Each point shows one value in order, from left
-            to right. Higher points mean bigger values, lower points mean smaller values. The line
-            helps you quickly see whether something is going up, going down, staying steady, or
-            moving around a lot.
+            This sparkline shows compact trend movement over time. Tap points to inspect
+            values, compare two series when available, and switch metrics without changing
+            the underlying chart footprint.
           </Text>
         </View>
       ) : null}
 
-      {summaryText ? <Text style={styles.summaryText}>{summaryText}</Text> : null}
-      {selectionText ? <Text style={styles.valueText}>{selectionText}</Text> : null}
+      <View style={styles.sectionCompact}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>{currentMetricMeta?.label ?? primaryLabel}</Text>
+          <Text style={styles.sectionSub}>Sparkline</Text>
+        </View>
 
-      <Svg width={width} height={height} accessible accessibilityLabel="Sparkline chart">
-        <Rect
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          rx={10}
-          fill={chartColors.panelBg}
-          stroke={chartColors.borderStrong}
-        />
+        <View style={styles.chartCard}>
+          <Svg width={width} height={height}>
+            <Rect
+              x={0}
+              y={0}
+              width={width}
+              height={height}
+              rx={12}
+              fill={COLORS.cardAlt}
+              stroke={COLORS.border}
+            />
 
-        {showBaseline ? (
-          <Line
-            x1={padding}
-            y1={geometry.baselineY}
-            x2={width - padding}
-            y2={geometry.baselineY}
-            stroke={chartColors.grid}
-            strokeWidth={1}
-          />
-        ) : null}
+            {showBaseline ? (
+              <Line
+                x1={padding}
+                y1={geometry.baselineY}
+                x2={width - padding}
+                y2={geometry.baselineY}
+                stroke={withAlpha(chartColors.text, 0.12)}
+                strokeWidth={1}
+              />
+            ) : null}
 
-        {hasComparison && comparisonGeometry.path ? (
-          <Path
-            d={comparisonGeometry.path}
-            fill="none"
-            stroke={comparisonColor}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={0.9}
-          />
-        ) : null}
-
-        <Path
-          d={geometry.path}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {hasComparison
-          ? comparisonGeometry.points.map((point) => (
-              <Circle
-                key={`comparison-${point.index}`}
-                cx={point.x}
-                cy={point.y}
-                r={2}
-                fill={comparisonColor}
+            {hasComparison && comparisonGeometry.path ? (
+              <Path
+                d={comparisonGeometry.path}
+                stroke={comparisonColor}
+                strokeWidth={strokeWidth}
+                fill="none"
                 opacity={0.9}
-                pointerEvents="none"
               />
-            ))
-          : null}
+            ) : null}
 
-        {geometry.points.map((point) => {
-          const isSelected = point.index === activeSelectedIndex;
-          const isPeak = metrics?.maxIndex === point.index;
-          const isLow = metrics?.minIndex === point.index;
+            <Path
+              d={geometry.path}
+              stroke={color}
+              strokeWidth={strokeWidth}
+              fill="none"
+            />
 
-          return (
-            <React.Fragment key={point.index}>
-              {isSelected ? (
-                <Circle
-                  cx={point.x}
-                  cy={point.y}
-                  r={selectedPointRadius + 4}
-                  fill={withAlpha(color, 0.18)}
-                  pointerEvents="none"
+            {hasComparison
+              ? comparisonGeometry.points.map((point) => (
+                  <Circle
+                    key={`comparison-${point.index}`}
+                    cx={point.x}
+                    cy={point.y}
+                    r={pointRadius}
+                    fill={comparisonColor}
+                    opacity={0.82}
+                  />
+                ))
+              : null}
+
+            {geometry.points.map((point) => {
+              const isSelected = point.index === activeSelectedIndex;
+              return (
+                <React.Fragment key={`primary-${point.index}`}>
+                  <Circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={isSelected ? selectedPointRadius : pointRadius}
+                    fill={color}
+                  />
+                  <Circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={pointHitRadius}
+                    fill="transparent"
+                    onPress={() => selectIndex(point.index)}
+                  />
+                </React.Fragment>
+              );
+            })}
+          </Svg>
+
+          {selectionText ? <Text style={styles.valueText}>{selectionText}</Text> : null}
+
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendSwatch, { backgroundColor: color }]} />
+              <Text style={styles.legendText}>{primaryLabel}</Text>
+            </View>
+
+            {hasComparison ? (
+              <View style={styles.legendItem}>
+                <View
+                  style={[styles.legendSwatch, { backgroundColor: comparisonColor }]}
                 />
-              ) : null}
-
-              <Circle
-                cx={point.x}
-                cy={point.y}
-                r={pointHitRadius}
-                fill="transparent"
-                onPress={() => selectIndex(point.index)}
-                accessibilityRole="button"
-                accessibilityLabel={`Select ${point.label ?? `point ${point.index + 1}`}`}
-              />
-
-              <Circle
-                cx={point.x}
-                cy={point.y}
-                r={
-                  isSelected
-                    ? selectedPointRadius
-                    : isPeak || isLow
-                    ? pointRadius + 0.75
-                    : pointRadius
-                }
-                fill={isSelected ? '#ffffff' : color}
-                stroke={color}
-                strokeWidth={isSelected ? 1.5 : isPeak || isLow ? 1 : 0}
-                pointerEvents="none"
-              />
-            </React.Fragment>
-          );
-        })}
-      </Svg>
-
-      {hasComparison ? (
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendSwatch, { backgroundColor: color }]} />
-            <Text style={styles.legendText}>{primaryLabel}</Text>
+                <Text style={styles.legendText}>{comparisonLabel}</Text>
+              </View>
+            ) : null}
           </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendSwatch, { backgroundColor: comparisonColor }]} />
-            <Text style={styles.legendText}>{comparisonLabel}</Text>
-          </View>
+        </View>
+      </View>
+
+      {summaryText ? (
+        <View style={styles.sectionCompact}>
+          <Text style={styles.summaryText}>{summaryText}</Text>
         </View>
       ) : null}
 
       {stats.length ? (
-        <View style={styles.statsRow}>
-          {stats.map((stat) => (
-            <View key={stat.label} style={styles.statPill}>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-              <Text style={styles.statValue}>{stat.value}</Text>
-            </View>
-          ))}
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsStripScroll}
+        >
+          <View
+            style={[
+              styles.statsStrip,
+              currentMetricMeta ? { backgroundColor: toneStyles(currentMetricMeta.category).bg } : null,
+            ]}
+          >
+            {stats.map((stat, index) => (
+              <React.Fragment key={stat.label}>
+                {index > 0 ? <View style={styles.statsDivider} /> : null}
+                <View style={styles.statStripItem}>
+                  <Text style={styles.statValue}>{stat.value}</Text>
+                  <Text
+                    style={styles.statLabel}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    {stat.label}
+                  </Text>
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
+        </ScrollView>
       ) : null}
 
       {narrative ? (
-        <View style={styles.narrativeCard}>
+        <View style={styles.sectionCompact}>
           <Text style={styles.narrativeTitle}>{narrativeTitle}</Text>
           <Text style={styles.narrativeHeadline}>{narrative.headline}</Text>
 
@@ -1318,98 +735,111 @@ function Sparkline({
   );
 }
 
-Sparkline.displayName = 'Sparkline';
+Sparkline.displayName = "Sparkline";
 
 export default memo(Sparkline);
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  metricCard: {
-    width: '100%',
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    gap: 8,
-  },
-  metricTitle: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  metricValue: {
-    color: chartColors.text,
-  },
-  metricPillsRow: {
-    gap: 8,
-    paddingRight: 8,
-  },
-  metricPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    backgroundColor: withAlpha(chartColors.text, 0.04),
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  metricPillActive: {
-    borderColor: chartColors.purple,
-    backgroundColor: withAlpha(chartColors.purple, 0.18),
-  },
-  metricPillText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  metricPillTextActive: {
-    color: chartColors.text,
-  },
-  explainerCard: {
-    width: '100%',
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
+    alignItems: "center",
     gap: 6,
   },
+
+  sectionCompact: {
+    width: "100%",
+    borderRadius: 14,
+    padding: 8,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 2,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  sectionSub: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "right",
+    flexShrink: 1,
+  },
+
+  underlineSelectorRowScroll: {
+    gap: 12,
+    paddingRight: 8,
+    alignItems: "flex-end",
+  },
+  underlineTabButton: {
+    paddingBottom: 2,
+  },
+  underlineTabText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  underlineTabTextActive: {
+    color: COLORS.accent,
+  },
+  underlineTabLine: {
+    marginTop: 4,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  underlineTabLineActive: {
+    backgroundColor: COLORS.accent,
+  },
+
+  chartCard: {
+    width: "100%",
+    alignItems: "center",
+    gap: 8,
+  },
+
   explainerTitle: {
-    color: chartColors.text,
+    color: COLORS.text,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   explainerText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 18,
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 16,
   },
+
   summaryText: {
-    color: chartColors.text,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
+    color: COLORS.text,
+    fontSize: 11,
+    lineHeight: 15,
   },
   valueText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: "center",
   },
+
   legendRow: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "center",
     gap: 12,
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   legendSwatch: {
@@ -1418,122 +848,125 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   legendText: {
-    color: chartColors.subtext,
-    fontSize: 11,
-    fontWeight: '700',
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "700",
   },
-  statsRow: {
-    width: '100%',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
+
+  statsStripScroll: {
+    width: "100%",
   },
-  statPill: {
-    minWidth: 72,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: chartColors.panelBg,
+  statsStrip: {
+    minWidth: "100%",
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    alignItems: 'center',
+    borderColor: COLORS.border,
+    overflow: "hidden",
+    backgroundColor: COLORS.cardAlt,
+  },
+  statStripItem: {
+    minWidth: 86,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  statsDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
   },
   statLabel: {
-    color: chartColors.subtext,
+    color: COLORS.sub,
     fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
+    lineHeight: 11,
+    fontWeight: "700",
+    textAlign: "center",
   },
   statValue: {
-    color: chartColors.text,
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  narrativeCard: {
-    width: '100%',
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    gap: 8,
-  },
-  narrativeTitle: {
-    color: chartColors.text,
+    color: COLORS.text,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  narrativeTitle: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "800",
   },
   narrativeHeadline: {
-    color: chartColors.text,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
   },
   tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
   },
   tagPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
+    borderRadius: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
-    backgroundColor: withAlpha(chartColors.purple, 0.14),
+    backgroundColor: COLORS.accentSoft,
     borderWidth: 1,
-    borderColor: withAlpha(chartColors.purple, 0.28),
+    borderColor: COLORS.border,
   },
   tagText: {
-    color: chartColors.text,
+    color: COLORS.text,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   bulletsWrap: {
     gap: 6,
   },
   bulletRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 6,
   },
   bulletMarker: {
-    color: chartColors.subtext,
+    color: COLORS.sub,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
     lineHeight: 18,
   },
   bulletText: {
     flex: 1,
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 18,
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 16,
   },
+
   reset: {
-    borderRadius: 999,
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: chartColors.panelBg,
+    backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: chartColors.borderStrong,
+    borderColor: COLORS.border,
   },
   resetText: {
-    color: chartColors.subtext,
+    color: COLORS.sub,
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: "800",
   },
+
   emptyState: {
     borderRadius: 10,
-    backgroundColor: chartColors.panelBg,
+    backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyText: {
-    color: chartColors.subtext,
+    color: COLORS.sub,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });

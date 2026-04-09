@@ -403,7 +403,7 @@ export default function GameTrendsScreen() {
                             { backgroundColor: getPlayerColor(player.color) },
                           ]}
                         />
-                        <Text style={styles.metricLabel}>{player.name}</Text>
+                        <Text style={styles.metricLabel} numberOfLines={1}>{player.name}</Text>
                       </View>
                       <Text style={styles.metricValue}>
                         {row.values[player.id] ?? 0}
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
   },
   predictionBadgeMiss: {
     color: '#FDE68A',
-    backgroundColor: 'rgba(245,158,11,0.18)',
+    backgroundColor: 'rgba(59,130,246,0.18)',
   },
   playerCard: {
     borderRadius: 12,
@@ -837,3 +837,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+

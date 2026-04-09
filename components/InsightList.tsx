@@ -2,7 +2,6 @@ import React, { memo, useMemo } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { useStore } from '@/store/useStore';
-import { useS } from '@/theme/useS';
 import Text from '@/components/ui/Text';
 import { chartColors, withAlpha } from '@/utils/chartTheme';
 
@@ -24,9 +23,7 @@ function InsightList({
   insights = [],
   title = 'Insight Feed',
 }: Props) {
-  const s = useS();
   const { width } = useWindowDimensions();
-
   const players = useStore((state: any) => state.players ?? []);
 
   const playerMap = useMemo(() => {
@@ -38,19 +35,18 @@ function InsightList({
   }, [players]);
 
   const visible = useMemo(() => insights.filter(Boolean), [insights]);
-
   const isTwoColumn = width >= 700;
 
   return (
-    <View style={[styles.panel, { marginTop: s.md }]}>
+    <View style={styles.panel}>
       <View pointerEvents="none" style={styles.nebulaPurple} />
       <View pointerEvents="none" style={styles.nebulaBlue} />
 
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>INTELLIGENCE</Text>
+        <Text style={styles.eyebrow}>Intelligence</Text>
         <Text style={styles.title}>{title}</Text>
 
-        <View style={styles.countChip}>
+        <View style={styles.countCard}>
           <Text style={styles.countValue}>{visible.length}</Text>
           <Text style={styles.countLabel}>Signals</Text>
         </View>
@@ -66,27 +62,15 @@ function InsightList({
           </Text>
         </View>
       ) : (
-        <View
-          style={[
-            styles.list,
-            isTwoColumn && styles.listTwoColumn,
-          ]}
-        >
+        <View style={[styles.list, isTwoColumn && styles.listTwoColumn]}>
           {visible.map((insight, index) => (
             <View
               key={`${insight.type}-${insight.playerId ?? 'global'}-${insight.label}-${index}`}
-              style={[
-                styles.cardCell,
-                isTwoColumn && styles.cardCellTwoColumn,
-              ]}
+              style={[styles.cardCell, isTwoColumn && styles.cardCellTwoColumn]}
             >
               <InsightCard
                 insight={insight}
-                playerName={
-                  insight.playerId
-                    ? playerMap.get(insight.playerId)
-                    : undefined
-                }
+                playerName={insight.playerId ? playerMap.get(insight.playerId) : undefined}
               />
             </View>
           ))}
@@ -100,7 +84,7 @@ export default memo(InsightList);
 
 const styles = StyleSheet.create({
   panel: {
-    borderRadius: 26,
+    borderRadius: 18,
     padding: 16,
     backgroundColor: '#040914',
     borderWidth: 1,
@@ -108,7 +92,6 @@ const styles = StyleSheet.create({
     gap: 14,
     overflow: 'hidden',
   },
-
   nebulaPurple: {
     position: 'absolute',
     top: -40,
@@ -127,7 +110,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(59,130,246,0.1)',
   },
-
   header: {
     gap: 6,
   },
@@ -135,20 +117,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
     color: chartColors?.cyan ?? '#67e8f9',
-    letterSpacing: 1.5,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
   title: {
     fontSize: 22,
     fontWeight: '900',
     color: '#ffffff',
   },
-
-  countChip: {
+  countCard: {
     marginTop: 6,
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: 12,
     backgroundColor: 'rgba(168,85,247,0.12)',
     borderWidth: 1,
     borderColor: 'rgba(168,85,247,0.3)',
@@ -163,12 +145,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#c084fc',
   },
-
   divider: {
     height: 1,
     backgroundColor: 'rgba(148,163,184,0.15)',
   },
-
   list: {
     gap: 10,
   },
@@ -178,7 +158,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginHorizontal: -5,
   },
-
   cardCell: {
     width: '100%',
   },
@@ -186,10 +165,9 @@ const styles = StyleSheet.create({
     width: '50%',
     paddingHorizontal: 5,
   },
-
   empty: {
     padding: 16,
-    borderRadius: 18,
+    borderRadius: 14,
     backgroundColor: 'rgba(10,15,28,0.9)',
     borderWidth: 1,
     borderColor: 'rgba(148,163,184,0.2)',
@@ -204,3 +182,5 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
 });
+
+

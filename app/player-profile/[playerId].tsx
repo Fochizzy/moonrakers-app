@@ -1,1230 +1,1813 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from "react";
 import {
-  Pressable,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
+  Text,
+  Pressable,
   View,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+  Image,
+} from "react-native";
+import { uiPolish } from "@/utils/uiPolish";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useStore } from "@/store/useStore";
 
-import Text from '@/components/ui/Text';
-import StarryNight from '@/components/ui/StarryNight';
-import { useStore } from '@/store/useStore';
+import {
+  getDefaultMetricTab,
+  useMetricScreenData,
+} from "@/utils/elo/metricHooks";
+import {
+  computeMetric,
+  type EloMetricTab,
+  type MetricContext,
+} from "@/utils/elo/metricRegistry";
 
-type PlayerLike = {
-  id: string;
-  name: string;
-  color?: string;
-  elo?: number;
-  rating?: number;
-  wins?: number;
-  gamesPlayed?: number;
-  totalPrestige?: number;
-  prestige?: number;
-};
+const SHEET = require("@/assets/images/player-card-sheet.png");
 
 const COLORS = {
-  bg: '#040814',
-  surface: 'rgba(12, 18, 36, 0.90)',
-  surfaceAlt: 'rgba(15, 23, 42, 0.95)',
-  surfaceMuted: 'rgba(9, 14, 28, 0.98)',
-  border: 'rgba(99, 102, 241, 0.20)',
-  borderSoft: 'rgba(148, 163, 184, 0.14)',
-  textPrimary: '#F8FBFF',
-  textSecondary: '#C7D6F3',
-  textMuted: '#8EA6C8',
-  cyan: '#67E8F9',
-  gold: '#FBBF24',
-  success: '#22c55e',
-  danger: '#ef4444',
+  bg: "#081120",
+  card: "rgba(12,18,38,0.92)",
+  cardAlt: "rgba(16,24,48,0.95)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  muted: "#64748B",
+  accent: "#A855F7",
+  accentSoft: "rgba(168,85,247,0.18)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  green: "#22C55E",
+  greenSoft: "rgba(34,197,94,0.16)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  red: "#EF4444",
+  redSoft: "rgba(239,68,68,0.16)",
+  border: "rgba(255,255,255,0.08)",
+  whiteSoft: "rgba(255,255,255,0.06)",
 };
 
-function toNumber(v: unknown) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
+type StorePlayer = {
+  id: string;
+  name?: string;
+  color?: string;
+};
 
-function getPlayerColor(color?: string) {
-  switch ((color ?? '').toLowerCase()) {
-    case 'green':
-      return '#22c55e';
-    case 'purple':
-      return '#a855f7';
-    case 'blue':
-      return '#3b82f6';
-    case 'orange':
-      return '#f97316';
-    case 'yellow':
-      return '#eab308';
-    case 'red':
-      return '#ef4444';
-    case 'pink':
-      return '#ec4899';
+type ProfileGameRow = {
+  gameId: string;
+  playerId: string;
+  opponentIds: string[];
+  preGameElo: number;
+  postGameElo: number;
+  opponentAvgElo: number;
+  eloDelta: number;
+  win: number;
+  gameIndex: number;
+};
+
+type StatCardTone = "default" | "accent" | "blue" | "green" | "blue" | "red";
+
+type CustomCard = {
+  key: string;
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: StatCardTone;
+};
+
+const PROFILE_TABS: EloMetricTab[] = [
+  "Leaderboard",
+  "Momentum",
+  "Skills",
+  "Context",
+  "Projection",
+];
+
+function getPlayerAccent(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "blue":
+      return "#60A5FA";
+    case "green":
+      return "#84CC16";
+    case "purple":
+      return "#C084FC";
+    case "orange":
+      return "#FB923C";
+    case "yellow":
+      return "#FACC15";
     default:
-      return '#9ca3af';
+      return "#A855F7";
   }
 }
 
-function getPlayerTint(color?: string) {
-  switch ((color ?? '').toLowerCase()) {
-    case 'green':
-      return 'rgba(34, 197, 94, 0.14)';
-    case 'purple':
-      return 'rgba(168, 85, 247, 0.14)';
-    case 'blue':
-      return 'rgba(59, 130, 246, 0.14)';
-    case 'orange':
-      return 'rgba(249, 115, 22, 0.14)';
-    case 'yellow':
-      return 'rgba(234, 179, 8, 0.14)';
-    case 'red':
-      return 'rgba(239, 68, 68, 0.12)';
-    case 'pink':
-      return 'rgba(236, 72, 153, 0.14)';
+function getColorColumn(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "blue":
+      return 0;
+    case "green":
+      return 1;
+    case "purple":
+      return 2;
+    case "orange":
+      return 3;
+    case "yellow":
+      return 4;
     default:
-      return 'rgba(148, 163, 184, 0.12)';
+      return 2;
   }
+}
+
+function cropPosition(index: number) {
+  return {
+    row: Math.floor(index / 5),
+    col: index % 5,
+  };
 }
 
 function getInitials(name?: string) {
-  if (!name?.trim()) return '?';
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase();
+  if (!name?.trim()) return "?";
+  return name.trim()[0].toUpperCase();
 }
 
-function formatPercent(value: number) {
-  return `${Math.round(value)}%`;
+function CropCardArt({
+  artIndex,
+  width,
+  height,
+}: {
+  artIndex: number;
+  width: number;
+  height: number;
+}) {
+  const { row, col } = cropPosition(artIndex);
+
+  return (
+    <View style={[styles.cropWindow, { width, height }]}>
+      <Image
+        source={SHEET}
+        resizeMode="stretch"
+        style={{
+          position: "absolute",
+          width: width * 5,
+          height: height * 6,
+          left: -(col * width),
+          top: -(row * height),
+        }}
+      />
+    </View>
+  );
 }
-
-function getTrendLabel(recentForm: number) {
-  if (recentForm >= 2.2) return 'Strong';
-  if (recentForm >= 1.5) return 'Stable';
-  return 'Slipping';
-}
-
-function getExpectationLabel(delta: number) {
-  if (delta >= 0.35) return 'Overperforming';
-  if (delta <= -0.35) return 'Underperforming';
-  return 'On expectation';
-}
-
-function getPlayerEloValue(player: any, playerLookup: Record<string, PlayerLike>) {
-  const direct = toNumber(player?.elo ?? player?.rating);
-  if (direct > 0) return direct;
-
-  const id = String(player?.id ?? player?.playerId ?? '');
-  if (id && playerLookup[id]) {
-    return toNumber(playerLookup[id]?.elo ?? playerLookup[id]?.rating);
+function toneStyles(tone?: StatCardTone) {
+  switch (tone) {
+    case "accent":
+      return { bg: COLORS.accentSoft, value: COLORS.accent };
+    case "blue":
+      return { bg: COLORS.blueSoft, value: COLORS.blue };
+    case "green":
+      return { bg: COLORS.greenSoft, value: COLORS.green };
+    case "blue":
+      return { bg: COLORS.blueSoft, value: COLORS.blue };
+    case "red":
+      return { bg: COLORS.redSoft, value: COLORS.red };
+    default:
+      return { bg: COLORS.whiteSoft, value: COLORS.text };
   }
-
-  return 1000;
 }
 
-function derivePlayerStats(
-  player: PlayerLike,
-  games: any[],
-  allPlayers: PlayerLike[]
-) {
-  const directWins = toNumber(player?.wins);
-  const directGames = toNumber(player?.gamesPlayed);
-  const directPrestige = toNumber(player?.totalPrestige ?? player?.prestige);
-  const elo = toNumber(player?.elo ?? player?.rating);
+function toNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
 
-  const playerLookup: Record<string, PlayerLike> = {};
-  for (const p of allPlayers) {
-    playerLookup[String(p.id)] = p;
-  }
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
-  let winsFromGames = 0;
-  let gamesFromGames = 0;
-  let prestigeFromGames = 0;
-  let recentPoints = 0;
-  let recentCount = 0;
-  let placements: number[] = [];
-  let recentOutcomes: boolean[] = [];
+function average(values: number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
 
-  let firstSeatGames = 0;
-  let firstSeatWins = 0;
-  let lastSeatGames = 0;
-  let lastSeatWins = 0;
+function sum(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
 
-  let expectedFinishTotal = 0;
-  let expectedFinishGames = 0;
-  let averageOpponentEloTotal = 0;
-  let averageOpponentEloGames = 0;
+function stdDev(values: number[]): number {
+  if (values.length <= 1) return 0;
+  const avg = average(values);
+  const variance =
+    values.reduce((acc, value) => acc + (value - avg) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
 
-  const tableSizeStats: Record<number, { games: number; wins: number }> = {};
-  const finishCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+function formatMetricValue(value: string | number | undefined): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return `${Math.round(value)}`;
+  return "0";
+}
 
-  const last10Placements: number[] = [];
-  const last10Prestige: number[] = [];
+function formatSigned(value: number, digits = 0): string {
+  if (!Number.isFinite(value)) return "0";
+  const rounded =
+    digits > 0 ? value.toFixed(digits) : `${Math.round(value)}`;
+  return value > 0 ? `+${rounded}` : rounded;
+}
 
-  const turnOrderTotals: Record<
-    number,
-    { games: number; placementSum: number; wins: number }
-  > = {};
+function formatPercentFromDecimal(value: number): string {
+  return `${Math.round(toNumber(value) * 100)}%`;
+}
 
-  const matchupMap: Record<
-    string,
-    {
-      opponentId: string;
-      opponentName: string;
-      games: number;
-      wins: number;
-      losses: number;
-      ties: number;
-      totalPlacementDiff: number;
-    }
-  > = {};
+function buildAllRowsForPlayer(games: any[], playerId: string): ProfileGameRow[] {
+  const rows: ProfileGameRow[] = [];
 
-  const safeGames = Array.isArray(games) ? [...games] : [];
-  safeGames.sort((a, b) => toNumber(b?.createdAt) - toNumber(a?.createdAt));
+  (games || []).forEach((game: any, index: number) => {
+    const players = Array.isArray(game?.players) ? game.players : [];
+    const totals = game?.totals ?? {};
 
-  for (const game of safeGames) {
-    const gamePlayers = Array.isArray(game?.players) ? game.players : [];
-    const resultIndex = gamePlayers.findIndex(
-      (p: any) => p?.id === player.id || p?.playerId === player.id
-    );
-    if (resultIndex === -1) continue;
+    const isInGame = players.some((p: any) => String(p?.id) === String(playerId));
+    if (!isInGame) return;
 
-    const result = gamePlayers[resultIndex];
-    gamesFromGames += 1;
+    const playerTotals = totals?.[playerId];
+    if (!playerTotals) return;
 
-    const prestige = toNumber(
-      result?.totalPrestige ??
-      result?.prestige ??
-      result?.score ??
-      result?.finalPrestige
-    );
-    prestigeFromGames += prestige;
+    const opponentIds = players
+      .map((p: any) => String(p?.id))
+      .filter((id: string) => id !== String(playerId));
 
-    const placement = toNumber(result?.placement ?? result?.place ?? result?.rank);
-    if (placement > 0) placements.push(placement);
-
-    const isWinner =
-      result?.isWinner === true || placement === 1 || result?.won === true;
-
-    if (isWinner) winsFromGames += 1;
-    recentOutcomes.push(isWinner);
-
-    if (recentCount < 5) {
-      recentPoints += isWinner ? 3 : prestige > 0 ? 1 : 0;
-      recentCount += 1;
-    }
-
-    const tableSize = gamePlayers.length;
-    if (!tableSizeStats[tableSize]) {
-      tableSizeStats[tableSize] = { games: 0, wins: 0 };
-    }
-    tableSizeStats[tableSize].games += 1;
-    if (isWinner) tableSizeStats[tableSize].wins += 1;
-
-    if (placement >= 1 && placement <= 4) {
-      finishCounts[placement] += 1;
-    }
-
-    if (last10Placements.length < 10) {
-      last10Placements.push(placement);
-      last10Prestige.push(prestige);
-    }
-
-    const turnOrder = toNumber(
-      result?.turnOrder ??
-      result?.seat ??
-      ((typeof result?.seatIndex === 'number' ? result.seatIndex : resultIndex) + 1)
+    const opponentElos = opponentIds.map((id: string) =>
+      toNumber(totals?.[id]?.elo ?? totals?.[id]?.rating ?? 1200)
     );
 
-    if (turnOrder > 0) {
-      if (!turnOrderTotals[turnOrder]) {
-        turnOrderTotals[turnOrder] = { games: 0, placementSum: 0, wins: 0 };
-      }
-      turnOrderTotals[turnOrder].games += 1;
-      turnOrderTotals[turnOrder].placementSum += placement > 0 ? placement : 0;
-      if (isWinner) turnOrderTotals[turnOrder].wins += 1;
+    const opponentAvgElo =
+      opponentElos.length > 0
+        ? opponentElos.reduce((acc: number, value: number) => acc + value, 0) /
+          opponentElos.length
+        : 1200;
 
-      if (turnOrder === 1) {
-        firstSeatGames += 1;
-        if (isWinner) firstSeatWins += 1;
-      }
+    const preGameElo = toNumber(playerTotals?.elo ?? playerTotals?.rating ?? 1200);
 
-      if (turnOrder === gamePlayers.length) {
-        lastSeatGames += 1;
-        if (isWinner) lastSeatWins += 1;
-      }
-    }
+    const winnerId =
+      game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId ?? null;
 
-    const eloValues = gamePlayers.map((gp: any) => getPlayerEloValue(gp, playerLookup));
-    const totalStrength = eloValues.reduce(
-      (sum, value) => sum + Math.pow(10, value / 400),
-      0
-    );
+    const win = String(winnerId) === String(playerId) ? 1 : 0;
 
-    const playerEloForGame = getPlayerEloValue(result, playerLookup);
-    const playerStrength = Math.pow(10, playerEloForGame / 400);
-    const strengthShare =
-      totalStrength > 0 ? playerStrength / totalStrength : 1 / Math.max(gamePlayers.length, 1);
+    const eloDelta =
+      typeof playerTotals?.eloDelta === "number"
+        ? playerTotals.eloDelta
+        : win
+        ? 12
+        : -12;
 
-    const expectedFinish =
-      gamePlayers.length > 1
-        ? 1 + (gamePlayers.length - 1) * (1 - strengthShare)
-        : 1;
+    rows.push({
+      gameId: String(game?.id ?? game?.gameId ?? `game-${index}`),
+      playerId: String(playerId),
+      opponentIds,
+      preGameElo,
+      postGameElo: preGameElo + eloDelta,
+      opponentAvgElo,
+      eloDelta,
+      win,
+      gameIndex: index,
+    });
+  });
 
-    expectedFinishTotal += expectedFinish;
-    expectedFinishGames += 1;
+  return rows;
+}
 
-    const opponentElos = gamePlayers
-      .filter((gp: any) => String(gp?.id ?? gp?.playerId ?? '') !== String(player.id))
-      .map((gp: any) => getPlayerEloValue(gp, playerLookup));
+function getWinStreaks(rows: ProfileGameRow[]) {
+  let currentWin = 0;
+  let bestWin = 0;
+  let currentLoss = 0;
+  let worstLoss = 0;
 
-    if (opponentElos.length > 0) {
-      averageOpponentEloTotal +=
-        opponentElos.reduce((sum, value) => sum + value, 0) / opponentElos.length;
-      averageOpponentEloGames += 1;
-    }
-
-    for (const opponent of gamePlayers) {
-      const opponentId = String(opponent?.id ?? opponent?.playerId ?? '');
-      if (!opponentId || opponentId === String(player.id)) continue;
-
-      const opponentPlacement = toNumber(
-        opponent?.placement ?? opponent?.place ?? opponent?.rank
-      );
-
-      if (!matchupMap[opponentId]) {
-        matchupMap[opponentId] = {
-          opponentId,
-          opponentName: opponent?.name ?? 'Unknown',
-          games: 0,
-          wins: 0,
-          losses: 0,
-          ties: 0,
-          totalPlacementDiff: 0,
-        };
-      }
-
-      matchupMap[opponentId].games += 1;
-
-      if (placement > 0 && opponentPlacement > 0) {
-        const diff = opponentPlacement - placement;
-        matchupMap[opponentId].totalPlacementDiff += diff;
-
-        if (placement < opponentPlacement) matchupMap[opponentId].wins += 1;
-        else if (placement > opponentPlacement) matchupMap[opponentId].losses += 1;
-        else matchupMap[opponentId].ties += 1;
-      }
-    }
-  }
-
-  const wins = Math.max(directWins, winsFromGames);
-  const gamesPlayed = Math.max(directGames, gamesFromGames);
-  const prestige = Math.max(directPrestige, prestigeFromGames);
-
-  const winRate = gamesPlayed > 0 ? (wins / gamesPlayed) * 100 : 0;
-  const avgPrestige = gamesPlayed > 0 ? prestige / gamesPlayed : 0;
-  const recentForm = recentCount > 0 ? recentPoints / recentCount : 0;
-
-  const averagePlacement =
-    placements.length > 0
-      ? placements.reduce((sum, value) => sum + value, 0) / placements.length
-      : 0;
-
-  const top2 = placements.filter((p) => p > 0 && p <= 2).length;
-  const top2Rate = gamesPlayed > 0 ? (top2 / gamesPlayed) * 100 : 0;
-
-  const consistency =
-    placements.length > 1
-      ? Math.sqrt(
-          placements.reduce((sum, p) => sum + Math.pow(p - averagePlacement, 2), 0) /
-            placements.length
-        )
-      : 0;
-
-  const clutchFactor = top2 > 0 ? (wins / top2) * 100 : 0;
-  const eloPerGame = gamesPlayed > 0 ? elo / gamesPlayed : 0;
-  const prestigePerWin = wins > 0 ? prestige / wins : 0;
-  const finishDelta = averagePlacement > 0 ? averagePlacement - 1 : 0;
-
-  let currentWinStreak = 0;
-  for (const outcome of recentOutcomes) {
-    if (outcome) currentWinStreak += 1;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    if (rows[i].win === 1) currentWin += 1;
     else break;
   }
 
-  let bestWinStreak = 0;
-  let runningWinStreak = 0;
-  for (const outcome of [...recentOutcomes].reverse()) {
-    if (outcome) {
-      runningWinStreak += 1;
-      if (runningWinStreak > bestWinStreak) bestWinStreak = runningWinStreak;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    if (rows[i].win === 0) currentLoss += 1;
+    else break;
+  }
+
+  let tempWin = 0;
+  let tempLoss = 0;
+
+  rows.forEach((row) => {
+    if (row.win === 1) {
+      tempWin += 1;
+      tempLoss = 0;
+      bestWin = Math.max(bestWin, tempWin);
     } else {
-      runningWinStreak = 0;
+      tempLoss += 1;
+      tempWin = 0;
+      worstLoss = Math.max(worstLoss, tempLoss);
     }
-  }
-
-  const half = Math.floor(placements.length / 2);
-  const firstHalf = half > 0 ? placements.slice(half) : [];
-  const secondHalf = half > 0 ? placements.slice(0, half) : [];
-
-  const firstHalfAvg =
-    firstHalf.length > 0
-      ? firstHalf.reduce((sum, p) => sum + p, 0) / firstHalf.length
-      : 0;
-
-  const secondHalfAvg =
-    secondHalf.length > 0
-      ? secondHalf.reduce((sum, p) => sum + p, 0) / secondHalf.length
-      : 0;
-
-  let improvementLabel = '—';
-  if (firstHalf.length > 0 && secondHalf.length > 0) {
-    if (secondHalfAvg < firstHalfAvg - 0.15) improvementLabel = 'Improving';
-    else if (secondHalfAvg > firstHalfAvg + 0.15) improvementLabel = 'Declining';
-    else improvementLabel = 'Steady';
-  }
-
-  const turnOrderStats = Object.entries(turnOrderTotals)
-    .map(([order, data]) => ({
-      turnOrder: Number(order),
-      games: data.games,
-      averagePlacement: data.games > 0 ? data.placementSum / data.games : 0,
-      winRate: data.games > 0 ? (data.wins / data.games) * 100 : 0,
-    }))
-    .sort((a, b) => a.turnOrder - b.turnOrder);
-
-  const matchupStats = Object.values(matchupMap)
-    .map((m) => ({
-      ...m,
-      averagePlacementEdge: m.games > 0 ? m.totalPlacementDiff / m.games : 0,
-    }))
-    .sort((a, b) => {
-      if (b.games !== a.games) return b.games - a.games;
-      return b.wins - a.wins;
-    });
-
-  const tableSizePerformance = Object.entries(tableSizeStats)
-    .map(([size, data]) => ({
-      size: Number(size),
-      games: data.games,
-      winRate: data.games > 0 ? (data.wins / data.games) * 100 : 0,
-    }))
-    .sort((a, b) => a.size - b.size);
-
-  const finishDistribution = {
-    first: finishCounts[1] ?? 0,
-    second: finishCounts[2] ?? 0,
-    third: finishCounts[3] ?? 0,
-    fourth: finishCounts[4] ?? 0,
-  };
-
-  const expectedAverageFinish =
-    expectedFinishGames > 0 ? expectedFinishTotal / expectedFinishGames : 0;
-
-  const averageOpponentElo =
-    averageOpponentEloGames > 0
-      ? averageOpponentEloTotal / averageOpponentEloGames
-      : 0;
-
-  const expectationDelta =
-    expectedAverageFinish > 0 && averagePlacement > 0
-      ? expectedAverageFinish - averagePlacement
-      : 0;
+  });
 
   return {
-    elo,
-    wins,
-    gamesPlayed,
-    prestige,
-    winRate,
-    avgPrestige,
-    recentForm,
-    averagePlacement,
-    top2Rate,
-    consistency,
-    clutchFactor,
-    currentWinStreak,
-    bestWinStreak,
-    eloPerGame,
-    prestigePerWin,
-    finishDelta,
-    trendLabel: getTrendLabel(recentForm),
-    improvementLabel,
-    firstSeatWinRate: firstSeatGames > 0 ? (firstSeatWins / firstSeatGames) * 100 : 0,
-    lastSeatWinRate: lastSeatGames > 0 ? (lastSeatWins / lastSeatGames) * 100 : 0,
-    firstSeatGames,
-    lastSeatGames,
-    turnOrderStats,
-    matchupStats,
-    tableSizePerformance,
-    finishDistribution,
-    last10Placements,
-    last10Prestige,
-    expectedAverageFinish,
-    expectationDelta,
-    expectationLabel: getExpectationLabel(expectationDelta),
-    averageOpponentElo,
+    currentWin,
+    bestWin,
+    currentLoss,
+    worstLoss,
   };
 }
 
-function StatCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-}) {
-  return (
-    <View style={[styles.statCard, { borderColor: `${accent}55` }]}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, { color: accent }]} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  );
+function getLastN<T>(items: T[], count: number): T[] {
+  return items.slice(Math.max(0, items.length - count));
 }
 
-function MetricCell({
-  label,
-  value,
-  valueColor,
-}: {
-  label: string;
-  value: string;
-  valueColor?: string;
-}) {
-  return (
-    <View style={styles.metricCell}>
-      <Text style={styles.metricCellLabel}>{label}</Text>
-      <Text
-        style={[styles.metricCellValue, valueColor ? { color: valueColor } : null]}
-        numberOfLines={1}
-      >
-        {value}
-      </Text>
-    </View>
-  );
+function buildProfileInsights(
+  rows: ProfileGameRow[],
+  currentElo: number,
+  peakElo: number,
+  confidence: number
+) {
+  const last5 = getLastN(rows, 5);
+  const last10 = getLastN(rows, 10);
+
+  const winRateAll = rows.length ? sum(rows.map((r) => r.win)) / rows.length : 0;
+  const winRate5 = last5.length ? sum(last5.map((r) => r.win)) / last5.length : 0;
+  const avgDelta = rows.length ? average(rows.map((r) => r.eloDelta)) : 0;
+  const avgDelta5 = last5.length ? average(last5.map((r) => r.eloDelta)) : 0;
+  const variability = stdDev(rows.map((r) => r.eloDelta));
+  const formGap = winRate5 - winRateAll;
+  const peakGap = peakElo - currentElo;
+
+  let headline = "Balanced profile";
+  let body =
+    "This player is tracking near their established baseline with no major outlier signal dominating the profile.";
+
+  if (formGap >= 0.2 && avgDelta5 > 0) {
+    headline = "Heating up";
+    body =
+      "Recent form is materially above the player’s long-run win rate, and short-run ELO change is trending positive.";
+  } else if (formGap <= -0.2 && avgDelta5 < 0) {
+    headline = "Cooling off";
+    body =
+      "Recent form has slipped below baseline, with weaker short-run win conversion and negative recent ELO drift.";
+  } else if (confidence >= 0.75 && peakGap <= 25) {
+    headline = "Stable contender";
+    body =
+      "This player is operating close to peak level with above-average confidence, which suggests repeatable output rather than volatility.";
+  } else if (variability >= 18) {
+    headline = "High variance profile";
+    body =
+      "Performance swings are large from game to game. Upside is evident, but consistency remains the main limiter.";
+  }
+
+  return { headline, body };
 }
 
-export default function PlayerProfileScreen() {
+function buildCustomTabCards(
+  activeTab: EloMetricTab,
+  rows: ProfileGameRow[],
+  selectedPlayerName: string,
+  selectedOpponentName?: string | null
+): { cards: CustomCard[]; title: string; subtitle: string } {
+  const totalGames = rows.length;
+  const wins = sum(rows.map((r) => r.win));
+  const losses = totalGames - wins;
+  const winRate = totalGames > 0 ? wins / totalGames : 0;
+
+  const metricRows = rows as any;
+  const currentElo = computeMetric("elo_current", metricRows);
+  const peakElo = computeMetric("elo_peak", metricRows);
+  const confidence = computeMetric("elo_confidence", metricRows);
+
+  const last3 = getLastN(rows, 3);
+  const last5 = getLastN(rows, 5);
+  const last10 = getLastN(rows, 10);
+
+  const recentWinRate3 = last3.length ? sum(last3.map((r) => r.win)) / last3.length : 0;
+  const recentWinRate5 = last5.length ? sum(last5.map((r) => r.win)) / last5.length : 0;
+  const recentWinRate10 = last10.length ? sum(last10.map((r) => r.win)) / last10.length : 0;
+
+  const avgDelta = totalGames ? average(rows.map((r) => r.eloDelta)) : 0;
+  const recentAvgDelta5 = last5.length ? average(last5.map((r) => r.eloDelta)) : 0;
+  const recentAvgDelta10 = last10.length ? average(last10.map((r) => r.eloDelta)) : 0;
+
+  const positiveDeltaRate = totalGames
+    ? rows.filter((r) => r.eloDelta > 0).length / totalGames
+    : 0;
+
+  const avgOpponent = totalGames ? average(rows.map((r) => r.opponentAvgElo)) : 0;
+  const highOppGames = rows.filter((r) => r.opponentAvgElo >= currentElo).length;
+  const highOppWins = rows.filter((r) => r.opponentAvgElo >= currentElo && r.win === 1).length;
+  const highOppWinRate = highOppGames ? highOppWins / highOppGames : 0;
+
+  const favoredGames = rows.filter((r) => r.preGameElo >= r.opponentAvgElo).length;
+  const favoredWins = rows.filter((r) => r.preGameElo >= r.opponentAvgElo && r.win === 1).length;
+  const favoredWinRate = favoredGames ? favoredWins / favoredGames : 0;
+
+  const underdogGames = rows.filter((r) => r.preGameElo < r.opponentAvgElo).length;
+  const underdogWins = rows.filter((r) => r.preGameElo < r.opponentAvgElo && r.win === 1).length;
+  const underdogWinRate = underdogGames ? underdogWins / underdogGames : 0;
+
+  const eloStd = stdDev(rows.map((r) => r.eloDelta));
+  const postGameStd = stdDev(rows.map((r) => r.postGameElo));
+  const peakGap = peakElo - currentElo;
+
+  const strongestWin = rows.length
+    ? rows.reduce((best, row) => (row.eloDelta > best.eloDelta ? row : best), rows[0])
+    : null;
+
+  const worstLoss = rows.length
+    ? rows.reduce((worst, row) => (row.eloDelta < worst.eloDelta ? row : worst), rows[0])
+    : null;
+
+  const streaks = getWinStreaks(rows);
+
+  const formScore = clamp(
+    50 + (recentAvgDelta5 * 2.2) + ((recentWinRate5 - winRate) * 70),
+    0,
+    100
+  );
+  const skillScore = clamp(
+    50 + ((currentElo - avgOpponent) / 8) + ((winRate - 0.5) * 100),
+    0,
+    100
+  );
+  const projectionScore = clamp(
+    50 + (recentAvgDelta10 * 1.8) + ((confidence - 0.5) * 40) - (peakGap / 4),
+    0,
+    100
+  );
+
+  switch (activeTab) {
+    case "Leaderboard":
+      return {
+        title: "Profile Snapshot",
+        subtitle: `${selectedPlayerName} at a glance`,
+        cards: [
+          {
+            key: "currentElo",
+            label: "Current ELO",
+            value: `${Math.round(currentElo)}`,
+            sub: "Live rating",
+            tone: "accent",
+          },
+          {
+            key: "peakElo",
+            label: "Peak ELO",
+            value: `${Math.round(peakElo)}`,
+            sub: `Gap ${Math.round(peakGap)}`,
+            tone: "blue",
+          },
+          {
+            key: "confidence",
+            label: "Confidence",
+            value: formatPercentFromDecimal(confidence),
+            sub: "Profile trust level",
+            tone: "green",
+          },
+          {
+            key: "games",
+            label: "Games Played",
+            value: `${totalGames}`,
+            sub: `${wins}-${losses} record`,
+            tone: "default",
+          },
+          {
+            key: "winRate",
+            label: "Win Rate",
+            value: formatPercentFromDecimal(winRate),
+            sub: `${wins} wins`,
+            tone: winRate >= 0.6 ? "green" : winRate >= 0.45 ? "blue" : "red",
+          },
+          {
+            key: "avgDelta",
+            label: "Avg ELO Delta",
+            value: formatSigned(avgDelta, 1),
+            sub: "Per game net movement",
+            tone: avgDelta >= 0 ? "green" : "red",
+          },
+          {
+            key: "bestStreak",
+            label: "Best Win Streak",
+            value: `${streaks.bestWin}`,
+            sub: `Current ${streaks.currentWin}`,
+            tone: "blue",
+          },
+          {
+            key: "variance",
+            label: "Delta Variance",
+            value: `${Math.round(eloStd)}`,
+            sub: "Game-to-game swing",
+            tone: eloStd <= 10 ? "green" : eloStd <= 18 ? "blue" : "red",
+          },
+        ],
+      };
+
+    case "Momentum":
+      return {
+        title: "Momentum Profile",
+        subtitle: "Short-run form and trend strength",
+        cards: [
+          {
+            key: "formScore",
+            label: "Form Score",
+            value: `${Math.round(formScore)}`,
+            sub: "Recent trend index",
+            tone: formScore >= 65 ? "green" : formScore >= 45 ? "blue" : "red",
+          },
+          {
+            key: "recentDelta5",
+            label: "Last 5 Avg Delta",
+            value: formatSigned(recentAvgDelta5, 1),
+            sub: "Recent ELO movement",
+            tone: recentAvgDelta5 >= 0 ? "green" : "red",
+          },
+          {
+            key: "recentDelta10",
+            label: "Last 10 Avg Delta",
+            value: formatSigned(recentAvgDelta10, 1),
+            sub: "Extended form",
+            tone: recentAvgDelta10 >= 0 ? "green" : "red",
+          },
+          {
+            key: "wr3",
+            label: "Last 3 Win Rate",
+            value: formatPercentFromDecimal(recentWinRate3),
+            sub: "Immediate form",
+            tone: recentWinRate3 >= 0.67 ? "green" : recentWinRate3 >= 0.34 ? "blue" : "red",
+          },
+          {
+            key: "wr5",
+            label: "Last 5 Win Rate",
+            value: formatPercentFromDecimal(recentWinRate5),
+            sub: "Rolling sample",
+            tone: recentWinRate5 >= 0.6 ? "green" : recentWinRate5 >= 0.4 ? "blue" : "red",
+          },
+          {
+            key: "wr10",
+            label: "Last 10 Win Rate",
+            value: formatPercentFromDecimal(recentWinRate10),
+            sub: "Trend stability",
+            tone: recentWinRate10 >= 0.6 ? "green" : recentWinRate10 >= 0.4 ? "blue" : "red",
+          },
+          {
+            key: "currentStreak",
+            label: "Current Streak",
+            value:
+              streaks.currentWin > 0
+                ? `${streaks.currentWin}W`
+                : streaks.currentLoss > 0
+                ? `${streaks.currentLoss}L`
+                : "0",
+            sub: `Best ${streaks.bestWin}W / Worst ${streaks.worstLoss}L`,
+            tone: streaks.currentWin > 0 ? "green" : streaks.currentLoss > 0 ? "red" : "default",
+          },
+          {
+            key: "positiveDeltaRate",
+            label: "Positive Delta Rate",
+            value: formatPercentFromDecimal(positiveDeltaRate),
+            sub: "Share of upward games",
+            tone: positiveDeltaRate >= 0.55 ? "green" : positiveDeltaRate >= 0.45 ? "blue" : "red",
+          },
+        ],
+      };
+
+    case "Skills":
+      return {
+        title: "Skill Indicators",
+        subtitle: "Repeatable strength rather than short-run noise",
+        cards: [
+          {
+            key: "skillScore",
+            label: "Skill Score",
+            value: `${Math.round(skillScore)}`,
+            sub: "Overall strength index",
+            tone: skillScore >= 65 ? "green" : skillScore >= 45 ? "blue" : "red",
+          },
+          {
+            key: "favoredWinRate",
+            label: "Favored Win Rate",
+            value: formatPercentFromDecimal(favoredWinRate),
+            sub: `${favoredWins}/${favoredGames} when favored`,
+            tone: favoredWinRate >= 0.65 ? "green" : favoredWinRate >= 0.5 ? "blue" : "red",
+          },
+          {
+            key: "underdogWinRate",
+            label: "Underdog Win Rate",
+            value: formatPercentFromDecimal(underdogWinRate),
+            sub: `${underdogWins}/${underdogGames} when chasing`,
+            tone: underdogWinRate >= 0.45 ? "green" : underdogWinRate >= 0.25 ? "blue" : "red",
+          },
+          {
+            key: "avgOpponent",
+            label: "Avg Opponent ELO",
+            value: `${Math.round(avgOpponent)}`,
+            sub: "Typical opposition",
+            tone: "blue",
+          },
+          {
+            key: "bestGain",
+            label: "Best Single Gain",
+            value: strongestWin ? formatSigned(strongestWin.eloDelta) : "0",
+            sub: strongestWin ? `Game ${strongestWin.gameIndex + 1}` : "No data",
+            tone: "green",
+          },
+          {
+            key: "worstDrop",
+            label: "Worst Single Drop",
+            value: worstLoss ? formatSigned(worstLoss.eloDelta) : "0",
+            sub: worstLoss ? `Game ${worstLoss.gameIndex + 1}` : "No data",
+            tone: "red",
+          },
+          {
+            key: "consistency",
+            label: "Consistency Score",
+            value: `${Math.round(clamp(100 - eloStd * 4.2, 0, 100))}`,
+            sub: "Lower variance scores higher",
+            tone: eloStd <= 10 ? "green" : eloStd <= 18 ? "blue" : "red",
+          },
+          {
+            key: "baselineEdge",
+            label: "Baseline Edge",
+            value: formatSigned(currentElo - avgOpponent),
+            sub: "Rating vs field average",
+            tone: currentElo >= avgOpponent ? "accent" : "blue",
+          },
+        ],
+      };
+
+    case "Context":
+      return {
+        title: "Context Splits",
+        subtitle: selectedOpponentName
+          ? `Filtered to ${selectedOpponentName}`
+          : "How results change by matchup strength",
+        cards: [
+          {
+            key: "highOppRate",
+            label: "Vs Equal+ ELO",
+            value: formatPercentFromDecimal(highOppWinRate),
+            sub: `${highOppWins}/${highOppGames} against stronger fields`,
+            tone: highOppWinRate >= 0.5 ? "green" : highOppWinRate >= 0.35 ? "blue" : "red",
+          },
+          {
+            key: "favoredRateContext",
+            label: "When Favored",
+            value: formatPercentFromDecimal(favoredWinRate),
+            sub: `${favoredWins}/${favoredGames}`,
+            tone: favoredWinRate >= 0.65 ? "green" : favoredWinRate >= 0.5 ? "blue" : "red",
+          },
+          {
+            key: "underdogRateContext",
+            label: "When Underdog",
+            value: formatPercentFromDecimal(underdogWinRate),
+            sub: `${underdogWins}/${underdogGames}`,
+            tone: underdogWinRate >= 0.45 ? "green" : underdogWinRate >= 0.25 ? "blue" : "red",
+          },
+          {
+            key: "opponentSpread",
+            label: "Opponent Range",
+            value: `${Math.round(
+              rows.length ? Math.max(...rows.map((r) => r.opponentAvgElo)) - Math.min(...rows.map((r) => r.opponentAvgElo)) : 0
+            )}`,
+            sub: "Difficulty spread",
+            tone: "blue",
+          },
+          {
+            key: "averageOppDelta",
+            label: "Opposition Gap",
+            value: formatSigned(
+              rows.length ? average(rows.map((r) => r.preGameElo - r.opponentAvgElo)) : 0,
+              1
+            ),
+            sub: "Pre-game rating edge",
+            tone: "accent",
+          },
+          {
+            key: "contextDelta",
+            label: "Context Avg Delta",
+            value: formatSigned(avgDelta, 1),
+            sub: selectedOpponentName ? "Filtered average" : "All-context average",
+            tone: avgDelta >= 0 ? "green" : "red",
+          },
+          {
+            key: "hardGamesShare",
+            label: "Tough Match Share",
+            value: formatPercentFromDecimal(
+              totalGames ? highOppGames / totalGames : 0
+            ),
+            sub: "Games vs equal-or-better avg ELO",
+            tone: "blue",
+          },
+          {
+            key: "contextStability",
+            label: "Context Stability",
+            value: `${Math.round(clamp(100 - postGameStd * 0.9, 0, 100))}`,
+            sub: "Post-game rating steadiness",
+            tone: postGameStd <= 20 ? "green" : postGameStd <= 35 ? "blue" : "red",
+          },
+        ],
+      };
+
+    case "Projection":
+    default:
+      return {
+        title: "Projection Signals",
+        subtitle: "Where the profile is likely heading next",
+        cards: [
+          {
+            key: "projectionScore",
+            label: "Projection Score",
+            value: `${Math.round(projectionScore)}`,
+            sub: "Forward-looking outlook",
+            tone: projectionScore >= 65 ? "green" : projectionScore >= 45 ? "blue" : "red",
+          },
+          {
+            key: "peakGapProj",
+            label: "Distance From Peak",
+            value: `${Math.round(peakGap)}`,
+            sub: "Closer is stronger",
+            tone: peakGap <= 20 ? "green" : peakGap <= 50 ? "blue" : "red",
+          },
+          {
+            key: "confidenceProj",
+            label: "Confidence",
+            value: formatPercentFromDecimal(confidence),
+            sub: "Projection reliability",
+            tone: confidence >= 0.7 ? "green" : confidence >= 0.5 ? "blue" : "red",
+          },
+          {
+            key: "recentLift",
+            label: "Recent Lift",
+            value: formatSigned(
+              last10.length ? average(last10.map((r) => r.postGameElo - r.preGameElo)) : 0,
+              1
+            ),
+            sub: "Average late-sample gain",
+            tone: recentAvgDelta10 >= 0 ? "green" : "red",
+          },
+          {
+            key: "ceilingPressure",
+            label: "Ceiling Pressure",
+            value: `${Math.round(clamp((peakGap / Math.max(1, peakElo)) * 1000, 0, 100))}`,
+            sub: "Lower means nearer ceiling",
+            tone: peakGap <= 20 ? "green" : peakGap <= 50 ? "blue" : "red",
+          },
+          {
+            key: "trendSlope",
+            label: "Trend Slope",
+            value: formatSigned(recentAvgDelta5 - avgDelta, 1),
+            sub: "Recent vs overall pace",
+            tone: recentAvgDelta5 >= avgDelta ? "green" : "red",
+          },
+          {
+            key: "breakoutChance",
+            label: "Breakout Chance",
+            value: `${Math.round(
+              clamp((recentWinRate10 * 45) + (confidence * 30) + ((peakGap <= 25 ? 15 : 0)) + (recentAvgDelta10 * 1.2), 0, 100)
+            )}`,
+            sub: "Upward move probability",
+            tone: projectionScore >= 65 ? "green" : projectionScore >= 45 ? "blue" : "red",
+          },
+          {
+            key: "floorStrength",
+            label: "Floor Strength",
+            value: `${Math.round(clamp((winRate * 55) + (confidence * 35) - (eloStd * 1.2), 0, 100))}`,
+            sub: "Downside resistance",
+            tone: confidence >= 0.65 && eloStd <= 14 ? "green" : "blue",
+          },
+        ],
+      };
+  }
+}
+
+function getPlayerNameById(players: StorePlayer[], playerId?: string | null): string | null {
+  if (!playerId) return null;
+  return players.find((player) => String(player.id) === String(playerId))?.name || null;
+}
+
+export default function PlayerProfileDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ playerId?: string | string[] }>();
-  const [activeTab, setActiveTab] = useState<
-    'overview' | 'advanced' | 'matchups' | 'history'
-  >('overview');
 
-  const rawPlayerId = Array.isArray(params.playerId)
-    ? params.playerId[0]
-    : params.playerId;
+  const games = useStore((s: any) => s.games || []);
+  const players = useStore((s: any) => s.players || []);
 
-  const playerId = typeof rawPlayerId === 'string' ? rawPlayerId : '';
+  const playerId = Array.isArray(params.playerId) ? params.playerId[0] : params.playerId;
+  const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<EloMetricTab>(getDefaultMetricTab());
 
-  const players = useStore((s: any) =>
-    Array.isArray(s.players) ? s.players : []
-  ) as PlayerLike[];
+  const sortedPlayers = useMemo<StorePlayer[]>(() => {
+    return [...players].sort((a: StorePlayer, b: StorePlayer) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+    );
+  }, [players]);
 
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : []
-  ) as any[];
-
-  const player = useMemo(
-    () => players.find((p) => String(p.id) === String(playerId)) ?? null,
-    [players, playerId]
+  const selectedPlayer = useMemo(
+    () => sortedPlayers.find((p) => String(p.id) === String(playerId)) || null,
+    [sortedPlayers, playerId]
   );
 
-  const stats = useMemo(() => {
-    if (!player) return null;
-    return derivePlayerStats(player, games, players);
-  }, [player, games, players]);
+  const selectedPlayerName = selectedPlayer?.name || "Player";
+  const playerAccent = getPlayerAccent(selectedPlayer?.color);
+  const playerArtIndex = Math.floor(Math.random() * 6) * 5 + getColorColumn(selectedPlayer?.color);
+
+  const opponentOptions = useMemo(
+    () => sortedPlayers.filter((p) => String(p.id) !== String(playerId)),
+    [sortedPlayers, playerId]
+  );
+
+  const playerRows = useMemo(
+    () => (playerId ? buildAllRowsForPlayer(games, String(playerId)) : []),
+    [games, playerId]
+  );
+
+  const filteredRows = useMemo(() => {
+    if (!selectedOpponentId) return playerRows;
+    return playerRows.filter((row) =>
+      row.opponentIds.some((id) => String(id) === String(selectedOpponentId))
+    );
+  }, [playerRows, selectedOpponentId]);
+
+  const context: MetricContext = useMemo(
+    () => ({
+      selectedOpponentId: selectedOpponentId || null,
+    }),
+    [selectedOpponentId]
+  );
+
+  const {
+    topCards,
+    activeInsight,
+    hasData,
+  } = useMetricScreenData({
+    games,
+    players,
+    playerId: playerId || null,
+    activeTab,
+    tabs: PROFILE_TABS,
+    context,
+  });
+
+  const selectedOpponentName = getPlayerNameById(sortedPlayers, selectedOpponentId);
+
+  const filteredMetricRows = filteredRows as any;
+  const currentElo = computeMetric("elo_current", filteredMetricRows);
+  const peakElo = computeMetric("elo_peak", filteredMetricRows);
+  const confidence = computeMetric("elo_confidence", filteredMetricRows);
+
+  const totalGames = filteredRows.length;
+  const totalWins = filteredRows.filter((row) => row.win === 1).length;
+  const winRate = totalGames > 0 ? totalWins / totalGames : 0;
+
+  const currentEloBadgeIndex = ((playerArtIndex + 5) % 30);
+  const peakBadgeIndex = ((playerArtIndex + 10) % 30);
+  const winRateBadgeIndex = ((playerArtIndex + 15) % 30);
+
+  const customSection = useMemo(
+    () =>
+      buildCustomTabCards(
+        activeTab,
+        filteredRows,
+        selectedPlayerName,
+        selectedOpponentName
+      ),
+    [activeTab, filteredRows, selectedPlayerName, selectedOpponentName]
+  );
+
+  const featuredCard = topCards[0];
+  const secondaryCards = topCards.slice(1, 3);
 
   const recentGames = useMemo(() => {
-    if (!player) return [];
+    const filteredGames = (games || []).filter((game: any) => {
+      const gamePlayers = Array.isArray(game?.players) ? game.players : [];
+      const includesPlayer = gamePlayers.some((p: any) => String(p?.id) === String(playerId));
+      if (!includesPlayer) return false;
 
-    const safeGames = Array.isArray(games) ? [...games] : [];
-    safeGames.sort((a, b) => toNumber(b?.createdAt) - toNumber(a?.createdAt));
+      if (!selectedOpponentId) return true;
+      return gamePlayers.some((p: any) => String(p?.id) === String(selectedOpponentId));
+    });
 
-    return safeGames
-      .map((game) => {
-        const gamePlayers = Array.isArray(game?.players) ? game.players : [];
-        const result = gamePlayers.find(
-          (p: any) => p?.id === player.id || p?.playerId === player.id
-        );
+    return filteredGames.slice(-6).reverse();
+  }, [games, playerId, selectedOpponentId]);
 
-        if (!result) return null;
+  const profileInsight = useMemo(
+    () => buildProfileInsights(filteredRows, currentElo, peakElo, confidence),
+    [filteredRows, currentElo, peakElo, confidence]
+  );
 
-        const prestige = toNumber(
-          result?.totalPrestige ??
-            result?.prestige ??
-            result?.score ??
-            result?.finalPrestige
-        );
-
-        const placement = toNumber(
-          result?.placement ?? result?.place ?? result?.rank
-        );
-
-        const createdAt = toNumber(game?.createdAt);
-        const title =
-          game?.name ||
-          game?.title ||
-          (createdAt > 0
-            ? new Date(createdAt).toLocaleDateString()
-            : 'Recorded Game');
-
-        return {
-          id: String(game?.id ?? `${player.id}-${createdAt}-${placement}`),
-          title,
-          prestige,
-          placement,
-          isWinner:
-            result?.isWinner === true || placement === 1 || result?.won === true,
-        };
-      })
-      .filter(Boolean) as {
-      id: string;
-      title: string;
-      prestige: number;
-      placement: number;
-      isWinner: boolean;
-    }[];
-  }, [games, player]);
-
-  if (!player || !playerId || !stats) {
+  if (!selectedPlayer) {
     return (
-      <View style={styles.screen}>
-        <View style={styles.backgroundLayer}>
-          <StarryNight />
-          <View pointerEvents="none" style={styles.backgroundDim} />
-        </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerState}>
+          <Text style={styles.centerTitle}>Player not found</Text>
+          <Text style={styles.centerSub}>
+            The profile route does not match a player in store data.
+          </Text>
 
-        <View style={styles.centerWrap}>
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Player not found</Text>
-            <Pressable onPress={() => router.back()} style={styles.backButton}>
-              <Text style={styles.backButtonText}>Go Back</Text>
-            </Pressable>
-          </View>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </Pressable>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  const playerColor = getPlayerColor(player.color);
-  const playerTint = getPlayerTint(player.color);
-
   return (
-    <View style={styles.screen}>
-      <View style={styles.backgroundLayer}>
-        <StarryNight />
-        <View
-          pointerEvents="none"
-          style={[styles.playerGlowOrb, { backgroundColor: playerTint }]}
-        />
-        <View pointerEvents="none" style={styles.backgroundDim} />
-      </View>
-
+    <SafeAreaView style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.container}
+        style={styles.scroll}
+        contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>‹ Back</Text>
-        </Pressable>
+        
+        
+        <View style={styles.headerCard}>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.kicker}>Moonrakers</Text>
 
-        <View style={[styles.heroCard, { borderColor: `${playerColor}66` }]}>
-          <View style={styles.heroTopRow}>
-            <View style={[styles.avatar, { backgroundColor: playerColor }]}>
-              <Text style={styles.avatarText}>{getInitials(player.name)}</Text>
-            </View>
+            <View style={styles.profileTitleRow}>
+              <View
+                style={[
+                  styles.profileCardBadge,
+                  { borderColor: playerAccent, shadowColor: playerAccent },
+                ]}
+              >
+                <CropCardArt artIndex={playerArtIndex} width={44} height={44} />
+                <View style={styles.profileCardBadgeDim} />
+                <Text style={styles.profileCardBadgeText}>
+                  {getInitials(selectedPlayer.name)}
+                </Text>
+              </View>
 
-            <View style={styles.heroTextWrap}>
-              <Text style={styles.eyebrow}>Player Profile</Text>
-              <Text style={styles.playerName}>{player.name}</Text>
-              <Text style={[styles.playerMeta, { color: playerColor }]}>
-                {player.color?.toUpperCase() || 'UNASSIGNED'} CREW
+              <Text
+                style={[
+                  styles.title,
+                  styles.profileTitleGlow,
+                  { color: playerAccent, textShadowColor: playerAccent },
+                ]}
+              >
+                {selectedPlayer.name || "Player Profile"}
               </Text>
             </View>
+
+            <Text style={styles.subtitle}>
+              Custom profile tabs with player-specific metrics, form, context, and projection signals.
+            </Text>
+          </View>
+
+          <Pressable
+            style={styles.headerBadge}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.headerBadgeText}>BACK</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.metricGridTop}>
+          <View style={[styles.metricCardTop, { backgroundColor: COLORS.accentSoft }]}>
+            <View style={styles.metricCardTopHeader}>
+              <View style={[styles.metricMiniCardBadge, { borderColor: COLORS.accent, shadowColor: COLORS.accent }]}>
+                <CropCardArt artIndex={currentEloBadgeIndex} width={24} height={24} />
+                <View style={styles.metricMiniCardBadgeDim} />
+                <Text style={styles.metricMiniCardBadgeText}>
+                  {getInitials(selectedPlayer.name)}
+                </Text>
+              </View>
+              <Text style={styles.metricLabel} numberOfLines={1}>Current ELO</Text>
+            </View>
+            <Text style={[styles.metricValue, { color: COLORS.accent }]}>
+              {Math.round(currentElo)}
+            </Text>
+            <Text style={styles.metricSub}>Live rating</Text>
+          </View>
+
+          <View style={[styles.metricCardTop, { backgroundColor: COLORS.blueSoft }]}>
+            <View style={styles.metricCardTopHeader}>
+              <View style={[styles.metricMiniCardBadge, { borderColor: COLORS.blue, shadowColor: COLORS.blue }]}>
+                <CropCardArt artIndex={peakBadgeIndex} width={24} height={24} />
+                <View style={styles.metricMiniCardBadgeDim} />
+                <Text style={styles.metricMiniCardBadgeText}>
+                  {getInitials(selectedPlayer.name)}
+                </Text>
+              </View>
+              <Text style={styles.metricLabel} numberOfLines={1}>Peak</Text>
+            </View>
+            <Text style={[styles.metricValue, { color: COLORS.blue }]}>
+              {Math.round(peakElo)}
+            </Text>
+            <Text style={styles.metricSub}>Best rating reached</Text>
+          </View>
+
+          <View style={[styles.metricCardTop, { backgroundColor: COLORS.greenSoft }]}>
+            <View style={styles.metricCardTopHeader}>
+              <View style={[styles.metricMiniCardBadge, { borderColor: COLORS.green, shadowColor: COLORS.green }]}>
+                <CropCardArt artIndex={winRateBadgeIndex} width={24} height={24} />
+                <View style={styles.metricMiniCardBadgeDim} />
+                <Text style={styles.metricMiniCardBadgeText}>
+                  {getInitials(selectedPlayer.name)}
+                </Text>
+              </View>
+              <Text style={styles.metricLabel} numberOfLines={1}>Win Rate</Text>
+            </View>
+            <Text style={[styles.metricValue, { color: COLORS.green }]}>
+              {formatPercentFromDecimal(winRate)}
+            </Text>
+            <Text style={styles.metricSub}>
+              {totalWins} wins / {totalGames} games
+            </Text>
           </View>
         </View>
 
-        <View style={styles.summaryCard}>
-          <View style={styles.statsGrid}>
-            <StatCard label="ELO" value={String(stats.elo)} accent={playerColor} />
-            <StatCard label="Wins" value={String(stats.wins)} accent={COLORS.gold} />
-            <StatCard label="Games" value={String(stats.gamesPlayed)} accent={COLORS.cyan} />
-            <StatCard label="Prestige" value={String(stats.prestige)} accent="#C4B5FD" />
-            <StatCard label="Win Rate" value={formatPercent(stats.winRate)} accent={COLORS.success} />
-            <StatCard label="Avg Prestige" value={stats.avgPrestige.toFixed(1)} accent={COLORS.textPrimary} />
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Profile Tabs</Text>
+            <Text style={styles.sectionSub}>Custom player breakdown</Text>
+          </View>
+
+          <View style={styles.tabGrid}>
+            <View style={styles.tabGridRowTwo}>
+              {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
+                const active = tab === activeTab;
+                return (
+                  <Pressable
+                    key={tab}
+                    style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
+                    onPress={() => setActiveTab(tab)}
+                  >
+                    <Text
+                      style={[
+                        styles.underlineMainTabText,
+                        active && styles.underlineMainTabTextActive,
+                      ]}
+                    >
+                      {tab}
+                    </Text>
+                    <View
+                      style={[
+                        styles.underlineMainTabLine,
+                        active && styles.underlineMainTabLineActive,
+                      ]}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.tabGridRowThree}>
+              {(["Skills", "Context", "Projection"] as EloMetricTab[]).map((tab) => {
+                const active = tab === activeTab;
+                return (
+                  <Pressable
+                    key={tab}
+                    style={[styles.underlineMainTab, styles.underlineMainTabThreeCol]}
+                    onPress={() => setActiveTab(tab)}
+                  >
+                    <Text
+                      style={[
+                        styles.underlineMainTabText,
+                        active && styles.underlineMainTabTextActive,
+                      ]}
+                    >
+                      {tab}
+                    </Text>
+                    <View
+                      style={[
+                        styles.underlineMainTabLine,
+                        active && styles.underlineMainTabLineActive,
+                      ]}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
 
-        <Text style={{ color: 'red', fontSize: 22, fontWeight: '900' }}>
-          REAL PROFILE SCREEN
-        </Text>
+        {activeTab === "Context" ? (
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Opponent Filter</Text>
+              <Text style={styles.sectionSub}>Optional head-to-head focus</Text>
+            </View>
 
-        <View style={styles.tabBar}>
-          {[
-            { key: 'overview', label: 'Overview' },
-            { key: 'advanced', label: 'Advanced' },
-            { key: 'matchups', label: 'Matchups' },
-            { key: 'history', label: 'History' },
-          ].map((tab) => {
-            const selected = activeTab === tab.key;
-            return (
+            <View style={styles.underlineSelectorRow}>
               <Pressable
-                key={tab.key}
-                onPress={() => setActiveTab(tab.key as any)}
-                style={[
-                  styles.tabButton,
-                  selected && {
-                    borderColor: playerColor,
-                    backgroundColor: 'rgba(255,255,255,0.08)',
-                  },
-                ]}
+                style={styles.underlineTabButton}
+                onPress={() => setSelectedOpponentId(null)}
               >
                 <Text
                   style={[
-                    styles.tabButtonText,
-                    selected && { color: playerColor },
+                    styles.underlineTabText,
+                    !selectedOpponentId && styles.underlineTabTextActive,
                   ]}
                 >
-                  {tab.label}
+                  All
                 </Text>
+                <View
+                  style={[
+                    styles.underlineTabLine,
+                    !selectedOpponentId && styles.underlineTabLineActive,
+                  ]}
+                />
               </Pressable>
-            );
-          })}
-        </View>
 
-        {activeTab === 'overview' && (
-          <>
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionEyebrow}>Overview</Text>
-              <Text style={styles.sectionTitle}>Core Metrics</Text>
-
-              <View style={styles.metricGrid}>
-                <MetricCell label="Average placement" value={stats.averagePlacement ? stats.averagePlacement.toFixed(2) : '—'} />
-                <MetricCell label="Top 2 Rate" value={formatPercent(stats.top2Rate)} />
-                <MetricCell label="Consistency" value={stats.consistency.toFixed(2)} />
-                <MetricCell label="Clutch Factor" value={formatPercent(stats.clutchFactor)} />
-                <MetricCell label="Recent form" value={`${stats.recentForm.toFixed(1)} / 3.0`} />
-                <MetricCell label="Trend" value={stats.trendLabel} />
-                <MetricCell label="Improvement" value={stats.improvementLabel} />
-                <MetricCell label="Current streak" value={String(stats.currentWinStreak)} />
-                <MetricCell label="Best streak" value={String(stats.bestWinStreak)} />
-                <MetricCell label="Finish Delta" value={stats.finishDelta.toFixed(2)} />
-                <MetricCell label="ELO Per Game" value={stats.eloPerGame.toFixed(1)} />
-                <MetricCell label="Prestige Per Win" value={stats.prestigePerWin.toFixed(1)} />
-              </View>
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionEyebrow}>Recent Form</Text>
-              <Text style={styles.sectionTitle}>Last 10 Games</Text>
-
-              <View style={styles.sparklineRow}>
-                {stats.last10Placements.map((placement, index) => (
-                  <View key={`${placement}-${index}`} style={styles.sparkColumn}>
+              {opponentOptions.map((player) => {
+                const active = String(player.id) === String(selectedOpponentId);
+                return (
+                  <Pressable
+                    key={player.id}
+                    style={styles.underlineTabButton}
+                    onPress={() => setSelectedOpponentId(String(player.id))}
+                  >
+                    <Text
+                      style={[
+                        styles.underlineTabText,
+                        active && styles.underlineTabTextActive,
+                      ]}
+                    >
+                      {player.name || "Unknown"}
+                    </Text>
                     <View
                       style={[
-                        styles.sparkBar,
-                        {
-                          height: Math.max(8, 34 - placement * 6),
-                          backgroundColor:
-                            placement === 1
-                              ? COLORS.gold
-                              : placement === 2
-                              ? COLORS.success
-                              : placement === 3
-                              ? COLORS.cyan
-                              : COLORS.textMuted,
-                        },
+                        styles.underlineTabLine,
+                        active && styles.underlineTabLineActive,
                       ]}
                     />
-                    <Text style={styles.sparkPlacementText}>{placement || '—'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Top 3 Winning Signals</Text>
+            <Text style={styles.sectionSub}>{selectedPlayer.name || "No player selected"}</Text>
+          </View>
+
+          {!hasData ? (
+            <Text style={styles.emptyText}>No ELO rows available for this player yet.</Text>
+          ) : (
+            <View style={styles.featuredSignalsWrap}>
+              {featuredCard ? (
+                <View
+                  style={[
+                    styles.featuredSignalCard,
+                    { backgroundColor: toneStyles(featuredCard.tone as StatCardTone).bg },
+                  ]}
+                >
+                  <Text style={styles.featuredSignalLabel} numberOfLines={1}>
+                    {featuredCard.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.featuredSignalValue,
+                      { color: toneStyles(featuredCard.tone as StatCardTone).value },
+                    ]}
+                  >
+                    {featuredCard.value}
+                  </Text>
+                  {featuredCard.sub ? (
+                    <Text style={styles.featuredSignalSub} numberOfLines={2}>
+                      {featuredCard.sub}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <View style={styles.secondarySignalColumn}>
+                {secondaryCards.map((card) => {
+                  const tone = toneStyles(card.tone as StatCardTone);
+                  return (
+                    <View
+                      key={card.key}
+                      style={[styles.secondarySignalCard, { backgroundColor: tone.bg }]}
+                    >
+                      <Text style={styles.metricLabelCompact} numberOfLines={1}>
+                        {card.label}
+                      </Text>
+                      <Text style={[styles.metricValueCompact, { color: tone.value }]}>
+                        {card.value}
+                      </Text>
+                      {card.sub ? (
+                        <Text style={styles.metricSubCompact} numberOfLines={1}>
+                          {card.sub}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.insightCardCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>{profileInsight.headline}</Text>
+            <Text style={styles.insightChip}>{activeTab.toUpperCase()}</Text>
+          </View>
+          <Text style={styles.insightText}>{profileInsight.body}</Text>
+          {activeInsight?.body ? (
+            <Text style={styles.insightTextSecondary}>{activeInsight.body}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>{customSection.title}</Text>
+            <Text style={styles.sectionSub}>{customSection.subtitle}</Text>
+          </View>
+
+          {filteredRows.length === 0 ? (
+            <Text style={styles.emptyText}>No metric data available yet.</Text>
+          ) : (
+            <View style={styles.metricGridDense}>
+              {customSection.cards.map((card) => {
+                const tone = toneStyles(card.tone);
+                return (
+                  <View
+                    key={card.key}
+                    style={[styles.metricCardDense, { backgroundColor: tone.bg }]}
+                  >
+                    <Text style={styles.metricLabelCompact} numberOfLines={2}>
+                      {card.label}
+                    </Text>
+                    <Text style={[styles.metricValueCompact, { color: tone.value }]}>
+                      {formatMetricValue(card.value)}
+                    </Text>
+                    {card.sub ? (
+                      <Text style={styles.metricSubCompact} numberOfLines={2}>
+                        {card.sub}
+                      </Text>
+                    ) : null}
                   </View>
-                ))}
-              </View>
-
-              <View style={styles.miniTable}>
-                <View style={styles.miniRow}>
-                  <Text style={styles.miniCellLeft}>Placements</Text>
-                  <Text style={styles.miniCell}>
-                    {stats.last10Placements.join(' • ') || '—'}
-                  </Text>
-                </View>
-
-                <View style={styles.miniRow}>
-                  <Text style={styles.miniCellLeft}>Prestige</Text>
-                  <Text style={styles.miniCell}>
-                    {stats.last10Prestige.join(' • ') || '—'}
-                  </Text>
-                </View>
-              </View>
+                );
+              })}
             </View>
-          </>
-        )}
+          )}
+        </View>
 
-        {activeTab === 'advanced' && (
-          <>
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionEyebrow}>Seat Analysis</Text>
-              <Text style={styles.sectionTitle}>Turn Order Impact</Text>
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Recent Games</Text>
+            <Text style={styles.sectionSub}>
+              {selectedOpponentId ? "Filtered by opponent" : "Latest appearances"}
+            </Text>
+          </View>
 
-              <View style={styles.metricGrid}>
-                <MetricCell label="Win rate going first" value={formatPercent(stats.firstSeatWinRate)} />
-                <MetricCell label="Games started first" value={String(stats.firstSeatGames)} />
-                <MetricCell label="Win rate going last" value={formatPercent(stats.lastSeatWinRate)} />
-                <MetricCell label="Games started last" value={String(stats.lastSeatGames)} />
-              </View>
+          {recentGames.length === 0 ? (
+            <Text style={styles.emptyText}>No recent games found for this player.</Text>
+          ) : (
+            <View style={styles.gameList}>
+              {recentGames.map((game: any, index: number) => {
+                const participants = Array.isArray(game?.players) ? game.players : [];
+                const participantNames = participants
+                  .map((p: any) => p?.name || "Unknown")
+                  .join(" • ");
 
-              <View style={styles.miniTable}>
-                {stats.turnOrderStats.length === 0 ? (
-                  <Text style={styles.emptyText}>No turn-order data yet.</Text>
-                ) : (
-                  stats.turnOrderStats.map((row) => (
-                    <View key={row.turnOrder} style={styles.miniRow}>
-                      <Text style={styles.miniCellLeft}>Seat {row.turnOrder}</Text>
-                      <Text style={styles.miniCell}>
-                        Avg Finish {row.averagePlacement.toFixed(2)}
-                      </Text>
-                      <Text style={styles.miniCell}>{Math.round(row.winRate)}% WR</Text>
-                    </View>
-                  ))
-                )}
-              </View>
-            </View>
+                const winnerId =
+                  game?.winnerId ??
+                  game?.selectedWinnerId ??
+                  game?.manualWinnerId ??
+                  null;
 
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionEyebrow}>Performance Context</Text>
-              <Text style={styles.sectionTitle}>Table Size and Expectation</Text>
+                const isWin = String(winnerId) === String(playerId);
 
-              {stats.tableSizePerformance.length > 0 && (
-                <View style={styles.miniTable}>
-                  {stats.tableSizePerformance.map((row) => (
-                    <View key={row.size} style={styles.miniRow}>
-                      <Text style={styles.miniCellLeft}>{row.size}-Player Games</Text>
-                      <Text style={styles.miniCell}>
-                        {Math.round(row.winRate)}% WR ({row.games})
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
+                return (
+                  <View key={String(game?.id ?? game?.gameId ?? index)} style={styles.gameRow}>
+                    <View style={styles.gameLeft}>
+                      <View style={styles.gameTitleRow}>
+                        <View
+                          style={[
+                            styles.gameMiniCardBadge,
+                            { borderColor: playerAccent, shadowColor: playerAccent },
+                          ]}
+                        >
+                          <CropCardArt
+                            artIndex={((index % 6) * 5) + getColorColumn(selectedPlayer?.color)}
+                            width={24}
+                            height={24}
+                          />
+                          <View style={styles.metricMiniCardBadgeDim} />
+                          <Text style={styles.metricMiniCardBadgeText}>
+                            {getInitials(selectedPlayer.name)}
+                          </Text>
+                        </View>
 
-              <View style={styles.metricGrid}>
-                <MetricCell label="Expected finish" value={stats.expectedAverageFinish.toFixed(2)} />
-                <MetricCell label="Actual finish" value={stats.averagePlacement.toFixed(2)} />
-                <MetricCell
-                  label="Vs expectation"
-                  value={`${stats.expectationDelta >= 0 ? '+' : ''}${stats.expectationDelta.toFixed(2)}`}
-                  valueColor={stats.expectationDelta >= 0 ? COLORS.success : COLORS.danger}
-                />
-                <MetricCell label="Expectation label" value={stats.expectationLabel} />
-                <MetricCell label="Average opponent ELO" value={stats.averageOpponentElo.toFixed(0)} />
-                <MetricCell label="Stored wins" value={String(toNumber(player.wins))} />
-                <MetricCell label="Stored prestige" value={String(toNumber(player.totalPrestige ?? player.prestige))} />
-                <MetricCell label="Player ID" value={player.id} />
-              </View>
-            </View>
-          </>
-        )}
+                        <Text style={styles.gameTitle}>Game {recentGames.length - index}</Text>
+                      </View>
 
-        {activeTab === 'matchups' && (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionEyebrow}>Matchups</Text>
-            <Text style={styles.sectionTitle}>Full Opponent Array</Text>
-
-            {stats.matchupStats.length === 0 ? (
-              <Text style={styles.emptyText}>No head-to-head data yet.</Text>
-            ) : (
-              <View style={styles.recentList}>
-                {stats.matchupStats.map((matchup) => (
-                  <View key={matchup.opponentId} style={styles.gameRow}>
-                    <View style={styles.gameMain}>
-                      <Text style={styles.gameTitle}>{matchup.opponentName}</Text>
-                      <Text style={styles.gameMeta}>
-                        {matchup.games} games • {matchup.wins}-{matchup.losses}
-                        {matchup.ties > 0 ? `-${matchup.ties}` : ''}
+                      <Text style={styles.gameMeta} numberOfLines={1}>
+                        {participantNames}
                       </Text>
                     </View>
 
                     <View style={styles.gameRight}>
                       <Text
                         style={[
-                          styles.gamePrestige,
-                          {
-                            color:
-                              matchup.averagePlacementEdge >= 0
-                                ? COLORS.success
-                                : COLORS.danger,
-                          },
+                          styles.gameResult,
+                          isWin ? styles.gameResultWin : styles.gameResultLoss,
                         ]}
                       >
-                        {matchup.averagePlacementEdge >= 0 ? '+' : ''}
-                        {matchup.averagePlacementEdge.toFixed(2)}
+                        {isWin ? "WIN" : "LOSS"}
                       </Text>
-                      <Text style={styles.gameOutcome}>Placement Edge</Text>
+                      <Text style={styles.gameMeta}>
+                        {game?.id || game?.gameId || "Tracked"}
+                      </Text>
                     </View>
                   </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {activeTab === 'history' && (
-          <>
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionEyebrow}>Finishes</Text>
-              <Text style={styles.sectionTitle}>Finish Distribution</Text>
-
-              <View style={styles.miniTable}>
-                <View style={styles.miniRow}>
-                  <Text style={styles.miniCellLeft}>1st Place</Text>
-                  <Text style={styles.miniCell}>{stats.finishDistribution.first}</Text>
-                </View>
-                <View style={styles.miniRow}>
-                  <Text style={styles.miniCellLeft}>2nd Place</Text>
-                  <Text style={styles.miniCell}>{stats.finishDistribution.second}</Text>
-                </View>
-                <View style={styles.miniRow}>
-                  <Text style={styles.miniCellLeft}>3rd Place</Text>
-                  <Text style={styles.miniCell}>{stats.finishDistribution.third}</Text>
-                </View>
-                <View style={styles.miniRow}>
-                  <Text style={styles.miniCellLeft}>4th Place</Text>
-                  <Text style={styles.miniCell}>{stats.finishDistribution.fourth}</Text>
-                </View>
-              </View>
+                );
+              })}
             </View>
+          )}
+        </View>
 
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionEyebrow}>Recent Games</Text>
-              <Text style={styles.sectionTitle}>History Array</Text>
-
-              {recentGames.length === 0 ? (
-                <Text style={styles.emptyText}>No recorded games found.</Text>
-              ) : (
-                <View style={styles.recentList}>
-                  {recentGames.map((game) => (
-                    <View key={game.id} style={styles.gameRow}>
-                      <View style={styles.gameMain}>
-                        <Text style={styles.gameTitle}>{game.title}</Text>
-                        <Text style={styles.gameMeta}>
-                          {game.placement > 0
-                            ? `Place #${game.placement}`
-                            : 'Placement unavailable'}
-                        </Text>
-                      </View>
-
-                      <View style={styles.gameRight}>
-                        <Text
-                          style={[
-                            styles.gamePrestige,
-                            { color: game.isWinner ? COLORS.gold : playerColor },
-                          ]}
-                        >
-                          {game.prestige}P
-                        </Text>
-                        <Text
-                          style={[
-                            styles.gameOutcome,
-                            {
-                              color: game.isWinner ? COLORS.gold : COLORS.textMuted,
-                            },
-                          ]}
-                        >
-                          {game.isWinner ? 'Win' : 'Result'}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          </>
-        )}
+        <View style={styles.bottomSpacer} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: COLORS.bg },
-  backgroundLayer: { ...StyleSheet.absoluteFillObject },
-  backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(2, 6, 18, 0.40)',
-  },
-  playerGlowOrb: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 999,
-    top: 70,
-    right: -70,
-  },
   container: {
-    padding: 10,
-    paddingBottom: 28,
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
+  scroll: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: uiPolish.spacing.sm,
+    paddingBottom: uiPolish.spacing.xxl,
+  },
+
+  cropWindow: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    overflow: "hidden",
+    backgroundColor: "#111827",
+  },
+
+  profileTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
-  centerWrap: {
+
+  profileCardBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 2,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.42,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
+  },
+
+  profileCardBadgeDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  profileCardBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "900",
+    zIndex: 2,
+  },
+
+  profileTitleGlow: {
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+
+  centerState: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: COLORS.bg,
+  },
+  centerTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+  centerSub: {
+    color: COLORS.sub,
+    fontSize: 12,
+    textAlign: "center",
+    marginBottom: 16,
   },
   backButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(10, 16, 30, 0.92)',
-    borderWidth: 1,
-    borderColor: COLORS.borderSoft,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   backButtonText: {
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '800',
+    color: COLORS.accent,
+    fontSize: 12,
+    fontWeight: "800",
   },
-  heroCard: {
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: COLORS.surface,
+
+  headerCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 10,
     borderWidth: 1,
-    gap: 10,
+    borderColor: COLORS.border,
+    marginBottom: 6,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  heroTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  avatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  heroTextWrap: {
+  headerTextWrap: {
     flex: 1,
-    gap: 2,
+    paddingRight: 12,
   },
-  eyebrow: {
-    color: COLORS.cyan,
+  kicker: {
+    color: COLORS.blue,
     fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginBottom: 4,
   },
-  playerName: {
-    color: COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '900',
+  title: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
     lineHeight: 24,
   },
-  playerMeta: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.4,
+  subtitle: {
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 6,
   },
-  summaryCard: {
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  statCard: {
-    width: '31.5%',
-    minHeight: 64,
+  headerBadge: {
+    backgroundColor: COLORS.accentSoft,
     borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: COLORS.surfaceAlt,
-    borderWidth: 1,
-    justifyContent: 'space-between',
-  },
-  statLabel: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '900',
-    lineHeight: 22,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 2,
-  },
-  tabButton: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.98)',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.20)',
-  },
-  tabButtonText: {
-    color: '#C7D6F3',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  sectionCard: {
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 8,
-  },
-  sectionEyebrow: {
-    color: COLORS.cyan,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  sectionTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  metricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  metricCell: {
-    width: '31%',
-    borderRadius: 8,
-    paddingHorizontal: 8,
     paddingVertical: 6,
-    backgroundColor: COLORS.surfaceAlt,
-    borderWidth: 1,
-    borderColor: COLORS.borderSoft,
   },
-  metricCellLabel: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  metricCellValue: {
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  recentList: {
-    gap: 8,
-  },
-  gameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.surfaceMuted,
-    borderWidth: 1,
-    borderColor: COLORS.borderSoft,
-  },
-  gameMain: {
-    flex: 1,
-    gap: 3,
-  },
-  gameTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  gameMeta: {
-    color: COLORS.textMuted,
+  headerBadgeText: {
+    color: COLORS.accent,
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "800",
   },
-  gameRight: {
-    alignItems: 'flex-end',
-    gap: 2,
+
+  metricGridTop: {
+    flexDirection: "row",
+    gap: 4,
+    marginBottom: 6,
   },
-  gamePrestige: {
-    fontSize: 15,
-    fontWeight: '900',
+  metricCardTop: {
+    flex: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    minHeight: 76,
+    justifyContent: "center",
   },
-  gameOutcome: {
+  metricCardTopHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  metricMiniCardBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
+  metricMiniCardBadgeDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  metricMiniCardBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
+    zIndex: 2,
+  },
+  metricLabel: {
+    color: COLORS.sub,
     fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    marginBottom: 4,
   },
-  emptyText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
+  metricValue: {
+    fontSize: 16,
+    fontWeight: "900",
     lineHeight: 18,
   },
-  miniTable: {
-    gap: 8,
-    marginTop: 2,
-  },
-  miniRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.surfaceMuted,
-    borderWidth: 1,
-    borderColor: COLORS.borderSoft,
-  },
-  miniCellLeft: {
-    flex: 1.1,
-    color: COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  miniCell: {
-    flex: 1,
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  sparklineRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
+  metricSub: {
+    color: COLORS.muted,
+    fontSize: 10,
     marginTop: 4,
-    minHeight: 42,
+    lineHeight: 12,
   },
-  sparkColumn: {
-    alignItems: 'center',
+
+  sectionCompact: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 6,
+  },
+  insightCardCompact: {
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  sectionSub: {
+    color: COLORS.sub,
+    fontSize: 10,
+    textAlign: "right",
+    flexShrink: 1,
+  },
+  emptyText: {
+    color: COLORS.sub,
+    fontSize: 11,
+  },
+
+  tabGrid: {
+    gap: 8,
+  },
+  tabGridRowTwo: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  tabGridRowThree: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  underlineMainTab: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  underlineMainTabTwoCol: {
+    flex: 1,
+  },
+  underlineMainTabThreeCol: {
+    flex: 1,
+  },
+  underlineMainTabText: {
+    color: COLORS.sub,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  underlineMainTabTextActive: {
+    color: COLORS.accent,
+  },
+  underlineMainTabLine: {
+    marginTop: 5,
+    height: 3,
+    width: "100%",
+    borderRadius: 12,
+    backgroundColor: "transparent",
+  },
+  underlineMainTabLineActive: {
+    backgroundColor: COLORS.accent,
+  },
+
+  underlineSelectorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 12,
+    rowGap: 8,
+    alignItems: "flex-end",
+  },
+  underlineTabButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  underlineTabText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  underlineTabTextActive: {
+    color: COLORS.accent,
+  },
+  underlineTabLine: {
+    marginTop: 4,
+    height: 2,
+    borderRadius: 12,
+    backgroundColor: "transparent",
+  },
+  underlineTabLineActive: {
+    backgroundColor: COLORS.accent,
+  },
+
+  featuredSignalsWrap: {
+    flexDirection: "row",
     gap: 4,
   },
-  sparkBar: {
-    width: 12,
-    borderRadius: 999,
+  featuredSignalCard: {
+    width: "52%",
+    minHeight: 150,
+    borderRadius: 14,
+    padding: 10,
+    justifyContent: "space-between",
   },
-  sparkPlacementText: {
-    color: COLORS.textMuted,
+  featuredSignalLabel: {
+    color: COLORS.sub,
+    fontSize: 12,
+    lineHeight: 14,
+    marginBottom: 6,
+  },
+  featuredSignalValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    lineHeight: 30,
+    marginBottom: 6,
+  },
+  featuredSignalSub: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  secondarySignalColumn: {
+    width: "46%",
+    justifyContent: "space-between",
+    gap: 4,
+  },
+  secondarySignalCard: {
+    borderRadius: 12,
+    padding: 10,
+    minHeight: 72,
+  },
+
+  metricGridDense: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  metricCardDense: {
+    width: "32%",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 72,
+    justifyContent: "center",
+  },
+  metricLabelCompact: {
+    color: COLORS.sub,
     fontSize: 10,
-    fontWeight: '800',
+    lineHeight: 12,
+    marginBottom: 4,
+  },
+  metricValueCompact: {
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 16,
+  },
+  metricSubCompact: {
+    color: COLORS.muted,
+    fontSize: 10,
+    marginTop: 4,
+    lineHeight: 12,
+  },
+
+  insightChip: {
+    color: COLORS.blue,
+    backgroundColor: COLORS.blueSoft,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  insightText: {
+    color: COLORS.text,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  insightTextSecondary: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 6,
+  },
+
+  gameList: {
+    gap: 4,
+  },
+  gameRow: {
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  gameLeft: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  gameRight: {
+    alignItems: "flex-end",
+    maxWidth: "40%",
+  },
+  gameTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 2,
+  },
+  gameMiniCardBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.34,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
+  gameTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 1,
+  },
+  gameMeta: {
+    color: COLORS.sub,
+    fontSize: 10,
+  },
+  gameResult: {
+    fontSize: 11,
+    fontWeight: "900",
+    marginBottom: 2,
+  },
+  gameResultWin: {
+    color: COLORS.green,
+  },
+  gameResultLoss: {
+    color: COLORS.blue,
+  },
+
+  bottomSpacer: {
+    height: 8,
   },
 });
+
+
+
+
+
+
+
+
+
+

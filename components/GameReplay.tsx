@@ -126,7 +126,7 @@ function MiniMetric({
 }) {
   return (
     <View style={[styles.metricTile, { borderColor: `${accent}33` }]}>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricLabel} numberOfLines={1}>{label}</Text>
       <Text style={[styles.metricValue, { color: accent }]}>{value}</Text>
     </View>
   );
@@ -821,3 +821,5 @@ const styles = StyleSheet.create({
     backgroundColor: ui.starSoft,
   },
 });
+
+

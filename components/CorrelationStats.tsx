@@ -296,7 +296,7 @@ function CorrelationCard({
       />
 
       <View style={styles.metricHeader}>
-        <Text style={styles.metricLabel}>{label}</Text>
+        <Text style={styles.metricLabel} numberOfLines={1}>{label}</Text>
 
         <View
           style={[
@@ -470,7 +470,7 @@ export default function CorrelationStats() {
         meta={`${correlations.length} metrics`}
       >
         <Text style={styles.sectionDescription}>
-          Winner logic is based on total prestige. Secondary score data is not used
+          Winner logic is based on Prestige. Secondary score data is not used
           to determine final outcome here.
         </Text>
 
@@ -951,3 +951,5 @@ const styles = StyleSheet.create({
     color: 'rgba(148,163,184,0.84)',
   },
 });
+
+

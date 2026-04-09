@@ -143,10 +143,11 @@ export function getNextTurnIndex(
 export function getTotalPrestigeFromTotals(
   totals?: Partial<PlayerTotals> | null
 ): number {
-  return (
+  return Math.max(
+    0,
     n(totals?.directPrestige) +
-    n(totals?.objectivePrestige) +
-    n(totals?.assistPrestigeReceived)
+      n(totals?.objectivePrestige) +
+      n(totals?.assistPrestigeReceived)
   );
 }
 

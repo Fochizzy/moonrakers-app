@@ -1,0 +1,44 @@
+﻿import { CardColor, getCardsByColor } from "@/playerCardCatalog";
+
+export function normalizeCardColor(color?: string): CardColor | null {
+  switch ((color ?? "").toLowerCase()) {
+    case "blue":
+    case "#60a5fa":
+      return "blue";
+
+    case "green":
+    case "#22c55e":
+    case "#14b8a6":
+      return "green";
+
+    case "purple":
+    case "#8b5cf6":
+    case "#ec4899":
+      return "purple";
+
+    case "orange":
+    case "#f59e0b":
+    case "#f97316":
+    case "#ef4444":
+      return "orange";
+
+    case "yellow":
+      return "yellow";
+
+    default:
+      return null;
+  }
+}
+}
+
+export function pickRandomCardArtIndexForColor(color?: string): number | null {
+  const normalized = normalizeCardColor(color);
+  if (!normalized) return null;
+
+  const cards = getCardsByColor(normalized);
+  if (!cards.length) return null;
+
+  const chosen = cards[Math.floor(Math.random() * cards.length)];
+  return typeof chosen?.artIndex === "number" ? chosen.artIndex : null;
+}
+

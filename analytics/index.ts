@@ -285,7 +285,7 @@ export function getStabilitySummary(
     label: 'High variance',
     detail: 'Results swing sharply from game to game.',
     value: 0.25,
-    color: '#F59E0B',
+    color: '#3B82F6',
   };
 }
 

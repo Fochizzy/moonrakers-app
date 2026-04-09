@@ -24,11 +24,14 @@ export const chartColors = {
   bg: '#08111f',
   panelBg: 'rgba(15, 23, 42, 0.9)',
   panelBgStrong: 'rgba(10, 16, 35, 0.94)',
+  surfaceBg: 'rgba(15, 23, 42, 0.9)',
   track: 'rgba(255,255,255,0.08)',
   grid: 'rgba(255,255,255,0.10)',
   border: 'rgba(255,255,255,0.12)',
   borderStrong: 'rgba(255,255,255,0.18)',
+  borderBright: 'rgba(125, 235, 255, 0.40)',
   text: '#ffffff',
+  textStrong: '#F8FBFF',
   subtext: '#cbd5e1',
   muted: '#94a3b8',
   primary: '#8b5cf6',
@@ -37,6 +40,7 @@ export const chartColors = {
   green: '#22c55e',
   red: '#ef4444',
   yellow: '#f59e0b',
+  blue: '#3b82f6',
 } as const;
 
 function clamp(value: number, min: number, max: number): number {

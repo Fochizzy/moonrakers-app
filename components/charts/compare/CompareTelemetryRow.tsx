@@ -66,18 +66,13 @@ export default function CompareTelemetryRow({
 
   return (
     <View style={styles.telemetryRow}>
-      <View style={styles.telemetryCard}>
-        <Text style={styles.telemetryLabel}>Turn Order Signal</Text>
-        <Text style={styles.telemetryValue}>{formatCorrelation(n(safeInsight.correlation))}</Text>
-      </View>
-
       <View style={styles.telemetryCardWide}>
-        <Text style={styles.telemetryLabel}>Summary</Text>
-        <Text style={styles.telemetryHeadline}>{headline}</Text>
-        <Text style={styles.telemetryMeta}>
-          {n(safeInsight.samples)} sample{n(safeInsight.samples) === 1 ? '' : 's'}
+        <Text style={styles.telemetryHeadline} numberOfLines={1}>
+          Turn {formatCorrelation(n(safeInsight.correlation))} • {headline} • {n(safeInsight.samples)} sample{n(safeInsight.samples) === 1 ? '' : 's'}
         </Text>
       </View>
     </View>
   );
 }
+
+

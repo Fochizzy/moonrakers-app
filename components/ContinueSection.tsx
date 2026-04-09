@@ -123,7 +123,7 @@ function ContinueSection({
   const resolvedHelperText =
     helperText ??
     (hasActiveGame
-      ? 'Resume your current session. Winner tracking uses total prestige first, while score is informational.'
+      ? 'Resume your current session. Winner tracking uses Prestige first, while score is informational.'
       : 'No active game found. Start a fresh session to begin tracking.');
 
   const continueSubLabel = hasActiveGame
@@ -212,3 +212,5 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
 });
+
+

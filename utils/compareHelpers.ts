@@ -368,16 +368,16 @@ export function buildGroupRows(
 
           prestige += n(playerOverall.totalPrestige);
           directPrestige += n(playerOverall.directPrestige);
-          assistIn += n(playerOverall.assistPrestigeReceived ?? playerOverall.assistReceived);
-          assistOut += n(playerOverall.assistPrestigeSent ?? playerOverall.assistGiven);
+          assistIn += n(playerOverall.assistReceived);
+          assistOut += n(playerOverall.assistGiven);
           objectivePrestige += n(playerOverall.objectivePrestige);
           score += n(playerOverall.score);
-          assists += n(playerOverall.assists ?? playerOverall.assistGiven);
+          assists += n(playerOverall.assistGiven);
           failures += n(playerOverall.failures);
           contracts += n(playerOverall.contracts);
           totalSynergy += n(playerOverall.synergyIndex);
 
-          gameAssistTotal += n(playerOverall.assists ?? playerOverall.assistGiven);
+          gameAssistTotal += n(playerOverall.assistGiven);
 
           const entry = entries.find(
             (item) => String(item?.playerId ?? item?.id ?? '') === memberId
@@ -644,10 +644,10 @@ export function getAssistCountSent(totals: any, game: any, playerId: string): nu
         ? round.assistRecipients
         : {};
 
-    sent += Object.values(recipients).reduce(
+    sent += Number(Object.values(recipients).reduce(
       (sum: number, value: any) => sum + n(value),
       0
-    );
+    ));
   }
 
   return sent;
@@ -672,10 +672,10 @@ export function getAssistPrestigeSent(totals: any, game: any, playerId: string):
         ? round.assistPrestigeRecipients
         : {};
 
-    sent += Object.values(recipients).reduce(
+    sent += Number(Object.values(recipients).reduce(
       (sum: number, value: any) => sum + n(value),
       0
-    );
+    ));
   }
 
   return sent;

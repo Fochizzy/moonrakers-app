@@ -11,3 +11,5 @@ const animatedStyle = useAnimatedStyle(() => {
     shadowOffset: { width: 0, height: 0 },
   };
 });
+
+

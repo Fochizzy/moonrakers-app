@@ -7,7 +7,15 @@ import {
   StyleProp,
 } from 'react-native';
 
-type Variant = 'title' | 'subtitle' | 'body' | 'caption';
+type Variant =
+  | 'title'
+  | 'subtitle'
+  | 'body'
+  | 'caption'
+  | 'eyebrow'
+  | 'sectionTitle'
+  | 'metricLabel'
+  | 'metricValue';
 
 type Props = RNTextProps & {
   variant?: Variant;
@@ -35,16 +43,18 @@ const styles = StyleSheet.create({
 
   title: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '900',
+    lineHeight: 24,
   },
 
   subtitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 
   body: {
     fontSize: 14,
+    lineHeight: 20,
     color: '#E2E8F0',
   },
 
@@ -52,4 +62,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94A3B8',
   },
+
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#93C5FD',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#F8FBFF',
+  },
+
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#8EA6C8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.35,
+  },
+
+  metricValue: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#F8FBFF',
+  },
 });
+
+

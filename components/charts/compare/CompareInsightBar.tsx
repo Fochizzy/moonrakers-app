@@ -193,7 +193,7 @@ export default function CompareInsightBar({
           ? `${bestPrestige.label} leads prestige pace at ${formatFixed(getMetric(bestPrestige, prestigeKeys), 1)} per game.`
           : null,
         mostPrestige && hasMetricData(rows, totalPrestigeKeys)
-          ? `${mostPrestige.label} has the highest total prestige at ${formatFixed(getMetric(mostPrestige, totalPrestigeKeys), 0)}.`
+          ? `${mostPrestige.label} has the highest Prestige at ${formatFixed(getMetric(mostPrestige, totalPrestigeKeys), 0)}.`
           : null,
         strongestConversion
           ? `${strongestConversion.label} converts prestige pressure into the best win rate at ${formatPercent(toNumber(strongestConversion.winRate))}.`
@@ -325,7 +325,7 @@ export default function CompareInsightBar({
       </View>
 
       <Text style={styles.cardTitle}>What these insights are about</Text>
-      <Text style={styles.helper}>
+      <Text style={styles.helper} numberOfLines={2}>
         These insights are based on the current compare selection: {comparedLabel}. They are not
         global stats for every saved game unless all players or groups are selected here.
       </Text>
@@ -345,7 +345,7 @@ export default function CompareInsightBar({
       <View style={{ gap: 8 }}>
         <Text style={styles.cardTitle}>Summary</Text>
         {insights.map((insight) => (
-          <Text key={insight} style={styles.matrixWhyText}>
+          <Text key={insight} style={styles.matrixWhyText} numberOfLines={2}>
             • {insight}
           </Text>
         ))}
@@ -354,7 +354,7 @@ export default function CompareInsightBar({
       <View style={{ gap: 8, marginTop: 10 }}>
         <Text style={styles.cardTitle}>Interpretation</Text>
         {interpretations.map((line) => (
-          <Text key={line} style={styles.matrixWhyText}>
+          <Text key={line} style={styles.matrixWhyText} numberOfLines={2}>
             • {line}
           </Text>
         ))}
@@ -362,3 +362,5 @@ export default function CompareInsightBar({
     </View>
   );
 }
+
+

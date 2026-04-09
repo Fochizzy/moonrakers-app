@@ -51,3 +51,5 @@ export default function PlayerProfileInsights({ playerId }: Props) {
     </View>
   );
 }
+
+

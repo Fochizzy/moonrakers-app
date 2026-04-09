@@ -16,6 +16,8 @@ type Entity = {
 };
 
 type Props = {
+  title?: string;
+  description?: string;
   players: Player[];
   groups: Group[];
   subjectMode: ConditionalSubjectMode;
@@ -93,10 +95,25 @@ function buildIfThenSentence(entities: Entity[], state: ConditionalState, subjec
   return `If ${anchor} ${action} appear with ${matcher} ${related}, then this leaderboard shows how ${noun} outcomes change.`;
 }
 
+function getSentenceParts(
+  entities: Entity[],
+  state: ConditionalState,
+  subjectMode: ConditionalSubjectMode
+) {
+  const anchor = getEntityName(entities, state.anchorId);
+  const action = state.viewMode === 'present' ? 'does' : 'does not';
+  const matcher = state.selectionMode === 'must' ? 'all of' : 'any of';
+  const related = listEntityNames(
+    entities,
+    state.selectionMode === 'must' ? state.mustIncludeIds : state.mayIncludeIds
+  );
+  const noun = subjectMode === 'groups' ? 'group' : 'player';
+
+  return { anchor, action, matcher, related, noun };
+}
+
 function buildSummaryLines(rows: ConditionalEntityDelta[], subjectMode: ConditionalSubjectMode): string[] {
-  if (!rows.length) {
-    return ['No conditional results yet.'];
-  }
+  if (!rows.length) return ['No conditional results yet.'];
 
   const noun = subjectMode === 'groups' ? 'group' : 'player';
   const winLeader = [...rows].sort((a, b) => toNumber(b.winRateDelta) - toNumber(a.winRateDelta))[0];
@@ -110,7 +127,16 @@ function buildSummaryLines(rows: ConditionalEntityDelta[], subjectMode: Conditio
   ];
 }
 
+const SORT_ITEMS: Array<{ key: 'winRateDelta' | 'prestigeDelta' | 'scoreDelta' | 'synergyDelta'; label: string; sub: string }> = [
+  { key: 'winRateDelta', label: 'Win Δ', sub: 'Outcome swing' },
+  { key: 'prestigeDelta', label: 'Prestige Δ', sub: 'Scoring pace' },
+  { key: 'scoreDelta', label: 'Score Δ', sub: 'Point pressure' },
+  { key: 'synergyDelta', label: 'Synergy Δ', sub: 'Table fit' },
+];
+
 export default function ConditionalComparisonCard({
+  title,
+  description,
   players,
   groups,
   subjectMode,
@@ -118,7 +144,6 @@ export default function ConditionalComparisonCard({
   conditionalAnalysis,
   sortedConditionalPlayers,
   onToggleEntity,
-  onRemoveEntity,
   onSetAnchor,
   onClear,
   onApplyCurrentCompare,
@@ -129,66 +154,89 @@ export default function ConditionalComparisonCard({
   onToggleCollapsed,
   onSort,
 }: Props) {
-  const entities = useMemo(
-    () => activeEntities(subjectMode, players, groups),
-    [subjectMode, players, groups]
-  );
-
+  const entities = useMemo(() => activeEntities(subjectMode, players, groups), [subjectMode, players, groups]);
   const selectedIds = useMemo(() => getSelectionIds(conditionalState), [conditionalState]);
-
   const availableEntities = useMemo(
     () => entities.filter((entity) => entity.id !== conditionalState.anchorId),
     [entities, conditionalState.anchorId]
   );
-
   const sentence = useMemo(
     () => buildIfThenSentence(entities, conditionalState, subjectMode),
     [entities, conditionalState, subjectMode]
   );
-
+  const sentenceParts = useMemo(
+    () => getSentenceParts(entities, conditionalState, subjectMode),
+    [entities, conditionalState, subjectMode]
+  );
   const summaryLines = useMemo(
     () => buildSummaryLines(sortedConditionalPlayers, subjectMode),
     [sortedConditionalPlayers, subjectMode]
   );
-
   const collapsed = !!conditionalState.selectorCollapsed;
 
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Conditional Comparison</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.eyebrow}>{title ?? 'Conditional affect'}</Text>
+          <Text style={styles.title}>Sentence-driven comparison</Text>
+          <Text style={styles.subtitle}>
+            {description ?? 'Build a condition with larger selector cards. The live sentence stays front and center.'}
+          </Text>
+        </View>
 
         <View style={styles.headerActions}>
-          <Pressable onPress={onClear} style={styles.clearButton}>
-            <Text style={styles.clearButtonText}>Clear</Text>
+          <Pressable onPress={onClear} style={[styles.topButton, styles.clearButton]}>
+            <Text style={styles.topButtonText}>Clear</Text>
           </Pressable>
-
-          <Pressable onPress={onToggleCollapsed} style={styles.collapseButton}>
-            <Text style={styles.collapseButtonText}>{collapsed ? 'Expand' : 'Collapse'}</Text>
+          <Pressable onPress={onToggleCollapsed} style={styles.topButton}>
+            <Text style={styles.topButtonText}>{collapsed ? 'Expand' : 'Collapse'}</Text>
           </Pressable>
         </View>
       </View>
 
-      <View style={styles.sentenceCard}>
-        <Text style={styles.sentenceEyebrow}>Live Condition</Text>
-        <Text style={styles.sentenceText}>{sentence}</Text>
+      <View style={styles.sentenceCardCompact}>
+        <Text style={styles.sentenceTextCompact}>
+          <Text style={styles.sentenceStatic}>If </Text>
+          <Text style={styles.sentenceTokenPrimary}>{sentenceParts.anchor}</Text>
+          <Text style={styles.sentenceStatic}> </Text>
+          <Text style={styles.sentenceTokenSecondary}>{sentenceParts.action}</Text>
+          <Text style={styles.sentenceStatic}> appear with </Text>
+          <Text style={styles.sentenceTokenSecondary}>{sentenceParts.matcher}</Text>
+          <Text style={styles.sentenceStatic}> </Text>
+          <Text style={styles.sentenceTokenPrimary}>{sentenceParts.related}</Text>
+          <Text style={styles.sentenceStatic}>{`, then this leaderboard shows how `}</Text>
+          <Text style={styles.sentenceTokenTertiary}>{sentenceParts.noun}</Text>
+          <Text style={styles.sentenceStatic}> outcomes change.</Text>
+        </Text>
       </View>
 
       {!collapsed ? (
         <View style={styles.builderStack}>
-          <View style={styles.builderRow}>
-            <Text style={styles.builderLabel}>If...</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorScroll}>
+          <View style={styles.builderSection}>
+            <Text style={styles.builderLabel}>1. Anchor</Text>
+            <Text style={styles.builderHelp}>Choose the main player or group the sentence starts from.</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
               {entities.map((entity) => {
                 const active = conditionalState.anchorId === entity.id;
                 return (
                   <Pressable
                     key={entity.id}
                     onPress={() => onSetAnchor(entity.id)}
-                    style={[styles.entityPill, active && styles.entityPillAnchor]}
+                    style={[styles.selectorCard, active && styles.selectorCardAnchor]}
                   >
-                    <Text style={[styles.entityPillText, active && styles.entityPillTextActive]}>
-                      {entity.name}
+                    <View style={styles.selectorIdentity}>
+                      <View
+                        style={[
+                          styles.selectorDot,
+                          entity.color ? { backgroundColor: entity.color } : null,
+                          active && styles.selectorDotActive,
+                        ]}
+                      />
+                      <Text style={[styles.selectorTitle, active && styles.selectorTitleActive]}>{entity.name}</Text>
+                    </View>
+                    <Text style={[styles.selectorSub, active && styles.selectorSubActive]}>
+                      {active ? 'Anchor selected' : 'Tap to set as anchor'}
                     </Text>
                   </Pressable>
                 );
@@ -196,62 +244,100 @@ export default function ConditionalComparisonCard({
             </ScrollView>
           </View>
 
-          <View style={styles.builderRow}>
-            <Text style={styles.builderLabel}>Does / Does Not...</Text>
-            <View style={styles.actionRow}>
-              <Pressable
-                onPress={() => onSetViewMode('present')}
-                style={[styles.actionPill, conditionalState.viewMode === 'present' && styles.actionPillActive]}
-              >
-                <Text style={[styles.actionPillText, conditionalState.viewMode === 'present' && styles.actionPillTextActive]}>
-                  Does
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => onSetViewMode('absent')}
-                style={[styles.actionPill, conditionalState.viewMode === 'absent' && styles.actionPillActive]}
-              >
-                <Text style={[styles.actionPillText, conditionalState.viewMode === 'absent' && styles.actionPillTextActive]}>
-                  Does Not
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => onSetSelectionMode('must')}
-                style={[styles.actionPill, conditionalState.selectionMode === 'must' && styles.actionPillSecondaryActive]}
-              >
-                <Text style={[styles.actionPillText, conditionalState.selectionMode === 'must' && styles.actionPillTextActive]}>
-                  All Of
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => onSetSelectionMode('may')}
-                style={[styles.actionPill, conditionalState.selectionMode === 'may' && styles.actionPillSecondaryActive]}
-              >
-                <Text style={[styles.actionPillText, conditionalState.selectionMode === 'may' && styles.actionPillTextActive]}>
-                  Any Of
-                </Text>
-              </Pressable>
+          <View style={styles.controlGrid}>
+            <View style={styles.controlPanel}>
+              <Text style={styles.controlTitle}>2. Presence</Text>
+              <Text style={styles.controlSub}>Set whether the anchor appears or does not appear.</Text>
+
+              <View style={styles.optionRow}>
+                <Pressable
+                  onPress={() => onSetViewMode('present')}
+                  style={[styles.optionCard, conditionalState.viewMode === 'present' && styles.optionCardActive]}
+                >
+                  <Text style={[styles.optionLabel, conditionalState.viewMode === 'present' && styles.optionLabelActive]}>
+                    Does
+                  </Text>
+                  <Text style={[styles.optionHint, conditionalState.viewMode === 'present' && styles.optionHintActive]}>
+                    Anchor is present
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => onSetViewMode('absent')}
+                  style={[styles.optionCard, conditionalState.viewMode === 'absent' && styles.optionCardActive]}
+                >
+                  <Text style={[styles.optionLabel, conditionalState.viewMode === 'absent' && styles.optionLabelActive]}>
+                    Does not
+                  </Text>
+                  <Text style={[styles.optionHint, conditionalState.viewMode === 'absent' && styles.optionHintActive]}>
+                    Anchor is absent
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.controlPanel}>
+              <Text style={styles.controlTitle}>3. Match rule</Text>
+              <Text style={styles.controlSub}>Choose whether all selected partners must appear, or any one can.</Text>
+
+              <View style={styles.optionRow}>
+                <Pressable
+                  onPress={() => onSetSelectionMode('must')}
+                  style={[styles.optionCard, conditionalState.selectionMode === 'must' && styles.optionCardSecondary]}
+                >
+                  <Text style={[styles.optionLabel, conditionalState.selectionMode === 'must' && styles.optionLabelActive]}>
+                    All of
+                  </Text>
+                  <Text style={[styles.optionHint, conditionalState.selectionMode === 'must' && styles.optionHintActive]}>
+                    Require every selected item
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => onSetSelectionMode('may')}
+                  style={[styles.optionCard, conditionalState.selectionMode === 'may' && styles.optionCardSecondary]}
+                >
+                  <Text style={[styles.optionLabel, conditionalState.selectionMode === 'may' && styles.optionLabelActive]}>
+                    Any of
+                  </Text>
+                  <Text style={[styles.optionHint, conditionalState.selectionMode === 'may' && styles.optionHintActive]}>
+                    Match one or more items
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
 
-          <View style={styles.builderRow}>
-            <Text style={styles.builderLabel}>With...</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorScroll}>
+          <View style={styles.builderSection}>
+            <Text style={styles.builderLabel}>4. Partners</Text>
+            <Text style={styles.builderHelp}>Add the people or groups that complete the sentence.</Text>
+            <View style={styles.selectionGrid}>
               {availableEntities.map((entity) => {
                 const active = selectedIds.includes(entity.id);
+
                 return (
                   <Pressable
                     key={entity.id}
                     onPress={() => onToggleEntity(entity.id)}
-                    style={[styles.entityPill, active && styles.entityPillActive]}
+                    style={[styles.partnerCard, active && styles.partnerCardActive]}
                   >
-                    <Text style={[styles.entityPillText, active && styles.entityPillTextActive]}>
-                      {entity.name}
-                    </Text>
+                    <View style={styles.selectorIdentity}>
+                      <View style={[styles.selectorDot, entity.color ? { backgroundColor: entity.color } : null]} />
+                      <Text style={[styles.selectorTitle, active && styles.selectorTitleActive]}>{entity.name}</Text>
+                    </View>
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </View>
+          </View>
+
+          <View style={styles.quickActions}>
+            <Pressable onPress={onApplyCurrentCompare} style={styles.quickActionCard}>
+              <Text style={styles.quickActionTitle}>Use Current Compare</Text>
+            </Pressable>
+            <Pressable onPress={onApplyTopWins} style={styles.quickActionCard}>
+              <Text style={styles.quickActionTitle}>Top Wins</Text>
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -276,65 +362,71 @@ export default function ConditionalComparisonCard({
       </View>
 
       <View style={styles.sectionBlock}>
-        <Text style={styles.sectionTitle}>Conditional Leaderboard</Text>
-
-        <View style={styles.sortRow}>
-          <Pressable style={styles.sortChip} onPress={() => onSort('winRateDelta')}>
-            <Text style={styles.sortChipText}>Win Δ</Text>
-          </Pressable>
-          <Pressable style={styles.sortChip} onPress={() => onSort('prestigeDelta')}>
-            <Text style={styles.sortChipText}>Prestige Δ</Text>
-          </Pressable>
-          <Pressable style={styles.sortChip} onPress={() => onSort('scoreDelta')}>
-            <Text style={styles.sortChipText}>Score Δ</Text>
-          </Pressable>
-          <Pressable style={styles.sortChip} onPress={() => onSort('synergyDelta')}>
-            <Text style={styles.sortChipText}>Synergy Δ</Text>
-          </Pressable>
+        <Text style={styles.sectionTitle}>Sort leaderboard by</Text>
+        <View style={styles.sortGrid}>
+          {SORT_ITEMS.map((item) => (
+            <Pressable key={item.key} onPress={() => onSort(item.key)} style={styles.sortCard}>
+              <Text style={styles.sortTitle}>{item.label}</Text>
+              <Text style={styles.sortSub}>{item.sub}</Text>
+            </Pressable>
+          ))}
         </View>
       </View>
 
-      {sortedConditionalPlayers.length === 0 ? (
-        <Text style={styles.emptyText}>No conditional data yet for this selection.</Text>
-      ) : (
-        <View style={styles.rows}>
-          {sortedConditionalPlayers.map((row) => (
-            <View key={row.id} style={[styles.resultRow, row.isAnchor && styles.resultRowAnchor]}>
-              <View style={styles.resultIdentity}>
-                <Text style={styles.resultName}>{row.name}</Text>
-                {row.isAnchor ? <Text style={styles.resultAnchorTag}>Anchor</Text> : null}
-              </View>
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>Conditional leaderboard</Text>
 
-              <View style={styles.metricStrip}>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Games</Text>
-                  <Text style={styles.metricValue}>{row.sampleGames}</Text>
+        {sortedConditionalPlayers.length === 0 ? (
+          <Text style={styles.emptyText}>No conditional data yet for this selection.</Text>
+        ) : (
+          <View style={styles.rows}>
+            {sortedConditionalPlayers.map((row) => (
+              <View key={row.id} style={[styles.resultRow, row.isAnchor && styles.resultRowAnchor]}>
+                <View style={styles.resultHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.resultName}>{row.name}</Text>
+                    <Text style={styles.resultSub}>
+                      {row.isAnchor ? 'Anchor baseline row' : `${row.sampleGames} sample games`}
+                    </Text>
+                  </View>
+                  {row.isAnchor ? (
+                    <View style={styles.anchorBadge}>
+                      <Text style={styles.anchorBadgeText}>Anchor</Text>
+                    </View>
+                  ) : null}
                 </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Win %</Text>
-                  <Text style={styles.metricValue}>{formatPercent(row.sampleWinRate)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Prestige</Text>
-                  <Text style={styles.metricValue}>{formatMetric(row.samplePrestigePerGame)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Score</Text>
-                  <Text style={styles.metricValue}>{formatMetric(row.sampleScorePerGame)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Win Δ</Text>
-                  <Text style={styles.metricValue}>{formatSigned(row.winRateDelta, 1)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Synergy Δ</Text>
-                  <Text style={styles.metricValue}>{formatSigned(row.synergyDelta, 2)}</Text>
+
+                <View style={styles.metricGrid}>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Win %</Text>
+                    <Text style={styles.metricValue}>{formatPercent(row.sampleWinRate)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Prestige</Text>
+                    <Text style={styles.metricValue}>{formatMetric(row.samplePrestigePerGame)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Score</Text>
+                    <Text style={styles.metricValue}>{formatMetric(row.sampleScorePerGame)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Win Δ</Text>
+                    <Text style={styles.metricValue}>{formatSigned(row.winRateDelta, 1)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Prestige Δ</Text>
+                    <Text style={styles.metricValue}>{formatSigned(row.prestigeDelta, 1)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Synergy Δ</Text>
+                    <Text style={styles.metricValue}>{formatSigned(row.synergyDelta, 2)}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
-        </View>
-      )}
+            ))}
+          </View>
+        )}
+      </View>
 
       <View style={styles.sectionBlock}>
         <Text style={styles.sectionTitle}>Summary</Text>
@@ -343,310 +435,471 @@ export default function ConditionalComparisonCard({
             • {line}
           </Text>
         ))}
-        {!!conditionalAnalysis?.summary ? (
-          <Text style={styles.helpText}>• {conditionalAnalysis.summary}</Text>
-        ) : null}
+        {!!conditionalAnalysis?.summary ? <Text style={styles.helpText}>• {conditionalAnalysis.summary}</Text> : null}
       </View>
 
       <View style={styles.sectionBlock}>
-        <Text style={styles.sectionTitle}>Based on</Text>
-      </View>
+        <Text style={styles.sectionTitle}>Baseline comparison</Text>
 
-      {sortedConditionalPlayers.length === 0 ? (
-        <Text style={styles.emptyText}>No baseline comparison data yet.</Text>
-      ) : (
-        <View style={styles.rows}>
-          {sortedConditionalPlayers.map((row) => (
-            <View key={`${row.id}-baseline`} style={styles.basisRow}>
-              <Text style={styles.resultName}>{row.name}</Text>
-              <View style={styles.metricStrip}>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Base Win %</Text>
-                  <Text style={styles.metricValue}>{formatPercent(row.overallWinRate)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Base Prestige</Text>
-                  <Text style={styles.metricValue}>{formatMetric(row.overallPrestigePerGame)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Base Score</Text>
-                  <Text style={styles.metricValue}>{formatMetric(row.overallScorePerGame)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Base Synergy</Text>
-                  <Text style={styles.metricValue}>{formatMetric(row.overallSynergy, 2)}</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Sample Games</Text>
-                  <Text style={styles.metricValue}>{row.sampleGames}</Text>
+        {sortedConditionalPlayers.length === 0 ? (
+          <Text style={styles.emptyText}>No baseline comparison data yet.</Text>
+        ) : (
+          <View style={styles.rows}>
+            {sortedConditionalPlayers.map((row) => (
+              <View key={`${row.id}-baseline`} style={styles.basisRow}>
+                <Text style={styles.resultName}>{row.name}</Text>
+                <View style={styles.metricGrid}>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Base Win %</Text>
+                    <Text style={styles.metricValue}>{formatPercent(row.overallWinRate)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Base Prestige</Text>
+                    <Text style={styles.metricValue}>{formatMetric(row.overallPrestigePerGame)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Base Score</Text>
+                    <Text style={styles.metricValue}>{formatMetric(row.overallScorePerGame)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Base Synergy</Text>
+                    <Text style={styles.metricValue}>{formatMetric(row.overallSynergy, 2)}</Text>
+                  </View>
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Sample Games</Text>
+                    <Text style={styles.metricValue}>{row.sampleGames}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
-        </View>
-      )}
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 12,
+    padding: 10,
     backgroundColor: 'rgba(7, 12, 24, 0.92)',
     borderWidth: 1,
     borderColor: 'rgba(96, 165, 250, 0.18)',
-    gap: 14,
-    overflow: 'hidden',
+    gap: 6,
+  },
+  eyebrow: {
+    color: '#7DEBFF',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    marginBottom: 2,
+  },
+  title: {
+    color: '#F8FBFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  subtitle: {
+    marginTop: 4,
+    color: '#96A8C4',
+    fontSize: 11,
+    lineHeight: 15,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
+    gap: 6,
   },
   headerActions: {
+    gap: 6,
+  },
+  topButton: {
+    minWidth: 74,
+    minHeight: 34,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.22)',
+    backgroundColor: 'rgba(15,23,42,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearButton: {
+    backgroundColor: 'rgba(127,29,29,0.20)',
+    borderColor: 'rgba(248,113,113,0.20)',
+  },
+  topButtonText: {
+    color: '#E2E8F0',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  sentenceCardCompact: {
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(10, 18, 36, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(125,235,255,0.24)',
+  },
+  sentenceTextCompact: {
+    color: '#F8FBFF',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  sentenceStatic: {
+    color: '#D9E6F7',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  sentenceTokenPrimary: {
+    color: '#7DEBFF',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
+  },
+  sentenceTokenSecondary: {
+    color: '#C4B5FD',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
+  },
+  sentenceTokenTertiary: {
+    color: '#86EFAC',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
+  },
+  builderStack: {
+    gap: 6,
+  },
+  builderSection: {
+    gap: 6,
+  },
+  builderLabel: {
+    color: '#F8FBFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  builderHelp: {
+    color: '#96A8C4',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  horizontalCards: {
+    gap: 6,
+    paddingRight: 6,
+  },
+  selectorCard: {
+    width: 148,
+    minHeight: 68,
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.16)',
+    justifyContent: 'space-between',
+  },
+  selectorCardAnchor: {
+    backgroundColor: 'rgba(86, 120, 255, 0.22)',
+    borderColor: 'rgba(125, 235, 255, 0.52)',
+  },
+  selectorIdentity: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  title: {
+  selectorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(148,163,184,0.42)',
+  },
+  selectorDotActive: {
+    shadowColor: '#7DEBFF',
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  selectorTitle: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#f8fafc',
-  },
-  collapseButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.28)',
-    backgroundColor: 'rgba(15,23,42,0.88)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  collapseButtonText: {
-    color: '#e2e8f0',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  clearButton: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    backgroundColor: 'rgba(127,29,29,0.24)',
-    borderWidth: 1,
-    borderColor: 'rgba(248,113,113,0.45)',
-  },
-  clearButtonText: {
-    color: '#fecaca',
+    color: '#E5EEF9',
     fontSize: 12,
     fontWeight: '800',
   },
-  sentenceCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: 'rgba(15,23,42,0.9)',
+  selectorTitleActive: {
+    color: '#FFFFFF',
+  },
+  selectorSub: {
+    color: '#8FA6C4',
+    fontSize: 10,
+    marginTop: 4,
+  },
+  selectorSubActive: {
+    color: '#D7F7FF',
+  },
+  controlGrid: {
+    gap: 6,
+  },
+  controlPanel: {
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.82)',
     borderWidth: 1,
-    borderColor: 'rgba(71,85,105,0.35)',
+    borderColor: 'rgba(148,163,184,0.16)',
     gap: 8,
   },
-  sentenceEyebrow: {
-    color: '#93c5fd',
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  sentenceText: {
-    color: '#f8fafc',
-    fontSize: 16,
-    fontWeight: '900',
-    lineHeight: 23,
-  },
-  builderStack: {
-    gap: 12,
-  },
-  builderRow: {
-    gap: 8,
-  },
-  builderLabel: {
-    color: '#cbd5e1',
+  controlTitle: {
+    color: '#F8FBFF',
     fontSize: 12,
     fontWeight: '800',
   },
-  actionRow: {
+  controlSub: {
+    color: '#96A8C4',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  optionCard: {
+    flex: 1,
+    minHeight: 84,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.16)',
+    backgroundColor: 'rgba(11, 18, 32, 0.94)',
+    justifyContent: 'center',
+  },
+  optionCardActive: {
+    backgroundColor: 'rgba(86, 120, 255, 0.22)',
+    borderColor: 'rgba(125, 235, 255, 0.52)',
+  },
+  optionCardSecondary: {
+    backgroundColor: 'rgba(168, 85, 247, 0.18)',
+    borderColor: 'rgba(196, 181, 253, 0.48)',
+  },
+  optionLabel: {
+    color: '#E5EEF9',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  optionLabelActive: {
+    color: '#FFFFFF',
+  },
+  optionHint: {
+    color: '#8FA6C4',
+    fontSize: 12,
+    marginTop: 5,
+    lineHeight: 17,
+  },
+  optionHintActive: {
+    color: '#E6F8FF',
+  },
+  selectionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  actionPill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    backgroundColor: 'rgba(15,23,42,0.9)',
+  partnerCard: {
+    width: '48.4%',
+    minHeight: 42,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(71,85,105,0.45)',
+    borderColor: 'rgba(148,163,184,0.16)',
+    justifyContent: 'center',
   },
-  actionPillActive: {
-    backgroundColor: 'rgba(37,99,235,0.25)',
-    borderColor: 'rgba(96,165,250,0.7)',
+  partnerCardActive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.16)',
+    borderColor: 'rgba(74, 222, 128, 0.42)',
   },
-  actionPillSecondaryActive: {
-    backgroundColor: 'rgba(14,116,144,0.25)',
-    borderColor: 'rgba(34,211,238,0.7)',
-  },
-  actionPillText: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  actionPillTextActive: {
-    color: '#ffffff',
-  },
-  selectorScroll: {
+  quickActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
-    paddingRight: 8,
   },
-  entityPill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    backgroundColor: 'rgba(15,23,42,0.88)',
+  quickActionCard: {
+    flex: 1,
+    minWidth: 150,
+    minHeight: 42,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(71,85,105,0.4)',
+    borderColor: 'rgba(148,163,184,0.16)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  entityPillActive: {
-    backgroundColor: 'rgba(37,99,235,0.22)',
-    borderColor: 'rgba(96,165,250,0.62)',
-  },
-  entityPillAnchor: {
-    backgroundColor: 'rgba(14,116,144,0.24)',
-    borderColor: 'rgba(34,211,238,0.62)',
-  },
-  entityPillText: {
-    color: '#cbd5e1',
+  quickActionTitle: {
+    color: '#F8FBFF',
     fontSize: 12,
     fontWeight: '800',
   },
-  entityPillTextActive: {
-    color: '#ffffff',
+  quickActionSub: {
+    color: '#8FA6C4',
+    fontSize: 12,
+    marginTop: 5,
+    lineHeight: 18,
   },
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   summaryTile: {
-    minWidth: 110,
-    flexGrow: 1,
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: 'rgba(15,23,42,0.88)',
+    flex: 1,
+    minWidth: 120,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(71,85,105,0.35)',
+    borderColor: 'rgba(148,163,184,0.16)',
   },
   summaryLabel: {
-    color: '#9fb3d1',
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 6,
+    color: '#8FA6C4',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
   },
   summaryValue: {
-    color: '#f8fafc',
-    fontSize: 18,
+    marginTop: 7,
+    color: '#F8FBFF',
+    fontSize: 21,
     fontWeight: '900',
   },
   sectionBlock: {
-    gap: 10,
+    gap: 8,
   },
   sectionTitle: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  helpText: {
-    color: '#9fb3d1',
+    color: '#F8FBFF',
     fontSize: 12,
-    lineHeight: 18,
+    fontWeight: '800',
   },
-  sortRow: {
+  sortGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  sortChip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(15,23,42,0.9)',
+  sortCard: {
+    width: '48.4%',
+    minHeight: 78,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(71,85,105,0.45)',
+    borderColor: 'rgba(148,163,184,0.16)',
+    justifyContent: 'center',
   },
-  sortChipText: {
-    color: '#dbeafe',
-    fontSize: 11,
+  sortTitle: {
+    color: '#F8FBFF',
+    fontSize: 12,
     fontWeight: '800',
   },
+  sortSub: {
+    marginTop: 4,
+    color: '#8FA6C4',
+    fontSize: 12,
+  },
   rows: {
-    gap: 10,
+    gap: 8,
   },
   resultRow: {
-    borderRadius: 18,
-    padding: 12,
-    backgroundColor: 'rgba(15,23,42,0.9)',
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.90)',
     borderWidth: 1,
-    borderColor: 'rgba(71,85,105,0.35)',
-    gap: 10,
+    borderColor: 'rgba(148,163,184,0.16)',
+    gap: 6,
   },
   resultRowAnchor: {
-    borderColor: 'rgba(96,165,250,0.72)',
-    backgroundColor: 'rgba(30,41,59,0.98)',
+    backgroundColor: 'rgba(86, 120, 255, 0.16)',
+    borderColor: 'rgba(125, 235, 255, 0.34)',
   },
   basisRow: {
-    borderRadius: 18,
-    padding: 12,
-    backgroundColor: 'rgba(15,23,42,0.76)',
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: 'rgba(11, 18, 32, 0.94)',
     borderWidth: 1,
-    borderColor: 'rgba(71,85,105,0.3)',
-    gap: 10,
+    borderColor: 'rgba(148,163,184,0.12)',
+    gap: 6,
   },
-  resultIdentity: {
+  resultHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap',
   },
   resultName: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  resultAnchorTag: {
-    color: '#93c5fd',
-    fontSize: 11,
+    color: '#F8FBFF',
+    fontSize: 12,
     fontWeight: '800',
   },
-  metricStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  resultSub: {
+    color: '#8FA6C4',
+    fontSize: 12,
+    marginTop: 4,
   },
-  metricCell: {
-    minWidth: 74,
+  anchorBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(125, 235, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(125, 235, 255, 0.28)',
   },
-  metricLabel: {
-    color: '#9fb3d1',
+  anchorBadgeText: {
+    color: '#EFFFFF',
     fontSize: 10,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  metricValue: {
-    color: '#ffffff',
-    fontSize: 13,
     fontWeight: '900',
   },
-  emptyText: {
-    color: '#94a3b8',
+  metricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metricCell: {
+    width: '31%',
+    minWidth: 96,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(8, 14, 28, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.10)',
+  },
+  metricLabel: {
+    color: '#8FA6C4',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  metricValue: {
+    color: '#F8FBFF',
     fontSize: 12,
+    fontWeight: '900',
+    marginTop: 6,
+  },
+  helpText: {
+    color: '#C9D8EC',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  emptyText: {
+    color: '#8FA6C4',
+    fontSize: 13,
+    lineHeight: 19,
   },
 });
+
+

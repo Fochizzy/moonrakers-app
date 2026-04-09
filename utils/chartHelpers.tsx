@@ -19,6 +19,10 @@ import EloChart from '@/components/charts/EloChart';
 import EfficiencyFailureScatter from '@/components/charts/EfficiencyFailureScatter';
 import BarChart from '@/components/charts/BarChart';
 import AssistNetworkOverview from '@/components/charts/AssistNetworkOverview';
+import {
+  getWinnerIdFromGame,
+  normalizeGameWithComputedTotals,
+} from '@/utils/gameTotals';
 
 type Player = {
   id: string;
@@ -54,6 +58,8 @@ type PlayerTotals = {
   performance?: number;
   efficiency?: number;
   assistedEfficiency?: number;
+  objectivePrestige?: number;
+  objectiveCount?: number;
 };
 
 type StoredGame = {
@@ -66,6 +72,7 @@ type StoredGame = {
   rounds?: Round[];
   totals?: Record<string, PlayerTotals>;
   eloSnapshot?: Record<string, number | { elo?: number }>;
+  [key: string]: unknown;
 };
 
 type Relationships = Record<string, Record<string, number>>;
@@ -89,8 +96,23 @@ type SnapshotPoint = {
 
 type ThemeShape = ReturnType<typeof useThemeContext>['theme'];
 
+type ResolvedGamePlayer = Player & {
+  canonicalId: string;
+  canonicalName: string;
+};
+
 function toNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
 function getTotalPrestige(totals?: PlayerTotals | null): number {
@@ -101,7 +123,11 @@ function getTotalPrestige(totals?: PlayerTotals | null): number {
     return explicit;
   }
 
-  return toNumber(totals.directPrestige) + toNumber(totals.assistPrestigeReceived);
+  return (
+    toNumber(totals.directPrestige) +
+    toNumber(totals.assistPrestigeReceived) +
+    toNumber(totals.objectivePrestige ?? totals.objectiveCount)
+  );
 }
 
 function formatTitle(key?: string | string[]) {
@@ -115,8 +141,7 @@ function formatTitle(key?: string | string[]) {
 }
 
 function getWinnerId(game?: StoredGame): string | undefined {
-  if (!game) return undefined;
-  return game.winnerId ?? game.selectedWinnerId ?? game.manualWinnerId;
+  return getWinnerIdFromGame(game as any);
 }
 
 function getParam(value: string | string[] | undefined): string | undefined {
@@ -132,7 +157,94 @@ function getParamList(value: string | string[] | undefined): string[] {
     .filter(Boolean);
 }
 
-function buildReplayFromGame(game: StoredGame | null): SnapshotPoint[] {
+function normalizeGame(game: StoredGame | null | undefined): StoredGame | null {
+  if (!game) return null;
+  return normalizeGameWithComputedTotals(game as any) as StoredGame;
+}
+
+function resolveGamePlayerForCanonical(
+  gameInput: StoredGame | null | undefined,
+  canonicalPlayer: Player | null | undefined
+): ResolvedGamePlayer | null {
+  if (!gameInput || !canonicalPlayer) return null;
+
+  const game = normalizeGame(gameInput);
+  const players = Array.isArray(game?.players) ? game.players : [];
+  if (!players.length) return null;
+
+  const canonicalId = String(canonicalPlayer.id ?? '').trim();
+  const canonicalName = normalizeText(canonicalPlayer.name);
+
+  const byId = players.find(
+    (player) => String(player?.id ?? '').trim() === canonicalId
+  );
+  if (byId) {
+    return {
+      ...byId,
+      canonicalId,
+      canonicalName: canonicalPlayer.name,
+    };
+  }
+
+  const byName = players.find(
+    (player) => normalizeText(player?.name) === canonicalName
+  );
+  if (byName) {
+    return {
+      ...byName,
+      canonicalId,
+      canonicalName: canonicalPlayer.name,
+    };
+  }
+
+  return null;
+}
+
+function getTotalsForCanonicalPlayer(
+  gameInput: StoredGame | null | undefined,
+  canonicalPlayer: Player | null | undefined
+): PlayerTotals | null {
+  if (!gameInput || !canonicalPlayer) return null;
+
+  const game = normalizeGame(gameInput);
+  if (!game?.totals || typeof game.totals !== 'object') return null;
+
+  const direct = game.totals[canonicalPlayer.id];
+  if (direct) return direct;
+
+  const resolved = resolveGamePlayerForCanonical(game, canonicalPlayer);
+  if (resolved?.id && game.totals[resolved.id]) {
+    return game.totals[resolved.id];
+  }
+
+  return null;
+}
+
+function getWinnerCanonicalId(
+  gameInput: StoredGame | null | undefined,
+  players: Player[]
+): string | undefined {
+  const game = normalizeGame(gameInput);
+  const rawWinnerId = String(getWinnerId(game) ?? '').trim();
+  if (!rawWinnerId) return undefined;
+
+  const direct = players.find((player) => String(player.id) === rawWinnerId);
+  if (direct) return direct.id;
+
+  const gameWinner = (game?.players ?? []).find(
+    (player) => String(player?.id ?? '').trim() === rawWinnerId
+  );
+  if (!gameWinner) return rawWinnerId;
+
+  const byName = players.find(
+    (player) => normalizeText(player.name) === normalizeText(gameWinner.name)
+  );
+
+  return byName?.id ?? rawWinnerId;
+}
+
+function buildReplayFromGame(gameInput: StoredGame | null): SnapshotPoint[] {
+  const game = normalizeGame(gameInput);
   if (!game?.rounds?.length) return [];
 
   const running: Record<string, any> = {};
@@ -175,7 +287,8 @@ function buildReplayFromGame(game: StoredGame | null): SnapshotPoint[] {
   return replay;
 }
 
-function buildTimelineFromGame(game: StoredGame | null, statKey: string): SnapshotPoint[] {
+function buildTimelineFromGame(gameInput: StoredGame | null, statKey: string): SnapshotPoint[] {
+  const game = normalizeGame(gameInput);
   if (!game?.rounds?.length || !game.players?.length) return [];
 
   const running: Record<string, any> = {};
@@ -235,7 +348,7 @@ function buildHistoryTimeline(
     const snapshot: Record<string, any> = {};
 
     players.forEach((player) => {
-      const totals = game.totals?.[player.id];
+      const totals = getTotalsForCanonicalPlayer(game, player);
       snapshot[player.id] = {
         score: toNumber(totals?.score),
         prestige: toNumber(totals?.prestige),
@@ -295,15 +408,16 @@ function buildRadarStats(totals?: PlayerTotals | null) {
   };
 }
 
-function buildSparklineDataForPlayer(games: StoredGame[], playerId?: string) {
-  if (!playerId) return [];
+function buildSparklineDataForPlayer(games: StoredGame[], player: Player | null) {
+  if (!player) return [];
 
   return games
-    .map((game) => getTotalPrestige(game.totals?.[playerId]))
+    .map((game) => getTotalPrestige(getTotalsForCanonicalPlayer(game, player)))
     .filter((value) => Number.isFinite(value));
 }
 
-function buildStackedRowsFromGame(game: StoredGame | null): StackedRow[] {
+function buildStackedRowsFromGame(gameInput: StoredGame | null): StackedRow[] {
+  const game = normalizeGame(gameInput);
   if (!game?.players?.length) return [];
 
   return game.players.map((player) => {
@@ -346,9 +460,9 @@ function buildStackedRowsFromPlayerHistory(
   if (!selectedPlayer) return [];
 
   return games
-    .filter((game) => game.totals?.[selectedPlayer.id])
     .map((game, index) => {
-      const totals = game.totals?.[selectedPlayer.id];
+      const totals = getTotalsForCanonicalPlayer(game, selectedPlayer);
+      if (!totals) return null;
 
       return {
         id: game.id ?? `game-${index}`,
@@ -376,11 +490,13 @@ function buildStackedRowsFromPlayerHistory(
             value: toNumber(totals?.assists),
           },
         ],
-      };
-    });
+      } as StackedRow;
+    })
+    .filter((row): row is StackedRow => Boolean(row));
 }
 
-function buildBarDataFromGame(game: StoredGame | null, statKey: string) {
+function buildBarDataFromGame(gameInput: StoredGame | null, statKey: string) {
+  const game = normalizeGame(gameInput);
   if (!game?.players?.length) return [];
 
   return game.players.map((player) => {
@@ -400,7 +516,7 @@ function buildBarDataFromHistory(games: StoredGame[], players: Player[], statKey
     let total = 0;
 
     for (const game of games) {
-      const totals = game.totals?.[player.id];
+      const totals = getTotalsForCanonicalPlayer(game, player);
       total +=
         statKey === 'totalPrestige'
           ? getTotalPrestige(totals)
@@ -417,7 +533,8 @@ function buildBarDataFromHistory(games: StoredGame[], players: Player[], statKey
 function buildPairRivalry(
   games: StoredGame[],
   playerA: Player | null,
-  playerB: Player | null
+  playerB: Player | null,
+  allPlayers: Player[]
 ) {
   if (!playerA || !playerB) return null;
 
@@ -428,16 +545,17 @@ function buildPairRivalry(
   let bPrestige = 0;
 
   for (const game of games) {
-    const ids = new Set((game.players ?? []).map((p) => p.id));
-    if (!ids.has(playerA.id) || !ids.has(playerB.id)) continue;
+    const resolvedA = resolveGamePlayerForCanonical(game, playerA);
+    const resolvedB = resolveGamePlayerForCanonical(game, playerB);
+    if (!resolvedA || !resolvedB) continue;
 
     gamesTogether += 1;
-    aPrestige += getTotalPrestige(game.totals?.[playerA.id]);
-    bPrestige += getTotalPrestige(game.totals?.[playerB.id]);
+    aPrestige += getTotalPrestige(getTotalsForCanonicalPlayer(game, playerA));
+    bPrestige += getTotalPrestige(getTotalsForCanonicalPlayer(game, playerB));
 
-    const winnerId = getWinnerId(game);
-    if (winnerId === playerA.id) aWins += 1;
-    if (winnerId === playerB.id) bWins += 1;
+    const winnerCanonicalId = getWinnerCanonicalId(game, allPlayers);
+    if (winnerCanonicalId === playerA.id) aWins += 1;
+    if (winnerCanonicalId === playerB.id) bWins += 1;
   }
 
   return {
@@ -448,6 +566,20 @@ function buildPairRivalry(
     bPrestige,
     prestigeDiff: aPrestige - bPrestige,
   };
+}
+
+function EmptyState({
+  text,
+  styles,
+}: {
+  text: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.metaText}>{text}</Text>
+    </View>
+  );
 }
 
 export default function ChartDetailScreen() {
@@ -470,7 +602,10 @@ export default function ChartDetailScreen() {
   const rawRelationships = store.relationships;
 
   const players: Player[] = Array.isArray(rawPlayers) ? rawPlayers : [];
-  const games: StoredGame[] = Array.isArray(rawGames) ? rawGames : [];
+  const games: StoredGame[] = useMemo(
+    () => (Array.isArray(rawGames) ? rawGames.map((game) => normalizeGame(game as any) as StoredGame) : []),
+    [rawGames]
+  );
   const relationships: Relationships =
     rawRelationships && typeof rawRelationships === 'object'
       ? rawRelationships
@@ -494,23 +629,19 @@ export default function ChartDetailScreen() {
   const latestGame = games.length ? games[games.length - 1] : null;
 
   const selectedGame = useMemo(() => {
-    if (gameId) {
-      return games.find((game) => game.id === gameId) ?? null;
-    }
-    return latestGame;
-  }, [gameId, games, latestGame]);
+    if (!gameId) return null;
+    return games.find((game) => game.id === gameId) ?? null;
+  }, [gameId, games]);
+
+  const replayGame = selectedGame ?? latestGame;
 
   const selectedPlayer = useMemo(() => {
     if (playerId) {
       return players.find((player) => player.id === playerId) ?? null;
     }
 
-    if (selectedGame?.players?.length) {
-      return selectedGame.players[0] ?? null;
-    }
-
     return players[0] ?? null;
-  }, [playerId, players, selectedGame]);
+  }, [playerId, players]);
 
   const selectedComparePlayer = useMemo(() => {
     if (comparePlayerId) {
@@ -518,7 +649,9 @@ export default function ChartDetailScreen() {
     }
 
     if (selectedGame?.players?.length && selectedPlayer) {
-      return selectedGame.players.find((player) => player.id !== selectedPlayer.id) ?? null;
+      return (
+        selectedGame.players.find((player) => player.id !== selectedPlayer.id) ?? null
+      );
     }
 
     if (players.length >= 2 && selectedPlayer) {
@@ -555,8 +688,9 @@ export default function ChartDetailScreen() {
   const selectedPlayerTotals = useMemo(() => {
     if (!selectedPlayer) return null;
 
-    if (selectedGame?.totals?.[selectedPlayer.id]) {
-      return selectedGame.totals[selectedPlayer.id];
+    const selectedGameTotals = getTotalsForCanonicalPlayer(selectedGame, selectedPlayer);
+    if (selectedGameTotals) {
+      return selectedGameTotals;
     }
 
     let aggregate: PlayerTotals = {
@@ -568,10 +702,11 @@ export default function ChartDetailScreen() {
       contracts: 0,
       efficiency: 0,
       assistedEfficiency: 0,
+      objectivePrestige: 0,
     };
 
     for (const game of games) {
-      const totals = game.totals?.[selectedPlayer.id];
+      const totals = getTotalsForCanonicalPlayer(game, selectedPlayer);
       if (!totals) continue;
 
       aggregate = {
@@ -587,17 +722,26 @@ export default function ChartDetailScreen() {
         efficiency: toNumber(aggregate.efficiency) + toNumber(totals.efficiency),
         assistedEfficiency:
           toNumber(aggregate.assistedEfficiency) + toNumber(totals.assistedEfficiency),
+        objectivePrestige:
+          toNumber(aggregate.objectivePrestige) +
+          toNumber(totals.objectivePrestige ?? totals.objectiveCount),
       };
     }
 
     return {
       ...aggregate,
       totalPrestige:
-        toNumber(aggregate.directPrestige) + toNumber(aggregate.assistPrestigeReceived),
+        toNumber(aggregate.directPrestige) +
+        toNumber(aggregate.assistPrestigeReceived) +
+        toNumber(aggregate.objectivePrestige),
+      prestige:
+        toNumber(aggregate.directPrestige) +
+        toNumber(aggregate.assistPrestigeReceived) +
+        toNumber(aggregate.objectivePrestige),
     };
   }, [games, selectedGame, selectedPlayer]);
 
-  const replayData = useMemo(() => buildReplayFromGame(selectedGame), [selectedGame]);
+  const replayData = useMemo(() => buildReplayFromGame(replayGame), [replayGame]);
 
   const prestigeTimelineData = useMemo(
     () =>
@@ -624,7 +768,7 @@ export default function ChartDetailScreen() {
   );
 
   const sparklineData = useMemo(
-    () => buildSparklineDataForPlayer(games, selectedPlayer?.id),
+    () => buildSparklineDataForPlayer(games, selectedPlayer),
     [games, selectedPlayer]
   );
 
@@ -652,8 +796,8 @@ export default function ChartDetailScreen() {
   }, [selectedComparePlayer, selectedPlayer]);
 
   const pairRivalry = useMemo(
-    () => buildPairRivalry(games, selectedPlayer, selectedComparePlayer),
-    [games, selectedComparePlayer, selectedPlayer]
+    () => buildPairRivalry(games, selectedPlayer, selectedComparePlayer, players),
+    [games, players, selectedComparePlayer, selectedPlayer]
   );
 
   const renderChart = () => {
@@ -680,10 +824,10 @@ export default function ChartDetailScreen() {
         );
 
       case 'replay-chart':
-        return selectedGame ? (
+        return replayGame ? (
           <ReplayChart
             replay={replayData}
-            players={selectedGame.players ?? []}
+            players={replayGame?.players ?? []}
             statKey="totalPrestige"
             title="Replay Chart"
           />
@@ -823,9 +967,7 @@ export default function ChartDetailScreen() {
         return (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>{formatTitle(chartKey)}</Text>
-            <Text style={styles.metaText}>
-              Chart key not found: {String(chartKey ?? 'undefined')}
-            </Text>
+            <Text style={styles.metaText}>Chart key not found.</Text>
           </View>
         );
     }
@@ -838,7 +980,85 @@ export default function ChartDetailScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.pageTitle}>{formatTitle(chartKey)}</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>{formatTitle(chartKey)}</Text>
+          <Text style={styles.subtitle}>
+            {selectedGame
+              ? 'Using selected saved game.'
+              : chartKey === 'replay-chart' && replayGame
+                ? 'Using latest saved game.'
+                : 'Using saved game history.'}
+          </Text>
+        </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Current Selection</Text
+        {renderChart()}
+      </ScrollView>
+    </View>
+  );
+}
+
+function createStyles(theme: ThemeShape) {
+  const background = theme?.colors?.background?.primary ?? '#081120';
+  const surface = theme?.colors?.background?.secondary ?? 'rgba(8,16,32,0.92)';
+  const border = theme?.colors?.border?.subtle ?? 'rgba(255,255,255,0.08)';
+  const text = theme?.colors?.text?.primary ?? '#F8FAFC';
+  const textMuted = theme?.colors?.text?.secondary ?? '#94A3B8';
+
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: background,
+    },
+    content: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 32,
+      gap: 12,
+    },
+    header: {
+      gap: 4,
+      marginBottom: 4,
+    },
+    title: {
+      color: text,
+      fontSize: 24,
+      fontWeight: '800',
+    },
+    subtitle: {
+      color: textMuted,
+      fontSize: 12,
+      lineHeight: 16,
+    },
+    sectionCard: {
+      backgroundColor: surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: border,
+      padding: 16,
+    },
+    chartCard: {
+      backgroundColor: surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: border,
+      padding: 16,
+      gap: 8,
+    },
+    sectionTitle: {
+      color: text,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    metaText: {
+      color: textMuted,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    centered: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+    },
+  });
+}
+

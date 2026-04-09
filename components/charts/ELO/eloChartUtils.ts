@@ -1,4 +1,4 @@
-import { chartColors } from './chartTheme';
+import { chartColors } from '@/utils/chartTheme';
 
 export const ELO_CHART_DIMENSIONS = {
   WIDTH: 340,
@@ -26,7 +26,11 @@ export type Player = {
   color?: string;
 };
 
-export type EloMode = 'elo' | 'eloDelta' | 'expectedVsActual' | 'performanceVsGap';
+export type EloMode =
+  | 'elo'
+  | 'eloDelta'
+  | 'expectedVsActual'
+  | 'performanceVsGap';
 
 export type ModeOption = {
   key: EloMode;
@@ -75,26 +79,102 @@ export type RenderSeries = PlayerSeries & {
   points: ChartPoint[];
   path: string;
   isFocused: boolean;
+  strokeWidth?: number;
+  strokeOpacity?: number;
 };
 
 export const MODE_OPTIONS: ModeOption[] = [
-  { key: 'elo', label: 'ELO', description: 'Raw rating progression over time.' },
-  { key: 'eloDelta', label: 'ELO Δ', description: 'Game-by-game rating change.' },
-  { key: 'expectedVsActual', label: 'Exp vs Act', description: 'Actual result minus expected result.' },
-  { key: 'performanceVsGap', label: 'vs Gap', description: 'Result compared to the rating-gap expectation.' },
+  {
+    key: 'elo',
+    label: 'ELO',
+    description: 'Raw rating progression over time.',
+  },
+  {
+    key: 'eloDelta',
+    label: 'ELO Δ',
+    description: 'Game-by-game rating change.',
+  },
+  {
+    key: 'expectedVsActual',
+    label: 'Exp vs Act',
+    description: 'Actual result minus expected result.',
+  },
+  {
+    key: 'performanceVsGap',
+    label: 'vs Gap',
+    description: 'Result compared to the rating-gap expectation.',
+  },
 ];
 
-export function getPlayerColor(color?: string): string {
-  if (typeof color === 'string' && color.trim()) return color;
-  return chartColors.purple;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function fallbackChartColorFromId(id: string): string {
+  const palette = [
+    chartColors.purple,
+    chartColors.blue,
+    chartColors.cyan,
+    chartColors.green,
+    chartColors.yellow,
+    chartColors.orange,
+    chartColors.red,
+    chartColors.pink,
+  ].filter(Boolean) as string[];
+
+  if (!palette.length) return '#8B5CF6';
+
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+
+  return palette[hash % palette.length];
+}
+
+export function getPlayerColor(
+  playerOrColor?: string | Player,
+  players?: Player[]
+): string {
+  if (!playerOrColor) return chartColors.purple ?? '#8B5CF6';
+
+  if (typeof playerOrColor === 'object') {
+    if (
+      typeof playerOrColor.color === 'string' &&
+      playerOrColor.color.trim().length
+    ) {
+      return playerOrColor.color;
+    }
+    return fallbackChartColorFromId(String(playerOrColor.id ?? 'player'));
+  }
+
+  const directString = playerOrColor.trim();
+  if (!directString) return chartColors.purple ?? '#8B5CF6';
+
+  if (
+    directString.startsWith('#') ||
+    directString.startsWith('rgb') ||
+    directString.startsWith('hsl')
+  ) {
+    return directString;
+  }
+
+  const matchedPlayer = players?.find((player) => player.id === directString);
+  if (matchedPlayer?.color?.trim()) return matchedPlayer.color;
+
+  return fallbackChartColorFromId(directString);
 }
 
 export function getEloValue(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (isFiniteNumber(value)) return value;
 
-  if (value && typeof value === 'object' && 'elo' in (value as Record<string, unknown>)) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'elo' in (value as Record<string, unknown>)
+  ) {
     const elo = (value as Record<string, unknown>).elo;
-    return typeof elo === 'number' && Number.isFinite(elo) ? elo : 0;
+    return isFiniteNumber(elo) ? elo : 0;
   }
 
   return 0;
@@ -102,7 +182,9 @@ export function getEloValue(value: unknown): number {
 
 export function average(values: number[]): number {
   const clean = values.filter(Number.isFinite);
-  return clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
+  return clean.length
+    ? clean.reduce((sum, value) => sum + value, 0) / clean.length
+    : 0;
 }
 
 export function getWinnerId(game: Game): string | null {
@@ -137,12 +219,19 @@ export function getModeValues(series: PlayerSeries, mode: EloMode): number[] {
 }
 
 export function getGameParticipants(game: Game, players: Player[]): Player[] {
-  const ids = game.players?.map((p) => p.id).filter(Boolean) as string[] | undefined;
+  const ids = game.players
+    ?.map((player) => player.id)
+    .filter(Boolean) as string[] | undefined;
+
   if (!ids?.length) return players;
   return players.filter((player) => ids.includes(player.id));
 }
 
-export function getExpectedResultForPlayer(game: Game, playerId: string, players: Player[]): number {
+export function getExpectedResultForPlayer(
+  game: Game,
+  playerId: string,
+  players: Player[]
+): number {
   const participants = getGameParticipants(game, players);
 
   const participantElos = participants
@@ -197,12 +286,25 @@ export function buildAnalytics(
   }
 
   const series: PlayerSeries[] = players.map((player) => {
-    const eloValues = games.map((game) => getEloValue(game.eloSnapshot?.[player.id]));
-    const eloDeltas = eloValues.map((elo, index) => (index === 0 ? 0 : elo - eloValues[index - 1]));
+    const eloValues = games.map((game) =>
+      getEloValue(game.eloSnapshot?.[player.id])
+    );
 
-    const expectedResults = games.map((game) => getExpectedResultForPlayer(game, player.id, players));
-    const actualResults = games.map((game) => (getWinnerId(game) === player.id ? 1 : 0));
-    const expectedVsActual = actualResults.map((actual, index) => actual - expectedResults[index]);
+    const eloDeltas = eloValues.map((elo, index) =>
+      index === 0 ? 0 : elo - eloValues[index - 1]
+    );
+
+    const expectedResults = games.map((game) =>
+      getExpectedResultForPlayer(game, player.id, players)
+    );
+
+    const actualResults = games.map((game) =>
+      getWinnerId(game) === player.id ? 1 : 0
+    );
+
+    const expectedVsActual = actualResults.map(
+      (actual, index) => actual - expectedResults[index]
+    );
 
     const performanceVsGap = games.map((game, index) =>
       getPerformanceVsGap(game, player.id, players, expectedVsActual[index])
@@ -243,7 +345,7 @@ export function buildAnalytics(
 
     return {
       ...player,
-      colorValue: getPlayerColor(player.color),
+      colorValue: getPlayerColor(player, players),
       eloValues,
       eloDeltas,
       expectedVsActual,

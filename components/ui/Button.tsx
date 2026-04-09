@@ -8,7 +8,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { chartColors, withAlpha } from '@/utils/chartTheme'
+import { chartColors, withAlpha } from '@/utils/chartTheme';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 
@@ -117,3 +117,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
+
+

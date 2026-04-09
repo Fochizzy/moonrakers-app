@@ -24,3 +24,5 @@ useEffect(() => {
   setOvertakes(newOvertakes);
   prevRankingRef.current = current;
 }, [ranking]);
+
+

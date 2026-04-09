@@ -42,7 +42,7 @@ function getTone(type: string, value: number) {
     case 'consistencyScore':
       return { accent: '#a855f7', label: 'CONSISTENT' };
     case 'impactScore':
-      return { accent: '#f59e0b', label: 'IMPACT' };
+      return { accent: '#3B82F6', label: 'IMPACT' };
     default:
       return {
         accent: value >= 0 ? '#67e8f9' : '#94a3b8',
@@ -52,53 +52,32 @@ function getTone(type: string, value: number) {
 }
 
 function InsightCard({ insight, playerName }: Props) {
-  const tone = useMemo(
-    () => getTone(insight.type, insight.value),
-    [insight.type, insight.value]
-  );
-
+  const tone = useMemo(() => getTone(insight.type, insight.value), [insight.type, insight.value]);
   const value = formatInsightValue(insight.type, insight.value);
 
   return (
     <View style={styles.cardWrapper}>
-      <View
-        style={[
-          styles.card,
-          { borderColor: withAlpha(tone.accent, 0.3) },
-        ]}
-      >
-        {/* glow */}
-        <View
-          pointerEvents="none"
-          style={[
-            styles.glow,
-            { backgroundColor: withAlpha(tone.accent, 0.18) },
-          ]}
-        />
+      <View style={[styles.card, { borderColor: withAlpha(tone.accent, 0.3) }]}>
+        <View pointerEvents="none" style={[styles.glow, { backgroundColor: withAlpha(tone.accent, 0.18) }]} />
 
-        {/* header */}
         <View style={styles.header}>
           <Text style={styles.label}>{insight.label}</Text>
 
           <View
             style={[
-              styles.badge,
+              styles.badgeCard,
               {
                 borderColor: withAlpha(tone.accent, 0.4),
                 backgroundColor: withAlpha(tone.accent, 0.12),
               },
             ]}
           >
-            <Text style={[styles.badgeText, { color: tone.accent }]}>
-              {tone.label}
-            </Text>
+            <Text style={[styles.badgeText, { color: tone.accent }]}>{tone.label}</Text>
           </View>
         </View>
 
-        {/* value */}
         <Text style={styles.value}>{value}</Text>
 
-        {/* footer */}
         {!!playerName && (
           <View style={styles.footer}>
             <Text style={styles.footerLabel}>Player</Text>
@@ -113,15 +92,13 @@ function InsightCard({ insight, playerName }: Props) {
 export default memo(InsightCard);
 
 const styles = StyleSheet.create({
-  // wrapper ensures equal height in grid
   cardWrapper: {
     flex: 1,
   },
-
   card: {
     flex: 1,
     position: 'relative',
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 14,
     backgroundColor: '#08101f',
     borderWidth: 1,
@@ -129,7 +106,6 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: 120,
   },
-
   glow: {
     position: 'absolute',
     top: -20,
@@ -138,13 +114,11 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 999,
   },
-
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
   },
-
   label: {
     flex: 1,
     fontSize: 11,
@@ -153,43 +127,39 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-
-  badge: {
+  badgeCard: {
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: 12,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
-
   badgeText: {
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 0.8,
   },
-
   value: {
     fontSize: 22,
     fontWeight: '900',
     color: '#ffffff',
   },
-
   footer: {
-    marginTop: 'auto', // pushes footer to bottom → equal alignment
+    marginTop: 'auto',
     borderTopWidth: 1,
     borderTopColor: 'rgba(148,163,184,0.15)',
     paddingTop: 8,
   },
-
   footerLabel: {
     fontSize: 10,
     color: '#94a3b8',
     fontWeight: '700',
     textTransform: 'uppercase',
   },
-
   player: {
     fontSize: 13,
     fontWeight: '800',
     color: '#e2e8f0',
   },
 });
+
+

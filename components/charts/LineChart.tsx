@@ -1,343 +1,421 @@
-import React, { memo, useMemo } from 'react';
-import MultiLineChart, {
-  LineChartRound,
-  LineChartSeries,
-  LineMode,
-} from '@/components/charts/MultiLineChart';
+import React, { memo, useMemo, useState } from "react";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import Svg, { Circle, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 
-export type ChartDatum = {
+import Text from "@/components/ui/Text";
+import { getMetricOrFallback } from "@/utils/metricMap";
+import { getChartMetricValue } from "@/utils/chartMetricValue";
+
+type ChartDatum = {
   round?: number;
   gameIndex?: number;
   label?: string;
-  snapshot?: Record<string, unknown>;
-  [key: string]: unknown;
+  snapshot?: Record<string, any>;
 };
 
-export type Player = {
-  id?: string;
-  name?: string;
+type Player = {
+  id: string;
+  name: string;
   color?: string;
-  [key: string]: unknown;
 };
 
-type CompareMode = 'all' | 'top5' | 'selectedOnly';
-type EmptyBehavior = 'empty-chart' | 'hide';
+type LineMode = "raw" | "cumulative" | "average";
 
 type Props = {
   data?: ChartDatum[];
   players?: Player[];
-  statKey?: string;
+  statKey: string;
+  scopedPlayerIds?: string[];
+  selectedPlayerIds?: string[];
+  compare?: string;
   title?: string;
   subtitle?: string;
-  compare?: CompareMode;
-  selectedPlayerIds?: string[];
-  emptyTitle?: string;
-  emptySubtitle?: string;
-  emptyBehavior?: EmptyBehavior;
-  maxPlayers?: number;
-  initialMode?: LineMode;
-  allowedModes?: LineMode[];
 };
 
-function toTitleCase(value: string) {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
+type Series = {
+  id: string;
+  name: string;
+  color: string;
+  values: number[];
+};
+
+const COLORS = {
+  card: "rgba(12,18,38,0.92)",
+  cardAlt: "rgba(16,24,48,0.95)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  accent: "#A855F7",
+  border: "rgba(255,255,255,0.08)",
+  grid: "rgba(255,255,255,0.06)",
+};
+
+function n(value: unknown, fallback = 0): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getColor(color?: string, index = 0) {
+  if (typeof color === "string" && color.trim()) return color.trim();
+  const fallback = ["#A855F7", "#3B82F6", "#22C55E", "#F59E0B", "#EF4444"];
+  return fallback[index % fallback.length];
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "")
     .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9 ]+/g, "")
+    .replace(/\s+/g, " ");
 }
 
-function buildDefaultTitle(statKey: string) {
-  return `${toTitleCase(statKey)} Trend`;
-}
+function buildAvailablePlayers(
+  data: ChartDatum[],
+  players: Player[]
+): Player[] {
+  const byId = new Map<string, Player>();
 
-function buildDefaultSubtitle(statKey: string, compare: CompareMode) {
-  const statLabel = toTitleCase(statKey).toLowerCase();
-
-  switch (compare) {
-    case 'top5':
-      return `Trend line for the top 5 players by ${statLabel}.`;
-    case 'selectedOnly':
-      return `Trend line for selected players by ${statLabel}.`;
-    default:
-      return `Game-by-game trend line for ${statLabel}.`;
-  }
-}
-
-function sanitizeArray<T>(value: T[] | undefined): T[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function asNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function sumPrestigeLikeRecord(record: Record<string, unknown>) {
-  const totalPrestige = asNumber(record.totalPrestige);
-  if (totalPrestige != null) return totalPrestige;
-
-  const prestige = asNumber(record.prestige);
-  if (prestige != null) return prestige;
-
-  return (
-    (asNumber(record.directPrestige) ?? 0) +
-    (asNumber(record.assistPrestigeReceived) ?? 0) +
-    (asNumber(record.objectivePrestige) ?? 0)
-  );
-}
-
-function resolveStatValue(playerEntry: unknown, statKey: string): number {
-  if (typeof playerEntry === 'number') {
-    return statKey === 'score' || statKey === 'value' || statKey === 'totalPrestige'
-      ? playerEntry
-      : 0;
+  for (const player of players ?? []) {
+    const id = String(player?.id ?? "").trim();
+    if (!id) continue;
+    byId.set(id, player);
   }
 
-  if (!playerEntry || typeof playerEntry !== 'object') {
-    return 0;
-  }
+  for (const point of data ?? []) {
+    const snapshot = point?.snapshot && typeof point.snapshot === "object" ? point.snapshot : {};
+    for (const [playerId, entry] of Object.entries(snapshot)) {
+      const id = String(playerId ?? "").trim();
+      if (!id || byId.has(id)) continue;
 
-  const record = playerEntry as Record<string, unknown>;
-
-  if (statKey === 'totalPrestige' || statKey === 'prestige') {
-    return sumPrestigeLikeRecord(record);
-  }
-
-  return asNumber(record[statKey]) ?? 0;
-}
-
-function extractStatFromPoint(point: ChartDatum, playerId: string, statKey: string): number {
-  const snapshot = point.snapshot;
-  if (!snapshot || typeof snapshot !== 'object') return 0;
-  const playerEntry = (snapshot as Record<string, unknown>)[playerId];
-  return resolveStatValue(playerEntry, statKey);
-}
-
-function getPlayerSeriesTotal(data: ChartDatum[], playerId: string, statKey: string) {
-  let total = 0;
-  for (const point of data) {
-    total += extractStatFromPoint(point, playerId, statKey);
-  }
-  return total;
-}
-
-function normalizePlayerId(player: Player, index: number): string | null {
-  if (typeof player.id === 'string' && player.id.trim()) {
-    return player.id.trim();
-  }
-  return null;
-}
-
-function normalizePlayerName(player: Player, index: number): string {
-  if (typeof player.name === 'string' && player.name.trim()) {
-    return player.name.trim();
-  }
-  const id = normalizePlayerId(player, index);
-  if (id) return id;
-  return `Player ${index + 1}`;
-}
-
-function uniquePlayers(players: Player[]) {
-  const seen = new Set<string>();
-  const result: Player[] = [];
-
-  players.forEach((player, index) => {
-    const id = normalizePlayerId(player, index);
-    const dedupeKey = id ? `id:${id}` : `idx:${index}`;
-
-    if (seen.has(dedupeKey)) return;
-    seen.add(dedupeKey);
-    result.push(player);
-  });
-
-  return result;
-}
-
-function filterPlayers({
-  players,
-  data,
-  statKey,
-  compare,
-  selectedPlayerIds,
-  maxPlayers,
-}: {
-  players: Player[];
-  data: ChartDatum[];
-  statKey: string;
-  compare: CompareMode;
-  selectedPlayerIds: string[];
-  maxPlayers: number;
-}) {
-  const deduped = uniquePlayers(players);
-
-  if (compare === 'selectedOnly') {
-    const selected = new Set(selectedPlayerIds);
-    return deduped.filter((player, index) => {
-      const id = normalizePlayerId(player, index);
-      return id ? selected.has(id) : false;
-    });
-  }
-
-  if (compare === 'top5') {
-    return [...deduped]
-      .map((player, index) => {
-        const id = normalizePlayerId(player, index);
-        return {
-          player,
-          total: id ? getPlayerSeriesTotal(data, id, statKey) : Number.NEGATIVE_INFINITY,
-        };
-      })
-      .sort((a, b) => b.total - a.total)
-      .slice(0, Math.max(1, Math.min(maxPlayers, 5)))
-      .map((entry) => entry.player);
-  }
-
-  return deduped;
-}
-
-function normalizeStatKey(statKey?: string) {
-  if (typeof statKey !== 'string' || !statKey.trim()) return 'score';
-  return statKey.trim();
-}
-
-function buildResolvedSubtitle({
-  subtitle,
-  title,
-  statKey,
-  compare,
-  visiblePlayers,
-  selectedPlayerIds,
-}: {
-  subtitle?: string;
-  title?: string;
-  statKey: string;
-  compare: CompareMode;
-  visiblePlayers: Player[];
-  selectedPlayerIds: string[];
-}) {
-  if (subtitle) return subtitle;
-
-  if (compare === 'selectedOnly' && selectedPlayerIds.length === 2) {
-    const orderedPlayers = selectedPlayerIds
-      .map((id) =>
-        visiblePlayers.find((player, index) => normalizePlayerId(player, index) === id),
-      )
-      .filter(Boolean) as Player[];
-
-    if (orderedPlayers.length === 2) {
-      const trendLabel = title ?? buildDefaultTitle(statKey);
-      return `${orderedPlayers[0].name ?? 'Player 1'} vs ${orderedPlayers[1].name ?? 'Player 2'} — ${trendLabel}`;
+      const obj = entry && typeof entry === "object" ? entry as Record<string, any> : {};
+      byId.set(id, {
+        id,
+        name: String(obj.playerName ?? obj.label ?? obj.name ?? "Unknown"),
+        color: typeof obj.color === "string" ? obj.color : undefined,
+      });
     }
   }
 
-  return buildDefaultSubtitle(statKey, compare);
+  return [...byId.values()];
 }
 
-function buildSeries(data: ChartDatum[], players: Player[], statKey: string): LineChartSeries[] {
-  return players.map((player, index) => {
-    const id = normalizePlayerId(player, index) ?? `player-${index}`;
-    const name = normalizePlayerName(player, index);
+function filterPlayers(
+  availablePlayers: Player[],
+  scopedPlayerIds?: string[],
+  selectedPlayerIds?: string[]
+) {
+  const ids = selectedPlayerIds?.length ? selectedPlayerIds : scopedPlayerIds;
+  if (!ids?.length) return availablePlayers;
 
-    return {
-      id,
-      name,
-      color: player.color,
-      values: data.map((point) => extractStatFromPoint(point, id, statKey)),
-    };
-  });
+  const allowed = new Set(ids.map(String));
+  const filtered = availablePlayers.filter((player) => allowed.has(String(player.id)));
+  return filtered.length ? filtered : availablePlayers;
 }
 
-function buildRounds(data: ChartDatum[]): LineChartRound[] {
-  return data.map((point, index) => ({
-    round: point.round ?? point.gameIndex ?? index + 1,
-    label: point.label,
+function buildSeries(
+  data: ChartDatum[],
+  players: Player[],
+  statKey: string
+): Series[] {
+  return players.map((player, index) => ({
+    id: String(player.id),
+    name: player.name || "Unknown",
+    color: getColor(player.color, index),
+    values: data.map((point) =>
+      n(getChartMetricValue(point?.snapshot?.[player.id], statKey))
+    ),
   }));
 }
 
-function hasUsableSeries(series: LineChartSeries[]) {
-  if (!series.length) return false;
-  return series.some((entry) => entry.values.some((value) => value !== 0));
+function applyMode(values: number[], mode: LineMode) {
+  if (mode === "raw") return values.map((value) => n(value));
+
+  let running = 0;
+  return values.map((value, index) => {
+    running += n(value);
+    return mode === "cumulative" ? running : running / (index + 1);
+  });
+}
+
+function buildPoints(
+  values: number[],
+  width: number,
+  height: number,
+  min: number,
+  max: number
+) {
+  const range = Math.max(1, max - min);
+  const stepX = values.length <= 1 ? 0 : width / (values.length - 1);
+
+  return values.map((value, index) => ({
+    x: n(index * stepX),
+    y: n(height - ((n(value) - min) / range) * height),
+    value: n(value),
+    index,
+  }));
+}
+
+function buildPath(points: Array<{ x: number; y: number }>) {
+  if (points.length < 2) return "";
+  const d = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(" ");
+  return /NaN|Infinity|undefined|null/.test(d) ? "" : d;
+}
+
+function axisTicks(min: number, max: number, count = 4) {
+  const range = Math.max(1, max - min);
+  return Array.from({ length: count + 1 }, (_, i) => min + (range * i) / count);
 }
 
 function LineChart({
-  data,
-  players,
-  statKey: rawStatKey = 'score',
+  data = [],
+  players = [],
+  statKey,
+  scopedPlayerIds,
+  selectedPlayerIds,
   title,
   subtitle,
-  compare = 'all',
-  selectedPlayerIds = [],
-  emptyTitle = 'No chart data yet',
-  emptySubtitle = 'Add games or player stats to render this trend line.',
-  emptyBehavior = 'empty-chart',
-  maxPlayers = 12,
-  initialMode = 'raw',
-  allowedModes = [
-    'raw',
-    'cumulativePrestige',
-    'netGainPerRound',
-    'rolling3RoundAverage',
-    'leadMarginPerRound',
-    'comebackDelta',
-    'firstPlaceOccupancy',
-  ],
 }: Props) {
-  const statKey = useMemo(() => normalizeStatKey(rawStatKey), [rawStatKey]);
-  const safeData = useMemo(() => sanitizeArray(data), [data]);
-  const safePlayers = useMemo(() => sanitizeArray(players), [players]);
+  const [mode, setMode] = useState<LineMode>("raw");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const visiblePlayers = useMemo(
-    () =>
-      filterPlayers({
-        players: safePlayers,
-        data: safeData,
-        statKey,
-        compare,
-        selectedPlayerIds,
-        maxPlayers,
-      }),
-    [safePlayers, safeData, statKey, compare, selectedPlayerIds, maxPlayers],
+  const metric = getMetricOrFallback(statKey);
+
+  const availablePlayers = useMemo(
+    () => buildAvailablePlayers(data, players),
+    [data, players]
   );
 
-  const resolvedTitle = useMemo(() => title ?? buildDefaultTitle(statKey), [title, statKey]);
+  const visiblePlayers = useMemo(
+    () => filterPlayers(availablePlayers, scopedPlayerIds, selectedPlayerIds),
+    [availablePlayers, scopedPlayerIds, selectedPlayerIds]
+  );
 
-  const resolvedSubtitle = useMemo(
-    () =>
-      buildResolvedSubtitle({
-        subtitle,
-        title: resolvedTitle,
-        statKey,
-        compare,
-        visiblePlayers,
-        selectedPlayerIds,
-      }),
-    [subtitle, resolvedTitle, statKey, compare, visiblePlayers, selectedPlayerIds],
+  const baseSeries = useMemo(
+    () => buildSeries(data, visiblePlayers, statKey),
+    [data, visiblePlayers, statKey]
   );
 
   const series = useMemo(
-    () => buildSeries(safeData, visiblePlayers, statKey),
-    [safeData, visiblePlayers, statKey],
+    () =>
+      baseSeries.map((row) => ({
+        ...row,
+        values: applyMode(row.values, mode),
+      })),
+    [baseSeries, mode]
   );
 
-  const rounds = useMemo(() => buildRounds(safeData), [safeData]);
+  const allValues = series.flatMap((row) => row.values).filter((value) => Number.isFinite(value));
+  const min = allValues.length ? Math.min(...allValues, 0) : 0;
+  const max = allValues.length ? Math.max(...allValues, 1) : 1;
 
-  const hasData = useMemo(() => hasUsableSeries(series), [series]);
+  const hasRenderableData =
+    data.length > 0 &&
+    visiblePlayers.length > 0 &&
+    series.some((row) => row.values.some((value) => Number.isFinite(value)));
 
-  if (!hasData && emptyBehavior === 'hide') {
-    return null;
-  }
+  const chartWidth = Math.max(560, Math.max(1, data.length - 1) * 78);
+  const innerWidth = chartWidth - 60;
+  const innerHeight = 180;
+  const ticks = axisTicks(min, max, 4);
+
+  const renderedSeries = useMemo(
+    () =>
+      series.map((row) => {
+        const points = buildPoints(row.values, innerWidth, innerHeight, min, max);
+        return {
+          ...row,
+          points,
+          path: buildPath(points),
+        };
+      }),
+    [series, innerWidth, innerHeight, min, max]
+  );
 
   return (
-    <MultiLineChart
-      series={hasData ? series : []}
-      rounds={hasData ? rounds : []}
-      title={hasData ? resolvedTitle : emptyTitle}
-      subtitle={hasData ? resolvedSubtitle : emptySubtitle}
-      initialMode={initialMode}
-      allowedModes={allowedModes}
-    />
+    <View style={styles.container}>
+      <Text style={styles.title}>{title || metric.label}</Text>
+      <Text style={styles.subtitle}>{subtitle || "Trend over time"}</Text>
+
+      <View style={styles.modeRow}>
+        {(["raw", "cumulative", "average"] as LineMode[]).map((entry) => (
+          <TouchableOpacity
+            key={entry}
+            onPress={() => setMode(entry)}
+            activeOpacity={0.9}
+          >
+            <Text style={[styles.modeText, mode === entry && styles.modeTextActive]}>
+              {entry}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {!hasRenderableData ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No line data yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Snapshot series is empty for the current metric or player scope.
+          </Text>
+        </View>
+      ) : (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <Svg width={chartWidth} height={240}>
+              <Rect
+                x={0}
+                y={0}
+                width={chartWidth}
+                height={240}
+                fill={COLORS.cardAlt}
+                rx={16}
+                stroke={COLORS.border}
+              />
+
+              {ticks.map((tick, index) => {
+                const y =
+                  20 + innerHeight - ((tick - min) / Math.max(1, max - min)) * innerHeight;
+                return (
+                  <React.Fragment key={`tick-${index}`}>
+                    <Line
+                      x1={48}
+                      y1={n(y)}
+                      x2={chartWidth - 12}
+                      y2={n(y)}
+                      stroke={COLORS.grid}
+                      strokeWidth={1}
+                    />
+                    <SvgText
+                      x={42}
+                      y={n(y) + 4}
+                      fontSize="10"
+                      fill={COLORS.sub}
+                      textAnchor="end"
+                    >
+                      {tick.toFixed(0)}
+                    </SvgText>
+                  </React.Fragment>
+                );
+              })}
+
+              {data.map((point, index) => {
+                const x =
+                  48 + (data.length <= 1 ? 0 : (index * innerWidth) / (data.length - 1));
+                return (
+                  <SvgText
+                    key={`label-${index}`}
+                    x={n(x)}
+                    y={222}
+                    fontSize="10"
+                    fill={COLORS.sub}
+                    textAnchor="middle"
+                  >
+                    {point?.label || `G${index + 1}`}
+                  </SvgText>
+                );
+              })}
+
+              {renderedSeries.map((row) => {
+                const isSelected = !selectedId || selectedId === row.id;
+                if (!row.path) {
+                  return row.points.length === 1 ? (
+                    <Circle
+                      key={`${row.id}-single`}
+                      cx={48 + row.points[0].x}
+                      cy={20 + row.points[0].y}
+                      r={isSelected ? 4 : 3}
+                      fill={row.color}
+                      opacity={isSelected ? 1 : 0.35}
+                    />
+                  ) : null;
+                }
+
+                return (
+                  <Path
+                    key={row.id}
+                    d={row.path}
+                    stroke={row.color}
+                    strokeWidth={isSelected ? 3 : 2}
+                    opacity={isSelected ? 1 : 0.35}
+                    fill="none"
+                    transform="translate(48,20)"
+                  />
+                );
+              })}
+
+              {renderedSeries.map((row) => {
+                const isSelected = !selectedId || selectedId === row.id;
+                return row.points.map((point) => (
+                  <Circle
+                    key={`${row.id}-${point.index}`}
+                    cx={48 + point.x}
+                    cy={20 + point.y}
+                    r={isSelected ? 3 : 2}
+                    fill={row.color}
+                    opacity={isSelected ? 1 : 0.45}
+                  />
+                ));
+              })}
+            </Svg>
+          </ScrollView>
+
+          <View style={styles.legendWrap}>
+            {renderedSeries.map((row) => {
+              const active = selectedId === row.id || (!selectedId && true);
+              return (
+                <TouchableOpacity
+                  key={row.id}
+                  style={styles.legendChip}
+                  onPress={() => setSelectedId((current) => (current === row.id ? null : row.id))}
+                  activeOpacity={0.9}
+                >
+                  <View style={[styles.legendDot, { backgroundColor: row.color, opacity: active ? 1 : 0.5 }]} />
+                  <Text style={[styles.legendText, !active && styles.legendTextMuted]}>
+                    {row.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
+      )}
+    </View>
   );
 }
 
 export default memo(LineChart);
+
+const styles = StyleSheet.create({
+  container: { gap: 10 },
+  title: { color: COLORS.text, fontWeight: "800", fontSize: 18 },
+  subtitle: { color: COLORS.sub, fontSize: 12 },
+  modeRow: { flexDirection: "row", gap: 14 },
+  modeText: { color: COLORS.sub, fontSize: 12, fontWeight: "700", textTransform: "capitalize" },
+  modeTextActive: { color: COLORS.accent },
+  emptyCard: {
+    borderRadius: 14,
+    padding: 16,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 4,
+  },
+  emptyTitle: { color: COLORS.text, fontWeight: "800" },
+  emptySubtitle: { color: COLORS.sub, fontSize: 12 },
+  legendWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  legendChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  legendDot: { width: 8, height: 8, borderRadius: 999 },
+  legendText: { color: COLORS.text, fontSize: 12, fontWeight: "700" },
+  legendTextMuted: { color: COLORS.sub },
+});

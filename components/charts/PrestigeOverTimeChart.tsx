@@ -1,6 +1,5 @@
-import React, { memo } from 'react';
-import LineChart from './LineChart';
-import { LineMode } from './MultiLineChart';
+import React, { memo } from "react";
+import LineChart from "./LineChart";
 
 type Player = {
   id: string;
@@ -26,28 +25,24 @@ type Props = Readonly<{
   players?: readonly Player[];
   title?: string;
   subtitle?: string;
+  compare?: "all" | "top5" | "selectedOnly";
+  selectedPlayerIds?: string[];
+  maxPlayers?: number;
 }>;
 
-const CHART_TITLE = 'Prestige Over Time';
+const CHART_TITLE = "Prestige Over Time";
 const CHART_SUBTITLE =
-  'Analyze prestige pace, swings, lead control, and comeback behavior across rounds.';
-const STAT_KEY = 'totalPrestige' as const;
-const INITIAL_MODE: LineMode = 'cumulativePrestige';
-
-const ALLOWED_MODES: LineMode[] = [
-  'cumulativePrestige',
-  'netGainPerRound',
-  'rolling3RoundAverage',
-  'leadMarginPerRound',
-  'comebackDelta',
-  'firstPlaceOccupancy',
-];
+  "Unified prestige trend across tracked games.";
+const STAT_KEY = "totalPrestige" as const;
 
 function PrestigeOverTimeChart({
   data = [],
   players = [],
   title = CHART_TITLE,
   subtitle = CHART_SUBTITLE,
+  compare = "all",
+  selectedPlayerIds,
+  maxPlayers = 12,
 }: Props) {
   return (
     <LineChart
@@ -56,16 +51,16 @@ function PrestigeOverTimeChart({
       statKey={STAT_KEY}
       title={title}
       subtitle={subtitle}
-      compare="all"
-      initialMode={INITIAL_MODE}
-      allowedModes={ALLOWED_MODES}
+      compare={compare}
+      selectedPlayerIds={selectedPlayerIds}
+      maxPlayers={maxPlayers}
       emptyTitle="No prestige data yet"
-      emptySubtitle="Add round snapshots with prestige values to render this chart."
+      emptySubtitle="Add tracked games or round snapshots to render prestige trend history."
       emptyBehavior="empty-chart"
     />
   );
 }
 
-PrestigeOverTimeChart.displayName = 'PrestigeOverTimeChart';
+PrestigeOverTimeChart.displayName = "PrestigeOverTimeChart";
 
 export default memo(PrestigeOverTimeChart);

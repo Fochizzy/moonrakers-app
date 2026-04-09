@@ -1,1192 +1,1443 @@
-import React, { useMemo, useState } from 'react';
-import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  View,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  SafeAreaView,
+  Image,
+  Animated,
+  Easing,
+} from "react-native";
+import { useRouter } from "expo-router";
 
-import { useStore } from '@/store/useStore';
-import StarryNight from '@/components/ui/StarryNight';
-import Text from '@/components/ui/Text';
-import RankBadge from '@/components/RankBadge';
-import { calculateElo } from '@/utils/elo';
+import { useStore } from "@/store/useStore";
+import StarryNight from "@/components/ui/StarryNight";
+import Text from "@/components/ui/Text";
+import { APP_ICONS } from "@/utils/iconAccess";
+import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 
-type PlayerStats = {
-  prestige?: number;
-  totalPrestige?: number;
-  directPrestige?: number;
-  assistPrestigeReceived?: number;
-  contracts?: number;
-  assists?: number;
-  failures?: number;
-  score?: number;
-  wins?: number;
-  gamesPlayed?: number;
+type Tab = "game" | "leaderboard" | "nav";
+
+type PlayerLike = {
+  id: string;
+  name?: string;
+  color?: string;
+  initials?: string;
+  assignedCardArtIndex?: number | null;
 };
 
-type Player = {
+type GroupLike = {
   id: string;
   name: string;
-  color?: string;
-  prestige?: number;
-  totalPrestige?: number;
-  directPrestige?: number;
-  assistPrestigeReceived?: number;
-  contracts?: number;
-  assists?: number;
-  failures?: number;
-  score?: number;
-  wins?: number;
-  gamesPlayed?: number;
-  stats?: PlayerStats;
+  playerIds: string[];
+  createdAt?: number;
+  objectiveStatsEligible?: boolean;
+  inferredUseCount?: number;
+  inferredRecentAt?: number;
 };
 
-type Totals = {
-  prestige?: number;
-  totalPrestige?: number;
-  directPrestige?: number;
-  assistPrestigeReceived?: number;
-  assistPrestigeBySource?: Record<string, number>;
-  contracts?: number;
-  assists?: number;
-  failures?: number;
-  score?: number;
-};
-
-type Game = {
+type GameLike = {
   id?: string;
-  winnerId?: string;
-  selectedWinnerId?: string;
-  manualWinnerId?: string;
-  totals?: Record<string, Totals>;
+  groupId?: string;
+  groupName?: string;
+  createdAt?: number;
+  players?: Array<{ id?: string; playerId?: string; name?: string }>;
 };
 
-type SortMetric =
-  | 'totalPrestige'
-  | 'elo'
-  | 'winRate'
-  | 'efficiency'
-  | 'assistedEfficiency'
-  | 'directEfficiency'
-  | 'directPrestige'
-  | 'assistPrestige'
-  | 'failureRate'
-  | 'riskFactor'
-  | 'score';
-
-type EnrichedPlayer = {
-  player: Player;
-  elo: number;
-  winRate: number;
-  efficiency: number;
-  assistedEfficiency: number;
-  directEfficiency: number;
-  failureRate: number;
-  riskFactor: number;
-  gamesPlayed: number;
-  wins: number;
-  totalPrestige: number;
-  directPrestige: number;
-  assistPrestigeReceived: number;
-  assistShare: number;
-  totalContracts: number;
-  totalAssists: number;
-  totalFailures: number;
-  totalScore: number;
-};
-
-const SORT_OPTIONS: { key: SortMetric; label: string; shortLabel: string }[] = [
-  { key: 'totalPrestige', label: 'Total Prestige', shortLabel: 'Prestige' },
-  { key: 'score', label: 'Score', shortLabel: 'Score' },
-  { key: 'elo', label: 'ELO', shortLabel: 'ELO' },
-  { key: 'winRate', label: 'Win %', shortLabel: 'Win %' },
-  { key: 'efficiency', label: 'All Contracts Efficiency', shortLabel: 'All Eff' },
-  { key: 'assistedEfficiency', label: 'Assistance Efficiency', shortLabel: 'Ast Eff' },
-  { key: 'directEfficiency', label: 'Direct Efficiency', shortLabel: 'Dir Eff' },
-  { key: 'failureRate', label: 'Failure %', shortLabel: 'Fail %' },
-  { key: 'riskFactor', label: 'Risk', shortLabel: 'Risk' },
-  { key: 'directPrestige', label: 'Direct Prestige', shortLabel: 'Direct' },
-  { key: 'assistPrestige', label: 'Assist Prestige', shortLabel: 'Assist' },
-];
-
-const sciFi = {
-  bg: '#060816',
-  panel: '#0D1428',
-  panel2: '#111B36',
-  panel3: '#162447',
-  border: 'rgba(120,160,255,0.14)',
-  borderStrong: 'rgba(99,230,255,0.34)',
-  text: '#F4F7FF',
-  textSoft: '#C7D2EA',
-  textDim: '#8C9ABB',
-  cyan: '#63E6FF',
-  blue: '#78A8FF',
-  violet: '#B57CFF',
-  gold: '#FFD76A',
-  green: '#4CE0B3',
-  red: '#FF7183',
-};
-
-function toNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function asArray<T = any>(value: any): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
-function safeDivide(numerator: number, denominator: number) {
-  return denominator > 0 ? numerator / denominator : 0;
+function normalizeId(value: any): string {
+  return String(value ?? "").trim();
 }
 
-function formatMetric(metric: SortMetric, value: number) {
-  switch (metric) {
-    case 'elo':
-      return Math.round(value).toString();
-    case 'winRate':
-    case 'failureRate':
-      return `${(value * 100).toFixed(1)}%`;
-    case 'efficiency':
-    case 'assistedEfficiency':
-    case 'directEfficiency':
-    case 'riskFactor':
-      return value.toFixed(2);
-    case 'score':
-      return value.toFixed(0);
-    case 'totalPrestige':
-    case 'directPrestige':
-    case 'assistPrestige':
+function normalizeName(value: any): string {
+  return String(value ?? "").trim();
+}
+
+function getInitials(name?: string, fallback?: string) {
+  const raw = String(name ?? fallback ?? "").trim();
+  if (!raw) return "?";
+  const parts = raw.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+function getPlayerAccent(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "blue":
+      return "#60A5FA";
+    case "green":
+      return "#84CC16";
+    case "purple":
+      return "#C084FC";
+    case "orange":
+      return "#FB923C";
+    case "yellow":
+      return "#FACC15";
+    case "red":
+      return "#F87171";
+    case "pink":
+      return "#F472B6";
     default:
-      return value.toFixed(0);
+      return "#60A5FA";
   }
 }
 
-function formatPercent(value: number) {
-  return `${(value * 100).toFixed(1)}%`;
+function normalizePlayer(raw: any, index: number): PlayerLike | null {
+  if (!raw) return null;
+
+  const id =
+    normalizeId(raw.id) ||
+    normalizeId(raw.playerId) ||
+    normalizeId(raw.uuid) ||
+    `player-${index}`;
+
+  const name =
+    normalizeName(raw.name) ||
+    normalizeName(raw.playerName) ||
+    normalizeName(raw.displayName) ||
+    normalizeName(raw.label) ||
+    `Player ${index + 1}`;
+
+  return {
+    ...raw,
+    id,
+    name,
+    color: normalizeName(raw.color) || undefined,
+    initials:
+      normalizeName(raw.initials) || getInitials(name, `P${index + 1}`),
+    assignedCardArtIndex:
+      typeof raw.assignedCardArtIndex === "number" &&
+      Number.isFinite(raw.assignedCardArtIndex)
+        ? raw.assignedCardArtIndex
+        : null,
+  };
 }
 
-function getSortValue(entry: EnrichedPlayer, sortBy: SortMetric): number {
-  switch (sortBy) {
-    case 'elo':
-      return entry.elo;
-    case 'winRate':
-      return entry.winRate;
-    case 'efficiency':
-      return entry.efficiency;
-    case 'assistedEfficiency':
-      return entry.assistedEfficiency;
-    case 'directEfficiency':
-      return entry.directEfficiency;
-    case 'directPrestige':
-      return entry.directPrestige;
-    case 'assistPrestige':
-      return entry.assistPrestigeReceived;
-    case 'failureRate':
-      return entry.failureRate;
-    case 'riskFactor':
-      return entry.riskFactor;
-    case 'score':
-      return entry.totalScore;
-    case 'totalPrestige':
+function normalizeGroup(raw: any, index: number): GroupLike | null {
+  if (!raw) return null;
+
+  const id =
+    normalizeId(raw.id) ||
+    normalizeId(raw.groupId) ||
+    normalizeId(raw.uuid) ||
+    `group-${index}`;
+
+  const name =
+    normalizeName(raw.name) ||
+    normalizeName(raw.groupName) ||
+    normalizeName(raw.label) ||
+    normalizeName(raw.title) ||
+    `Group ${index + 1}`;
+
+  const playerIdsRaw =
+    raw.playerIds ??
+    raw.players ??
+    raw.memberIds ??
+    raw.members ??
+    raw.roster ??
+    [];
+
+  const playerIds = asArray(playerIdsRaw)
+    .map((item: any) =>
+      typeof item === "string"
+        ? normalizeId(item)
+        : normalizeId(item?.id ?? item?.playerId ?? item?.uuid)
+    )
+    .filter(Boolean);
+
+  return {
+    ...raw,
+    id,
+    name,
+    playerIds,
+    createdAt:
+      typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
+        ? raw.createdAt
+        : undefined,
+    objectiveStatsEligible:
+      typeof raw.objectiveStatsEligible === "boolean"
+        ? raw.objectiveStatsEligible
+        : undefined,
+  };
+}
+
+function normalizeGame(raw: any): GameLike | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const players = asArray(raw.players).map((p: any) => ({
+    id: normalizeId(p?.id),
+    playerId: normalizeId(p?.playerId),
+    name: normalizeName(p?.name),
+  }));
+
+  return {
+    id: normalizeId(raw.id) || undefined,
+    groupId: normalizeId(raw.groupId) || undefined,
+    groupName: normalizeName(raw.groupName) || undefined,
+    createdAt:
+      typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
+        ? raw.createdAt
+        : undefined,
+    players,
+  };
+}
+
+function getGamePlayerIds(game: GameLike): string[] {
+  return asArray(game.players)
+    .map((p) => normalizeId(p.id ?? p.playerId))
+    .filter(Boolean);
+}
+
+function sameIdSet(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const aSorted = [...a].sort();
+  const bSorted = [...b].sort();
+  return aSorted.every((id, index) => id === bSorted[index]);
+}
+
+function tabLabel(tab: Tab) {
+  switch (tab) {
+    case "game":
+      return "Command";
+    case "leaderboard":
+      return "Data Center";
+    case "nav":
+      return "Bridge";
     default:
-      return entry.totalPrestige;
+      return tab;
   }
 }
 
-function getTotalPrestige(totals?: Totals) {
-  const direct = toNumber(totals?.directPrestige);
-  const assist = toNumber(totals?.assistPrestigeReceived);
-  const explicit = totals?.totalPrestige ?? totals?.prestige;
-
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
-    return explicit;
-  }
-
-  return direct + assist;
+function BrandHeader() {
+  return (
+    <View style={styles.brandHeader}>
+      <View style={styles.brandMoon} />
+      <Text style={styles.brandText}>Moonrakers</Text>
+    </View>
+  );
 }
 
-function getPlayerStat(player: Player, key: keyof PlayerStats) {
-  const nested = player.stats?.[key];
-  const direct = player[key];
-  return toNumber(nested ?? direct);
-}
-
-function getPlayerTotalPrestige(player: Player) {
-  const explicit =
-    player.stats?.totalPrestige ??
-    player.totalPrestige ??
-    player.stats?.prestige ??
-    player.prestige;
-
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
-    return explicit;
-  }
-
-  const direct = getPlayerStat(player, 'directPrestige');
-  const assist = getPlayerStat(player, 'assistPrestigeReceived');
-  return direct + assist;
-}
-
-function getWinnerId(game?: Game): string | undefined {
-  if (!game) return undefined;
-  return game.winnerId ?? game.selectedWinnerId ?? game.manualWinnerId;
-}
-
-function getRankAccent(index: number) {
-  if (index === 0) return sciFi.gold;
-  if (index === 1) return '#D9E4F7';
-  if (index === 2) return '#D6A06A';
-  return sciFi.cyan;
-}
-
-function MetricChip({
-  label,
-  value,
-  accent,
+function SelectionShimmer({
+  visible,
+  borderRadius = 16,
 }: {
-  label: string;
-  value: string;
-  accent?: string;
+  visible: boolean;
+  borderRadius?: number;
 }) {
+  const translate = useRef(new Animated.Value(-220)).current;
+
+  useEffect(() => {
+    if (!visible) {
+      translate.setValue(-220);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.timing(translate, {
+        toValue: 220,
+        duration: 1400,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      })
+    );
+
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [translate, visible]);
+
+  if (!visible) return null;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        StyleSheet.absoluteFillObject,
+        styles.shimmerWrap,
+        { borderRadius },
+      ]}
+    >
+      <View style={[styles.shimmerGlow, { borderRadius }]} />
+      <Animated.View
+        style={[
+          styles.shimmerSweep,
+          {
+            transform: [{ translateX: translate }, { rotate: "18deg" }],
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+function PlayerSelectionCard({
+  player,
+  selected,
+  dimmed,
+  locked,
+  onPress,
+  onLongPress,
+}: {
+  player: PlayerLike;
+  selected: boolean;
+  dimmed: boolean;
+  locked: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
+  const accent = getPlayerAccent(player.color);
+
+  return (
+    <Pressable
+      onPress={locked ? undefined : onPress}
+      onLongPress={locked ? undefined : onLongPress}
+      delayLongPress={250}
+      style={[
+        styles.playerListItemCompact,
+        { borderColor: "rgba(255,255,255,0.08)" },
+        selected && [
+          styles.playerListItemCompactSelected,
+          {
+            borderColor: `${accent}EE`,
+            shadowColor: accent,
+            backgroundColor: `${accent}14`,
+          },
+        ],
+        dimmed && styles.playerListItemDimmed,
+        locked && styles.playerListItemLocked,
+      ]}
+    >
+      <SelectionShimmer visible={selected} borderRadius={14} />
+
+      <View style={styles.playerCompactInner}>
+        <PlayerCardIcon
+          player={player as any}
+          size={38}
+          borderRadius={9}
+          dimAmount={selected ? 0.03 : 0.08}
+        />
+        <Text
+          style={[
+            styles.playerCompactName,
+            selected && { color: accent },
+            locked && styles.lockedText,
+          ]}
+          numberOfLines={1}
+        >
+          {player.name ?? "Unknown"}
+        </Text>
+      </View>
+
+      {locked ? (
+        <View style={styles.lockBadge}>
+          <Text style={styles.lockBadgeText}>FULL</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function GroupSelectionCard({
+  group,
+  selected,
+  onPress,
+  playersById,
+}: {
+  group: GroupLike;
+  selected: boolean;
+  onPress: () => void;
+  playersById: Record<string, PlayerLike>;
+}) {
+  const visiblePlayers = group.playerIds
+    .map((id) => playersById[id])
+    .filter(Boolean)
+    .slice(0, 5);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.groupCardCompact, selected && styles.groupCardCompactActive]}
+    >
+      <SelectionShimmer visible={selected} borderRadius={14} />
+
+      <Text style={styles.groupLabel}>GROUP</Text>
+      <Text style={styles.groupCompactName} numberOfLines={1}>
+        {group.name}
+      </Text>
+
+      <View style={styles.groupPlayersRow}>
+        {visiblePlayers.map((player) => (
+          <View key={player.id} style={styles.groupMiniPlayer}>
+            <PlayerCardIcon
+              player={player as any}
+              size={23}
+              borderRadius={6}
+              dimAmount={0.08}
+            />
+            <Text style={styles.groupMiniName} numberOfLines={1}>
+              {player.initials || getInitials(player.name)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </Pressable>
+  );
+}
+
+function SelectedNamePill({
+  name,
+  color,
+}: {
+  name: string;
+  color?: string;
+}) {
+  const accent = getPlayerAccent(color);
   return (
     <View
       style={[
-        styles.metricChip,
-        accent ? { borderColor: `${accent}44` } : null,
+        styles.selectedNamePill,
+        {
+          borderColor: `${accent}55`,
+          backgroundColor: `${accent}12`,
+        },
       ]}
     >
-      <Text style={styles.metricChipLabel}>{label}</Text>
-      <Text
-        style={[
-          styles.metricChipValue,
-          accent ? { color: accent } : null,
-        ]}
-      >
-        {value}
+      <Text style={[styles.selectedNamePillText, { color: "#EAF2FF" }]} numberOfLines={1}>
+        {name}
       </Text>
     </View>
   );
 }
 
-function LeaderHero({
-  top,
-  sortBy,
-}: {
-  top?: EnrichedPlayer;
-  sortBy: SortMetric;
-}) {
-  if (!top) return null;
+export default function HomeScreen() {
+  const router = useRouter();
 
-  const currentSort = SORT_OPTIONS.find((item) => item.key === sortBy);
-
-  return (
-    <View style={styles.heroCard}>
-      <Text style={styles.heroEyebrow}>FLAGSHIP LEADER</Text>
-
-      <View style={styles.heroHeaderRow}>
-        <View style={styles.heroIdentity}>
-          <View style={styles.heroRankBadge}>
-            <Text style={styles.heroRankBadgeText}>#01</Text>
-          </View>
-
-          <View style={styles.heroNameBlock}>
-            <Text style={styles.heroName}>{top.player.name}</Text>
-            <Text style={styles.heroMeta}>
-              {top.gamesPlayed} games • {top.wins} wins • {Math.round(top.elo)} ELO
-            </Text>
-          </View>
-        </View>
-
-        <RankBadge rating={top.elo} size="sm" uppercase />
-      </View>
-
-      <View style={styles.heroPrimaryRow}>
-        <View style={styles.heroPrimaryMetric}>
-          <Text style={styles.heroPrimaryLabel}>TOTAL PRESTIGE</Text>
-          <Text style={styles.heroPrimaryValue}>
-            {top.totalPrestige.toFixed(0)}
-          </Text>
-        </View>
-
-        <View style={styles.heroSecondaryMetric}>
-          <Text style={styles.heroSecondaryLabel}>ACTIVE SORT</Text>
-          <Text style={styles.heroSecondaryValue}>
-            {currentSort?.label}: {formatMetric(sortBy, getSortValue(top, sortBy))}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.heroChips}>
-        <MetricChip label="Win %" value={formatPercent(top.winRate)} accent={sciFi.cyan} />
-        <MetricChip label="Score" value={top.totalScore.toFixed(0)} accent={sciFi.blue} />
-        <MetricChip label="All Eff" value={top.efficiency.toFixed(2)} accent={sciFi.green} />
-        <MetricChip label="Assist Share" value={formatPercent(top.assistShare)} accent={sciFi.violet} />
-      </View>
-    </View>
-  );
-}
-
-export function LeaderboardContent({
-  embedded = false,
-}: {
-  embedded?: boolean;
-} = {}) {
-  const [sortBy, setSortBy] = useState<SortMetric>('totalPrestige');
-
-  const players = useStore((s: any) =>
+  const rawPlayers = useStore((s: any) =>
     Array.isArray(s.players) ? s.players : []
-  ) as Player[];
-
-  const games = useStore((s: any) =>
+  );
+  const rawGroups = useStore((s: any) =>
+    Array.isArray(s.groups) ? s.groups : []
+  );
+  const rawGames = useStore((s: any) =>
     Array.isArray(s.games) ? s.games : []
-  ) as Game[];
+  );
+  const activeGame = useStore((s: any) => s.activeGame);
+  const clearActiveGame = useStore((s: any) => s.clearActiveGame);
 
-  const eloMap = useMemo(() => {
-    try {
-      return calculateElo(games as any) ?? {};
-    } catch {
-      return {};
-    }
-  }, [games]);
+  const [tab, setTab] = useState<Tab>("game");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<GroupLike | null>(null);
 
-  const enriched = useMemo<EnrichedPlayer[]>(() => {
-    return players.map((player) => {
-      let gameGamesPlayed = 0;
-      let gameWins = 0;
-      let gameTotalPrestige = 0;
-      let gameDirectPrestige = 0;
-      let gameAssistPrestigeReceived = 0;
-      let gameTotalContracts = 0;
-      let gameTotalAssists = 0;
-      let gameTotalFailures = 0;
-      let gameTotalScore = 0;
+  const startPulse = useRef(new Animated.Value(1)).current;
+  const removePulse = useRef(new Animated.Value(1)).current;
+  const prevCanStart = useRef(false);
 
-      for (const game of games) {
-        const totals = game.totals?.[player.id];
-        if (!totals) continue;
+  const players = useMemo(
+    () =>
+      rawPlayers
+        .map((player: any, index: number) => normalizePlayer(player, index))
+        .filter(
+          (player: PlayerLike | null): player is PlayerLike => Boolean(player)
+        ),
+    [rawPlayers]
+  );
 
-        gameGamesPlayed += 1;
+  const groups = useMemo(
+    () =>
+      rawGroups
+        .map((group: any, index: number) => normalizeGroup(group, index))
+        .filter((group: GroupLike | null): group is GroupLike => Boolean(group)),
+    [rawGroups]
+  );
 
-        const prestige = getTotalPrestige(totals);
-        const direct = toNumber(totals.directPrestige);
-        const assistReceived =
-          typeof totals.assistPrestigeReceived === 'number' &&
-          Number.isFinite(totals.assistPrestigeReceived)
-            ? toNumber(totals.assistPrestigeReceived)
-            : Math.max(0, prestige - direct);
+  const games = useMemo(
+    () =>
+      rawGames
+        .map((game: any) => normalizeGame(game))
+        .filter((game: GameLike | null): game is GameLike => Boolean(game)),
+    [rawGames]
+  );
 
-        const contracts = toNumber(totals.contracts);
-        const assists = toNumber(totals.assists);
-        const failures = toNumber(totals.failures);
-        const score = toNumber(totals.score);
+  const playersById = useMemo(() => {
+    return players.reduce<Record<string, PlayerLike>>((acc, player) => {
+      acc[player.id] = player;
+      return acc;
+    }, {});
+  }, [players]);
 
-        gameTotalPrestige += prestige;
-        gameDirectPrestige += direct;
-        gameAssistPrestigeReceived += assistReceived;
-        gameTotalContracts += contracts;
-        gameTotalAssists += assists;
-        gameTotalFailures += failures;
-        gameTotalScore += score;
+  const usage = useMemo(() => {
+    const playerGameCount: Record<string, number> = {};
+    const playerRecentAt: Record<string, number> = {};
+    const groupUseCount: Record<string, number> = {};
+    const groupRecentAt: Record<string, number> = {};
+    const comboUseCount: Record<string, number> = {};
+    const comboRecentAt: Record<string, number> = {};
 
-        if (getWinnerId(game) === player.id) {
-          gameWins += 1;
-        }
+    for (const game of games) {
+      const createdAt = game.createdAt ?? 0;
+      const gamePlayerIds = Array.from(new Set(getGamePlayerIds(game)));
+      const comboKey = [...gamePlayerIds].sort().join("|");
+
+      for (const playerId of gamePlayerIds) {
+        playerGameCount[playerId] = (playerGameCount[playerId] ?? 0) + 1;
+        playerRecentAt[playerId] = Math.max(
+          playerRecentAt[playerId] ?? 0,
+          createdAt
+        );
       }
 
-      const savedGamesPlayed = getPlayerStat(player, 'gamesPlayed');
-      const savedWins = getPlayerStat(player, 'wins');
-      const savedTotalPrestige = getPlayerTotalPrestige(player);
-      const savedDirectPrestige = getPlayerStat(player, 'directPrestige');
-      const savedAssistPrestigeReceived = getPlayerStat(player, 'assistPrestigeReceived');
-      const savedContracts = getPlayerStat(player, 'contracts');
-      const savedAssists = getPlayerStat(player, 'assists');
-      const savedFailures = getPlayerStat(player, 'failures');
-      const savedScore = getPlayerStat(player, 'score');
+      if (game.groupId) {
+        groupUseCount[game.groupId] = (groupUseCount[game.groupId] ?? 0) + 1;
+        groupRecentAt[game.groupId] = Math.max(
+          groupRecentAt[game.groupId] ?? 0,
+          createdAt
+        );
+      }
 
-      const totalPrestige =
-        gameTotalPrestige > 0 ? gameTotalPrestige : savedTotalPrestige;
+      if (comboKey) {
+        comboUseCount[comboKey] = (comboUseCount[comboKey] ?? 0) + 1;
+        comboRecentAt[comboKey] = Math.max(
+          comboRecentAt[comboKey] ?? 0,
+          createdAt
+        );
+      }
+    }
 
-      const directPrestige =
-        gameDirectPrestige > 0 ? gameDirectPrestige : savedDirectPrestige;
+    return {
+      playerGameCount,
+      playerRecentAt,
+      groupUseCount,
+      groupRecentAt,
+      comboUseCount,
+      comboRecentAt,
+    };
+  }, [games]);
 
-      const assistPrestigeReceived =
-        gameAssistPrestigeReceived > 0
-          ? gameAssistPrestigeReceived
-          : savedAssistPrestigeReceived > 0
-            ? savedAssistPrestigeReceived
-            : Math.max(0, totalPrestige - directPrestige);
+  const rankedPlayers = useMemo(() => {
+    return [...players].sort((a, b) => {
+      const aCount = usage.playerGameCount[a.id] ?? 0;
+      const bCount = usage.playerGameCount[b.id] ?? 0;
+      if (bCount !== aCount) return bCount - aCount;
 
-      const totalContracts =
-        gameTotalContracts > 0 ? gameTotalContracts : savedContracts;
+      const aRecent = usage.playerRecentAt[a.id] ?? 0;
+      const bRecent = usage.playerRecentAt[b.id] ?? 0;
+      if (bRecent !== aRecent) return bRecent - aRecent;
 
-      const totalAssists =
-        gameTotalAssists > 0 ? gameTotalAssists : savedAssists;
-
-      const totalFailures =
-        gameTotalFailures > 0 ? gameTotalFailures : savedFailures;
-
-      const totalScore =
-        gameTotalScore > 0 ? gameTotalScore : savedScore;
-
-      const wins =
-        gameWins > 0 || gameGamesPlayed > 0 ? gameWins : savedWins;
-
-      const gamesPlayed =
-        gameGamesPlayed > 0 ? gameGamesPlayed : savedGamesPlayed;
-
-      const attempts = totalContracts + totalFailures;
-      const winRate = safeDivide(wins, gamesPlayed);
-      const allContractsEfficiency = safeDivide(
-        directPrestige + assistPrestigeReceived,
-        totalContracts + totalAssists
-      );
-      const assistanceEfficiency = safeDivide(
-        assistPrestigeReceived,
-        totalAssists
-      );
-      const directEfficiency = safeDivide(
-        directPrestige,
-        totalContracts
-      );
-      const assistShare = safeDivide(assistPrestigeReceived, totalPrestige);
-      const failureRate = safeDivide(totalFailures, attempts);
-      const riskFactor = safeDivide(totalFailures, Math.max(1, totalContracts));
-
-      return {
-        player,
-        elo: eloMap[player.id] ?? 1000,
-        winRate,
-        efficiency: allContractsEfficiency,
-        assistedEfficiency: assistanceEfficiency,
-        directEfficiency,
-        failureRate,
-        riskFactor,
-        gamesPlayed,
-        wins,
-        totalPrestige,
-        directPrestige,
-        assistPrestigeReceived,
-        assistShare,
-        totalContracts,
-        totalAssists,
-        totalFailures,
-        totalScore,
-      };
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""));
     });
-  }, [players, games, eloMap]);
+  }, [players, usage]);
 
-  const ranked = useMemo(() => {
-    return [...enriched]
-      .filter(
-        (entry) =>
-          entry.gamesPlayed > 0 ||
-          entry.totalPrestige > 0 ||
-          entry.totalScore > 0 ||
-          entry.wins > 0
-      )
+  const rankedGroups = useMemo(() => {
+    return [...groups]
+      .map((group) => {
+        const directUseCount = usage.groupUseCount[group.id] ?? 0;
+        const directRecentAt = usage.groupRecentAt[group.id] ?? 0;
+
+        const comboKey = [...group.playerIds].sort().join("|");
+        const comboUseCount = usage.comboUseCount[comboKey] ?? 0;
+        const comboRecentAt = usage.comboRecentAt[comboKey] ?? 0;
+
+        return {
+          ...group,
+          inferredUseCount: Math.max(directUseCount, comboUseCount),
+          inferredRecentAt: Math.max(directRecentAt, comboRecentAt),
+        };
+      })
       .sort((a, b) => {
-        const primaryDiff = getSortValue(b, sortBy) - getSortValue(a, sortBy);
-        if (primaryDiff !== 0) return primaryDiff;
-        if (b.totalPrestige !== a.totalPrestige) return b.totalPrestige - a.totalPrestige;
-        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-        if (b.winRate !== a.winRate) return b.winRate - a.winRate;
-        if (b.elo !== a.elo) return b.elo - a.elo;
-        return a.player.name.localeCompare(b.player.name);
+        if ((b.inferredUseCount ?? 0) !== (a.inferredUseCount ?? 0)) {
+          return (b.inferredUseCount ?? 0) - (a.inferredUseCount ?? 0);
+        }
+
+        if ((b.inferredRecentAt ?? 0) !== (a.inferredRecentAt ?? 0)) {
+          return (b.inferredRecentAt ?? 0) - (a.inferredRecentAt ?? 0);
+        }
+
+        return a.name.localeCompare(b.name);
       });
-  }, [enriched, sortBy]);
+  }, [groups, usage]);
 
-  const topPlayer = ranked[0];
+  const detectedGroup = useMemo(() => {
+    if (selectedIds.length < 2 || selectedGroup) return null;
 
-  if (embedded) {
-    const embeddedRows = ranked.slice(0, 3);
+    const exactGroup =
+      rankedGroups.find((group) => sameIdSet(group.playerIds, selectedIds)) ??
+      null;
 
-    return (
-      <View style={styles.embeddedRoot}>
-        <View style={styles.embeddedCompactWrap}>
-          <View style={styles.embeddedSortOnly}>
-            <View style={styles.toggleWrap}>
-              {SORT_OPTIONS.map((option) => {
-                const active = sortBy === option.key;
+    if (exactGroup) return exactGroup;
 
-                return (
-                  <Pressable
-                    key={option.key}
-                    onPress={() => setSortBy(option.key)}
-                    style={[
-                      styles.toggleButton,
-                      styles.embeddedToggleButton,
-                      active && styles.toggleButtonActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.toggleText,
-                        styles.embeddedToggleText,
-                        active && styles.toggleTextActive,
-                      ]}
-                    >
-                      {option.shortLabel}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+    const comboKey = [...selectedIds].sort().join("|");
+    const comboCount = usage.comboUseCount[comboKey] ?? 0;
 
-          {embeddedRows.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyEyebrow}>NO SIGNAL</Text>
-              <Text style={styles.emptyText}>No leaderboard data yet.</Text>
-            </View>
-          ) : (
-            <View style={styles.embeddedMiniList}>
-              {embeddedRows.map((entry, index) => {
-                const accent = getRankAccent(index);
-                const currentSort = SORT_OPTIONS.find((item) => item.key === sortBy);
+    if (comboCount <= 0) return null;
 
-                return (
-                  <View
-                    key={entry.player.id}
-                    style={[
-                      styles.embeddedMiniRow,
-                      { borderColor: `${accent}44` },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.embeddedMiniRail,
-                        { backgroundColor: accent },
-                      ]}
-                    />
+    return {
+      id: "",
+      name: "Most-used combo",
+      playerIds: [...selectedIds].sort(),
+      inferredUseCount: comboCount,
+      inferredRecentAt: usage.comboRecentAt[comboKey] ?? 0,
+    } as GroupLike;
+  }, [rankedGroups, selectedIds, usage, selectedGroup]);
 
-                    <View
-                      style={[
-                        styles.embeddedMiniRank,
-                        {
-                          borderColor: `${accent}44`,
-                          backgroundColor: `${accent}12`,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.embeddedMiniRankText, { color: accent }]}>
-                        #{index + 1}
-                      </Text>
-                    </View>
+  const selectedPlayers = useMemo(
+    () => rankedPlayers.filter((player) => selectedIds.includes(player.id)),
+    [rankedPlayers, selectedIds]
+  );
 
-                    <View style={styles.embeddedMiniMain}>
-                      <Text style={styles.embeddedMiniName} numberOfLines={1}>
-                        {entry.player.name}
-                      </Text>
-                      <Text style={styles.embeddedMiniMeta} numberOfLines={1}>
-                        {entry.gamesPlayed}g • {entry.wins}w • {Math.round(entry.elo)} ELO
-                      </Text>
-                    </View>
+  const canStart = selectedPlayers.length >= 2 && selectedPlayers.length <= 5;
 
-                    <View style={styles.embeddedMiniValueWrap}>
-                      <Text style={styles.embeddedMiniValueLabel}>
-                        {currentSort?.shortLabel ?? 'Stat'}
-                      </Text>
-                      <Text style={[styles.embeddedMiniValue, { color: accent }]}>
-                        {formatMetric(sortBy, getSortValue(entry, sortBy))}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (canStart && !prevCanStart.current) {
+      startPulse.setValue(1);
+      Animated.sequence([
+        Animated.timing(startPulse, {
+          toValue: 1.08,
+          duration: 120,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(startPulse, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+    prevCanStart.current = canStart;
+  }, [canStart, startPulse]);
+
+  const triggerRemovePulse = () => {
+    removePulse.setValue(1);
+    Animated.sequence([
+      Animated.timing(removePulse, {
+        toValue: 0.97,
+        duration: 70,
+        useNativeDriver: true,
+      }),
+      Animated.timing(removePulse, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const togglePlayer = (id: string) => {
+    setSelectedGroup(null);
+    setSelectedIds((prev) => {
+      const exists = prev.includes(id);
+      if (exists) {
+        triggerRemovePulse();
+        return prev.filter((x) => x !== id);
+      }
+      if (prev.length >= 5) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const loadGroup = (group: GroupLike) => {
+    setSelectedGroup(group);
+    setSelectedIds(group.playerIds.slice(0, 5));
+  };
+
+  const clearSelection = () => {
+    setSelectedGroup(null);
+    setSelectedIds([]);
+    triggerRemovePulse();
+  };
+
+  const openPlayerProfile = (player: PlayerLike) => {
+    if (!player?.id) return;
+
+    router.push({
+      pathname: "/player-profile",
+      params: { playerId: player.id },
+    });
+  };
+
+  const openFullProfileFromNav = () => {
+    const selectedPlayer = selectedPlayers[0] || rankedPlayers[0];
+    if (!selectedPlayer?.id) return;
+
+    router.push({
+      pathname: "/player-profile",
+      params: { playerId: selectedPlayer.id },
+    });
+  };
+
+  const startGame = () => {
+    if (!canStart) return;
+
+    const effectiveGroup = selectedGroup;
+    const selectedPlayerNamesOnly = rankedPlayers
+      .filter((player) => selectedIds.includes(player.id))
+      .map((player) => ({
+        id: player.id,
+        name: player.name ?? "Unknown",
+      }));
+
+    router.push({
+      pathname: "/game-setup",
+      params: {
+        mode: effectiveGroup ? "group" : "players",
+        selectedPlayers: JSON.stringify(
+          effectiveGroup ? [] : selectedPlayerNamesOnly
+        ),
+        selectedGroups: JSON.stringify(
+          effectiveGroup
+            ? [
+                {
+                  id: effectiveGroup.id,
+                  name: effectiveGroup.name,
+                  playerIds: effectiveGroup.playerIds,
+                },
+              ]
+            : []
+        ),
+        players: JSON.stringify(
+          rankedPlayers.map((player) => ({
+            id: player.id,
+            name: player.name ?? "Unknown",
+          }))
+        ),
+        groups: JSON.stringify(
+          rankedGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            playerIds: group.playerIds,
+          }))
+        ),
+      },
+    });
+  };
 
   return (
-    <View style={styles.root}>
-      <View style={styles.backgroundLayer}>
-        <StarryNight />
-        <View style={styles.backgroundDim} />
+    <SafeAreaView style={styles.container}>
+      <View style={StyleSheet.absoluteFillObject}>
+        <StarryNight count={100} />
+        <View style={styles.homeBackgroundDim} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.pageHeader}>
-          <Text style={styles.eyebrow}>COMMAND RANKINGS</Text>
-          <Text style={styles.title}>Leaderboard</Text>
-          <Text style={styles.subtitle}>
-            Full leaderboard analysis across prestige, score, ELO, win rate,
-            and the new efficiency model.
-          </Text>
-        </View>
+      <BrandHeader />
 
-        <LeaderHero top={topPlayer} sortBy={sortBy} />
+      <View style={styles.tabs}>
+        {(["game", "leaderboard", "nav"] as Tab[]).map((t) => (
+          <Pressable
+            key={t}
+            onPress={() => setTab(t)}
+            style={[styles.tab, tab === t && styles.tabActive]}
+          >
+            <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+              {tabLabel(t)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
-        <View style={styles.sortSection}>
-          <Text style={styles.sortSectionTitle}>SORT METRIC</Text>
+      {tab === "game" && (
+        <View style={styles.gameTabWrap}>
+          <ScrollView
+            contentContainerStyle={styles.gameScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {activeGame ? (
+              <View style={styles.activeCard}>
+                <Text style={styles.sectionTitle}>Active Game</Text>
+                <Text style={styles.activeSub}>
+                  Continue your current match or delete it to start fresh.
+                </Text>
 
-          <View style={styles.toggleWrap}>
-            {SORT_OPTIONS.map((option) => {
-              const active = sortBy === option.key;
+                <View style={styles.row}>
+                  <Pressable
+                    style={styles.primaryBtn}
+                    onPress={() => router.push("/game")}
+                  >
+                    <Text style={styles.primaryText}>Continue</Text>
+                  </Pressable>
 
-              return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => setSortBy(option.key)}
-                  style={[
-                    styles.toggleButton,
-                    active && styles.toggleButtonActive,
-                  ]}
+                  <Pressable
+                    style={styles.dangerBtn}
+                    onPress={() => {
+                      clearActiveGame();
+                    }}
+                  >
+                    <Text style={styles.dangerText}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            <Animated.View style={{ transform: [{ scale: startPulse }] }}>
+              <Pressable
+                onPress={startGame}
+                disabled={!canStart}
+                style={[styles.startBtnTop, canStart && styles.startActive]}
+              >
+                <Text
+                  style={[styles.startText, canStart && styles.startTextActive]}
                 >
-                  <Text
+                  Start Game
+                </Text>
+              </Pressable>
+            </Animated.View>
+
+            {detectedGroup?.name ? (
+              <Text style={styles.detectedGroupText}>
+                {selectedGroup?.name
+                  ? `Selected group: ${selectedGroup.name}`
+                  : detectedGroup.id
+                    ? `Detected group: ${detectedGroup.name}`
+                    : `${detectedGroup.name} • ${(detectedGroup.inferredUseCount ?? 0).toString()} uses`}
+              </Text>
+            ) : null}
+
+            <View style={styles.setupColumnsCompact}>
+              <View style={styles.setupColumn}>
+                <View style={styles.columnHeaderCompact}>
+                  <Text style={styles.sectionTitleSmall}>Players</Text>
+                  <Text style={styles.columnCount}>{rankedPlayers.length}</Text>
+                </View>
+
+                {rankedPlayers.length === 0 ? (
+                  <View style={styles.emptyPanel}>
+                    <Text style={styles.emptyPanelText}>
+                      No player profiles found.
+                    </Text>
+                  </View>
+                ) : (
+                  <Animated.View
                     style={[
-                      styles.toggleText,
-                      active && styles.toggleTextActive,
+                      styles.playerGridCompact,
+                      { transform: [{ scale: removePulse }] },
                     ]}
                   >
-                    {option.shortLabel}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    {rankedPlayers.map((player) => {
+                      const selected =
+                        !selectedGroup && selectedIds.includes(player.id);
+                      const locked =
+                        !selected &&
+                        !selectedGroup &&
+                        selectedIds.length >= 5;
+                      const dimmed = Boolean(selectedGroup) && !selected;
+
+                      return (
+                        <PlayerSelectionCard
+                          key={player.id}
+                          player={player}
+                          selected={selected}
+                          dimmed={dimmed}
+                          locked={locked}
+                          onPress={() => togglePlayer(player.id)}
+                          onLongPress={() => openPlayerProfile(player)}
+                        />
+                      );
+                    })}
+                  </Animated.View>
+                )}
+              </View>
+
+              <View style={styles.setupColumn}>
+                <View style={styles.columnHeaderCompact}>
+                  <Text style={styles.sectionTitleSmall}>Groups</Text>
+                  <Text style={styles.columnCount}>{rankedGroups.length}</Text>
+                </View>
+
+                {rankedGroups.length === 0 ? (
+                  <View style={styles.emptyPanel}>
+                    <Text style={styles.emptyPanelText}>
+                      No saved groups found.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.groupListCompact}>
+                    {rankedGroups.map((group) => {
+                      const isActive = selectedGroup?.id === group.id;
+
+                      return (
+                        <GroupSelectionCard
+                          key={group.id}
+                          group={group}
+                          selected={isActive}
+                          onPress={() => loadGroup(group)}
+                          playersById={playersById}
+                        />
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.dockDividerGlow} />
+
+          <View style={styles.bottomSetupDock}>
+            <View style={styles.bottomSetupLeft}>
+              {selectedPlayers.length === 0 ? (
+                <Text style={styles.previewEmptyCompact}>No players selected</Text>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.selectedNamesRow}
+                >
+                  {selectedPlayers.map((player) => (
+                    <SelectedNamePill
+                      key={player.id}
+                      name={player.name ?? "Unknown"}
+                      color={player.color}
+                    />
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+
+            <View style={styles.bottomSetupRight}>
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{selectedPlayers.length}/5</Text>
+              </View>
+              <Pressable onPress={clearSelection} style={styles.clearBtnTop}>
+                <Text style={styles.clearBtnText}>Clear</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
+      )}
 
-        {ranked.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyEyebrow}>NO SIGNAL</Text>
-            <Text style={styles.emptyText}>No leaderboard data yet.</Text>
-          </View>
-        ) : (
-          <View style={styles.list}>
-            {ranked.map((entry, index) => {
-              const accent = getRankAccent(index);
-              const currentSort = SORT_OPTIONS.find((item) => item.key === sortBy);
+      {tab === "leaderboard" && (
+        <View style={styles.leaderboardTabWrap}>
+          <LeaderboardContent />
+        </View>
+      )}
 
-              return (
+      {tab === "nav" && (
+        <View style={styles.navScreen}>
+          <View style={styles.navGridFull}>
+            {[
+              ["compare", "/charts/compare"],
+              ["history", "/history"],
+              ["charts", "/charts"],
+              ["statistics", "/stats"],
+              ["elo", "/elo"],
+              ["definitions", "/definitions"],
+              ["addRemoves", "/add-players"],
+              ["fullProfile", "PROFILE"],
+            ].map(([key, route], index) => (
+              <Pressable
+                key={key}
+                onPress={() => {
+                  if (route === "PROFILE") {
+                    openFullProfileFromNav();
+                  } else {
+                    router.push(route as any);
+                  }
+                }}
+                style={styles.navCardFull}
+              >
                 <View
-                  key={entry.player.id}
                   style={[
-                    styles.card,
-                    index < 3 && { borderColor: `${accent}55` },
+                    styles.navTileTint,
+                    index % 2 === 0 ? styles.navTileBlue : styles.navTilePurple,
                   ]}
-                >
-                  <View
-                    style={[
-                      styles.cardAccentRail,
-                      { backgroundColor: accent },
-                    ]}
-                  />
-
-                  <View style={styles.headerRow}>
-                    <View style={styles.headerLeft}>
-                      <View
-                        style={[
-                          styles.rankCapsule,
-                          { borderColor: `${accent}55` },
-                        ]}
-                      >
-                        <Text style={[styles.rankNumber, { color: accent }]}>
-                          #{index + 1}
-                        </Text>
-                      </View>
-
-                      <View style={styles.nameBlock}>
-                        <View style={styles.nameRow}>
-                          <Text style={styles.rank}>{entry.player.name}</Text>
-                          <RankBadge rating={entry.elo} size="sm" uppercase />
-                        </View>
-
-                        <Text style={styles.gamesText}>
-                          {entry.gamesPlayed} game{entry.gamesPlayed === 1 ? '' : 's'} •{' '}
-                          {entry.wins} win{entry.wins === 1 ? '' : 's'}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View style={styles.primaryRow}>
-                    <View style={styles.primaryStatCard}>
-                      <Text style={styles.primaryStatLabel}>TOTAL PRESTIGE</Text>
-                      <Text style={styles.primaryStatValue}>
-                        {entry.totalPrestige.toFixed(0)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.sortStatCard}>
-                      <Text style={styles.sortStatLabel}>ACTIVE SORT</Text>
-                      <Text style={styles.sortStatValue}>
-                        {currentSort?.shortLabel}
-                      </Text>
-                      <Text style={styles.sortStatSubvalue}>
-                        {formatMetric(sortBy, getSortValue(entry, sortBy))}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.metricGrid}>
-                    <MetricChip label="Direct Prestige" value={entry.directPrestige.toFixed(0)} />
-                    <MetricChip label="Assist Prestige" value={entry.assistPrestigeReceived.toFixed(0)} accent={sciFi.violet} />
-                    <MetricChip label="Score" value={entry.totalScore.toFixed(0)} accent={sciFi.blue} />
-                    <MetricChip label="Wins" value={entry.wins.toString()} />
-                    <MetricChip label="Win %" value={formatPercent(entry.winRate)} accent={sciFi.cyan} />
-                    <MetricChip label="All Eff" value={entry.efficiency.toFixed(2)} accent={sciFi.green} />
-                    <MetricChip label="Assist Eff" value={entry.assistedEfficiency.toFixed(2)} />
-                    <MetricChip label="Direct Eff" value={entry.directEfficiency.toFixed(2)} />
-                    <MetricChip label="Fail %" value={formatPercent(entry.failureRate)} accent={sciFi.red} />
-                    <MetricChip label="Risk" value={entry.riskFactor.toFixed(2)} accent={sciFi.gold} />
-                    <MetricChip label="Contracts" value={entry.totalContracts.toFixed(0)} />
-                    <MetricChip label="Assists" value={entry.totalAssists.toFixed(0)} />
-                    <MetricChip label="Failures" value={entry.totalFailures.toFixed(0)} />
-                    <MetricChip label="Assist Share" value={formatPercent(entry.assistShare)} accent={sciFi.violet} />
-                    <MetricChip label="ELO" value={Math.round(entry.elo).toString()} accent={sciFi.cyan} />
-                  </View>
-                </View>
-              );
-            })}
+                />
+                <Image
+                  source={APP_ICONS[key as keyof typeof APP_ICONS]}
+                  style={styles.navIconLarge}
+                />
+              </Pressable>
+            ))}
           </View>
-        )}
-      </ScrollView>
-    </View>
+        </View>
+      )}
+    </SafeAreaView>
   );
-}
-
-export default function LeaderboardScreen() {
-  return <LeaderboardContent />;
 }
 
 const styles = StyleSheet.create({
-  root: {
+  container: {
     flex: 1,
-    backgroundColor: sciFi.bg,
-  },
-  embeddedRoot: {
-    borderRadius: 22,
-    overflow: 'hidden',
-    backgroundColor: sciFi.panel,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(3,6,14,0.26)',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 28,
-    gap: 12,
-  },
-  pageHeader: {
-    marginBottom: 4,
-  },
-  eyebrow: {
-    color: sciFi.cyan,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    marginBottom: 6,
-  },
-  title: {
-    color: sciFi.text,
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    color: sciFi.textSoft,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 8,
-  },
-  heroCard: {
-    borderRadius: 24,
-    padding: 16,
-    backgroundColor: sciFi.panel2,
-    borderWidth: 1,
-    borderColor: 'rgba(255,215,106,0.30)',
-    shadowColor: sciFi.gold,
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  heroEyebrow: {
-    color: sciFi.gold,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-    marginBottom: 10,
-  },
-  heroHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-    alignItems: 'center',
-  },
-  heroIdentity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
-  },
-  heroRankBadge: {
-    minWidth: 58,
-    height: 42,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,215,106,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,215,106,0.30)',
-    marginRight: 12,
-  },
-  heroRankBadgeText: {
-    color: sciFi.gold,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  heroNameBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  heroName: {
-    color: sciFi.text,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  heroMeta: {
-    marginTop: 4,
-    color: sciFi.textSoft,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  heroPrimaryRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 14,
-  },
-  heroPrimaryMetric: {
-    flex: 1,
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: sciFi.panel3,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  heroSecondaryMetric: {
-    flex: 1,
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: sciFi.panel3,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  heroPrimaryLabel: {
-    color: sciFi.textDim,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  heroPrimaryValue: {
-    marginTop: 6,
-    color: sciFi.text,
-    fontSize: 28,
-    fontWeight: '900',
-  },
-  heroSecondaryLabel: {
-    color: sciFi.textDim,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  heroSecondaryValue: {
-    marginTop: 8,
-    color: sciFi.text,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  heroChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
-  },
-  sortSection: {
-    marginTop: 2,
-    marginBottom: 2,
-  },
-  sortSectionTitle: {
-    color: sciFi.textSoft,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    marginBottom: 10,
-  },
-  toggleWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  toggleButton: {
-    minHeight: 38,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-    backgroundColor: sciFi.panel2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toggleButtonActive: {
-    borderColor: sciFi.borderStrong,
-    backgroundColor: 'rgba(99,230,255,0.10)',
-  },
-  toggleText: {
-    color: sciFi.textSoft,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  toggleTextActive: {
-    color: sciFi.cyan,
-  },
-  list: {
-    gap: 12,
-  },
-  card: {
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: 22,
-    padding: 14,
-    backgroundColor: sciFi.panel2,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  cardAccentRail: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: 4,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
-  },
-  rankCapsule: {
-    minWidth: 56,
-    height: 38,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  rankNumber: {
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  nameBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  rank: {
-    color: sciFi.text,
-    fontSize: 18,
-    fontWeight: '900',
-    flexShrink: 1,
-  },
-  gamesText: {
-    marginTop: 4,
-    color: sciFi.textSoft,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  primaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  primaryStatCard: {
-    flex: 1,
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: sciFi.panel3,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  sortStatCard: {
-    width: 120,
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: sciFi.panel3,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  primaryStatLabel: {
-    color: sciFi.textDim,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  primaryStatValue: {
-    marginTop: 6,
-    color: sciFi.text,
-    fontSize: 26,
-    fontWeight: '900',
-  },
-  sortStatLabel: {
-    color: sciFi.textDim,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  sortStatValue: {
-    marginTop: 6,
-    color: sciFi.textSoft,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  sortStatSubvalue: {
-    marginTop: 4,
-    color: sciFi.cyan,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  metricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
-  },
-  metricChip: {
-    minWidth: 92,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  metricChipLabel: {
-    color: sciFi.textDim,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  metricChipValue: {
-    marginTop: 5,
-    color: sciFi.text,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  emptyCard: {
-    borderRadius: 18,
-    padding: 16,
-    backgroundColor: sciFi.panel2,
-    borderWidth: 1,
-    borderColor: sciFi.border,
-  },
-  emptyEyebrow: {
-    color: sciFi.cyan,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    marginBottom: 6,
-  },
-  emptyText: {
-    color: sciFi.textSoft,
-    fontSize: 14,
-    fontWeight: '700',
+    backgroundColor: "#050816",
   },
 
-  embeddedCompactWrap: {
-    padding: 12,
+  homeBackgroundDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(3,6,18,0.16)",
+  },
+
+  brandHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
-  embeddedSortOnly: {
-    marginBottom: 2,
+  brandMoon: {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "#60A5FA",
+    shadowColor: "#60A5FA",
+    shadowOpacity: 0.95,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
   },
-  embeddedToggleButton: {
-    minHeight: 34,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+  brandText: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#A855F7",
+    letterSpacing: 0.3,
   },
-  embeddedToggleText: {
-    fontSize: 11,
+
+  tabs: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    gap: 10,
+    paddingBottom: 10,
   },
-  embeddedMiniList: {
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(96,165,250,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.22)",
+  },
+  tabActive: {
+    backgroundColor: "rgba(168,85,247,0.22)",
+    borderColor: "rgba(96,165,250,0.5)",
+    shadowColor: "#60A5FA",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  tabText: {
+    color: "#9CCBFF",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  tabTextActive: {
+    color: "#EAD9FF",
+  },
+
+  gameTabWrap: {
+    flex: 1,
+  },
+  gameScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 92,
+    gap: 10,
+  },
+
+  activeCard: {
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: "rgba(9,14,28,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.14)",
+  },
+  activeSub: {
+    color: "#93C5FD",
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+
+  row: {
+    flexDirection: "row",
     gap: 8,
   },
-  embeddedMiniRow: {
-    minHeight: 68,
-    borderRadius: 16,
+  primaryBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(168,85,247,0.18)",
     borderWidth: 1,
-    backgroundColor: sciFi.panel2,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    overflow: 'hidden',
+    borderColor: "rgba(96,165,250,0.35)",
   },
-  embeddedMiniRail: {
-    width: 3,
-    alignSelf: 'stretch',
-    borderRadius: 999,
-  },
-  embeddedMiniRank: {
-    minWidth: 44,
-    height: 34,
-    borderRadius: 999,
+  dangerBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(239,68,68,0.14)",
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: "rgba(239,68,68,0.4)",
   },
-  embeddedMiniRankText: {
+  primaryText: {
+    color: "#EAF2FF",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  dangerText: {
+    color: "#FCA5A5",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  startBtnTop: {
+    minHeight: 28,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(168,85,247,0.18)",
+    borderWidth: 1.2,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  startActive: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "rgba(96,165,250,0.92)",
+    shadowColor: "#60A5FA",
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  startText: {
+    color: "#D8B4FE",
     fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.6,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
-  embeddedMiniMain: {
+  startTextActive: {
+    color: "#7C3AED",
+  },
+
+  detectedGroupText: {
+    marginTop: 2,
+    paddingHorizontal: 2,
+    color: "#60A5FA",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+
+  setupColumnsCompact: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  setupColumn: {
+    flex: 1,
+    gap: 8,
+  },
+  columnHeaderCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  columnCount: {
+    minWidth: 24,
+    textAlign: "center",
+    color: "#C4B5FD",
+    fontSize: 11,
+    fontWeight: "900",
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(168,85,247,0.16)",
+  },
+  sectionTitleSmall: {
+    color: "#B9D8FF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  emptyPanel: {
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.12)",
+  },
+  emptyPanelText: {
+    color: "#93C5FD",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  playerGridCompact: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  playerListItemCompact: {
+    width: "48%",
+    borderRadius: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    backgroundColor: "rgba(9,14,28,0.92)",
+    borderWidth: 1.25,
+    overflow: "hidden",
+    minHeight: 78,
+  },
+  playerListItemCompactSelected: {
+    shadowOpacity: 0.46,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  playerListItemDimmed: {
+    opacity: 0.42,
+  },
+  playerListItemLocked: {
+    opacity: 0.36,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  playerCompactInner: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  playerCompactName: {
+    color: "#EAF2FF",
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "center",
+    width: "100%",
+  },
+  lockedText: {
+    color: "#94A3B8",
+  },
+  lockBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "rgba(15,23,42,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.28)",
+  },
+  lockBadgeText: {
+    color: "#94A3B8",
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+
+  groupListCompact: {
+    gap: 8,
+  },
+  groupCardCompact: {
+    borderRadius: 14,
+    padding: 8,
+    backgroundColor: "rgba(5,9,20,0.98)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.1)",
+    overflow: "hidden",
+  },
+  groupCardCompactActive: {
+    borderColor: "rgba(96,165,250,0.78)",
+    backgroundColor: "rgba(96,165,250,0.08)",
+    shadowColor: "#60A5FA",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 5,
+  },
+  groupLabel: {
+    color: "#A855F7",
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    marginBottom: 3,
+  },
+  groupCompactName: {
+    color: "#E9D5FF",
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 6,
+  },
+  groupPlayersRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 2,
+  },
+  groupMiniPlayer: {
+    flex: 1,
+    alignItems: "center",
+  },
+  groupMiniName: {
+    marginTop: 2,
+    color: "#B9D8FF",
+    fontSize: 9,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  dockDividerGlow: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 68,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(96,165,250,0.55)",
+    shadowColor: "#60A5FA",
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 5,
+  },
+  bottomSetupDock: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 8,
+    minHeight: 52,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: "rgba(6,10,22,0.97)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.16)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bottomSetupLeft: {
     flex: 1,
     minWidth: 0,
   },
-  embeddedMiniName: {
-    color: sciFi.text,
-    fontSize: 15,
-    fontWeight: '900',
+  bottomSetupRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  embeddedMiniMeta: {
-    marginTop: 3,
-    color: sciFi.textDim,
-    fontSize: 11,
-    fontWeight: '700',
+  countBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: "rgba(168,85,247,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.3)",
   },
-  embeddedMiniValueWrap: {
-    alignItems: 'flex-end',
-    minWidth: 68,
-  },
-  embeddedMiniValueLabel: {
-    color: sciFi.textDim,
+  countBadgeText: {
+    color: "#E9D5FF",
     fontSize: 10,
-    fontWeight: '800',
-    marginBottom: 3,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontWeight: "900",
   },
-  embeddedMiniValue: {
-    fontSize: 15,
-    fontWeight: '900',
+  clearBtnTop: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.16)",
+  },
+  clearBtnText: {
+    color: "#B9D8FF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  previewEmptyCompact: {
+    color: "#93C5FD",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  selectedNamesRow: {
+    gap: 6,
+    paddingRight: 2,
+    alignItems: "center",
+  },
+  selectedNamePill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
+  selectedNamePillText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  shimmerWrap: {
+    overflow: "hidden",
+  },
+  shimmerGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "rgba(255,255,255,0.02)",
+  },
+  shimmerSweep: {
+    position: "absolute",
+    top: -30,
+    bottom: -30,
+    width: 72,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    shadowColor: "#FFFFFF",
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+  },
+
+  leaderboardTabWrap: {
+    flex: 1,
+  },
+
+  navScreen: {
+    flex: 1,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
+    paddingTop: 0,
+  },
+  navGridFull: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignContent: "stretch",
+  },
+  navCardFull: {
+    width: "50%",
+    height: "25%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderRadius: 0,
+    margin: 0,
+    padding: 0,
+    position: "relative",
+    overflow: "hidden",
+  },
+  navTileTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 0.5,
+    borderColor: "rgba(168,85,247,0.14)",
+  },
+  navTileBlue: {
+    backgroundColor: "rgba(96,165,250,0.06)",
+  },
+  navTilePurple: {
+    backgroundColor: "rgba(168,85,247,0.06)",
+  },
+  navIconLarge: {
+    width: 132,
+    height: 132,
+    resizeMode: "contain",
+    tintColor: undefined,
+  },
+
+  sectionTitle: {
+    color: "#E9D5FF",
+    fontSize: 18,
+    fontWeight: "900",
   },
 });

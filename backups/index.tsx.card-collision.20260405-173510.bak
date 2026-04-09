@@ -1,0 +1,322 @@
+import React, { useMemo } from "react";
+import {
+  Dimensions,
+  Image,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { useStore } from "@/store/useStore";
+import StarryNight from "@/components/ui/StarryNight";
+
+const SHEET = require("@/assets/images/player-card-sheet.png");
+
+const SHEET_COLUMNS = 5;
+const SHEET_ROWS = 6;
+const SCREEN_WIDTH = Dimensions.get("window").width;
+
+const GRID_GAP = 8;
+const H_PADDING = 12;
+const GRID_COLUMNS = 5;
+const CARD_WIDTH =
+  (SCREEN_WIDTH - H_PADDING * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
+const CARD_HEIGHT = CARD_WIDTH * 1.42;
+
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
+}
+
+function getColorColumn(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "blue":
+      return 0;
+    case "green":
+      return 1;
+    case "purple":
+      return 2;
+    case "orange":
+      return 3;
+    case "yellow":
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+function getAccent(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "blue":
+      return "#60A5FA";
+    case "green":
+      return "#84CC16";
+    case "purple":
+      return "#C084FC";
+    case "orange":
+      return "#FB923C";
+    case "yellow":
+      return "#FACC15";
+    default:
+      return "#CBD5E1";
+  }
+}
+
+function cropPosition(index: number) {
+  return {
+    row: Math.floor(index / SHEET_COLUMNS),
+    col: index % SHEET_COLUMNS,
+  };
+}
+
+function CropCardArt({
+  artIndex,
+  width,
+  height,
+}: {
+  artIndex: number;
+  width: number;
+  height: number;
+}) {
+  const { row, col } = cropPosition(artIndex);
+
+  return (
+    <View style={[styles.cropWindow, { width, height }]}>
+      <Image
+        source={SHEET}
+        resizeMode="stretch"
+        style={{
+          position: "absolute",
+          width: width * SHEET_COLUMNS,
+          height: height * SHEET_ROWS,
+          left: -(col * width),
+          top: -(row * height),
+        }}
+      />
+    </View>
+  );
+}
+
+function PlayerCard({
+  player,
+  artIndex,
+  onPress,
+}: {
+  player: any;
+  artIndex: number;
+  onPress: () => void;
+}) {
+  const accent = getAccent(player?.color);
+
+  return (
+    <Pressable onPress={onPress} style={styles.cardShell}>
+      <View style={styles.cardBorder}>
+        <CropCardArt
+          artIndex={artIndex}
+          width={CARD_WIDTH - 4}
+          height={CARD_HEIGHT - 4}
+        />
+
+        <View style={styles.cardDim} />
+
+        <View style={[styles.initialsBadge, { borderColor: accent }]}>
+          <Text style={styles.initialsText}>{getInitials(player?.name)}</Text>
+        </View>
+
+        <View style={[styles.bottomLabel, { borderColor: accent }]}>
+          <Text numberOfLines={2} style={styles.bottomLabelText}>
+            {player?.name || "Unknown Player"}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+export default function PlayerProfileIndex() {
+  const router = useRouter();
+  const players = useStore((s: any) => (Array.isArray(s.players) ? s.players : []));
+
+  
+
+    players.forEach((player: any, index: number) => {
+      const col = getColorColumn(player?.color);
+      const row = Math.floor(Math.random() * SHEET_ROWS);
+      map[String(player?.id ?? index)] = row * SHEET_COLUMNS + col;
+    });
+
+    return map;
+  }, [players]);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={StyleSheet.absoluteFillObject}>
+        <StarryNight />
+        <View style={styles.backgroundGlow} />
+        <View style={styles.backgroundDim} />
+      </View>
+
+      <View style={styles.header}>
+        <Text style={styles.title}>Select Player</Text>
+        <Text style={styles.subtitle}>
+          Choose a player card to open their full profile
+        </Text>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {players.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyText}>No players found</Text>
+          </View>
+        ) : (
+          <View style={styles.grid}>
+            {players.map((player: any, index: number) => {
+              const playerId = String(player?.id ?? index);
+              return (
+                <PlayerCard
+                  key={playerId}
+                  player={player}
+                  artIndex={player.assignedCardArtIndex ?? 0}
+                  onPress={() => router.push(`/player-profile/${playerId}` as any)}
+                />
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#020617",
+  },
+
+  backgroundGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+
+  backgroundDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(2,6,23,0.40)",
+  },
+
+  header: {
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+
+  title: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+
+  subtitle: {
+    color: "#C7D2FE",
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  scrollContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 20,
+  },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+  },
+
+  cardShell: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+  },
+
+  cardBorder: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#000000",
+    backgroundColor: "#111827",
+  },
+
+  cropWindow: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    overflow: "hidden",
+    backgroundColor: "#111827",
+  },
+
+  cardDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+
+  initialsBadge: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 4,
+    borderRadius: 11,
+    backgroundColor: "rgba(0,0,0,0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+
+  initialsText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  bottomLabel: {
+    position: "absolute",
+    left: 4,
+    right: 4,
+    bottom: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.82)",
+    borderWidth: 1,
+  },
+
+  bottomLabelText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "800",
+    lineHeight: 11,
+    textAlign: "center",
+  },
+
+  emptyWrap: {
+    paddingTop: 40,
+    alignItems: "center",
+  },
+
+  emptyText: {
+    color: "#94A3B8",
+    fontSize: 14,
+  },
+});
+

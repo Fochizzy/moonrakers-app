@@ -1,0 +1,1518 @@
+import {
+  connectGoogleDriveForBackup,
+  getValidGoogleDriveAccessToken,
+  uploadLocalFileToGoogleDrive,
+} from '@/utils/googleDriveBackup';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  TextInput,
+} from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+import { useRouter } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
+import { Swipeable } from 'react-native-gesture-handler';
+
+import { useStore } from '@/store/useStore';
+import { importAndMergeBackup } from '../utils/csv/importCSV';
+import {
+  buildHybridExportPayload,
+  exportGamesToCSV,
+} from '../utils/csv/exportCSV';
+import StarryNight from '@/components/ui/StarryNight';
+import Text from '@/components/ui/Text';
+import { getWinnerIdFromGame, normalizeGameWithComputedTotals } from '@/utils/gameTotals';
+
+type Player = {
+  id: string;
+  name: string;
+  color?: string;
+  initials?: string;
+  startOrder?: number;
+  [key: string]: unknown;
+};
+
+type Group = {
+  id: string;
+  name: string;
+  playerIds?: string[];
+  members?: string[];
+  createdAt?: number;
+  [key: string]: unknown;
+};
+
+type PlayerTotals = {
+  prestige?: number;
+  totalPrestige?: number;
+  directPrestige?: number;
+  assistPrestigeReceived?: number;
+  score?: number;
+  assists?: number;
+  failures?: number;
+  contracts?: number;
+  objectivePrestige?: number;
+};
+
+type Round = {
+  id?: string;
+  playerId: string;
+};
+
+type StoredGame = {
+  id?: string;
+  createdAt?: number;
+  winnerId?: string;
+  selectedWinnerId?: string;
+  manualWinnerId?: string;
+  groupId?: string;
+  groupName?: string;
+  players?: any[];
+  rounds?: Round[];
+  timeline?: Round[];
+  roundCount?: number;
+  totals?: Record<string, PlayerTotals>;
+};
+
+type HistoryFilter = 'all' | 'group' | 'solo';
+type HistorySort = 'newest' | 'oldest' | 'winner' | 'rounds';
+
+const LAST_SHARED_EMAIL_KEY = 'moonrakers_last_shared_email';
+const RECENT_SHARED_EMAILS_KEY = 'moonrakers_recent_shared_emails';
+const MAX_RECENT_EMAILS = 5;
+const DRIVE_FILE_NAME = 'moonrakers_backup.moonrakers.json';
+const SUMMARY_ROUTE = '/summary';
+const REPLAY_ROUTE = '/charts/replay';
+
+function formatDate(value?: number): string {
+  if (!value) return 'Unknown date';
+  return new Date(value).toLocaleString();
+}
+
+function getWinnerId(game?: StoredGame): string | undefined {
+  return getWinnerIdFromGame(game);
+}
+
+function getRoundsCount(game: StoredGame): number {
+  if (
+    typeof game?.roundCount === 'number' &&
+    Number.isFinite(game.roundCount)
+  ) {
+    return game.roundCount;
+  }
+
+  if (Array.isArray(game?.rounds) && game.rounds.length > 0) {
+    return game.rounds.length;
+  }
+
+  if (Array.isArray(game?.timeline) && game.timeline.length > 0) {
+    return game.timeline.length;
+  }
+
+  return 0;
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function getWinnerColor(game: StoredGame, players: Player[]): string {
+  const winnerId = getWinnerId(game);
+  const playerColor = players.find((p) => p.id === winnerId)?.color;
+
+  if (typeof playerColor === 'string' && playerColor.trim()) {
+    return playerColor;
+  }
+
+  return '#A855F7';
+}
+
+function getPreviewText(game: StoredGame, players: Player[]): string {
+  const winnerId = getWinnerId(game);
+  const winnerName =
+    players.find((p) => p.id === winnerId)?.name ?? 'Unknown';
+  const rounds = getRoundsCount(game);
+  const groupPart = game.groupName ? ` • ${game.groupName}` : '';
+  return `${winnerName} won in ${rounds} round${rounds === 1 ? '' : 's'}${groupPart}`;
+}
+
+function SortChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.sortChip, active && styles.sortChipActive]}
+    >
+      <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+export default function HistoryScreen() {
+  const router = useRouter();
+
+  const rawPlayers = useStore((s: any) => s.players);
+  const rawGroups = useStore((s: any) => s.groups);
+  const rawGames = useStore((s: any) => s.games);
+  const removeGame = useStore((s: any) => s.removeGame);
+  const setPlayers = useStore((s: any) => s.setPlayers);
+  const setGroups = useStore((s: any) => s.setGroups);
+  const mergeImportedGames = useStore((s: any) => s.mergeImportedGames);
+
+  const players = useMemo<Player[]>(
+    () => (Array.isArray(rawPlayers) ? rawPlayers : []),
+    [rawPlayers]
+  );
+
+  const groups = useMemo<Group[]>(
+    () => (Array.isArray(rawGroups) ? rawGroups : []),
+    [rawGroups]
+  );
+
+  const games = useMemo<StoredGame[]>(
+    () => (Array.isArray(rawGames) ? rawGames : []),
+    [rawGames]
+  );
+
+  const [shareEmail, setShareEmail] = useState('');
+  const [recentEmails, setRecentEmails] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
+  const [historySort, setHistorySort] = useState<HistorySort>('newest');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [backupExpanded, setBackupExpanded] = useState(false);
+  const [exportFileName, setExportFileName] = useState('MoonrakersBackup.json');
+  const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
+
+  useEffect(() => {
+    const loadSavedEmails = async () => {
+      try {
+        const [lastEmail, recentEmailsRaw] = await Promise.all([
+          SecureStore.getItemAsync(LAST_SHARED_EMAIL_KEY),
+          SecureStore.getItemAsync(RECENT_SHARED_EMAILS_KEY),
+        ]);
+
+        const parsedRecent = recentEmailsRaw
+          ? (JSON.parse(recentEmailsRaw) as unknown)
+          : [];
+
+        const safeRecent = Array.isArray(parsedRecent)
+          ? parsedRecent.filter((item): item is string => typeof item === 'string')
+          : [];
+
+        if (lastEmail) {
+          setShareEmail(lastEmail);
+        }
+
+        setRecentEmails(safeRecent);
+      } catch (error) {
+        console.error('Failed to load saved share emails', error);
+      }
+    };
+
+    loadSavedEmails();
+  }, []);
+
+  const saveSharedEmail = async (email: string) => {
+    const normalized = normalizeEmail(email);
+
+    const updatedRecent = [
+      normalized,
+      ...recentEmails.filter((item) => normalizeEmail(item) !== normalized),
+    ].slice(0, MAX_RECENT_EMAILS);
+
+    setRecentEmails(updatedRecent);
+    setShareEmail(normalized);
+
+    await Promise.all([
+      SecureStore.setItemAsync(LAST_SHARED_EMAIL_KEY, normalized),
+      SecureStore.setItemAsync(
+        RECENT_SHARED_EMAILS_KEY,
+        JSON.stringify(updatedRecent)
+      ),
+    ]);
+  };
+
+  const filteredSuggestions = useMemo(() => {
+    const query = normalizeEmail(shareEmail);
+
+    if (!query) {
+      return recentEmails;
+    }
+
+    return recentEmails.filter((email) =>
+      normalizeEmail(email).includes(query)
+    );
+  }, [recentEmails, shareEmail]);
+
+  const displayedGames = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    const filtered = [...games].filter((game) => {
+      const isGroupGame = !!game.groupName;
+
+      if (historyFilter === 'group' && !isGroupGame) return false;
+      if (historyFilter === 'solo' && isGroupGame) return false;
+
+      if (!query) return true;
+
+      const winnerId = getWinnerId(game);
+      const winnerName =
+        players.find((p) => p.id === winnerId)?.name?.toLowerCase() ?? '';
+
+      const groupName = game.groupName?.toLowerCase() ?? '';
+      const dateText = formatDate(game.createdAt).toLowerCase();
+      const gameLabel = `game ${game.id ?? ''}`.toLowerCase();
+
+      return (
+        winnerName.includes(query) ||
+        groupName.includes(query) ||
+        dateText.includes(query) ||
+        gameLabel.includes(query)
+      );
+    });
+
+    filtered.sort((a, b) => {
+      const aTime = typeof a.createdAt === 'number' ? a.createdAt : 0;
+      const bTime = typeof b.createdAt === 'number' ? b.createdAt : 0;
+      const aWinner =
+        players.find((p) => p.id === getWinnerId(a))?.name?.toLowerCase() ?? '';
+      const bWinner =
+        players.find((p) => p.id === getWinnerId(b))?.name?.toLowerCase() ?? '';
+      const aRounds = getRoundsCount(a);
+      const bRounds = getRoundsCount(b);
+
+      switch (historySort) {
+        case 'oldest':
+          return aTime - bTime;
+        case 'winner':
+          return aWinner.localeCompare(bWinner) || bTime - aTime;
+        case 'rounds':
+          return bRounds - aRounds || bTime - aTime;
+        case 'newest':
+        default:
+          return bTime - aTime;
+      }
+    });
+
+    return filtered;
+  }, [games, historyFilter, historySort, searchQuery, players]);
+
+  useEffect(() => {
+    if (displayedGames.length === 0) {
+      if (selectedGameId) {
+        setSelectedGameId(undefined);
+      }
+      return;
+    }
+
+    const selectedStillVisible = displayedGames.some(
+      (game) => game.id && game.id === selectedGameId
+    );
+
+    if (!selectedStillVisible && selectedGameId) {
+      setSelectedGameId(undefined);
+    }
+  }, [displayedGames, selectedGameId]);
+
+  const handleConnectDrive = async () => {
+    try {
+      const success = await connectGoogleDriveForBackup();
+
+      if (success) {
+        Alert.alert('Connected', 'Google Drive linked successfully.');
+      } else {
+        Alert.alert('Cancelled', 'Google login was cancelled.');
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to connect Google Drive.');
+    }
+  };
+
+  const handleExportBackup = async () => {
+    const trimmedName = exportFileName.trim();
+    const normalizedFileName = trimmedName
+      ? trimmedName.toLowerCase().endsWith('.json')
+        ? trimmedName
+        : `${trimmedName}.json`
+      : 'MoonrakersBackup.json';
+
+    Alert.alert(
+      'Please Confirm',
+      'Are you sure you want to export this backup?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Export',
+          onPress: async () => {
+            try {
+              const fileUri = await exportGamesToCSV(
+                {
+                  players,
+                  groups,
+                  games,
+                },
+                normalizedFileName
+              );
+
+              if (!fileUri) {
+                Alert.alert('Export failed', 'Could not export backup.');
+                return;
+              }
+
+              Alert.alert(
+                'Export complete',
+                `Backup exported successfully as ${normalizedFileName}.`
+              );
+            } catch (error: any) {
+              console.error(error);
+              Alert.alert(
+                'Export failed',
+                error?.message ?? 'Could not export backup.'
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleImportBackup = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', 'text/csv', 'text/plain', '*/*'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        Alert.alert('Import cancelled', 'No file was selected.');
+        return;
+      }
+
+      const asset = result.assets[0];
+      const fileUri = asset.uri;
+      const fileName = asset.name ?? 'backup';
+
+      if (!fileUri) {
+        throw new Error('Selected file does not have a readable URI.');
+      }
+
+      const fileText = await FileSystem.readAsStringAsync(fileUri);
+
+      if (!fileText || !fileText.trim()) {
+        throw new Error('The selected backup file is empty.');
+      }
+
+      const trimmed = fileText.trim();
+      const looksLikeJson =
+        fileName.toLowerCase().endsWith('.json') ||
+        trimmed.startsWith('{') ||
+        trimmed.startsWith('[');
+
+      if (typeof importAndMergeBackup !== 'function') {
+        throw new Error(
+          'Import helper is not exported correctly. Check ../utils/csv/importCSV.'
+        );
+      }
+
+      const merged = importAndMergeBackup(
+        players as any[],
+        groups as any[],
+        trimmed,
+        fileName
+      );
+
+      const mergedPlayers = Array.isArray(merged?.players) ? merged.players : [];
+      const mergedGroups = Array.isArray(merged?.groups) ? merged.groups : [];
+
+      if (importedGames.length > 0 && typeof mergeImportedGames === 'function') {
+        mergeImportedGames(importedGames);
+      }
+
+      Alert.alert(
+        'Import complete',
+        `Imported ${mergedPlayers.length} player record${mergedPlayers.length === 1 ? '' : 's'}, ${mergedGroups.length} group record${mergedGroups.length === 1 ? '' : 's'}${importedGames.length > 0 ? `, and ${importedGames.length} game${importedGames.length === 1 ? '' : 's'}` : ''} from ${fileName}.`
+      );
+    } catch (error: any) {
+      console.error('Import failed', error);
+      Alert.alert(
+        'Import failed',
+        error?.message ?? 'Could not import backup.'
+      );
+    }
+  };
+
+  const handleUpdateAndShareDriveBackup = async () => {
+    try {
+      const accessToken = await getValidGoogleDriveAccessToken();
+
+      if (!accessToken) {
+        Alert.alert(
+          'Not connected',
+          'Connect Google Drive first, then try again.'
+        );
+        return;
+      }
+
+      const email = normalizeEmail(shareEmail);
+
+      if (!email) {
+        Alert.alert('Missing email', 'Enter an email address to share with.');
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        Alert.alert('Invalid email', 'Enter a valid email address.');
+        return;
+      }
+
+      const payload = buildHybridExportPayload({
+        players,
+        groups,
+        games,
+      });
+
+      const writableDir =
+        FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? null;
+
+      if (!writableDir) {
+        throw new Error('No writable local directory is available.');
+      }
+
+      const fileUri = `${writableDir}${DRIVE_FILE_NAME}`;
+
+      await FileSystem.writeAsStringAsync(
+        fileUri,
+        JSON.stringify(payload, null, 2)
+      );
+
+      const uploaded = await uploadLocalFileToGoogleDrive({
+        accessToken,
+        fileUri,
+        fileName: DRIVE_FILE_NAME,
+      });
+
+      if (!uploaded?.id) {
+        throw new Error('Drive upload succeeded but no file ID was returned.');
+      }
+
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${uploaded.id}/permissions?sendNotificationEmail=true`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'user',
+            role: 'writer',
+            emailAddress: email,
+          }),
+        }
+      );
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        throw new Error(`Share failed: ${response.status} ${responseText}`);
+      }
+
+      await saveSharedEmail(email);
+      setShowSuggestions(false);
+
+      Alert.alert(
+        'Updated + Shared',
+        `${email} now has writer access to ${uploaded.name ?? DRIVE_FILE_NAME}`
+      );
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert(
+        'Update + Share failed',
+        error?.message ?? 'Could not update and share the Drive backup.'
+      );
+    }
+  };
+
+  const handleDeleteGame = (game: StoredGame, index: number) => {
+    if (!game?.id || typeof removeGame !== 'function') {
+      Alert.alert(
+        'Delete unavailable',
+        'This game cannot be removed because the store is missing removeGame or the game has no id.'
+      );
+      return;
+    }
+
+    const winnerId = getWinnerId(game);
+    const winnerName =
+      players.find((p) => p.id === winnerId)?.name ?? 'Unknown';
+    const label = `Game ${index + 1} • ${formatDate(game.createdAt)}`;
+
+    Alert.alert(
+      'Delete Game',
+      `Delete this game permanently?\n\n${label}\nWinner: ${winnerName}\nRounds: ${getRoundsCount(
+        game
+      )}\n\nThis should remove it from history and all statistics.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            if (selectedGameId === game.id) {
+              setSelectedGameId(undefined);
+            }
+            removeGame(game.id);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOpenGameSummary = (game: StoredGame) => {
+    if (!game?.id) {
+      Alert.alert(
+        'Open unavailable',
+        'This game cannot be opened because it has no saved id.'
+      );
+      return;
+    }
+
+    router.push({
+      pathname: SUMMARY_ROUTE as any,
+      params: { gameId: game.id },
+    });
+  };
+
+  return (
+    <View style={styles.root}>
+      <StarryNight />
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.heroShell}>
+          <View style={styles.heroGlowPrimary} />
+          <View style={styles.heroGlowSecondary} />
+
+          <View style={styles.hero}>
+            <Text style={styles.appHeader}>Moonrakers</Text>
+            <Text style={styles.heroTitle}>History</Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Pressable
+            style={styles.sectionAccordionHeader}
+            onPress={() => setBackupExpanded((v) => !v)}
+          >
+            <View style={styles.sectionHeaderBlock}>
+              <Text style={styles.sectionEyebrow}>Data Systems</Text>
+              <Text style={styles.sectionTitle}>Backup + Sync</Text>
+            </View>
+
+            <View style={styles.collapseChip}>
+              <Text style={styles.collapseChipText}>
+                {backupExpanded ? 'Hide' : 'Show'}
+              </Text>
+            </View>
+          </Pressable>
+
+          {backupExpanded ? (
+            <>
+              <Text style={styles.sectionSubtitle}>
+                Export a JSON backup, import a backup, connect Drive, or upload a fresh
+                shared backup to your crew.
+              </Text>
+
+              <View style={styles.systemPanel}>
+                <View style={styles.systemStatusRow}>
+                  <View style={styles.systemDot} />
+                  <Text style={styles.systemStatusText}>
+                    Mission archive tools ready
+                  </Text>
+                </View>
+
+                <TextInput
+                  value={exportFileName}
+                  onChangeText={setExportFileName}
+                  placeholder="MoonrakersBackup.json"
+                  placeholderTextColor="#8F9BB3"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+
+                <View style={styles.actionsRow}>
+                  <Pressable
+                    style={[styles.actionButton, styles.secondaryAction]}
+                    onPress={handleImportBackup}
+                  >
+                    <Text style={styles.actionButtonText}>Import Backup</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.actionButton, styles.primaryAction]}
+                    onPress={handleExportBackup}
+                  >
+                    <Text style={styles.actionButtonText}>Export</Text>
+                  </Pressable>
+                </View>
+
+                <Pressable
+                  style={[styles.actionButton, styles.successAction]}
+                  onPress={handleConnectDrive}
+                >
+                  <Text style={styles.actionButtonText}>Connect Google Drive</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.sharePanel}>
+                <Text style={styles.subPanelTitle}>Update + Share Drive Backup</Text>
+
+                <TextInput
+                  value={shareEmail}
+                  onChangeText={(value) => {
+                    setShareEmail(value);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
+                  placeholder="Enter email address"
+                  placeholderTextColor="#8F9BB3"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  style={styles.input}
+                />
+
+                {showSuggestions && filteredSuggestions.length > 0 ? (
+                  <View style={styles.suggestionsBox}>
+                    {filteredSuggestions.map((email) => (
+                      <Pressable
+                        key={email}
+                        style={styles.suggestionItem}
+                        onPress={() => {
+                          setShareEmail(email);
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        <Text style={styles.suggestionText}>{email}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                <Pressable
+                  style={[styles.actionButton, styles.warningAction]}
+                  onPress={handleUpdateAndShareDriveBackup}
+                >
+                  <Text style={styles.actionButtonText}>Update + Share Backup</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionEyebrow}>Mission Logs</Text>
+              <Text style={styles.sectionTitle}>Game History</Text>
+            </View>
+
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{displayedGames.length}</Text>
+            </View>
+          </View>
+
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search by winner, group, or date"
+            placeholderTextColor="#8F9BB3"
+            style={styles.searchInput}
+          />
+
+          <View style={styles.filterRow}>
+            {(['all', 'group', 'solo'] as HistoryFilter[]).map((filter) => {
+              const isActive = historyFilter === filter;
+              return (
+                <Pressable
+                  key={filter}
+                  onPress={() => setHistoryFilter(filter)}
+                  style={[
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isActive && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {filter === 'all'
+                      ? 'All'
+                      : filter === 'group'
+                        ? 'Groups'
+                        : 'Solo'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.sortRow}>
+            <SortChip
+              label="Newest"
+              active={historySort === 'newest'}
+              onPress={() => setHistorySort('newest')}
+            />
+            <SortChip
+              label="Oldest"
+              active={historySort === 'oldest'}
+              onPress={() => setHistorySort('oldest')}
+            />
+            <SortChip
+              label="Winner A–Z"
+              active={historySort === 'winner'}
+              onPress={() => setHistorySort('winner')}
+            />
+            <SortChip
+              label="Most Rounds"
+              active={historySort === 'rounds'}
+              onPress={() => setHistorySort('rounds')}
+            />
+          </View>
+
+          {displayedGames.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No matching mission logs</Text>
+              <Text style={styles.emptyText}>
+                Try another search term or change the filter.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.historyList}>
+              {displayedGames.map((game, index) => {
+                const winnerId = getWinnerId(game);
+                const winnerName =
+                  players.find((p) => p.id === winnerId)?.name ?? 'Unknown';
+                const gameKey = game.id ?? `${game.createdAt ?? 'game'}-${index}`;
+                const accentColor = getWinnerColor(game, players);
+                const rounds = getRoundsCount(game);
+                const previewText = getPreviewText(game, players);
+                const isSelected = !!game.id && game.id === selectedGameId;
+
+                return (
+                  <Swipeable
+                    key={gameKey}
+                    overshootRight={false}
+                    renderRightActions={() => (
+                      <Pressable
+                        onPress={() => handleDeleteGame(game, index)}
+                        style={styles.swipeDeleteAction}
+                      >
+                        <Text style={styles.swipeDeleteText}>Delete</Text>
+                      </Pressable>
+                    )}
+                  >
+                    <Pressable
+                      style={[
+                        styles.gameCard,
+                        isSelected && styles.gameCardSelected,
+                      ]}
+                      onPress={() => {
+                        if (!game?.id) {
+                          handleOpenGameSummary(game);
+                          return;
+                        }
+
+                        setSelectedGameId((current) =>
+                          current === game.id ? undefined : game.id
+                        );
+                      }}
+                    >
+                      <View
+                        style={[
+                          styles.gameCardAccent,
+                          { backgroundColor: accentColor },
+                        ]}
+                      />
+
+                      <View
+                        style={[
+                          styles.gameCardGlow,
+                          { backgroundColor: `${accentColor}22` },
+                        ]}
+                      />
+
+                      <View style={styles.gameCardHeader}>
+                        <View style={styles.gameHeaderLeft}>
+                          <View style={styles.gameTitleRow}>
+                            <Text style={styles.gameTitle}>
+                              Game {displayedGames.length - index}
+                            </Text>
+                            <View
+                              style={[
+                                styles.openChip,
+                                isSelected && styles.selectedChip,
+                              ]}
+                            >
+                              <Text style={styles.openChipText}>
+                                {isSelected ? 'Selected' : 'Select'}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <Text style={styles.gameDate}>
+                            {formatDate(game.createdAt)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.gameMetaRow}>
+                        <Text style={styles.gameMetaStrong}>{winnerName}</Text>
+                        <Text style={styles.gameMetaDivider}>•</Text>
+                        <Text style={styles.gameMetaText}>
+                          {rounds} round{rounds === 1 ? '' : 's'}
+                        </Text>
+                        {game.groupName ? (
+                          <>
+                            <Text style={styles.gameMetaDivider}>•</Text>
+                            <Text style={styles.gameMetaText}>{game.groupName}</Text>
+                          </>
+                        ) : null}
+                      </View>
+
+                      <Text style={styles.previewText}>{previewText}</Text>
+
+                      {isSelected ? (
+                        <View style={styles.cardActionsRow}>
+                          <Pressable
+                            style={[styles.inlineButton, styles.inlineSecondaryButton]}
+                            onPress={() => handleOpenGameSummary(game)}
+                          >
+                            <Text style={styles.inlineButtonText}>View Summary</Text>
+                          </Pressable>
+
+                          <Pressable
+                            style={[styles.inlineButton, styles.inlinePrimaryButton]}
+                            onPress={() => {
+                              if (!game?.id) {
+                                Alert.alert(
+                                  'Replay unavailable',
+                                  'This game cannot be replayed because it has no saved id.'
+                                );
+                                return;
+                              }
+
+                              router.push({
+                                pathname: REPLAY_ROUTE as any,
+                                params: {
+                                  gameId: game.id,
+                                  selectedGameId: game.id,
+                                  source: 'history',
+                                },
+                              });
+                            }}
+                          >
+                            <Text style={styles.inlineButtonText}>Replay Graph</Text>
+                          </Pressable>
+
+                          <Pressable
+                            style={[styles.inlineButton, styles.inlineDeleteButton]}
+                            onPress={() => handleDeleteGame(game, index)}
+                          >
+                            <Text style={styles.inlineButtonText}>Delete Game</Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  </Swipeable>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        <View style={{ height: 14 }} />
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#040814',
+  },
+
+  content: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 18,
+    gap: 12,
+  },
+
+  heroShell: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.22)',
+    backgroundColor: 'rgba(11, 19, 35, 0.88)',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+
+  heroGlowPrimary: {
+    position: 'absolute',
+    top: -40,
+    left: -10,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(139, 92, 246, 0.16)',
+  },
+
+  heroGlowSecondary: {
+    position: 'absolute',
+    bottom: -70,
+    right: -20,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(96, 165, 250, 0.10)',
+  },
+
+  hero: {
+    alignItems: 'center',
+    gap: 2,
+  },
+
+  appHeader: {
+    color: '#8B5CF6',
+    fontSize: 34,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(139, 92, 246, 0.45)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
+  },
+
+  heroTitle: {
+    color: '#F8FAFC',
+    fontSize: 24,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+
+  section: {
+    backgroundColor: 'rgba(10, 16, 31, 0.90)',
+    borderRadius: 20,
+    padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.16)',
+    shadowColor: '#000',
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+
+  sectionAccordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+
+  sectionHeaderBlock: {
+    gap: 3,
+    flex: 1,
+  },
+
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+
+  sectionEyebrow: {
+    color: '#A5B4FC',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+
+  sectionTitle: {
+    color: '#F8FAFC',
+    fontWeight: '900',
+    fontSize: 18,
+  },
+
+  sectionSubtitle: {
+    color: '#9FB0CF',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+
+  collapseChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(124, 58, 237, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.24)',
+  },
+
+  collapseChipText: {
+    color: '#E9D5FF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+
+  systemPanel: {
+    borderRadius: 18,
+    padding: 12,
+    gap: 10,
+    backgroundColor: 'rgba(14, 22, 42, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.22)',
+  },
+
+  systemStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+
+  systemDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22C55E',
+  },
+
+  systemStatusText: {
+    color: '#C7D2FE',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  sharePanel: {
+    borderRadius: 18,
+    padding: 12,
+    gap: 10,
+    backgroundColor: 'rgba(8, 13, 27, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.16)',
+  },
+
+  subPanelTitle: {
+    color: '#F8FAFC',
+    fontWeight: '900',
+    fontSize: 15,
+  },
+
+  badge: {
+    minWidth: 32,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(139, 92, 246, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  badgeText: {
+    color: '#D8B4FE',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  actionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+
+  primaryAction: {
+    flex: 1,
+    backgroundColor: 'rgba(124, 58, 237, 0.24)',
+    borderColor: 'rgba(196, 181, 253, 0.34)',
+  },
+
+  secondaryAction: {
+    flex: 1,
+    backgroundColor: 'rgba(37, 99, 235, 0.20)',
+    borderColor: 'rgba(147, 197, 253, 0.28)',
+  },
+
+  successAction: {
+    backgroundColor: 'rgba(34, 197, 94, 0.18)',
+    borderColor: 'rgba(134, 239, 172, 0.24)',
+  },
+
+  warningAction: {
+    backgroundColor: 'rgba(245, 158, 11, 0.20)',
+    borderColor: 'rgba(253, 224, 71, 0.24)',
+  },
+
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+
+  input: {
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.18)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(9, 15, 31, 0.92)',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  searchInput: {
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.16)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(8, 13, 27, 0.94)',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  suggestionsBox: {
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.16)',
+    borderRadius: 14,
+    backgroundColor: 'rgba(9, 15, 31, 0.96)',
+    overflow: 'hidden',
+  },
+
+  suggestionItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(148, 163, 184, 0.18)',
+  },
+
+  suggestionText: {
+    color: '#E9E8FF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  filterChip: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.12)',
+  },
+
+  filterChipActive: {
+    backgroundColor: 'rgba(124, 58, 237, 0.22)',
+    borderColor: 'rgba(196, 181, 253, 0.30)',
+  },
+
+  filterChipText: {
+    color: '#94A3B8',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+
+  filterChipTextActive: {
+    color: '#F3E8FF',
+  },
+
+  sortRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+
+  sortChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.12)',
+  },
+
+  sortChipActive: {
+    backgroundColor: 'rgba(59, 130, 246, 0.20)',
+    borderColor: 'rgba(147, 197, 253, 0.28)',
+  },
+
+  sortChipText: {
+    color: '#94A3B8',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+
+  sortChipTextActive: {
+    color: '#DBEAFE',
+  },
+
+  emptyCard: {
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: 'rgba(8, 13, 27, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.10)',
+    gap: 3,
+  },
+
+  emptyTitle: {
+    color: '#E2E8F0',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  emptyText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  historyList: {
+    gap: 10,
+  },
+
+  swipeDeleteAction: {
+    marginLeft: 8,
+    marginBottom: 10,
+    borderRadius: 18,
+    minWidth: 92,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(220, 38, 38, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.28)',
+  },
+
+  swipeDeleteText: {
+    color: '#FCA5A5',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+
+  gameCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 18,
+    paddingTop: 12,
+    paddingRight: 12,
+    paddingBottom: 12,
+    paddingLeft: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.14)',
+    gap: 7,
+  },
+
+  gameCardSelected: {
+    borderColor: 'rgba(96, 165, 250, 0.42)',
+    backgroundColor: 'rgba(10, 19, 38, 0.98)',
+  },
+
+  gameCardAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
+
+  gameCardGlow: {
+    position: 'absolute',
+    top: -18,
+    right: -18,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+
+  gameCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+
+  gameHeaderLeft: {
+    flex: 1,
+    gap: 2,
+  },
+
+  gameTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+
+  gameTitle: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '900',
+    flex: 1,
+  },
+
+  gameDate: {
+    color: '#A5B4FC',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  openChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(124, 58, 237, 0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.24)',
+  },
+
+  selectedChip: {
+    backgroundColor: 'rgba(37, 99, 235, 0.24)',
+    borderColor: 'rgba(147, 197, 253, 0.28)',
+  },
+
+  openChipText: {
+    color: '#E9D5FF',
+    fontWeight: '900',
+    fontSize: 11,
+  },
+
+  gameMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+
+  gameMetaStrong: {
+    color: '#F8FAFC',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  gameMetaText: {
+    color: '#9FB0CF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  gameMetaDivider: {
+    color: '#7C8DB5',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  previewText: {
+    color: '#C4B5FD',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  cardActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+
+  inlineButton: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  inlinePrimaryButton: {
+    backgroundColor: 'rgba(37, 99, 235, 0.18)',
+    borderColor: 'rgba(147, 197, 253, 0.24)',
+  },
+
+  inlineSecondaryButton: {
+    backgroundColor: 'rgba(124, 58, 237, 0.18)',
+    borderColor: 'rgba(196, 181, 253, 0.22)',
+  },
+
+  inlineDeleteButton: {
+    backgroundColor: 'rgba(220, 38, 38, 0.18)',
+    borderColor: 'rgba(248, 113, 113, 0.24)',
+  },
+
+  inlineButtonText: {
+    color: '#F8FAFC',
+    fontWeight: '900',
+    fontSize: 12,
+  },
+});
+
+
+
+
+
+
+
+
+

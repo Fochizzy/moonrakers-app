@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 
 export type Player = {
@@ -5,6 +6,7 @@ export type Player = {
   name: string;
   initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
 };
 
 export type Group = {
@@ -39,6 +41,7 @@ export type GamePlayer = {
   name?: string;
   initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
   startOrder?: number;
 };
 
@@ -176,8 +179,20 @@ function normalizeImportedGame(raw: any): Game {
         ...current,
         id,
         name: normalizeName(current?.name) || normalizeName(p?.name) || 'Player',
-        initials: normalizeStringOrUndefined(current?.initials) || normalizeStringOrUndefined(p?.initials),
-        color: normalizeStringOrUndefined(current?.color) || normalizeStringOrUndefined(p?.color),
+        initials:
+          normalizeStringOrUndefined(current?.initials) ||
+          normalizeStringOrUndefined(p?.initials),
+        color:
+          normalizeStringOrUndefined(current?.color) ||
+          normalizeStringOrUndefined(p?.color),
+        assignedCardArtIndex:
+          typeof current?.assignedCardArtIndex === 'number' &&
+          Number.isFinite(current.assignedCardArtIndex)
+            ? current.assignedCardArtIndex
+            : typeof p?.assignedCardArtIndex === 'number' &&
+                Number.isFinite(p.assignedCardArtIndex)
+              ? p.assignedCardArtIndex
+              : null,
         startOrder:
           typeof current?.startOrder === 'number'
             ? current.startOrder
@@ -191,7 +206,10 @@ function normalizeImportedGame(raw: any): Game {
   const rawRounds = Array.isArray(raw?.rounds) ? raw.rounds : [];
   const rawTimeline = Array.isArray(raw?.timeline) ? raw.timeline : rawRounds;
 
-  const rounds = rawRounds.map(normalizeRound).filter((round): round is StoredRound => Boolean(round));
+  const rounds = rawRounds
+    .map(normalizeRound)
+    .filter((round): round is StoredRound => Boolean(round));
+
   const timeline = rawTimeline
     .map(normalizeRound)
     .filter((round): round is StoredRound => Boolean(round));
@@ -201,14 +219,16 @@ function normalizeImportedGame(raw: any): Game {
       playerMap.set(round.playerId, {
         id: round.playerId,
         name: 'Recovered Player',
+        assignedCardArtIndex: null,
       });
     }
   }
 
   const totals: GameTotals = {};
-  const rawTotals = raw?.totals && typeof raw.totals === 'object' && !Array.isArray(raw.totals)
-    ? raw.totals
-    : {};
+  const rawTotals =
+    raw?.totals && typeof raw.totals === 'object' && !Array.isArray(raw.totals)
+      ? raw.totals
+      : {};
 
   Object.entries(rawTotals).forEach(([rawPlayerId, t]: any) => {
     const id = normalizeId(rawPlayerId);
@@ -218,18 +238,23 @@ function normalizeImportedGame(raw: any): Game {
       playerMap.set(id, {
         id,
         name: 'Recovered Player',
+        assignedCardArtIndex: null,
       });
     }
 
     const direct = safeNumber(t?.directPrestige);
     const assist = safeNumber(t?.assistPrestigeReceived);
-    const objective = Math.max(0, Math.floor(safeNumber(t?.objectivePrestige ?? t?.objectiveCount)));
+    const objective = Math.max(
+      0,
+      Math.floor(safeNumber(t?.objectivePrestige ?? t?.objectiveCount))
+    );
+    const computedTotal = Math.max(0, direct + assist + objective);
     const total =
       typeof t?.totalPrestige === 'number' && Number.isFinite(t.totalPrestige)
-        ? t.totalPrestige
+        ? Math.max(0, t.totalPrestige)
         : typeof t?.prestige === 'number' && Number.isFinite(t.prestige)
-          ? t.prestige
-          : direct + assist + objective;
+          ? Math.max(0, t.prestige)
+          : computedTotal;
 
     totals[id] = {
       prestige: total,
@@ -282,8 +307,37 @@ function normalizeImportedGame(raw: any): Game {
     groupId: normalizeStringOrUndefined(raw?.groupId),
     groupName: normalizeStringOrUndefined(raw?.groupName),
     objectiveStatsEligible:
-      typeof raw?.objectiveStatsEligible === 'boolean' ? raw.objectiveStatsEligible : false,
+      typeof raw?.objectiveStatsEligible === 'boolean'
+        ? raw.objectiveStatsEligible
+        : false,
   };
+}
+
+function patchGamePlayers(
+  players: GamePlayer[] | undefined,
+  playerId: string,
+  updates: Partial<Player>
+): GamePlayer[] {
+  if (!Array.isArray(players)) return [];
+  const normalized = normalizeId(playerId);
+
+  return players.map((player) =>
+    player.id === normalized
+      ? {
+          ...player,
+          name: normalizeName(updates?.name ?? player.name) || player.name,
+          initials: normalizeStringOrUndefined(updates?.initials ?? player.initials),
+          color: normalizeStringOrUndefined(updates?.color ?? player.color),
+          assignedCardArtIndex:
+            updates?.assignedCardArtIndex === null
+              ? null
+              : typeof updates?.assignedCardArtIndex === 'number' &&
+                  Number.isFinite(updates.assignedCardArtIndex)
+                ? updates.assignedCardArtIndex
+                : player.assignedCardArtIndex ?? null,
+        }
+      : player
+  );
 }
 
 type StartActiveGameInput = {
@@ -305,11 +359,14 @@ type Store = {
 
   setPlayers: (players: Player[]) => void;
   addPlayer: (player: Player) => void;
+  updatePlayer: (playerId: string, updates: Partial<Player>) => void;
   removePlayer: (playerId: string) => void;
+  deletePlayer: (playerId: string) => void;
 
   setGroups: (groups: Group[]) => void;
   addGroup: (group: Group) => void;
   removeGroup: (groupId: string) => void;
+  deleteGroup: (groupId: string) => void;
   selectGroup: (groupId: string | null) => void;
 
   setGames: (games: Game[]) => void;
@@ -327,6 +384,7 @@ type Store = {
   patchActiveGame: (patch: Partial<ActiveGame>) => void;
   clearActiveGame: () => void;
 
+  assignPlayerCard: (playerId: string, artIndex: number | null) => void;
   resetStore: () => void;
 };
 
@@ -350,6 +408,59 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({
       players: [...state.players, player],
     })),
+
+  updatePlayer: (playerId, updates) =>
+    set((state) => {
+      const normalized = normalizeId(playerId);
+      if (!normalized) return {};
+
+      const normalizedUpdates: Partial<Player> = {
+        ...updates,
+        name: normalizeName(updates?.name),
+        color: normalizeStringOrUndefined(updates?.color),
+        initials: normalizeStringOrUndefined(updates?.initials),
+        assignedCardArtIndex:
+          updates?.assignedCardArtIndex === null
+            ? null
+            : typeof updates?.assignedCardArtIndex === 'number' &&
+                Number.isFinite(updates.assignedCardArtIndex)
+              ? updates.assignedCardArtIndex
+              : undefined,
+      };
+
+      return {
+        players: state.players.map((p) =>
+          p.id === normalized
+            ? {
+                ...p,
+                ...normalizedUpdates,
+                id: p.id,
+                name: normalizedUpdates.name || p.name,
+                color:
+                  normalizedUpdates.color !== undefined ? normalizedUpdates.color : p.color,
+                initials:
+                  normalizedUpdates.initials !== undefined
+                    ? normalizedUpdates.initials
+                    : p.initials,
+                assignedCardArtIndex:
+                  normalizedUpdates.assignedCardArtIndex !== undefined
+                    ? normalizedUpdates.assignedCardArtIndex
+                    : p.assignedCardArtIndex ?? null,
+              }
+            : p
+        ),
+        activeGame: state.activeGame
+          ? {
+              ...state.activeGame,
+              players: patchGamePlayers(
+                state.activeGame.players,
+                normalized,
+                normalizedUpdates
+              ),
+            }
+          : state.activeGame,
+      };
+    }),
 
   removePlayer: (playerId) =>
     set((state) => {
@@ -408,7 +519,8 @@ export const useStore = create<Store>((set, get) => ({
         })
         .filter(Boolean) as Game[];
 
-      const activeContainsPlayer = state.activeGame?.players?.some((p) => p.id === normalized) ?? false;
+      const activeContainsPlayer =
+        state.activeGame?.players?.some((p) => p.id === normalized) ?? false;
 
       const nextActiveGame = activeContainsPlayer
         ? null
@@ -443,6 +555,8 @@ export const useStore = create<Store>((set, get) => ({
       };
     }),
 
+  deletePlayer: (playerId) => get().removePlayer(playerId),
+
   setGroups: (groups) =>
     set({
       groups: Array.isArray(groups) ? groups : [],
@@ -462,6 +576,8 @@ export const useStore = create<Store>((set, get) => ({
           ? { ...state.activeGame, groupId: undefined, groupName: undefined }
           : state.activeGame,
     })),
+
+  deleteGroup: (groupId) => get().removeGroup(groupId),
 
   selectGroup: (groupId) =>
     set({
@@ -508,20 +624,110 @@ export const useStore = create<Store>((set, get) => ({
     }),
 
   mergeImportedGames: (incoming) => {
-    const normalizedIncoming = (incoming ?? [])
+    const existing = Array.isArray(get().games) ? get().games : [];
+
+    const incomingGames = (incoming ?? [])
       .map(normalizeImportedGame)
       .filter((g) => g.players.length > 0);
 
     const byId = new Map<string, Game>();
-    for (const game of get().games) {
+
+    const mergeTotals = (a: any, b: any) => {
+      const result: any = { ...a };
+
+      for (const [playerId, t] of Object.entries(b || {}) as [string, any][]) {
+        const existingTotals = result[playerId] || {};
+
+        result[playerId] = {
+          ...existingTotals,
+          ...t,
+          score: Number((t as any).score) || Number(existingTotals.score) || 0,
+          totalPrestige:
+            Number((t as any).totalPrestige ?? (t as any).prestige) ||
+            Number(existingTotals.totalPrestige ?? existingTotals.prestige) ||
+            0,
+          prestige:
+            Number((t as any).prestige ?? (t as any).totalPrestige) ||
+            Number(existingTotals.prestige ?? existingTotals.totalPrestige) ||
+            0,
+          directPrestige:
+            Number((t as any).directPrestige) || Number(existingTotals.directPrestige) || 0,
+          assistPrestigeReceived:
+            Number((t as any).assistPrestigeReceived) ||
+            Number(existingTotals.assistPrestigeReceived) ||
+            0,
+          assistPrestigeSent:
+            Number((t as any).assistPrestigeSent) ||
+            Number(existingTotals.assistPrestigeSent) ||
+            0,
+          objectivePrestige:
+            Number((t as any).objectivePrestige) ||
+            Number(existingTotals.objectivePrestige) ||
+            0,
+          assists: Number((t as any).assists) || Number(existingTotals.assists) || 0,
+          contracts: Number((t as any).contracts) || Number(existingTotals.contracts) || 0,
+          failures: Number((t as any).failures) || Number(existingTotals.failures) || 0,
+          performance:
+            Number((t as any).performance) || Number(existingTotals.performance) || 0,
+          efficiency:
+            Number((t as any).efficiency) || Number(existingTotals.efficiency) || 0,
+          assistedEfficiency:
+            Number((t as any).assistedEfficiency) ||
+            Number(existingTotals.assistedEfficiency) ||
+            0,
+          assistPrestigeBySource: {
+            ...(existingTotals.assistPrestigeBySource || {}),
+            ...(((t as any).assistPrestigeBySource || {}) as Record<string, number>),
+          },
+        };
+      }
+
+      return result;
+    };
+
+    const mergeGame = (a: Game, b: Game): Game => ({
+      ...a,
+      ...b,
+      totals: mergeTotals(a.totals, b.totals),
+      rounds: b.rounds && b.rounds.length > 0 ? b.rounds : a.rounds,
+      timeline:
+        b.timeline && b.timeline.length > 0
+          ? b.timeline
+          : b.rounds && b.rounds.length > 0
+            ? b.rounds
+            : a.timeline ?? a.rounds,
+      winnerId: b.winnerId ?? a.winnerId,
+      selectedWinnerId:
+        b.selectedWinnerId ??
+        b.winnerId ??
+        a.selectedWinnerId ??
+        a.winnerId,
+      manualWinnerId: b.manualWinnerId ?? a.manualWinnerId,
+      roundCount:
+        (typeof b.roundCount === 'number' ? b.roundCount : 0) ||
+        (b.rounds?.length || b.timeline?.length || 0) ||
+        (typeof a.roundCount === 'number' ? a.roundCount : 0) ||
+        (a.rounds?.length || a.timeline?.length || 0),
+      createdAt: b.createdAt ?? a.createdAt ?? Date.now(),
+    });
+
+    for (const game of existing) {
       byId.set(game.id, normalizeImportedGame(game));
     }
-    for (const game of normalizedIncoming) {
-      byId.set(game.id, game);
+
+    for (const game of incomingGames) {
+      const current = byId.get(game.id);
+      if (!current) {
+        byId.set(game.id, game);
+      } else {
+        byId.set(game.id, mergeGame(current, game));
+      }
     }
 
     set({
-      games: Array.from(byId.values()).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+      games: Array.from(byId.values()).sort(
+        (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
+      ),
     });
   },
 
@@ -593,6 +799,11 @@ export const useStore = create<Store>((set, get) => ({
             name: normalizeName(player?.name) || 'Player',
             initials: normalizeStringOrUndefined(player?.initials),
             color: normalizeStringOrUndefined(player?.color),
+            assignedCardArtIndex:
+              typeof player?.assignedCardArtIndex === 'number' &&
+              Number.isFinite(player.assignedCardArtIndex)
+                ? player.assignedCardArtIndex
+                : null,
             startOrder:
               typeof player?.startOrder === 'number' && Number.isFinite(player.startOrder)
                 ? player.startOrder
@@ -634,6 +845,26 @@ export const useStore = create<Store>((set, get) => ({
   clearActiveGame: () =>
     set({
       activeGame: null,
+    }),
+
+  assignPlayerCard: (playerId, artIndex) =>
+    set((state) => {
+      const normalized = normalizeId(playerId);
+      if (!normalized) return {};
+
+      return {
+        players: state.players.map((p) =>
+          p.id === normalized ? { ...p, assignedCardArtIndex: artIndex } : p
+        ),
+        activeGame: state.activeGame
+          ? {
+              ...state.activeGame,
+              players: patchGamePlayers(state.activeGame.players, normalized, {
+                assignedCardArtIndex: artIndex,
+              }),
+            }
+          : state.activeGame,
+      };
     }),
 
   resetStore: () =>

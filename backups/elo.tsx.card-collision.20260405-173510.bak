@@ -1,0 +1,828 @@
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useStore } from "@/store/useStore";
+import {
+  getAvailableMetricTabs,
+  getDefaultMetricTab,
+  useMetricScreenData,
+} from "@/utils/elo/metricHooks";
+import { computeMetric, type EloMetricTab, type MetricContext } from "@/utils/elo/metricRegistry";
+
+const COLORS = {
+  bg: "#081120",
+  card: "rgba(12,18,38,0.92)",
+  cardAlt: "rgba(16,24,48,0.95)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  muted: "#64748B",
+  accent: "#A855F7",
+  accentSoft: "rgba(168,85,247,0.18)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  green: "#22C55E",
+  greenSoft: "rgba(34,197,94,0.16)",
+  amber: "#F59E0B",
+  amberSoft: "rgba(245,158,11,0.16)",
+  border: "rgba(255,255,255,0.08)",
+  whiteSoft: "rgba(255,255,255,0.06)",
+};
+
+type StorePlayer = {
+  id: string;
+  name?: string;
+  color?: string;
+};
+
+type LeaderboardRow = {
+  rank: number;
+  playerId: string;
+  name: string;
+  currentElo: number;
+  peakElo: number;
+  confidence: number;
+  isSelected: boolean;
+};
+
+const TABS = getAvailableMetricTabs();
+
+function toneStyles(tone?: "default" | "accent" | "blue" | "green" | "amber") {
+  switch (tone) {
+    case "accent":
+      return { bg: COLORS.accentSoft, value: COLORS.accent };
+    case "blue":
+      return { bg: COLORS.blueSoft, value: COLORS.blue };
+    case "green":
+      return { bg: COLORS.greenSoft, value: COLORS.green };
+    case "amber":
+      return { bg: COLORS.amberSoft, value: COLORS.amber };
+    default:
+      return { bg: COLORS.whiteSoft, value: COLORS.text };
+  }
+}
+
+function toNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function formatMetricValue(value: string | number | undefined): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return `${Math.round(value)}`;
+  return "0";
+}
+
+function formatPercentFromDecimal(value: number): string {
+  return `${Math.round(toNumber(value) * 100)}%`;
+}
+
+function buildAllRowsForPlayer(games: any[], playerId: string): any[] {
+  const rows: any[] = [];
+
+  for (const game of games || []) {
+    const players = Array.isArray(game?.players) ? game.players : [];
+    const totals = game?.totals ?? {};
+
+    const isInGame = players.some((p: any) => String(p?.id) === String(playerId));
+    if (!isInGame) continue;
+
+    const playerTotals = totals?.[playerId];
+    if (!playerTotals) continue;
+
+    const opponentIds = players
+      .map((p: any) => String(p?.id))
+      .filter((id: string) => id !== String(playerId));
+
+    const opponentElos = opponentIds.map((id: string) =>
+      toNumber(totals?.[id]?.elo ?? totals?.[id]?.rating ?? 1200)
+    );
+
+    const opponentAvgElo =
+      opponentElos.length > 0
+        ? opponentElos.reduce((sum: number, value: number) => sum + value, 0) / opponentElos.length
+        : 1200;
+
+    const preGameElo = toNumber(playerTotals?.elo ?? playerTotals?.rating ?? 1200);
+
+    const winnerId =
+      game?.winnerId ??
+      game?.selectedWinnerId ??
+      game?.manualWinnerId ??
+      null;
+
+    const win = String(winnerId) === String(playerId) ? 1 : 0;
+
+    const eloDelta =
+      typeof playerTotals?.eloDelta === "number"
+        ? playerTotals.eloDelta
+        : win
+        ? 12
+        : -12;
+
+    rows.push({
+      gameId: game?.id ?? game?.gameId ?? "",
+      playerId: String(playerId),
+      opponentIds,
+      preGameElo,
+      postGameElo: preGameElo + eloDelta,
+      opponentAvgElo,
+      eloDelta,
+      win,
+    });
+  }
+
+  return rows;
+}
+
+export default function EloScreen() {
+  const games = useStore((s: any) => s.games || []);
+  const players = useStore((s: any) => s.players || []);
+
+  const sortedPlayers = useMemo<StorePlayer[]>(() => {
+    return [...players].sort((a: StorePlayer, b: StorePlayer) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+    );
+  }, [players]);
+
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<EloMetricTab>(getDefaultMetricTab());
+
+  useEffect(() => {
+    if (!selectedPlayerId && sortedPlayers.length) {
+      setSelectedPlayerId(String(sortedPlayers[0].id));
+    }
+  }, [selectedPlayerId, sortedPlayers]);
+
+  useEffect(() => {
+    if (selectedOpponentId === selectedPlayerId) {
+      setSelectedOpponentId(null);
+    }
+  }, [selectedOpponentId, selectedPlayerId]);
+
+  const selectedPlayer = useMemo(
+    () => sortedPlayers.find((p) => String(p.id) === String(selectedPlayerId)) || null,
+    [sortedPlayers, selectedPlayerId]
+  );
+
+  const opponentOptions = useMemo(
+    () => sortedPlayers.filter((p) => String(p.id) !== String(selectedPlayerId)),
+    [sortedPlayers, selectedPlayerId]
+  );
+
+  const context: MetricContext = useMemo(
+    () => ({
+      selectedOpponentId: selectedOpponentId || null,
+    }),
+    [selectedOpponentId]
+  );
+
+  const {
+    topCards,
+    activeSection,
+    activeInsight,
+    hasData,
+  } = useMetricScreenData({
+    games,
+    players,
+    playerId: selectedPlayerId,
+    activeTab,
+    tabs: TABS,
+    context,
+  });
+
+  const leaderboardRows = useMemo<LeaderboardRow[]>(() => {
+    const rows = sortedPlayers.map((player) => {
+      const playerRows = buildAllRowsForPlayer(games, String(player.id));
+
+      const currentElo = computeMetric("elo_current", playerRows);
+      const peakElo = computeMetric("elo_peak", playerRows);
+      const confidence = computeMetric("elo_confidence", playerRows);
+
+      return {
+        rank: 0,
+        playerId: String(player.id),
+        name: player.name || "Unknown",
+        currentElo,
+        peakElo,
+        confidence,
+        isSelected: String(player.id) === String(selectedPlayerId),
+      };
+    });
+
+    return rows
+      .sort((a, b) => {
+        if (b.currentElo !== a.currentElo) return b.currentElo - a.currentElo;
+        if (b.peakElo !== a.peakElo) return b.peakElo - a.peakElo;
+        return a.name.localeCompare(b.name);
+      })
+      .map((row, index) => ({
+        ...row,
+        rank: index + 1,
+      }));
+  }, [games, sortedPlayers, selectedPlayerId]);
+
+  const featuredCard = topCards[0];
+  const secondaryCards = topCards.slice(1, 3);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerCard}>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.kicker}>Moonrakers</Text>
+            <Text style={styles.title}>ELO</Text>
+            <Text style={styles.subtitle}>
+              5-tab ladder, form, skill, context, and projection breakdown.
+            </Text>
+          </View>
+
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>LIVE</Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Player</Text>
+            <Text style={styles.sectionSub}>Select focus player</Text>
+          </View>
+
+          <View style={styles.underlineSelectorRow}>
+            {sortedPlayers.map((player) => {
+              const active = String(player.id) === String(selectedPlayerId);
+              return (
+                <TouchableOpacity
+                  key={player.id}
+                  style={styles.underlineTabButton}
+                  onPress={() => setSelectedPlayerId(String(player.id))}
+                  activeOpacity={0.9}
+                >
+                  <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
+                    {player.name || "Unknown"}
+                  </Text>
+                  <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {activeTab === "Context" ? (
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Opponent</Text>
+              <Text style={styles.sectionSub}>Optional head-to-head filter</Text>
+            </View>
+
+            <View style={styles.underlineSelectorRow}>
+              <TouchableOpacity
+                style={styles.underlineTabButton}
+                onPress={() => setSelectedOpponentId(null)}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.underlineTabText, !selectedOpponentId && styles.underlineTabTextActive]}>
+                  None
+                </Text>
+                <View style={[styles.underlineTabLine, !selectedOpponentId && styles.underlineTabLineActive]} />
+              </TouchableOpacity>
+
+              {opponentOptions.map((player) => {
+                const active = String(player.id) === String(selectedOpponentId);
+                return (
+                  <TouchableOpacity
+                    key={player.id}
+                    style={styles.underlineTabButton}
+                    onPress={() => setSelectedOpponentId(String(player.id))}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
+                      {player.name || "Unknown"}
+                    </Text>
+                    <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.tabGrid}>
+          <View style={styles.tabGridRowTwo}>
+            {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
+              const active = tab === activeTab;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
+                  onPress={() => setActiveTab(tab)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={[styles.underlineMainTabText, active && styles.underlineMainTabTextActive]}>
+                    {tab}
+                  </Text>
+                  <View style={[styles.underlineMainTabLine, active && styles.underlineMainTabLineActive]} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.tabGridRowThree}>
+            {(["Skills", "Context", "Projection"] as EloMetricTab[]).map((tab) => {
+              const active = tab === activeTab;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.underlineMainTab, styles.underlineMainTabThreeCol]}
+                  onPress={() => setActiveTab(tab)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={[styles.underlineMainTabText, active && styles.underlineMainTabTextActive]}>
+                    {tab}
+                  </Text>
+                  <View style={[styles.underlineMainTabLine, active && styles.underlineMainTabLineActive]} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Top 3 Winning Signals</Text>
+            <Text style={styles.sectionSub}>
+              {selectedPlayer?.name || "No player selected"}
+            </Text>
+          </View>
+
+          {!hasData ? (
+            <Text style={styles.emptyText}>No ELO rows available for this player yet.</Text>
+          ) : (
+            <View style={styles.featuredSignalsWrap}>
+              {featuredCard ? (
+                <View
+                  style={[
+                    styles.featuredSignalCard,
+                    { backgroundColor: toneStyles(featuredCard.tone).bg },
+                  ]}
+                >
+                  <Text style={styles.featuredSignalLabel} numberOfLines={1}>
+                    {featuredCard.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.featuredSignalValue,
+                      { color: toneStyles(featuredCard.tone).value },
+                    ]}
+                  >
+                    {featuredCard.value}
+                  </Text>
+                  {featuredCard.sub ? (
+                    <Text style={styles.featuredSignalSub} numberOfLines={2}>
+                      {featuredCard.sub}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <View style={styles.secondarySignalColumn}>
+                {secondaryCards.map((card) => {
+                  const tone = toneStyles(card.tone);
+                  return (
+                    <View
+                      key={card.key}
+                      style={[styles.secondarySignalCard, { backgroundColor: tone.bg }]}
+                    >
+                      <Text style={styles.metricLabelCompact} numberOfLines={1}>
+                        {card.label}
+                      </Text>
+                      <Text style={[styles.metricValueCompact, { color: tone.value }]}>
+                        {card.value}
+                      </Text>
+                      {card.sub ? (
+                        <Text style={styles.metricSubCompact} numberOfLines={1}>
+                          {card.sub}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.insightCardCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>{activeInsight.title}</Text>
+            <Text style={styles.insightChip}>{activeTab.toUpperCase()}</Text>
+          </View>
+          <Text style={styles.insightText}>{activeInsight.body}</Text>
+        </View>
+
+        {activeTab === "Leaderboard" ? (
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Leaderboard</Text>
+              <Text style={styles.sectionSub}>All players ranked by current ELO</Text>
+            </View>
+
+            <View style={styles.leaderboardList}>
+              {leaderboardRows.map((row) => (
+                <TouchableOpacity
+                  key={row.playerId}
+                  style={[styles.leaderboardRow, row.isSelected && styles.leaderboardRowSelected]}
+                  onPress={() => setSelectedPlayerId(row.playerId)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.leaderboardLeft}>
+                    <View style={[styles.rankBadge, row.isSelected && styles.rankBadgeSelected]}>
+                      <Text style={[styles.rankText, row.isSelected && styles.rankTextSelected]}>
+                        {row.rank}
+                      </Text>
+                    </View>
+
+                    <View>
+                      <Text style={styles.leaderboardName}>{row.name}</Text>
+                      <Text style={styles.leaderboardMeta}>
+                        Peak {Math.round(row.peakElo)} • Conf {formatPercentFromDecimal(row.confidence)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.leaderboardRight}>
+                    <Text style={styles.leaderboardElo}>{Math.round(row.currentElo)}</Text>
+                    <Text style={styles.leaderboardMeta}>Current ELO</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>{activeSection.title}</Text>
+            <Text style={styles.sectionSub}>Active tab metrics</Text>
+          </View>
+
+          {!hasData ? (
+            <Text style={styles.emptyText}>No metric data available yet.</Text>
+          ) : (
+            <View style={styles.metricGridDense}>
+              {activeSection.cards.slice(0, 6).map((card) => {
+                const tone = toneStyles(card.tone);
+                return (
+                  <View
+                    key={card.key}
+                    style={[styles.metricCardDense, { backgroundColor: tone.bg }]}
+                  >
+                    <Text style={styles.metricLabelCompact} numberOfLines={2}>
+                      {card.label}
+                    </Text>
+                    <Text style={[styles.metricValueCompact, { color: tone.value }]}>
+                      {formatMetricValue(card.value)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
+  scroll: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 8,
+    paddingBottom: 12,
+  },
+
+  headerCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 6,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  headerTextWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  kicker: {
+    color: COLORS.blue,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginBottom: 4,
+  },
+  title: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 24,
+  },
+  subtitle: {
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 6,
+  },
+  headerBadge: {
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  headerBadgeText: {
+    color: COLORS.accent,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  sectionCompact: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 6,
+  },
+  insightCardCompact: {
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  sectionSub: {
+    color: COLORS.sub,
+    fontSize: 10,
+    textAlign: "right",
+    flexShrink: 1,
+  },
+  emptyText: {
+    color: COLORS.sub,
+    fontSize: 11,
+  },
+
+  underlineSelectorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 12,
+    rowGap: 8,
+    alignItems: "flex-end",
+  },
+  underlineTabButton: {
+    paddingBottom: 2,
+  },
+  underlineTabText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  underlineTabTextActive: {
+    color: COLORS.accent,
+  },
+  underlineTabLine: {
+    marginTop: 4,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  underlineTabLineActive: {
+    backgroundColor: COLORS.accent,
+  },
+
+  tabGrid: {
+    marginBottom: 6,
+    gap: 8,
+  },
+  tabGridRowTwo: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  tabGridRowThree: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  underlineMainTab: {
+    paddingBottom: 4,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  underlineMainTabTwoCol: {
+    flex: 1,
+  },
+  underlineMainTabThreeCol: {
+    flex: 1,
+  },
+  underlineMainTabText: {
+    color: COLORS.sub,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  underlineMainTabTextActive: {
+    color: COLORS.accent,
+  },
+  underlineMainTabLine: {
+    marginTop: 5,
+    height: 3,
+    width: "100%",
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  underlineMainTabLineActive: {
+    backgroundColor: COLORS.accent,
+  },
+
+  featuredSignalsWrap: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  featuredSignalCard: {
+    width: "52%",
+    minHeight: 150,
+    borderRadius: 14,
+    padding: 10,
+    justifyContent: "space-between",
+  },
+  featuredSignalLabel: {
+    color: COLORS.sub,
+    fontSize: 12,
+    lineHeight: 14,
+    marginBottom: 6,
+  },
+  featuredSignalValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    lineHeight: 30,
+    marginBottom: 6,
+  },
+  featuredSignalSub: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  secondarySignalColumn: {
+    width: "46%",
+    justifyContent: "space-between",
+    gap: 4,
+  },
+  secondarySignalCard: {
+    borderRadius: 12,
+    padding: 10,
+    minHeight: 72,
+  },
+
+  leaderboardList: {
+    gap: 4,
+  },
+  leaderboardRow: {
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  leaderboardRowSelected: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.accentSoft,
+  },
+  leaderboardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    paddingRight: 10,
+  },
+  leaderboardRight: {
+    alignItems: "flex-end",
+  },
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.cardAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankBadgeSelected: {
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  rankText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  rankTextSelected: {
+    color: COLORS.accent,
+  },
+  leaderboardName: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 1,
+  },
+  leaderboardElo: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 22,
+  },
+  leaderboardMeta: {
+    color: COLORS.sub,
+    fontSize: 10,
+  },
+
+  metricGridDense: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  metricCardDense: {
+    width: "32%",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  metricLabelCompact: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 12,
+    marginBottom: 4,
+  },
+  metricValueCompact: {
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 16,
+  },
+  metricSubCompact: {
+    color: COLORS.muted,
+    fontSize: 10,
+    marginTop: 4,
+    lineHeight: 12,
+  },
+
+  insightChip: {
+    color: COLORS.amber,
+    backgroundColor: COLORS.amberSoft,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  insightText: {
+    color: COLORS.text,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+});
+
+
+
+

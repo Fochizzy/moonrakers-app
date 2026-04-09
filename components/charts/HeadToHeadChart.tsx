@@ -1,875 +1,560 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import Text from "@/components/ui/Text";
 
-import Text from '@/components/ui/Text';
-import ChartShell from './ChartShell';
-import ChartLegend from './ChartLegend';
-import { chartColors, withAlpha } from '@/utils/chartTheme';
+type Player = { id: string; name?: string; color?: string };
 
-type Player = { id: string; name: string; color?: string };
-
-type Totals = {
-  prestige?: number;
-  totalPrestige?: number;
-  directPrestige?: number;
-  assistPrestigeReceived?: number;
-  objectivePrestige?: number;
-  assistPrestigeGiven?: number;
-  score?: number;
-  assists?: number;
-  assistsGiven?: number;
-  failures?: number;
-  contracts?: number;
+type SnapshotPoint = {
+  round?: number;
+  gameIndex?: number;
+  label?: string;
+  snapshot?: Record<string, Record<string, number>>;
 };
 
-type Game = {
-  id?: string | number;
-  createdAt?: number;
+type GameLike = {
+  id?: string;
+  players?: Player[];
+  totals?: Record<string, Record<string, number>>;
   winnerId?: string;
   selectedWinnerId?: string;
   manualWinnerId?: string;
-  players?: Array<{ id: string; name?: string }>;
-  totals?: Record<string, Totals>;
 };
 
-type MatchupRow = {
-  key: string;
+type Props = {
+  data?: SnapshotPoint[];
+  games?: GameLike[];
+  players?: Player[];
+  scopedPlayerIds?: string[];
+  playerId?: string | null;
+  compareId?: string | null;
+  title?: string;
+  subtitle?: string;
+};
+
+type MatchupSummary = {
   playerAId: string;
   playerBId: string;
   playerAName: string;
   playerBName: string;
   playerAColor: string;
   playerBColor: string;
+  games: number;
   aWins: number;
   bWins: number;
-  total: number;
+  ties: number;
   aWinRate: number;
   bWinRate: number;
   avgPrestigeMargin: number;
   avgScoreMargin: number;
-  recent5AWins: number;
-  recent5BWins: number;
-  aAssistReceivedPerGame: number;
-  bAssistReceivedPerGame: number;
-  aAssistGivenPerGame: number;
-  bAssistGivenPerGame: number;
-  edgeLabel: string;
-  momentumLabel: string;
+  recentFive: string;
   verdict: string;
 };
 
-type Props = {
-  players?: Player[];
-  games?: Game[];
-  maxItems?: number;
-  title?: string;
+const COLORS = {
+  card: "rgba(12,18,38,0.92)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  green: "#22C55E",
+  greenSoft: "rgba(34,197,94,0.16)",
+  border: "rgba(255,255,255,0.08)",
+  whiteSoft: "rgba(255,255,255,0.06)",
 };
 
-type SortMode = 'best_rivalries' | 'most_played' | 'closest' | 'biggest_edge';
-type SelectorSlot = 'A' | 'B';
-
 function n(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function safeRatio(numerator: number, denominator: number): number {
-  return denominator > 0 ? numerator / denominator : 0;
+function getColor(color?: string, index = 0) {
+  if (typeof color === "string" && color.trim()) return color.trim();
+  const fallback = ["#A855F7", "#3B82F6", "#22C55E", "#3B82F6"];
+  return fallback[index % fallback.length];
 }
 
-function getWinnerId(game?: Game): string | null {
-  return game?.manualWinnerId ?? game?.selectedWinnerId ?? game?.winnerId ?? null;
-}
-
-function getPlayerColor(color?: string): string {
-  return typeof color === 'string' && color.trim() ? color : chartColors.purple;
-}
-
-function getTotalPrestige(totals?: Totals | null): number {
+function totalPrestige(row?: Record<string, number>) {
   return (
-    n(totals?.totalPrestige) ||
-    n(totals?.prestige) ||
-    (n(totals?.directPrestige) +
-      n(totals?.assistPrestigeReceived) +
-      n(totals?.objectivePrestige))
+    n(row?.totalPrestige) ||
+    n(row?.prestige) ||
+    n(row?.directPrestige) + n(row?.assistPrestigeReceived) + n(row?.objectivePrestige)
   );
 }
 
-function getScore(totals?: Totals | null): number {
-  return n(totals?.score);
+function totalScore(row?: Record<string, number>) {
+  return n(row?.score) || totalPrestige(row);
 }
 
-function getAssistReceived(totals?: Totals | null): number {
-  return n(totals?.assistPrestigeReceived);
-}
-
-function getAssistGiven(totals?: Totals | null): number {
-  return (
-    n(totals?.assistPrestigeGiven) ||
-    n(totals?.assistsGiven) ||
-    n(totals?.assists)
-  );
-}
-
-function formatPct(value: number): string {
+function pct(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-function formatSigned(value: number): string {
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
+function signed(value: number) {
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
 }
 
-function getEdgeLabel(aWinRate: number): string {
-  const diff = Math.abs(aWinRate - 0.5);
-  if (diff < 0.05) return 'Dead heat';
-  if (diff < 0.1) return 'Narrow edge';
-  if (diff < 0.18) return 'Clear edge';
-  return 'Dominant matchup';
-}
-
-function getMomentumLabel(recent5AWins: number, recent5BWins: number): string {
-  if (recent5AWins === recent5BWins) return 'Even lately';
-  if (Math.abs(recent5AWins - recent5BWins) === 1) return 'Slight recent edge';
-  return recent5AWins > recent5BWins ? 'A surging' : 'B surging';
-}
-
-function buildVerdict(row: MatchupRow): string {
-  const longRunLeader = row.aWinRate >= 0.5 ? row.playerAName : row.playerBName;
-  if (Math.abs(row.aWinRate - 0.5) < 0.08) {
-    return `${row.playerAName} and ${row.playerBName} are effectively even over the larger sample.`;
+function buildVerdict(aName: string, bName: string, aRate: number, margin: number) {
+  if (Math.abs(aRate - 0.5) < 0.08) {
+    return `${aName} and ${bName} are effectively even over the current sample.`;
   }
-  return `${longRunLeader} has the stronger long-run edge, with prestige margin ${formatSigned(
-    row.avgPrestigeMargin,
-  )} and score margin ${formatSigned(row.avgScoreMargin)}.`;
+  const leader = aRate >= 0.5 ? aName : bName;
+  return `${leader} has the stronger long-run edge, with prestige margin ${signed(margin)}.`;
 }
 
-function buildRows(players: Player[], games: Game[]): MatchupRow[] {
-  const rows: MatchupRow[] = [];
-
-  for (let i = 0; i < players.length; i += 1) {
-    for (let j = i + 1; j < players.length; j += 1) {
-      const a = players[i];
-      const b = players[j];
-      let aWins = 0;
-      let bWins = 0;
-      let prestigeMargin = 0;
-      let scoreMargin = 0;
-      let aRecv = 0;
-      let bRecv = 0;
-      let aGiven = 0;
-      let bGiven = 0;
-      const chronology: Array<{ aWon: boolean; bWon: boolean }> = [];
-
-      for (const game of games) {
-        const ids = new Set((game.players ?? []).map((entry) => entry.id));
-        if (ids.size && (!ids.has(a.id) || !ids.has(b.id))) continue;
-
-        const aTotals = game.totals?.[a.id];
-        const bTotals = game.totals?.[b.id];
-        if (!aTotals || !bTotals) continue;
-
-        const winnerId = getWinnerId(game);
-        const aWon = winnerId === a.id;
-        const bWon = winnerId === b.id;
-        if (aWon) aWins += 1;
-        if (bWon) bWins += 1;
-
-        prestigeMargin += getTotalPrestige(aTotals) - getTotalPrestige(bTotals);
-        scoreMargin += getScore(aTotals) - getScore(bTotals);
-        aRecv += getAssistReceived(aTotals);
-        bRecv += getAssistReceived(bTotals);
-        aGiven += getAssistGiven(aTotals);
-        bGiven += getAssistGiven(bTotals);
-        chronology.push({ aWon, bWon });
-      }
-
-      const total = aWins + bWins;
-      if (!total) continue;
-
-      const recent5 = chronology.slice(-5);
-      const recent5AWins = recent5.filter((row) => row.aWon).length;
-      const recent5BWins = recent5.filter((row) => row.bWon).length;
-      const aWinRate = safeRatio(aWins, total);
-
-      const row: MatchupRow = {
-        key: `${a.id}-${b.id}`,
-        playerAId: a.id,
-        playerBId: b.id,
-        playerAName: a.name,
-        playerBName: b.name,
-        playerAColor: getPlayerColor(a.color),
-        playerBColor: getPlayerColor(b.color),
-        aWins,
-        bWins,
-        total,
-        aWinRate,
-        bWinRate: safeRatio(bWins, total),
-        avgPrestigeMargin: safeRatio(prestigeMargin, total),
-        avgScoreMargin: safeRatio(scoreMargin, total),
-        recent5AWins,
-        recent5BWins,
-        aAssistReceivedPerGame: safeRatio(aRecv, total),
-        bAssistReceivedPerGame: safeRatio(bRecv, total),
-        aAssistGivenPerGame: safeRatio(aGiven, total),
-        bAssistGivenPerGame: safeRatio(bGiven, total),
-        edgeLabel: getEdgeLabel(aWinRate),
-        momentumLabel: getMomentumLabel(recent5AWins, recent5BWins),
-        verdict: '',
+function gamesToSnapshots(games: GameLike[] = []): SnapshotPoint[] {
+  return games.map((game, index) => {
+    const snapshot: Record<string, Record<string, number>> = {};
+    Object.entries(game?.totals ?? {}).forEach(([playerId, totals]) => {
+      snapshot[String(playerId)] = {
+        score: n(totals?.score),
+        totalPrestige: totalPrestige(totals),
+        prestige: n(totals?.prestige) || totalPrestige(totals),
+        directPrestige: n(totals?.directPrestige),
+        assistPrestigeReceived: n(totals?.assistPrestigeReceived),
+        objectivePrestige: n(totals?.objectivePrestige),
       };
+    });
 
-      row.verdict = buildVerdict(row);
-      rows.push(row);
+    return {
+      round: index + 1,
+      gameIndex: index + 1,
+      label: `Game ${index + 1}`,
+      snapshot,
+    };
+  });
+}
+
+function buildSummary(
+  players: Player[],
+  data: SnapshotPoint[],
+  aId?: string | null,
+  bId?: string | null
+): MatchupSummary | null {
+  if (players.length < 2) return null;
+
+  const playerA = players.find((p) => String(p.id) === String(aId)) ?? players[0];
+  const playerB =
+    players.find(
+      (p) => String(p.id) === String(bId) && String(p.id) !== String(playerA.id)
+    ) ?? players.find((p) => String(p.id) !== String(playerA.id));
+
+  if (!playerA || !playerB) return null;
+
+  let games = 0;
+  let aWins = 0;
+  let bWins = 0;
+  let ties = 0;
+  let prestigeMargin = 0;
+  let scoreMargin = 0;
+  const history: string[] = [];
+
+  for (const point of data || []) {
+    const a = point?.snapshot?.[playerA.id];
+    const b = point?.snapshot?.[playerB.id];
+    if (!a || !b) continue;
+
+    games += 1;
+
+    const aPrestige = totalPrestige(a);
+    const bPrestige = totalPrestige(b);
+    const aScore = totalScore(a);
+    const bScore = totalScore(b);
+
+    prestigeMargin += aPrestige - bPrestige;
+    scoreMargin += aScore - bScore;
+
+    if (aPrestige > bPrestige) {
+      aWins += 1;
+      history.push("A");
+    } else if (bPrestige > aPrestige) {
+      bWins += 1;
+      history.push("B");
+    } else {
+      ties += 1;
+      history.push("T");
     }
   }
 
-  return rows;
+  if (!games) return null;
+
+  const aWinRate = aWins / games;
+  const bWinRate = bWins / games;
+
+  return {
+    playerAId: playerA.id,
+    playerBId: playerB.id,
+    playerAName: playerA.name || "Player A",
+    playerBName: playerB.name || "Player B",
+    playerAColor: getColor(playerA.color, 0),
+    playerBColor: getColor(playerB.color, 1),
+    games,
+    aWins,
+    bWins,
+    ties,
+    aWinRate,
+    bWinRate,
+    avgPrestigeMargin: prestigeMargin / games,
+    avgScoreMargin: scoreMargin / games,
+    recentFive: history.slice(-5).join(" "),
+    verdict: buildVerdict(
+      playerA.name || "Player A",
+      playerB.name || "Player B",
+      aWinRate,
+      prestigeMargin / games
+    ),
+  };
 }
 
-function sortRows(rows: MatchupRow[], sortMode: SortMode, maxItems: number): MatchupRow[] {
-  const copy = [...rows];
+export default function HeadToHeadChart({
+  data = [],
+  games = [],
+  players = [],
+  scopedPlayerIds,
+  playerId = null,
+  compareId = null,
+  title = "Head-to-Head",
+  subtitle = "Direct two-player matchup across unified snapshots.",
+}: Props) {
+  const visiblePlayers = useMemo(() => {
+    if (!scopedPlayerIds?.length) return players;
+    const allowed = new Set(scopedPlayerIds.map(String));
+    return players.filter((player) => allowed.has(String(player.id)));
+  }, [players, scopedPlayerIds]);
 
-  switch (sortMode) {
-    case 'most_played':
-      copy.sort((a, b) => b.total - a.total);
-      break;
-    case 'closest':
-      copy.sort(
-        (a, b) =>
-          Math.abs(a.aWinRate - 0.5) - Math.abs(b.aWinRate - 0.5) ||
-          b.total - a.total,
+  const effectiveData = useMemo(
+    () => (data?.length ? data : gamesToSnapshots(games)),
+    [data, games]
+  );
+
+  const [selectedA, setSelectedA] = useState<string | null>(playerId);
+  const [selectedB, setSelectedB] = useState<string | null>(compareId);
+
+  useEffect(() => {
+    if (!selectedA && visiblePlayers.length) {
+      setSelectedA(String(visiblePlayers[0].id));
+    }
+
+    if ((!selectedB || selectedB === selectedA) && visiblePlayers.length > 1) {
+      const fallback = visiblePlayers.find(
+        (p) => String(p.id) !== String(selectedA ?? visiblePlayers[0].id)
       );
-      break;
-    case 'biggest_edge':
-      copy.sort(
-        (a, b) =>
-          Math.abs(b.aWinRate - 0.5) - Math.abs(a.aWinRate - 0.5) ||
-          b.total - a.total,
-      );
-      break;
-    case 'best_rivalries':
-    default:
-      copy.sort(
-        (a, b) =>
-          b.total -
-          Math.abs(b.aWinRate - 0.5) * 10 -
-          (a.total - Math.abs(a.aWinRate - 0.5) * 10),
-      );
-      break;
+      setSelectedB(fallback ? String(fallback.id) : null);
+    }
+  }, [visiblePlayers, selectedA, selectedB]);
+
+  useEffect(() => {
+    if (playerId) setSelectedA(playerId);
+  }, [playerId]);
+
+  useEffect(() => {
+    if (compareId) setSelectedB(compareId);
+  }, [compareId]);
+
+  const summary = useMemo(
+    () => buildSummary(visiblePlayers, effectiveData, selectedA, selectedB),
+    [visiblePlayers, effectiveData, selectedA, selectedB]
+  );
+
+  if (!summary) {
+    return (
+      <View style={styles.sectionCompact}>
+        <Text style={styles.emptyTitle}>No head-to-head data yet</Text>
+        <Text style={styles.emptyText}>
+          Pick two players with shared saved or imported game history to render this matchup.
+        </Text>
+      </View>
+    );
   }
 
-  return copy.slice(0, maxItems);
-}
-
-function findRowForPlayers(
-  rows: MatchupRow[],
-  playerAId: string | null,
-  playerBId: string | null,
-): MatchupRow | null {
-  if (!playerAId || !playerBId) return null;
   return (
-    rows.find(
-      (row) =>
-        (row.playerAId === playerAId && row.playerBId === playerBId) ||
-        (row.playerAId === playerBId && row.playerBId === playerAId),
-    ) ?? null
-  );
-}
+    <View style={styles.container}>
+      <View style={styles.sectionCompact}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          <Text style={styles.sectionSub}>{summary.games} games</Text>
+        </View>
 
-function normalizeSelectedIds(
-  players: Player[],
-  nextA: string | null,
-  nextB: string | null,
-): { nextA: string | null; nextB: string | null } {
-  const ids = new Set(players.map((player) => player.id));
-  const safeA = nextA && ids.has(nextA) ? nextA : players[0]?.id ?? null;
-  const fallbackB =
-    players.find((player) => player.id !== safeA)?.id ?? null;
-  const safeB =
-    nextB && ids.has(nextB) && nextB !== safeA ? nextB : fallbackB;
+        <Text style={styles.subtitle}>{subtitle}</Text>
 
-  return { nextA: safeA, nextB: safeB };
-}
-
-function SelectorChips({
-  label,
-  slot,
-  players,
-  selectedId,
-  otherSelectedId,
-  onSelect,
-}: {
-  label: string;
-  slot: SelectorSlot;
-  players: Player[];
-  selectedId: string | null;
-  otherSelectedId: string | null;
-  onSelect: (slot: SelectorSlot, playerId: string) => void;
-}) {
-  return (
-    <View style={styles.selectorBlock}>
-      <Text style={styles.selectorLabel}>
-        {label}:{' '}
-        <Text style={styles.selectorValue}>
-          {players.find((player) => player.id === selectedId)?.name ?? 'Choose player'}
-        </Text>
-      </Text>
-
-      <View style={styles.selectorList}>
-        {players.map((player) => {
-          const selected = player.id === selectedId;
-          const disabled = player.id === otherSelectedId;
-          const color = getPlayerColor(player.color);
-
-          return (
-            <Pressable
-              key={`${slot}-${player.id}`}
-              onPress={() => !disabled && onSelect(slot, player.id)}
-              disabled={disabled}
-              style={[
-                styles.playerPill,
-                selected && {
-                  borderColor: withAlpha(color, 0.8),
-                  backgroundColor: withAlpha(color, 0.18),
-                },
-                disabled && styles.playerPillDisabled,
-              ]}
-            >
-              <View
+        <View style={styles.selectorBlock}>
+          <Text style={styles.selectorLabel}>Player A</Text>
+          <View style={styles.selectorList}>
+            {visiblePlayers.map((player, index) => (
+              <TouchableOpacity
+                key={`a-${player.id}`}
                 style={[
-                  styles.playerDot,
-                  { backgroundColor: disabled ? withAlpha(color, 0.35) : color },
+                  styles.playerChip,
+                  String(player.id) === String(selectedA) && {
+                    borderColor: getColor(player.color, index),
+                    backgroundColor: `${getColor(player.color, index)}22`,
+                  },
                 ]}
-              />
-              <Text
-                style={[
-                  styles.playerPillText,
-                  selected && styles.playerPillTextSelected,
-                  disabled && styles.playerPillTextDisabled,
-                ]}
+                onPress={() =>
+                  String(player.id) !== String(selectedB) && setSelectedA(String(player.id))
+                }
+                activeOpacity={0.9}
               >
-                {player.name}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <View
+                  style={[styles.playerDot, { backgroundColor: getColor(player.color, index) }]}
+                />
+                <Text style={styles.playerChipText}>{player.name || "Unknown"}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.selectorBlock}>
+          <Text style={styles.selectorLabel}>Player B</Text>
+          <View style={styles.selectorList}>
+            {visiblePlayers.map((player, index) => (
+              <TouchableOpacity
+                key={`b-${player.id}`}
+                style={[
+                  styles.playerChip,
+                  String(player.id) === String(selectedB) && {
+                    borderColor: getColor(player.color, index),
+                    backgroundColor: `${getColor(player.color, index)}22`,
+                  },
+                ]}
+                onPress={() =>
+                  String(player.id) !== String(selectedA) && setSelectedB(String(player.id))
+                }
+                activeOpacity={0.9}
+              >
+                <View
+                  style={[styles.playerDot, { backgroundColor: getColor(player.color, index) }]}
+                />
+                <Text style={styles.playerChipText}>{player.name || "Unknown"}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.sectionCompact}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>
+            {summary.playerAName} vs {summary.playerBName}
+          </Text>
+          <Text style={styles.sectionSub}>
+            {pct(summary.aWinRate)} / {pct(summary.bWinRate)}
+          </Text>
+        </View>
+
+        <View style={styles.metricGridDense}>
+          <View style={[styles.metricCardDense, { backgroundColor: COLORS.blueSoft }]}>
+            <Text style={styles.metricLabelCompact}>{summary.playerAName}</Text>
+            <Text style={[styles.metricValueCompact, { color: COLORS.blue }]}>
+              {summary.aWins}
+            </Text>
+          </View>
+
+          <View style={styles.metricCardDense}>
+            <Text style={styles.metricLabelCompact}>Games</Text>
+            <Text style={styles.metricValueCompact}>{summary.games}</Text>
+          </View>
+
+          <View style={[styles.metricCardDense, { backgroundColor: COLORS.greenSoft }]}>
+            <Text style={styles.metricLabelCompact}>{summary.playerBName}</Text>
+            <Text style={[styles.metricValueCompact, { color: COLORS.green }]}>
+              {summary.bWins}
+            </Text>
+          </View>
+
+          <View style={styles.metricCardDense}>
+            <Text style={styles.metricLabelCompact}>Prestige Δ</Text>
+            <Text style={styles.metricValueCompact}>{signed(summary.avgPrestigeMargin)}</Text>
+          </View>
+
+          <View style={styles.metricCardDense}>
+            <Text style={styles.metricLabelCompact}>Score Δ</Text>
+            <Text style={styles.metricValueCompact}>{signed(summary.avgScoreMargin)}</Text>
+          </View>
+
+          <View style={styles.metricCardDense}>
+            <Text style={styles.metricLabelCompact}>Recent 5</Text>
+            <Text style={styles.metricValueCompact}>{summary.recentFive || "—"}</Text>
+          </View>
+        </View>
+
+        <View style={styles.barWrap}>
+          <View style={styles.barTrack}>
+            <View
+              style={[
+                styles.barLeft,
+                { width: `${summary.aWinRate * 50}%`, backgroundColor: summary.playerAColor },
+              ]}
+            />
+            <View
+              style={[
+                styles.barRight,
+                { width: `${summary.bWinRate * 50}%`, backgroundColor: summary.playerBColor },
+              ]}
+            />
+            <View style={styles.barCenter} />
+          </View>
+
+          <View style={styles.barLabels}>
+            <Text style={styles.barLabel}>{summary.aWins} wins</Text>
+            <Text style={styles.barLabel}>{summary.ties} ties</Text>
+            <Text style={styles.barLabel}>{summary.bWins} wins</Text>
+          </View>
+        </View>
+
+        <Text style={styles.verdict}>{summary.verdict}</Text>
       </View>
     </View>
   );
 }
 
-export default function HeadToHeadChart({
-  players = [],
-  games = [],
-  maxItems = 12,
-  title = 'Head-to-Head Battles',
-}: Props) {
-  const [sortMode, setSortMode] = useState<SortMode>('best_rivalries');
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [selectedPlayerAId, setSelectedPlayerAId] = useState<string | null>(null);
-  const [selectedPlayerBId, setSelectedPlayerBId] = useState<string | null>(null);
-
-  const allRows = useMemo(() => buildRows(players, games), [players, games]);
-  const rows = useMemo(
-    () => sortRows(allRows, sortMode, maxItems),
-    [allRows, sortMode, maxItems],
-  );
-
-  useEffect(() => {
-    const normalized = normalizeSelectedIds(players, selectedPlayerAId, selectedPlayerBId);
-    if (
-      normalized.nextA !== selectedPlayerAId ||
-      normalized.nextB !== selectedPlayerBId
-    ) {
-      setSelectedPlayerAId(normalized.nextA);
-      setSelectedPlayerBId(normalized.nextB);
-    }
-  }, [players, selectedPlayerAId, selectedPlayerBId]);
-
-  const explicitMatchup = useMemo(
-    () => findRowForPlayers(allRows, selectedPlayerAId, selectedPlayerBId),
-    [allRows, selectedPlayerAId, selectedPlayerBId],
-  );
-
-  useEffect(() => {
-    if (explicitMatchup) {
-      setSelectedKey(explicitMatchup.key);
-      return;
-    }
-
-    if (!rows.length) {
-      setSelectedKey(null);
-      setExpandedKey(null);
-      return;
-    }
-
-    if (!rows.some((row) => row.key === selectedKey)) {
-      setSelectedKey(rows[0].key);
-    }
-  }, [rows, selectedKey, explicitMatchup]);
-
-  const selected =
-    explicitMatchup ??
-    rows.find((row) => row.key === selectedKey) ??
-    rows[0] ??
-    null;
-
-  useEffect(() => {
-    if (!selected) return;
-    setSelectedPlayerAId(selected.playerAId);
-    setSelectedPlayerBId(selected.playerBId);
-  }, [selected?.key]);
-
-  const accent = selected?.playerAColor ?? chartColors.purple;
-  const legend = selected
-    ? [
-        {
-          key: selected.playerAId,
-          label: selected.playerAName,
-          color: selected.playerAColor,
-          value: formatPct(selected.aWinRate),
-        },
-        {
-          key: selected.playerBId,
-          label: selected.playerBName,
-          color: selected.playerBColor,
-          value: formatPct(selected.bWinRate),
-        },
-      ]
-    : [];
-
-  const filteredRows = explicitMatchup ? [explicitMatchup] : rows;
-  const noDirectMatchup =
-    !!selectedPlayerAId && !!selectedPlayerBId && !explicitMatchup;
-
-  const handleSelectPlayer = (slot: SelectorSlot, playerId: string) => {
-    if (slot === 'A') {
-      if (playerId === selectedPlayerBId) return;
-      setSelectedPlayerAId(playerId);
-      return;
-    }
-
-    if (playerId === selectedPlayerAId) return;
-    setSelectedPlayerBId(playerId);
-  };
-
-  if (!allRows.length) {
-    return (
-      <ChartShell
-        title={title}
-        subtitle="Pick two players and compare their shared games."
-        explanation="Each card only counts games where both selected players appeared."
-        meaning="Use this chart to separate close rivalries from one-sided counters."
-      >
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Not enough shared matchups yet.</Text>
-        </View>
-      </ChartShell>
-    );
-  }
-
-  return (
-    <ChartShell
-      title={title}
-      subtitle="Pick the exact two players you want to compare."
-      playerColor={accent}
-      badge={selected ? `${selected.total} games` : undefined}
-      topStats={
-        selected
-          ? [
-              { label: selected.playerAName, value: formatPct(selected.aWinRate) },
-              { label: selected.playerBName, value: formatPct(selected.bWinRate) },
-              { label: 'Recent 5', value: `${selected.recent5AWins}-${selected.recent5BWins}` },
-              { label: 'Prestige Δ', value: formatSigned(selected.avgPrestigeMargin) },
-            ]
-          : undefined
-      }
-      explanation="Use Player A and Player B below to lock the chart to one exact matchup."
-      meaning="When a matchup exists, the battle bar shows win share and the cards explain the edge."
-      legend={<ChartLegend items={legend} />}
-    >
-      <View style={styles.selectorCard}>
-        <Text style={styles.selectorTitle}>Compare these two players</Text>
-        <SelectorChips
-          label="Player A"
-          slot="A"
-          players={players}
-          selectedId={selectedPlayerAId}
-          otherSelectedId={selectedPlayerBId}
-          onSelect={handleSelectPlayer}
-        />
-        <SelectorChips
-          label="Player B"
-          slot="B"
-          players={players}
-          selectedId={selectedPlayerBId}
-          otherSelectedId={selectedPlayerAId}
-          onSelect={handleSelectPlayer}
-        />
-      </View>
-
-      {!explicitMatchup ? (
-        <View style={styles.sortRow}>
-          {([
-            ['best_rivalries', 'Best Rivalries'],
-            ['most_played', 'Most Played'],
-            ['closest', 'Closest'],
-            ['biggest_edge', 'Biggest Edge'],
-          ] as Array<[SortMode, string]>).map(([key, label]) => {
-            const active = key === sortMode;
-            return (
-              <Pressable
-                key={key}
-                onPress={() => setSortMode(key)}
-                style={[styles.sortPill, active && styles.sortPillActive]}
-              >
-                <Text style={[styles.sortPillText, active && styles.sortPillTextActive]}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {noDirectMatchup ? (
-        <View style={styles.noticeCard}>
-          <Text style={styles.noticeTitle}>No shared matchup found</Text>
-          <Text style={styles.noticeText}>
-            These two players do not have any games together in the current data, so the list below falls back to the best available rivalries.
-          </Text>
-        </View>
-      ) : null}
-
-      {selected ? (
-        <View style={styles.stickySummary}>
-          <Text style={styles.summaryTitle}>
-            {selected.playerAName} vs {selected.playerBName}
-          </Text>
-          <Text style={styles.summaryText}>{selected.verdict}</Text>
-          <View style={styles.barWrap}>
-            <View style={styles.barTrack}>
-              <View
-                style={[
-                  styles.barLeft,
-                  {
-                    width: `${selected.aWinRate * 50}%`,
-                    backgroundColor: selected.playerAColor,
-                  },
-                ]}
-              />
-              <View
-                style={[
-                  styles.barRight,
-                  {
-                    width: `${selected.bWinRate * 50}%`,
-                    backgroundColor: selected.playerBColor,
-                  },
-                ]}
-              />
-              <View style={styles.barCenter} />
-            </View>
-            <View style={styles.barLabels}>
-              <Text style={styles.barLabel}>{selected.aWins} wins</Text>
-              <Text style={styles.barLabel}>split</Text>
-              <Text style={styles.barLabel}>{selected.bWins} wins</Text>
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      <ScrollView contentContainerStyle={styles.cards}>
-        {filteredRows.map((row) => {
-          const isSelected = row.key === selected?.key;
-          const expanded = expandedKey === row.key;
-
-          return (
-            <Pressable
-              key={row.key}
-              onPress={() => setSelectedKey(row.key)}
-              style={[
-                styles.card,
-                isSelected && {
-                  borderColor: withAlpha(row.playerAColor, 0.6),
-                  backgroundColor: withAlpha(row.playerAColor, 0.08),
-                },
-              ]}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>
-                  {row.playerAName} vs {row.playerBName}
-                </Text>
-                <Text style={styles.cardMeta}>{row.total} games</Text>
-              </View>
-
-              <View style={styles.chips}>
-                <View style={styles.chip}>
-                  <Text style={styles.chipText}>{row.edgeLabel}</Text>
-                </View>
-                <View style={styles.chip}>
-                  <Text style={styles.chipText}>{row.momentumLabel}</Text>
-                </View>
-                <View style={styles.chip}>
-                  <Text style={styles.chipText}>
-                    Recent 5 {row.recent5AWins}-{row.recent5BWins}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.rowStats}>
-                <Text style={styles.statText}>
-                  Prestige Δ {formatSigned(row.avgPrestigeMargin)}
-                </Text>
-                <Text style={styles.statText}>
-                  Score Δ {formatSigned(row.avgScoreMargin)}
-                </Text>
-              </View>
-
-              <View style={styles.rowStats}>
-                <Text style={styles.statText}>
-                  {row.playerAName} {formatPct(row.aWinRate)}
-                </Text>
-                <Pressable
-                  onPress={() => setExpandedKey(expanded ? null : row.key)}
-                  style={styles.drawerToggle}
-                >
-                  <Text style={styles.drawerToggleText}>
-                    {expanded ? 'Hide details' : 'Show details'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {expanded ? (
-                <View style={styles.drawer}>
-                  <Text style={styles.drawerVerdict}>{row.verdict}</Text>
-                  <View style={styles.drawerGrid}>
-                    <View style={styles.drawerStat}>
-                      <Text style={styles.drawerStatLabel}>A recv / game</Text>
-                      <Text style={styles.drawerStatValue}>
-                        {row.aAssistReceivedPerGame.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={styles.drawerStat}>
-                      <Text style={styles.drawerStatLabel}>B recv / game</Text>
-                      <Text style={styles.drawerStatValue}>
-                        {row.bAssistReceivedPerGame.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={styles.drawerStat}>
-                      <Text style={styles.drawerStatLabel}>A given / game</Text>
-                      <Text style={styles.drawerStatValue}>
-                        {row.aAssistGivenPerGame.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={styles.drawerStat}>
-                      <Text style={styles.drawerStatLabel}>B given / game</Text>
-                      <Text style={styles.drawerStatValue}>
-                        {row.bAssistGivenPerGame.toFixed(2)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </ChartShell>
-  );
-}
-
 const styles = StyleSheet.create({
-  selectorCard: {
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    marginBottom: 12,
-    gap: 12,
-  },
-  selectorTitle: {
-    color: chartColors.text,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  selectorBlock: {
-    gap: 8,
-  },
-  selectorLabel: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  selectorValue: {
-    color: chartColors.text,
-  },
-  selectorList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  playerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    backgroundColor: withAlpha(chartColors.text, 0.04),
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  playerPillDisabled: {
-    opacity: 0.5,
-  },
-  playerDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 999,
-  },
-  playerPillText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  playerPillTextSelected: {
-    color: chartColors.text,
-  },
-  playerPillTextDisabled: {
-    color: withAlpha(chartColors.subtext, 0.75),
-  },
-  noticeCard: {
+  container: { gap: 6 },
+  sectionCompact: {
+    backgroundColor: COLORS.card,
     borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: withAlpha(chartColors.text, 0.04),
+    padding: 8,
     borderWidth: 1,
-    borderColor: withAlpha(chartColors.text, 0.1),
-    gap: 6,
+    borderColor: COLORS.border,
+    marginBottom: 6,
   },
-  noticeTitle: {
-    color: chartColors.text,
-    fontSize: 13,
-    fontWeight: '900',
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 6,
   },
-  noticeText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    lineHeight: 18,
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+    flexShrink: 1,
   },
-  sortRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  sortPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    backgroundColor: chartColors.panelBg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  sectionSub: {
+    color: COLORS.sub,
+    fontSize: 10,
+    textAlign: "right",
+    flexShrink: 1,
   },
-  sortPillActive: {
-    borderColor: chartColors.purple,
-    backgroundColor: withAlpha(chartColors.purple, 0.18),
-  },
-  sortPillText: { color: chartColors.subtext, fontSize: 12, fontWeight: '800' },
-  sortPillTextActive: { color: chartColors.text },
-  stickySummary: {
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    marginBottom: 12,
-    gap: 10,
-  },
-  summaryTitle: { color: chartColors.text, fontSize: 16, fontWeight: '900' },
-  summaryText: { color: chartColors.subtext, fontSize: 12, lineHeight: 18 },
-  barWrap: { gap: 8 },
-  barTrack: {
-    height: 16,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: withAlpha(chartColors.text, 0.06),
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  barLeft: { alignSelf: 'stretch' },
-  barRight: { alignSelf: 'stretch' },
-  barCenter: {
-    position: 'absolute',
-    left: '50%',
-    width: 2,
-    top: 0,
-    bottom: 0,
-    backgroundColor: withAlpha(chartColors.text, 0.35),
-  },
-  barLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  barLabel: { color: chartColors.subtext, fontSize: 11, fontWeight: '700' },
-  cards: { gap: 12 },
-  card: {
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    gap: 10,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-  cardTitle: { color: chartColors.text, fontSize: 15, fontWeight: '900', flex: 1 },
-  cardMeta: { color: chartColors.subtext, fontSize: 11, fontWeight: '700' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: withAlpha(chartColors.text, 0.05),
-    borderWidth: 1,
-    borderColor: withAlpha(chartColors.text, 0.08),
-  },
-  chipText: { color: chartColors.subtext, fontSize: 11, fontWeight: '800' },
-  rowStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    alignItems: 'center',
-  },
-  statText: { color: chartColors.text, fontSize: 12, fontWeight: '700' },
-  drawerToggle: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: withAlpha(chartColors.purple, 0.15),
-    borderWidth: 1,
-    borderColor: withAlpha(chartColors.purple, 0.35),
-  },
-  drawerToggleText: { color: chartColors.text, fontSize: 11, fontWeight: '800' },
-  drawer: {
-    borderTopWidth: 1,
-    borderTopColor: withAlpha(chartColors.text, 0.08),
-    paddingTop: 10,
-    gap: 10,
-  },
-  drawerVerdict: { color: chartColors.subtext, fontSize: 12, lineHeight: 18 },
-  drawerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  drawerStat: {
-    minWidth: 120,
-    flexGrow: 1,
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: withAlpha(chartColors.text, 0.04),
-  },
-  drawerStatLabel: {
-    color: chartColors.subtext,
+  subtitle: {
+    color: COLORS.sub,
     fontSize: 11,
-    fontWeight: '700',
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  emptyTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "800",
     marginBottom: 4,
   },
-  drawerStatValue: { color: chartColors.text, fontSize: 14, fontWeight: '900' },
-  emptyCard: {
-    borderRadius: 16,
-    padding: 18,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
+  emptyText: {
+    color: COLORS.sub,
+    fontSize: 11,
   },
-  emptyText: { color: chartColors.subtext, fontSize: 13, fontWeight: '700' },
+  selectorBlock: {
+    gap: 6,
+    marginTop: 6,
+  },
+  selectorLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  selectorList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  playerChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  playerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  playerChipText: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  metricGridDense: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 6,
+  },
+  metricCardDense: {
+    minWidth: "30%",
+    flexGrow: 1,
+    borderRadius: 12,
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  metricLabelCompact: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  metricValueCompact: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  barWrap: {
+    marginTop: 10,
+    gap: 6,
+  },
+  barTrack: {
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: COLORS.whiteSoft,
+    overflow: "hidden",
+    position: "relative",
+    flexDirection: "row",
+  },
+  barLeft: {
+    height: "100%",
+  },
+  barRight: {
+    height: "100%",
+    marginLeft: "auto",
+  },
+  barCenter: {
+    position: "absolute",
+    left: "50%",
+    top: 0,
+    bottom: 0,
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: COLORS.border,
+  },
+  barLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  barLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  verdict: {
+    marginTop: 8,
+    color: COLORS.text,
+    fontSize: 11,
+    lineHeight: 16,
+  },
 });

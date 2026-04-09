@@ -6,16 +6,24 @@ export type Player = {
 
 export type Relationships = Record<string, Record<string, number>>;
 
+export type NetworkViewMode = "flow" | "network";
+export type EdgeFilterMode = 1 | 2 | 3 | 5 | 999;
+
 export type RelationshipGraphProps = Readonly<{
   players?: readonly Player[];
   relationships?: Relationships;
   maxItems?: number;
+  initialView?: NetworkViewMode;
+  initialTopEdgesPerNode?: EdgeFilterMode;
+  title?: string;
+  subtitle?: string;
 }>;
 
 export type NodeStats = {
   sent: number;
   received: number;
   involvement: number;
+  supportBalance: number;
 };
 
 export type GraphNode = Player &
@@ -24,6 +32,8 @@ export type GraphNode = Player &
     y: number;
     radius: number;
     colorValue: string;
+    dominanceColor: string;
+    dominanceLabel: string;
   };
 
 export type GraphEdge = {
@@ -39,6 +49,8 @@ export type GraphEdge = {
   toX: number;
   toY: number;
   strokeWidth: number;
+  opacity: number;
+  curveOffset: number;
 };
 
 export type GraphLayout = {

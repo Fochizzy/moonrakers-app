@@ -102,7 +102,7 @@ function TopPlayerCard({
       </View>
 
       <Text style={[styles.subtitle, { color: c?.text?.secondary ?? '#9FB0D3' }]}>
-        Highest-ranked commander by total prestige output
+        Highest-ranked commander by Prestige output
       </Text>
     </View>
   );
@@ -209,3 +209,5 @@ const styles = StyleSheet.create({
     maxWidth: 260,
   },
 });
+
+

@@ -1,540 +1,1111 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
+  SafeAreaView,
   ScrollView,
-} from 'react-native';
-import { useStore } from '@/store/useStore';
-import { calculateElo } from '@/utils/elo';
-import { buildPlayerAggregateMetrics } from '@/utils/chartAnalytics';
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useStore } from "@/store/useStore";
+import { calculateElo } from "@/utils/elo";
 
-type Player = {
+const COLORS = {
+  bg: "#081120",
+  card: "rgba(12,18,38,0.92)",
+  cardAlt: "rgba(16,24,48,0.95)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  muted: "#64748B",
+  accent: "#A855F7",
+  accentSoft: "rgba(168,85,247,0.18)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  green: "#22C55E",
+  greenSoft: "rgba(34,197,94,0.16)",
+  border: "rgba(255,255,255,0.08)",
+  whiteSoft: "rgba(255,255,255,0.06)",
+  danger: "#F87171",
+  dangerSoft: "rgba(248,113,113,0.14)",
+};
+
+type StorePlayer = {
   id: string;
   name?: string;
   color?: string;
 };
 
-type LeaderboardRow = {
-  id: string;
+type EloMetricTab =
+  | "Leaderboard"
+  | "Momentum"
+  | "Skills"
+  | "Context"
+  | "Projection";
+
+type SimpleEloRow = {
+  gameId: string;
+  createdAt: number;
+  playerId: string;
+  opponentIds: string[];
+  win: number;
+};
+
+type PlayerSummary = {
+  playerId: string;
   name: string;
-  color?: string;
-  rating: number;
-  rank: number;
+  currentElo: number;
+  peakElo: number;
+  confidence: number;
   gamesPlayed: number;
-  winRate: number;
-  efficiency: number;
-  earlyLeadRate: number;
-  avgObjectivePrestigePerGame: number;
-  avgAssistsGivenPerGame: number;
-  failureRate: number;
+  wins: number;
+  losses: number;
+  avgDelta: number;
+  bestDelta: number;
+  worstDelta: number;
+  recentForm: string;
 };
 
-type CorrelationRow = {
+type StatCard = {
+  key: string;
   label: string;
-  shortLabel: string;
-  value: number;
+  value: string;
+  sub?: string;
+  tone?: "default" | "accent" | "blue" | "green" | "danger";
 };
 
-const COLORS = {
-  bg: '#081120',
-  card: 'rgba(12,18,38,0.92)',
-  cardAlt: 'rgba(16,24,48,0.95)',
-  text: '#E2E8F0',
-  sub: '#94A3B8',
-  muted: '#64748B',
-  accent: '#A855F7',
-  accentSoft: 'rgba(168,85,247,0.18)',
-  blue: '#3B82F6',
-  blueSoft: 'rgba(59,130,246,0.18)',
-  green: '#22C55E',
-  greenSoft: 'rgba(34,197,94,0.16)',
-  red: '#EF4444',
-  redSoft: 'rgba(239,68,68,0.16)',
-  amber: '#F59E0B',
-  amberSoft: 'rgba(245,158,11,0.16)',
-  border: 'rgba(255,255,255,0.08)',
-  whiteSoft: 'rgba(255,255,255,0.06)',
-};
+const TABS: EloMetricTab[] = [
+  "Leaderboard",
+  "Momentum",
+  "Skills",
+  "Context",
+  "Projection",
+];
 
-function safeNum(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+const DEFAULT_ELO = 1000;
+
+function toneStyles(
+  tone?: "default" | "accent" | "blue" | "green" | "danger"
+) {
+  switch (tone) {
+    case "accent":
+      return { bg: COLORS.accentSoft, value: COLORS.accent };
+    case "blue":
+      return { bg: COLORS.blueSoft, value: COLORS.blue };
+    case "green":
+      return { bg: COLORS.greenSoft, value: COLORS.green };
+    case "danger":
+      return { bg: COLORS.dangerSoft, value: COLORS.danger };
+    default:
+      return { bg: COLORS.whiteSoft, value: COLORS.text };
+  }
 }
 
-function percent(value: number): string {
-  return `${(safeNum(value) * 100).toFixed(1)}%`;
+function toNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function decimal(value: number, digits = 2): string {
-  return safeNum(value).toFixed(digits);
+function normalizeId(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function correlation(xs: number[], ys: number[]): number {
-  if (xs.length !== ys.length || xs.length < 2) return 0;
+function formatMetricValue(value: string | number | undefined): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `${Math.round(value)}`;
+  }
+  return "0";
+}
 
-  const meanX = xs.reduce((sum, value) => sum + value, 0) / xs.length;
-  const meanY = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+function formatPercentFromDecimal(value: number): string {
+  return `${Math.round((Number.isFinite(value) ? value : 0) * 100)}%`;
+}
 
-  let numerator = 0;
-  let spreadX = 0;
-  let spreadY = 0;
+function formatSignedNumber(value: number): string {
+  const rounded = Math.round(Number.isFinite(value) ? value : 0);
+  if (rounded > 0) return `+${rounded}`;
+  return `${rounded}`;
+}
 
-  for (let i = 0; i < xs.length; i += 1) {
-    const dx = xs[i] - meanX;
-    const dy = ys[i] - meanY;
-    numerator += dx * dy;
-    spreadX += dx * dx;
-    spreadY += dy * dy;
+function getGameWinnerId(game: any): string | null {
+  const explicit = normalizeId(
+    game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId
+  );
+  if (explicit) return explicit;
+
+  const totals = game?.totals ?? {};
+  const players = Array.isArray(game?.players) ? game.players : [];
+
+  const ranked = players
+    .map((p: any) => {
+      const id = normalizeId(p?.id ?? p?.playerId);
+      const totalPrestige = toNumber(
+        totals?.[id]?.totalPrestige ?? totals?.[id]?.prestige
+      );
+      const score = toNumber(totals?.[id]?.score);
+      return { id, totalPrestige, score };
+    })
+    .filter((row: any) => row.id)
+    .sort((a: any, b: any) => {
+      if (b.totalPrestige !== a.totalPrestige) {
+        return b.totalPrestige - a.totalPrestige;
+      }
+      if (b.score !== a.score) return b.score - a.score;
+      return a.id.localeCompare(b.id);
+    });
+
+  return ranked[0]?.id ?? null;
+}
+
+function getChronologicalGames(games: any[]): any[] {
+  return [...(Array.isArray(games) ? games : [])].sort((a, b) => {
+    const createdDiff = toNumber(a?.createdAt) - toNumber(b?.createdAt);
+    if (createdDiff !== 0) return createdDiff;
+    return normalizeId(a?.id).localeCompare(normalizeId(b?.id));
+  });
+}
+
+function buildGameRowsByPlayer(
+  games: any[],
+  players: StorePlayer[]
+): Record<string, SimpleEloRow[]> {
+  const rowsByPlayer: Record<string, SimpleEloRow[]> = {};
+  const validPlayerIds = new Set(
+    players.map((player) => normalizeId(player.id)).filter(Boolean)
+  );
+
+  for (const player of players) {
+    const id = normalizeId(player.id);
+    rowsByPlayer[id] = [];
   }
 
-  const denominator = Math.sqrt(spreadX * spreadY);
-  if (!denominator) return 0;
+  for (const game of getChronologicalGames(games)) {
+    const participantIds = Array.from(
+      new Set(
+        (Array.isArray(game?.players) ? game.players : [])
+          .map((player: any) => normalizeId(player?.id ?? player?.playerId))
+          .filter((id: string) => Boolean(id) && validPlayerIds.has(id))
+      )
+    );
 
-  return numerator / denominator;
-}
+    if (participantIds.length < 2) continue;
 
-function correlationStrength(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 0.8) return 'Very Strong';
-  if (abs >= 0.6) return 'Strong';
-  if (abs >= 0.4) return 'Moderate';
-  if (abs >= 0.2) return 'Weak';
-  return 'Very Weak';
-}
+    const winnerId = getGameWinnerId(game);
+    if (!winnerId || !participantIds.includes(winnerId)) continue;
 
-function getCorrelationTone(value: number) {
-  if (value >= 0.2) {
-    return {
-      color: COLORS.green,
-      bg: COLORS.greenSoft,
-      arrow: '▲',
-    };
+    const gameId =
+      normalizeId(game?.id ?? game?.gameId) ||
+      `${toNumber(game?.createdAt)}-${winnerId}`;
+
+    for (const playerId of participantIds) {
+      if (!rowsByPlayer[playerId]) rowsByPlayer[playerId] = [];
+      rowsByPlayer[playerId].push({
+        gameId,
+        createdAt: toNumber(game?.createdAt),
+        playerId,
+        opponentIds: participantIds.filter((id) => id !== playerId),
+        win: playerId === winnerId ? 1 : 0,
+      });
+    }
   }
 
-  if (value <= -0.2) {
-    return {
-      color: COLORS.red,
-      bg: COLORS.redSoft,
-      arrow: '▼',
-    };
-  }
+  return rowsByPlayer;
+}
+
+function computeConfidence(rows: SimpleEloRow[]): number {
+  if (!rows.length) return 0;
+  return Math.min(1, rows.length / 12);
+}
+
+function buildContextRows(
+  rows: SimpleEloRow[],
+  selectedOpponentId: string | null
+): SimpleEloRow[] {
+  if (!selectedOpponentId) return rows;
+  return rows.filter((row) => row.opponentIds.includes(selectedOpponentId));
+}
+
+function buildSummary(
+  playerId: string,
+  players: StorePlayer[],
+  rowsByPlayer: Record<string, SimpleEloRow[]>,
+  eloMap: Record<string, number>
+): PlayerSummary {
+  const rows = rowsByPlayer[playerId] ?? [];
+  const name =
+    players.find((player) => normalizeId(player.id) === playerId)?.name ||
+    "Unknown";
+  const currentEloRaw = eloMap[playerId];
+  const currentElo =
+    typeof currentEloRaw === "number" && Number.isFinite(currentEloRaw)
+      ? currentEloRaw
+      : DEFAULT_ELO;
+
+  const wins = rows.filter((row) => row.win === 1).length;
+  const losses = rows.length - wins;
 
   return {
-    color: COLORS.sub,
-    bg: COLORS.whiteSoft,
-    arrow: '•',
+    playerId,
+    name,
+    currentElo,
+    peakElo: currentElo,
+    confidence: computeConfidence(rows),
+    gamesPlayed: rows.length,
+    wins,
+    losses,
+    avgDelta: 0,
+    bestDelta: 0,
+    worstDelta: 0,
+    recentForm: rows
+      .slice(-5)
+      .map((row) => (row.win ? "W" : "L"))
+      .join(""),
   };
 }
 
-function getPlaystyleLabel(row: LeaderboardRow | undefined): string {
-  if (!row) return 'Balanced';
-  if (row.avgAssistsGivenPerGame >= 1.5 && row.winRate >= 0.35) return 'Support Engine';
-  if (row.efficiency >= 2 && row.failureRate <= 0.25) return 'Closer';
-  if (row.earlyLeadRate >= 0.45) return 'Aggressor';
-  if (row.avgObjectivePrestigePerGame >= 1.5) return 'Objective Hunter';
-  return 'Balanced';
+function buildTopCards(
+  summary: PlayerSummary,
+  rows: SimpleEloRow[],
+  contextRows: SimpleEloRow[]
+): StatCard[] {
+  const winRate = rows.length ? summary.wins / rows.length : 0;
+  const contextWinRate = contextRows.length
+    ? contextRows.filter((row) => row.win === 1).length / contextRows.length
+    : 0;
+
+  return [
+    {
+      key: "current-elo",
+      label: "Current ELO",
+      value: `${Math.round(summary.currentElo)}`,
+      sub: `${summary.gamesPlayed} rated game${
+        summary.gamesPlayed === 1 ? "" : "s"
+      }`,
+      tone: "accent",
+    },
+    {
+      key: "peak-elo",
+      label: "Peak ELO",
+      value: `${Math.round(summary.peakElo)}`,
+      sub: "Matched to leaderboard source",
+      tone: "blue",
+    },
+    {
+      key: "win-rate",
+      label: "Win Rate",
+      value: formatPercentFromDecimal(winRate),
+      sub: contextRows.length
+        ? `H2H ${formatPercentFromDecimal(contextWinRate)}`
+        : "All rated games",
+      tone: "green",
+    },
+  ];
 }
 
-function getTopInsight(correlations: CorrelationRow[]): string {
-  if (!correlations.length) return 'No correlation data available yet.';
+function buildSectionCards(
+  activeTab: EloMetricTab,
+  summary: PlayerSummary,
+  rows: SimpleEloRow[],
+  contextRows: SimpleEloRow[],
+  opponentName: string | null
+): { title: string; cards: StatCard[] } {
+  const winRate = rows.length ? summary.wins / rows.length : 0;
+  const contextWins = contextRows.filter((row) => row.win === 1).length;
+  const contextWinRate = contextRows.length
+    ? contextWins / contextRows.length
+    : 0;
 
-  const strongest = [...correlations].sort(
-    (a, b) => Math.abs(b.value) - Math.abs(a.value)
-  )[0];
+  switch (activeTab) {
+    case "Momentum":
+      return {
+        title: "Momentum Snapshot",
+        cards: [
+          {
+            key: "recent-form",
+            label: "Recent Form",
+            value: summary.recentForm || "—",
+            tone: "accent",
+          },
+          {
+            key: "games",
+            label: "Rated Games",
+            value: `${summary.gamesPlayed}`,
+            tone: "default",
+          },
+          {
+            key: "wins",
+            label: "Wins",
+            value: `${summary.wins}`,
+            tone: "green",
+          },
+          {
+            key: "losses",
+            label: "Losses",
+            value: `${summary.losses}`,
+            tone: "danger",
+          },
+          {
+            key: "winrate",
+            label: "Win Rate",
+            value: formatPercentFromDecimal(winRate),
+            tone: winRate >= 0.5 ? "green" : "danger",
+          },
+          {
+            key: "confidence",
+            label: "Confidence",
+            value: formatPercentFromDecimal(summary.confidence),
+            tone: "blue",
+          },
+        ],
+      };
 
-  const direction =
-    strongest.value > 0.15
-      ? 'positively'
-      : strongest.value < -0.15
-        ? 'negatively'
-        : 'weakly';
+    case "Skills":
+      return {
+        title: "Rating Profile",
+        cards: [
+          {
+            key: "current",
+            label: "Current ELO",
+            value: `${Math.round(summary.currentElo)}`,
+            tone: "accent",
+          },
+          {
+            key: "peak",
+            label: "Peak ELO",
+            value: `${Math.round(summary.peakElo)}`,
+            tone: "blue",
+          },
+          {
+            key: "games",
+            label: "Rated Games",
+            value: `${summary.gamesPlayed}`,
+            tone: "default",
+          },
+          {
+            key: "record",
+            label: "Record",
+            value: `${summary.wins}-${summary.losses}`,
+            tone: summary.wins >= summary.losses ? "green" : "danger",
+          },
+          {
+            key: "confidence",
+            label: "Confidence",
+            value: formatPercentFromDecimal(summary.confidence),
+            tone: "blue",
+          },
+          {
+            key: "winrate",
+            label: "Win Rate",
+            value: formatPercentFromDecimal(winRate),
+            tone: winRate >= 0.5 ? "green" : "danger",
+          },
+        ],
+      };
 
-  return `${strongest.label} is currently the strongest signal in your meta and ${direction} tracks with winning.`;
+    case "Context":
+      return {
+        title: "Context Split",
+        cards: [
+          {
+            key: "sample",
+            label: opponentName ? `Games vs ${opponentName}` : "Filtered Games",
+            value: `${contextRows.length}`,
+            tone: "accent",
+          },
+          {
+            key: "context-winrate",
+            label: "Head-to-Head Win Rate",
+            value: formatPercentFromDecimal(contextWinRate),
+            tone: contextWinRate >= 0.5 ? "green" : "danger",
+          },
+          {
+            key: "context-wins",
+            label: "Filter Wins",
+            value: `${contextWins}`,
+            tone: "green",
+          },
+          {
+            key: "context-losses",
+            label: "Filter Losses",
+            value: `${Math.max(0, contextRows.length - contextWins)}`,
+            tone: "danger",
+          },
+          {
+            key: "context-current",
+            label: "Current ELO",
+            value: `${Math.round(summary.currentElo)}`,
+            tone: "blue",
+          },
+          {
+            key: "context-confidence",
+            label: "Confidence",
+            value: formatPercentFromDecimal(summary.confidence),
+            tone: "default",
+          },
+        ],
+      };
+
+    case "Projection":
+      return {
+        title: "Projection Window",
+        cards: [
+          {
+            key: "current-proj",
+            label: "Current ELO",
+            value: `${Math.round(summary.currentElo)}`,
+            tone: "accent",
+          },
+          {
+            key: "next-win",
+            label: "Next Win Range",
+            value: `${Math.round(summary.currentElo)}`,
+            tone: "green",
+          },
+          {
+            key: "next-loss",
+            label: "Next Loss Range",
+            value: `${Math.round(summary.currentElo)}`,
+            tone: "danger",
+          },
+          {
+            key: "record-proj",
+            label: "Record",
+            value: `${summary.wins}-${summary.losses}`,
+            tone: "default",
+          },
+          {
+            key: "confidence-proj",
+            label: "Confidence",
+            value: formatPercentFromDecimal(summary.confidence),
+            tone: "blue",
+          },
+          {
+            key: "games-proj",
+            label: "Rated Games",
+            value: `${summary.gamesPlayed}`,
+            tone: "default",
+          },
+        ],
+      };
+
+    case "Leaderboard":
+    default:
+      return {
+        title: "Leaderboard Metrics",
+        cards: [
+          {
+            key: "leader-current",
+            label: "Current ELO",
+            value: `${Math.round(summary.currentElo)}`,
+            tone: "accent",
+          },
+          {
+            key: "leader-peak",
+            label: "Peak ELO",
+            value: `${Math.round(summary.peakElo)}`,
+            tone: "blue",
+          },
+          {
+            key: "leader-games",
+            label: "Rated Games",
+            value: `${summary.gamesPlayed}`,
+            tone: "default",
+          },
+          {
+            key: "leader-record",
+            label: "Record",
+            value: `${summary.wins}-${summary.losses}`,
+            tone: summary.wins >= summary.losses ? "green" : "danger",
+          },
+          {
+            key: "leader-winrate",
+            label: "Win Rate",
+            value: formatPercentFromDecimal(winRate),
+            tone: winRate >= 0.5 ? "green" : "danger",
+          },
+          {
+            key: "leader-confidence",
+            label: "Confidence",
+            value: formatPercentFromDecimal(summary.confidence),
+            tone: "blue",
+          },
+        ],
+      };
+  }
 }
 
-function getSelectedPlayerInsight(player: LeaderboardRow | undefined): string {
-  if (!player) return 'Select a player to view a premium breakdown.';
-  if (player.winRate >= 0.6 && player.efficiency >= 2) {
-    return `${player.name} is converting strong output into wins at an elite rate.`;
+function buildInsight(
+  activeTab: EloMetricTab,
+  summary: PlayerSummary,
+  contextRows: SimpleEloRow[],
+  opponentName: string | null
+): { title: string; body: string } {
+  switch (activeTab) {
+    case "Momentum":
+      return {
+        title: "Momentum Insight",
+        body:
+          summary.gamesPlayed === 0
+            ? "No rated games yet. Finish a saved game to start real leaderboard-backed ELO tracking."
+            : `${summary.name} has played ${summary.gamesPlayed} rated game${
+                summary.gamesPlayed === 1 ? "" : "s"
+              } with recent form ${summary.recentForm || "—"}.`,
+      };
+
+    case "Skills":
+      return {
+        title: "Rating Insight",
+        body:
+          summary.gamesPlayed === 0
+            ? "This screen now uses the same ELO source as the leaderboard."
+            : `${summary.name} currently sits at ${Math.round(
+                summary.currentElo
+              )}. The headline ELO now matches leaderboard ordering exactly.`,
+      };
+
+    case "Context":
+      return {
+        title: "Context Insight",
+        body:
+          opponentName && contextRows.length
+            ? `${summary.name} has ${
+                contextRows.filter((row) => row.win === 1).length
+              } win${
+                contextRows.filter((row) => row.win === 1).length === 1
+                  ? ""
+                  : "s"
+              } in ${contextRows.length} rated game${
+                contextRows.length === 1 ? "" : "s"
+              } against ${opponentName}.`
+            : "Select an opponent to isolate head-to-head results from saved game history.",
+      };
+
+    case "Projection":
+      return {
+        title: "Projection Insight",
+        body:
+          summary.gamesPlayed === 0
+            ? "Projection is limited until saved games exist."
+            : `Current displayed ELO is now aligned to the leaderboard source. Projection cards are informational and no longer use the old separate ELO engine.`,
+      };
+
+    case "Leaderboard":
+    default:
+      return {
+        title: "Leaderboard Insight",
+        body:
+          summary.gamesPlayed === 0
+            ? "Leaderboard and ELO now share the same current-rating source."
+            : `${summary.name} is ranked using the same current ELO value as the leaderboard view.`,
+      };
   }
-  if (player.earlyLeadRate >= 0.45) {
-    return `${player.name} starts fast and often controls the pace early.`;
-  }
-  if (player.avgAssistsGivenPerGame >= 1.5) {
-    return `${player.name} creates value through support and table-wide impact.`;
-  }
-  if (player.failureRate <= 0.2 && player.gamesPlayed >= 5) {
-    return `${player.name} plays a low-error style with strong stability.`;
-  }
-  return `${player.name} profiles as a balanced player with room to separate through efficiency or conversion.`;
 }
 
 export default function EloScreen() {
   const games = useStore((s: any) => s.games || []);
   const players = useStore((s: any) => s.players || []);
 
-  const metrics = useMemo(() => buildPlayerAggregateMetrics(games, players), [games, players]);
+  const sortedPlayers = useMemo<StorePlayer[]>(() => {
+    return [...players].sort((a: StorePlayer, b: StorePlayer) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+    );
+  }, [players]);
 
-  const leaderboard = useMemo<LeaderboardRow[]>(() => {
-    const ratings = calculateElo(games);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(
+    null
+  );
+  const [activeTab, setActiveTab] =
+    useState<EloMetricTab>("Leaderboard");
 
-    return metrics
-      .map((metric: any) => ({
-        id: metric.playerId,
-        name: metric.name || 'Unknown',
-        color: metric.color,
-        rating: Math.round(ratings[metric.playerId] || 1000),
-        rank: 0,
-        gamesPlayed: safeNum(metric.gamesPlayed),
-        winRate: safeNum(metric.winRate),
-        efficiency: safeNum(metric.efficiency),
-        earlyLeadRate: safeNum(metric.earlyLeadRate),
-        avgObjectivePrestigePerGame: safeNum(metric.avgObjectivePrestigePerGame),
-        avgAssistsGivenPerGame: safeNum(metric.avgAssistsGivenPerGame),
-        failureRate: safeNum(metric.failureRate),
-      }))
+  useEffect(() => {
+    if (!selectedPlayerId && sortedPlayers.length) {
+      setSelectedPlayerId(normalizeId(sortedPlayers[0].id));
+    }
+  }, [selectedPlayerId, sortedPlayers]);
+
+  useEffect(() => {
+    if (selectedOpponentId === selectedPlayerId) {
+      setSelectedOpponentId(null);
+    }
+  }, [selectedOpponentId, selectedPlayerId]);
+
+  const eloMap = useMemo<Record<string, number>>(() => {
+    try {
+      const raw = calculateElo(games);
+      if (!raw || typeof raw !== "object") return {};
+      return raw as Record<string, number>;
+    } catch {
+      return {};
+    }
+  }, [games]);
+
+  const rowsByPlayer = useMemo(
+    () => buildGameRowsByPlayer(games, sortedPlayers),
+    [games, sortedPlayers]
+  );
+
+  const selectedPlayer = useMemo(
+    () =>
+      sortedPlayers.find(
+        (p) => normalizeId(p.id) === normalizeId(selectedPlayerId)
+      ) || null,
+    [sortedPlayers, selectedPlayerId]
+  );
+
+  const opponentOptions = useMemo(
+    () =>
+      sortedPlayers.filter(
+        (p) => normalizeId(p.id) !== normalizeId(selectedPlayerId)
+      ),
+    [sortedPlayers, selectedPlayerId]
+  );
+
+  const selectedRows = useMemo(
+    () => rowsByPlayer[normalizeId(selectedPlayerId)] ?? [],
+    [rowsByPlayer, selectedPlayerId]
+  );
+
+  const selectedContextRows = useMemo(
+    () => buildContextRows(selectedRows, selectedOpponentId),
+    [selectedRows, selectedOpponentId]
+  );
+
+  const selectedSummary = useMemo(
+    () =>
+      buildSummary(
+        normalizeId(selectedPlayerId),
+        sortedPlayers,
+        rowsByPlayer,
+        eloMap
+      ),
+    [selectedPlayerId, sortedPlayers, rowsByPlayer, eloMap]
+  );
+
+  const selectedOpponentName = useMemo(() => {
+    return (
+      sortedPlayers.find(
+        (player) =>
+          normalizeId(player.id) === normalizeId(selectedOpponentId)
+      )?.name || null
+    );
+  }, [sortedPlayers, selectedOpponentId]);
+
+  const topCards = useMemo(
+    () => buildTopCards(selectedSummary, selectedRows, selectedContextRows),
+    [selectedSummary, selectedRows, selectedContextRows]
+  );
+
+  const activeSection = useMemo(
+    () =>
+      buildSectionCards(
+        activeTab,
+        selectedSummary,
+        selectedRows,
+        selectedContextRows,
+        selectedOpponentName
+      ),
+    [
+      activeTab,
+      selectedSummary,
+      selectedRows,
+      selectedContextRows,
+      selectedOpponentName,
+    ]
+  );
+
+  const activeInsight = useMemo(
+    () =>
+      buildInsight(
+        activeTab,
+        selectedSummary,
+        selectedContextRows,
+        selectedOpponentName
+      ),
+    [activeTab, selectedSummary, selectedContextRows, selectedOpponentName]
+  );
+
+  const hasData = selectedRows.length > 0;
+
+  const leaderboardRows = useMemo(() => {
+    return sortedPlayers
+      .map((player) => {
+        const playerId = normalizeId(player.id);
+        const summary = buildSummary(playerId, sortedPlayers, rowsByPlayer, eloMap);
+        return {
+          rank: 0,
+          playerId,
+          name: player.name || "Unknown",
+          currentElo: summary.currentElo,
+          peakElo: summary.peakElo,
+          confidence: summary.confidence,
+          isSelected: playerId === normalizeId(selectedPlayerId),
+        };
+      })
       .sort((a, b) => {
-        if (b.rating !== a.rating) return b.rating - a.rating;
-        if (b.winRate !== a.winRate) return b.winRate - a.winRate;
-        return b.gamesPlayed - a.gamesPlayed;
+        if (b.currentElo !== a.currentElo) return b.currentElo - a.currentElo;
+        if (b.peakElo !== a.peakElo) return b.peakElo - a.peakElo;
+        return a.name.localeCompare(b.name);
       })
       .map((row, index) => ({
         ...row,
         rank: index + 1,
       }));
-  }, [games, metrics]);
+  }, [sortedPlayers, rowsByPlayer, eloMap, selectedPlayerId]);
 
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(
-    leaderboard[0]?.id ?? null
-  );
-
-  const selectedPlayer =
-    leaderboard.find((row) => row.id === selectedPlayerId) ?? leaderboard[0];
-
-  const globalCorrelations = useMemo<CorrelationRow[]>(() => {
-    const rows = leaderboard.filter((row) => row.gamesPlayed > 0);
-    const winRates = rows.map((row) => row.winRate);
-
-    return [
-      {
-        label: 'Turn Order vs Wins',
-        shortLabel: 'Turn Order',
-        value: correlation(
-          rows.map((row: any) => safeNum(metrics.find((m: any) => m.playerId === row.id)?.avgSeat)),
-          winRates
-        ),
-      },
-      {
-        label: 'Assists vs Wins',
-        shortLabel: 'Assists',
-        value: correlation(rows.map((row) => row.avgAssistsGivenPerGame), winRates),
-      },
-      {
-        label: 'Objectives vs Wins',
-        shortLabel: 'Objectives',
-        value: correlation(rows.map((row) => row.avgObjectivePrestigePerGame), winRates),
-      },
-      {
-        label: 'Efficiency vs Wins',
-        shortLabel: 'Efficiency',
-        value: correlation(rows.map((row) => row.efficiency), winRates),
-      },
-      {
-        label: 'Failure Rate vs Wins',
-        shortLabel: 'Failures',
-        value: correlation(rows.map((row) => row.failureRate), winRates),
-      },
-      {
-        label: 'Early Lead vs Wins',
-        shortLabel: 'Early Lead',
-        value: correlation(rows.map((row) => row.earlyLeadRate), winRates),
-      },
-    ].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-  }, [leaderboard, metrics]);
-
-  const heroStats = useMemo(() => {
-    const activePlayers = leaderboard.length;
-    const totalGames = Array.isArray(games) ? games.length : 0;
-    const topPlayer = leaderboard[0];
-    const avgElo =
-      leaderboard.length > 0
-        ? Math.round(
-            leaderboard.reduce((sum, row) => sum + row.rating, 0) / leaderboard.length
-          )
-        : 1000;
-
-    return {
-      totalGames,
-      activePlayers,
-      topPlayerName: topPlayer?.name ?? '—',
-      topPlayerElo: topPlayer?.rating ?? 1000,
-      avgElo,
-    };
-  }, [games, leaderboard]);
-
-  const featuredCards = useMemo(() => {
-    if (!selectedPlayer) return [];
-
-    return [
-      {
-        label: 'Current ELO',
-        value: String(selectedPlayer.rating),
-        tone: 'accent',
-      },
-      {
-        label: 'Win Rate',
-        value: percent(selectedPlayer.winRate),
-        tone: 'blue',
-      },
-      {
-        label: 'All Eff',
-        value: decimal(selectedPlayer.efficiency),
-        tone: 'green',
-      },
-      {
-        label: 'Playstyle',
-        value: getPlaystyleLabel(selectedPlayer),
-        tone: 'amber',
-      },
-    ];
-  }, [selectedPlayer]);
-
-  const topInsight = getTopInsight(globalCorrelations);
-  const playerInsight = getSelectedPlayerInsight(selectedPlayer);
+  const featuredCard = topCards[0];
+  const secondaryCards = topCards.slice(1, 3);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.title}>Moonrakers</Text>
-      <Text style={styles.subtitle}>ELO</Text>
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Player</Text>
+            <Text style={styles.sectionSub}>Select focus player</Text>
+          </View>
 
-      <View style={styles.heroCard}>
-        <View style={styles.heroTopRow}>
-          <View style={styles.heroTextWrap}>
-            <Text style={styles.heroLabel}>Premium Analytics</Text>
-            <Text style={styles.heroTitle}>Competitive Meta Dashboard</Text>
-            <Text style={styles.heroBody}>
-              Track the live ELO ladder, identify win signals, and inspect how each pilot performs across efficiency, objectives, support, and early tempo.
+          <View style={styles.underlineSelectorRow}>
+            {sortedPlayers.map((player) => {
+              const active =
+                normalizeId(player.id) === normalizeId(selectedPlayerId);
+              return (
+                <TouchableOpacity
+                  key={player.id}
+                  style={styles.underlineTabButton}
+                  onPress={() => setSelectedPlayerId(normalizeId(player.id))}
+                  activeOpacity={0.9}
+                >
+                  <Text
+                    style={[
+                      styles.underlineTabText,
+                      active && styles.underlineTabTextActive,
+                    ]}
+                  >
+                    {player.name || "Unknown"}
+                  </Text>
+                  <View
+                    style={[
+                      styles.underlineTabLine,
+                      active && styles.underlineTabLineActive,
+                    ]}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {activeTab === "Context" ? (
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Opponent</Text>
+              <Text style={styles.sectionSub}>
+                Optional head-to-head filter
+              </Text>
+            </View>
+
+            <View style={styles.underlineSelectorRow}>
+              <TouchableOpacity
+                style={styles.underlineTabButton}
+                onPress={() => setSelectedOpponentId(null)}
+                activeOpacity={0.9}
+              >
+                <Text
+                  style={[
+                    styles.underlineTabText,
+                    !selectedOpponentId && styles.underlineTabTextActive,
+                  ]}
+                >
+                  None
+                </Text>
+                <View
+                  style={[
+                    styles.underlineTabLine,
+                    !selectedOpponentId && styles.underlineTabLineActive,
+                  ]}
+                />
+              </TouchableOpacity>
+
+              {opponentOptions.map((player) => {
+                const active =
+                  normalizeId(player.id) === normalizeId(selectedOpponentId);
+                return (
+                  <TouchableOpacity
+                    key={player.id}
+                    style={styles.underlineTabButton}
+                    onPress={() => setSelectedOpponentId(normalizeId(player.id))}
+                    activeOpacity={0.9}
+                  >
+                    <Text
+                      style={[
+                        styles.underlineTabText,
+                        active && styles.underlineTabTextActive,
+                      ]}
+                    >
+                      {player.name || "Unknown"}
+                    </Text>
+                    <View
+                      style={[
+                        styles.underlineTabLine,
+                        active && styles.underlineTabLineActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.tabGrid}>
+          <View style={styles.tabGridRowTwo}>
+            {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
+              const active = tab === activeTab;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
+                  onPress={() => setActiveTab(tab)}
+                  activeOpacity={0.9}
+                >
+                  <Text
+                    style={[
+                      styles.underlineMainTabText,
+                      active && styles.underlineMainTabTextActive,
+                    ]}
+                  >
+                    {tab}
+                  </Text>
+                  <View
+                    style={[
+                      styles.underlineMainTabLine,
+                      active && styles.underlineMainTabLineActive,
+                    ]}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.tabGridRowThree}>
+            {(["Skills", "Context", "Projection"] as EloMetricTab[]).map(
+              (tab) => {
+                const active = tab === activeTab;
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[
+                      styles.underlineMainTab,
+                      styles.underlineMainTabThreeCol,
+                    ]}
+                    onPress={() => setActiveTab(tab)}
+                    activeOpacity={0.9}
+                  >
+                    <Text
+                      style={[
+                        styles.underlineMainTabText,
+                        active && styles.underlineMainTabTextActive,
+                      ]}
+                    >
+                      {tab}
+                    </Text>
+                    <View
+                      style={[
+                        styles.underlineMainTabLine,
+                        active && styles.underlineMainTabLineActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                );
+              }
+            )}
+          </View>
+        </View>
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Top 3 Winning Signals</Text>
+            <Text style={styles.sectionSub}>
+              {selectedPlayer?.name || "No player selected"}
             </Text>
           </View>
 
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>LIVE META</Text>
-          </View>
-        </View>
-
-        <View style={styles.heroStatsGrid}>
-          <View style={styles.heroStatCard}>
-            <Text style={styles.heroStatLabel}>Games</Text>
-            <Text style={styles.heroStatValue}>{heroStats.totalGames}</Text>
-          </View>
-
-          <View style={styles.heroStatCard}>
-            <Text style={styles.heroStatLabel}>Players</Text>
-            <Text style={styles.heroStatValue}>{heroStats.activePlayers}</Text>
-          </View>
-
-          <View style={styles.heroStatCard}>
-            <Text style={styles.heroStatLabel}>Top ELO</Text>
-            <Text style={styles.heroStatValue}>{heroStats.topPlayerElo}</Text>
-            <Text style={styles.heroStatSub}>{heroStats.topPlayerName}</Text>
-          </View>
-
-          <View style={styles.heroStatCard}>
-            <Text style={styles.heroStatLabel}>Avg ELO</Text>
-            <Text style={styles.heroStatValue}>{heroStats.avgElo}</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.insightStrip}>
-        <View style={styles.insightHeaderRow}>
-          <Text style={styles.sectionTitle}>Meta Insight</Text>
-          <Text style={styles.insightChip}>AUTO</Text>
-        </View>
-        <Text style={styles.insightText}>{topInsight}</Text>
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Leaderboard</Text>
-          <Text style={styles.sectionSub}>Current ELO ladder</Text>
-        </View>
-
-        {leaderboard.length === 0 ? (
-          <Text style={styles.emptyText}>No player or game data available yet.</Text>
-        ) : (
-          leaderboard.map((row) => {
-            const isSelected = selectedPlayer?.id === row.id;
-            return (
-              <TouchableOpacity
-                key={row.id}
-                style={[styles.leaderboardRow, isSelected && styles.leaderboardRowSelected]}
-                onPress={() => setSelectedPlayerId(row.id)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.leaderboardLeft}>
-                  <View style={styles.rankPill}>
-                    <Text style={styles.rankPillText}>#{row.rank}</Text>
-                  </View>
-
-                  <View>
-                    <Text style={styles.playerName}>{row.name}</Text>
-                    <Text style={styles.playerSub}>
-                      {row.gamesPlayed} games • {percent(row.winRate)}
+          {!hasData ? (
+            <Text style={styles.emptyText}>
+              No rated ELO rows available for this player yet.
+            </Text>
+          ) : (
+            <View style={styles.featuredSignalsWrap}>
+              {featuredCard ? (
+                <View
+                  style={[
+                    styles.featuredSignalCard,
+                    { backgroundColor: toneStyles(featuredCard.tone).bg },
+                  ]}
+                >
+                  <Text style={styles.featuredSignalLabel} numberOfLines={1}>
+                    {featuredCard.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.featuredSignalValue,
+                      { color: toneStyles(featuredCard.tone).value },
+                    ]}
+                  >
+                    {featuredCard.value}
+                  </Text>
+                  {featuredCard.sub ? (
+                    <Text style={styles.featuredSignalSub} numberOfLines={2}>
+                      {featuredCard.sub}
                     </Text>
-                  </View>
+                  ) : null}
                 </View>
+              ) : null}
 
-                <View style={styles.leaderboardRight}>
-                  <Text style={styles.eloValue}>{row.rating}</Text>
-                  <Text style={styles.eloSub}>ELO</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Global Correlations</Text>
-          <Text style={styles.sectionSub}>What most tracks with wins</Text>
-        </View>
-
-        <View style={styles.correlationGrid}>
-          {globalCorrelations.map((item) => {
-            const tone = getCorrelationTone(item.value);
-
-            return (
-              <View key={item.label} style={styles.correlationCard}>
-                <Text style={styles.correlationLabel}>{item.shortLabel}</Text>
-                <View style={[styles.correlationPill, { backgroundColor: tone.bg }]}>
-                  <Text style={[styles.correlationPillText, { color: tone.color }]}>
-                    {tone.arrow} {item.value.toFixed(2)}
-                  </Text>
-                </View>
-                <Text style={styles.correlationStrength}>
-                  {correlationStrength(item.value)}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Player Focus</Text>
-          <Text style={styles.sectionSub}>Premium breakdown</Text>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.playerChipRow}
-        >
-          {leaderboard.map((row) => {
-            const active = selectedPlayer?.id === row.id;
-            return (
-              <TouchableOpacity
-                key={row.id}
-                style={[styles.playerChip, active && styles.playerChipActive]}
-                onPress={() => setSelectedPlayerId(row.id)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.playerChipText, active && styles.playerChipTextActive]}>
-                  {row.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {selectedPlayer ? (
-          <>
-            <View style={styles.featuredPlayerCard}>
-              <View style={styles.featuredPlayerHeader}>
-                <View>
-                  <Text style={styles.featuredEyebrow}>Featured Player</Text>
-                  <Text style={styles.featuredName}>{selectedPlayer.name}</Text>
-                  <Text style={styles.featuredDescriptor}>
-                    {getPlaystyleLabel(selectedPlayer)}
-                  </Text>
-                </View>
-
-                <View style={styles.featuredEloBadge}>
-                  <Text style={styles.featuredEloValue}>{selectedPlayer.rating}</Text>
-                  <Text style={styles.featuredEloLabel}>ELO</Text>
-                </View>
-              </View>
-
-              <Text style={styles.featuredNarrative}>{playerInsight}</Text>
-
-              <View style={styles.featuredStatsGrid}>
-                {featuredCards.map((card) => {
-                  const toneStyles =
-                    card.tone === 'accent'
-                      ? styles.tileAccent
-                      : card.tone === 'blue'
-                        ? styles.tileBlue
-                        : card.tone === 'green'
-                          ? styles.tileGreen
-                          : styles.tileAmber;
-
+              <View style={styles.secondarySignalColumn}>
+                {secondaryCards.map((card) => {
+                  const tone = toneStyles(card.tone);
                   return (
-                    <View key={card.label} style={[styles.featureTile, toneStyles]}>
-                      <Text style={styles.featureTileLabel}>{card.label}</Text>
-                      <Text style={styles.featureTileValue}>{card.value}</Text>
+                    <View
+                      key={card.key}
+                      style={[
+                        styles.secondarySignalCard,
+                        { backgroundColor: tone.bg },
+                      ]}
+                    >
+                      <Text style={styles.metricLabelCompact} numberOfLines={1}>
+                        {card.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.metricValueCompact,
+                          { color: tone.value },
+                        ]}
+                      >
+                        {card.value}
+                      </Text>
+                      {card.sub ? (
+                        <Text style={styles.metricSubCompact} numberOfLines={1}>
+                          {card.sub}
+                        </Text>
+                      ) : null}
                     </View>
                   );
                 })}
               </View>
             </View>
+          )}
+        </View>
 
-            <View style={styles.analyticsGrid}>
-              <View style={styles.analyticsCard}>
-                <Text style={styles.analyticsLabel}>Objective Pressure</Text>
-                <Text style={styles.analyticsValue}>
-                  {decimal(selectedPlayer.avgObjectivePrestigePerGame)}
-                </Text>
-                <Text style={styles.analyticsSub}>Avg objective prestige/game</Text>
-              </View>
+        <View style={styles.insightCardCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>{activeInsight.title}</Text>
+            <Text style={styles.insightChip}>{activeTab.toUpperCase()}</Text>
+          </View>
+          <Text style={styles.insightText}>{activeInsight.body}</Text>
+        </View>
 
-              <View style={styles.analyticsCard}>
-                <Text style={styles.analyticsLabel}>Support Output</Text>
-                <Text style={styles.analyticsValue}>
-                  {decimal(selectedPlayer.avgAssistsGivenPerGame)}
-                </Text>
-                <Text style={styles.analyticsSub}>Avg assists/game</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Text style={styles.analyticsLabel}>Early Tempo</Text>
-                <Text style={styles.analyticsValue}>
-                  {percent(selectedPlayer.earlyLeadRate)}
-                </Text>
-                <Text style={styles.analyticsSub}>Early lead rate</Text>
-              </View>
-
-              <View style={styles.analyticsCard}>
-                <Text style={styles.analyticsLabel}>Error Rate</Text>
-                <Text style={styles.analyticsValue}>
-                  {percent(selectedPlayer.failureRate)}
-                </Text>
-                <Text style={styles.analyticsSub}>Failure rate</Text>
-              </View>
+        {activeTab === "Leaderboard" ? (
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Leaderboard</Text>
+              <Text style={styles.sectionSub}>
+                All players ranked by current ELO
+              </Text>
             </View>
-          </>
-        ) : (
-          <Text style={styles.emptyText}>Select a player to view analytics.</Text>
-        )}
-      </View>
-    </ScrollView>
+
+            <View style={styles.leaderboardList}>
+              {leaderboardRows.map((row) => (
+                <TouchableOpacity
+                  key={row.playerId}
+                  style={[
+                    styles.leaderboardRow,
+                    row.isSelected && styles.leaderboardRowSelected,
+                  ]}
+                  onPress={() => setSelectedPlayerId(row.playerId)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.leaderboardLeft}>
+                    <View
+                      style={[
+                        styles.rankBadge,
+                        row.isSelected && styles.rankBadgeSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.rankText,
+                          row.isSelected && styles.rankTextSelected,
+                        ]}
+                      >
+                        {row.rank}
+                      </Text>
+                    </View>
+
+                    <View>
+                      <Text style={styles.leaderboardName}>{row.name}</Text>
+                      <Text style={styles.leaderboardMeta}>
+                        Peak {Math.round(row.peakElo)}   Conf{" "}
+                        {formatPercentFromDecimal(row.confidence)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.leaderboardRight}>
+                    <Text style={styles.leaderboardElo}>
+                      {Math.round(row.currentElo)}
+                    </Text>
+                    <Text style={styles.leaderboardMeta}>Current ELO</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>{activeSection.title}</Text>
+            <Text style={styles.sectionSub}>Active tab metrics</Text>
+          </View>
+
+          {!hasData ? (
+            <Text style={styles.emptyText}>No metric data available yet.</Text>
+          ) : (
+            <View style={styles.metricGridDense}>
+              {activeSection.cards.slice(0, 6).map((card) => {
+                const tone = toneStyles(card.tone);
+                return (
+                  <View
+                    key={card.key}
+                    style={[
+                      styles.metricCardDense,
+                      { backgroundColor: tone.bg },
+                    ]}
+                  >
+                    <Text style={styles.metricLabelCompact} numberOfLines={2}>
+                      {card.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.metricValueCompact,
+                        { color: tone.value },
+                      ]}
+                    >
+                      {formatMetricValue(card.value)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -543,397 +1114,263 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  contentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 40,
-  },
-  title: {
-    color: COLORS.accent,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: COLORS.blue,
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 2,
-    marginBottom: 14,
-  },
-
-  heroCard: {
-    backgroundColor: COLORS.cardAlt,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 14,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  heroTextWrap: {
+  scroll: {
     flex: 1,
   },
-  heroLabel: {
-    color: COLORS.blue,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 6,
+  contentContainer: {
+    padding: 8,
+    paddingBottom: 12,
   },
-  heroTitle: {
-    color: COLORS.text,
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  heroBody: {
-    color: COLORS.sub,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  heroBadge: {
-    backgroundColor: COLORS.accentSoft,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  heroBadgeText: {
-    color: COLORS.accent,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  heroStatsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 16,
-  },
-  heroStatCard: {
-    width: '47%',
-    backgroundColor: COLORS.whiteSoft,
+  sectionCompact: {
+    backgroundColor: COLORS.card,
     borderRadius: 14,
-    padding: 12,
-  },
-  heroStatLabel: {
-    color: COLORS.sub,
-    fontSize: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     marginBottom: 6,
   },
-  heroStatValue: {
-    color: COLORS.text,
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  heroStatSub: {
-    color: COLORS.sub,
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  insightStrip: {
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    padding: 14,
+  insightCardCompact: {
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 14,
+    padding: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: 14,
-  },
-  insightHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  insightChip: {
-    color: COLORS.amber,
-    backgroundColor: COLORS.amberSoft,
-    overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  insightText: {
-    color: COLORS.text,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
-  },
-
-  section: {
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 14,
+    marginBottom: 6,
   },
   sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 6,
   },
   sectionTitle: {
     color: COLORS.text,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: "800",
+    flexShrink: 1,
   },
   sectionSub: {
     color: COLORS.sub,
-    fontSize: 12,
+    fontSize: 10,
+    textAlign: "right",
+    flexShrink: 1,
   },
   emptyText: {
     color: COLORS.sub,
-    fontSize: 13,
+    fontSize: 11,
   },
-
-  leaderboardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.whiteSoft,
+  underlineSelectorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 12,
+    rowGap: 8,
+    alignItems: "flex-end",
+  },
+  underlineTabButton: {
+    paddingBottom: 2,
+  },
+  underlineTabText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  underlineTabTextActive: {
+    color: COLORS.accent,
+  },
+  underlineTabLine: {
+    marginTop: 4,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  underlineTabLineActive: {
+    backgroundColor: COLORS.accent,
+  },
+  tabGrid: {
+    marginBottom: 6,
+    gap: 8,
+  },
+  tabGridRowTwo: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  tabGridRowThree: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  underlineMainTab: {
+    paddingBottom: 4,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  underlineMainTabTwoCol: {
+    flex: 1,
+  },
+  underlineMainTabThreeCol: {
+    flex: 1,
+  },
+  underlineMainTabText: {
+    color: COLORS.sub,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  underlineMainTabTextActive: {
+    color: COLORS.accent,
+  },
+  underlineMainTabLine: {
+    marginTop: 5,
+    height: 3,
+    width: "100%",
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  underlineMainTabLineActive: {
+    backgroundColor: COLORS.accent,
+  },
+  featuredSignalsWrap: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  featuredSignalCard: {
+    width: "52%",
+    minHeight: 150,
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 8,
+    padding: 10,
+    justifyContent: "space-between",
+  },
+  featuredSignalLabel: {
+    color: COLORS.sub,
+    fontSize: 12,
+    lineHeight: 14,
+    marginBottom: 6,
+  },
+  featuredSignalValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    lineHeight: 30,
+    marginBottom: 6,
+  },
+  featuredSignalSub: {
+    color: COLORS.muted,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  secondarySignalColumn: {
+    width: "46%",
+    justifyContent: "space-between",
+    gap: 4,
+  },
+  secondarySignalCard: {
+    borderRadius: 12,
+    padding: 10,
+    minHeight: 72,
+  },
+  leaderboardList: {
+    gap: 4,
+  },
+  leaderboardRow: {
+    backgroundColor: COLORS.whiteSoft,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   leaderboardRowSelected: {
     borderColor: COLORS.accent,
-    backgroundColor: 'rgba(168,85,247,0.10)',
+    backgroundColor: COLORS.accentSoft,
   },
   leaderboardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     flex: 1,
+    paddingRight: 10,
   },
   leaderboardRight: {
-    alignItems: 'flex-end',
-    marginLeft: 12,
+    alignItems: "flex-end",
   },
-  rankPill: {
-    minWidth: 42,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: COLORS.blueSoft,
-    alignItems: 'center',
-  },
-  rankPillText: {
-    color: COLORS.blue,
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  playerName: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  playerSub: {
-    color: COLORS.sub,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  eloValue: {
-    color: COLORS.text,
-    fontSize: 24,
-    fontWeight: '800',
-    lineHeight: 26,
-  },
-  eloSub: {
-    color: COLORS.sub,
-    fontSize: 11,
-    marginTop: 2,
-  },
-
-  correlationGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  correlationCard: {
-    width: '48.4%',
-    backgroundColor: COLORS.whiteSoft,
+  rankBadge: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
-    padding: 12,
-  },
-  correlationLabel: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  correlationPill: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 8,
-  },
-  correlationPillText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  correlationStrength: {
-    color: COLORS.sub,
-    fontSize: 12,
-  },
-
-  playerChipRow: {
-    paddingBottom: 2,
-    gap: 8,
-  },
-  playerChip: {
-    backgroundColor: COLORS.whiteSoft,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  playerChipActive: {
-    backgroundColor: COLORS.accentSoft,
-    borderColor: COLORS.accent,
-  },
-  playerChipText: {
-    color: COLORS.sub,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  playerChipTextActive: {
-    color: COLORS.accent,
-  },
-
-  featuredPlayerCard: {
-    marginTop: 14,
     backgroundColor: COLORS.cardAlt,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  featuredPlayerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    alignItems: 'flex-start',
+  rankBadgeSelected: {
+    backgroundColor: "rgba(255,255,255,0.10)",
   },
-  featuredEyebrow: {
-    color: COLORS.blue,
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-    marginBottom: 6,
-  },
-  featuredName: {
+  rankText: {
     color: COLORS.text,
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: "900",
   },
-  featuredDescriptor: {
-    color: COLORS.sub,
+  rankTextSelected: {
+    color: COLORS.accent,
+  },
+  leaderboardName: {
+    color: COLORS.text,
     fontSize: 13,
-    marginTop: 4,
+    fontWeight: "800",
+    marginBottom: 1,
   },
-  featuredEloBadge: {
-    backgroundColor: COLORS.accentSoft,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    minWidth: 84,
-  },
-  featuredEloValue: {
-    color: COLORS.accent,
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 24,
-  },
-  featuredEloLabel: {
-    color: COLORS.accent,
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  featuredNarrative: {
-    color: COLORS.text,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 12,
-  },
-  featuredStatsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
-  },
-  featureTile: {
-    width: '47.5%',
-    borderRadius: 14,
-    padding: 12,
-  },
-  tileAccent: {
-    backgroundColor: COLORS.accentSoft,
-  },
-  tileBlue: {
-    backgroundColor: COLORS.blueSoft,
-  },
-  tileGreen: {
-    backgroundColor: COLORS.greenSoft,
-  },
-  tileAmber: {
-    backgroundColor: COLORS.amberSoft,
-  },
-  featureTileLabel: {
-    color: COLORS.sub,
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  featureTileValue: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-
-  analyticsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 14,
-  },
-  analyticsCard: {
-    width: '48.4%',
-    backgroundColor: COLORS.whiteSoft,
-    borderRadius: 14,
-    padding: 12,
-  },
-  analyticsLabel: {
-    color: COLORS.sub,
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  analyticsValue: {
+  leaderboardElo: {
     color: COLORS.text,
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: "900",
+    lineHeight: 22,
   },
-  analyticsSub: {
+  leaderboardMeta: {
+    color: COLORS.sub,
+    fontSize: 10,
+  },
+  metricGridDense: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  metricCardDense: {
+    width: "32%",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  metricLabelCompact: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 12,
+    marginBottom: 4,
+  },
+  metricValueCompact: {
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 16,
+  },
+  metricSubCompact: {
     color: COLORS.muted,
+    fontSize: 10,
+    marginTop: 4,
+    lineHeight: 12,
+  },
+  insightChip: {
+    color: COLORS.blue,
+    backgroundColor: COLORS.blueSoft,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  insightText: {
+    color: COLORS.text,
     fontSize: 11,
-    marginTop: 6,
     lineHeight: 15,
   },
 });

@@ -256,7 +256,7 @@ export default function SummaryScreen() {
       <View style={styles.root}>
         <StarryNight />
         <View style={styles.centered}>
-          <Text style={styles.appHeader}>Moonrakers</Text>
+          
           <Text style={styles.emptyTitle}>No game selected</Text>
           <Text style={styles.emptySubtitle}>
             Open this screen from History by tapping a saved game.
@@ -274,7 +274,7 @@ export default function SummaryScreen() {
       <View style={styles.root}>
         <StarryNight />
         <View style={styles.centered}>
-          <Text style={styles.appHeader}>Moonrakers</Text>
+          
           <Text style={styles.emptyTitle}>Game not found</Text>
           <Text style={styles.emptySubtitle}>
             That saved game could not be found in the current store.
@@ -296,7 +296,7 @@ export default function SummaryScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <Text style={styles.appHeader}>Moonrakers</Text>
+          
           <Text style={styles.heroTitle}>Game Summary</Text>
           <Text style={styles.heroSubtitle}>
             Review the final standings, detailed totals, and replay flow.
@@ -415,7 +415,7 @@ export default function SummaryScreen() {
                     <View style={styles.rankTextWrap}>
                       <Text style={styles.rankName}>{player.name}</Text>
                       <Text style={styles.rankMeta}>
-                        {player.totalPrestige} total prestige
+                        {player.totalPrestige} Prestige
                       </Text>
                     </View>
                   </View>
@@ -429,36 +429,36 @@ export default function SummaryScreen() {
 
                 <View style={styles.metricsGrid}>
                   <View style={styles.metricPill}>
-                    <Text style={styles.metricLabel}>Direct</Text>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Direct</Text>
                     <Text style={styles.metricValue}>{player.directPrestige}</Text>
                   </View>
 
                   <View style={styles.metricPill}>
-                    <Text style={styles.metricLabel}>Assist In</Text>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Assist In</Text>
                     <Text style={styles.metricValue}>
                       {player.assistPrestigeReceived}
                     </Text>
                   </View>
 
                   <View style={styles.metricPill}>
-                    <Text style={styles.metricLabel}>Objectives</Text>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Objectives</Text>
                     <Text style={styles.metricValue}>
                       {player.objectivePrestige}
                     </Text>
                   </View>
 
                   <View style={styles.metricPill}>
-                    <Text style={styles.metricLabel}>Contracts</Text>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Contracts</Text>
                     <Text style={styles.metricValue}>{player.contracts}</Text>
                   </View>
 
                   <View style={styles.metricPill}>
-                    <Text style={styles.metricLabel}>Assists</Text>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Assists</Text>
                     <Text style={styles.metricValue}>{player.assists}</Text>
                   </View>
 
                   <View style={styles.metricPill}>
-                    <Text style={styles.metricLabel}>Failures</Text>
+                    <Text style={styles.metricLabel} numberOfLines={1}>Failures</Text>
                     <Text style={styles.metricValue}>{player.failures}</Text>
                   </View>
                 </View>
@@ -619,18 +619,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 4,
     gap: 4,
-  },
-
-  appHeader: {
-    color: '#A855F7',
-    fontSize: 34,
-    fontWeight: '900',
-    textAlign: 'center',
-    letterSpacing: 0.4,
-    textShadowColor: 'rgba(168, 85, 247, 0.45)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
-  },
+  },
 
   heroTitle: {
     color: '#F5F3FF',
@@ -1098,3 +1087,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
+

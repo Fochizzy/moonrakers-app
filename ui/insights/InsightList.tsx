@@ -71,3 +71,4 @@ export default memo(InsightsList);
 const styles = StyleSheet.create({
   container: {},
 });
+

@@ -11,9 +11,9 @@ import {
 import { useRouter } from 'expo-router';
 
 import { useStore } from '@/store/useStore';
-import Text from '@/components/ui/Text';
 import StarryNight from '@/components/ui/StarryNight';
-import LiveLeaderboard from '@/components/LiveLeaderboard';
+import Text from '@/components/ui/Text';
+import { getFallbackPlayerColor, resolveStoredPlayerColor } from '@/utils/playerColor';
 import {
   createRound,
   getNextTurnIndex,
@@ -27,7 +27,6 @@ import {
 import {
   getPlayerAccentColor,
   getPlayerBackgroundColor,
-  getPlayerTintColor,
 } from '@/utils/turnTheme';
 
 type Player = {
@@ -63,6 +62,25 @@ const initialCurrentState: CurrentTurnStats = {
   objectiveCount: 0,
 };
 
+const UI = {
+  black: '#05070b',
+  panelBlack: '#090c12',
+  panelElevated: '#0c1018',
+  card: '#101722',
+  cardSoft: '#0c121b',
+  cardMuted: '#0b1018',
+  line: 'rgba(255,255,255,0.08)',
+  lineStrong: 'rgba(255,255,255,0.14)',
+  text: '#ffffff',
+  textMuted: 'rgba(255,255,255,0.68)',
+  textFaint: 'rgba(255,255,255,0.44)',
+  success: '#22c55e',
+  failure: '#ef4444',
+  gold: '#facc15',
+  silver: '#c0c0c0',
+  pressedScale: 0.97,
+};
+
 function toNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -71,26 +89,60 @@ function clampCount(value: unknown): number {
   return Math.max(0, Math.floor(toNumber(value)));
 }
 
-function getAssistCount(assistRecipients?: Record<string, number>) {
-  return Object.values(assistRecipients ?? {}).filter((value) => toNumber(value) > 0).length;
+function parseColorToRgb(input: string) {
+  const color = input.trim();
+
+  if (color.startsWith('#')) {
+    const safe = color.replace('#', '');
+    const normalized =
+      safe.length === 3
+        ? safe.split('').map((c) => c + c).join('')
+        : safe.padEnd(6, '0').slice(0, 6);
+
+    const num = parseInt(normalized, 16);
+    return {
+      r: (num >> 16) & 255,
+      g: (num >> 8) & 255,
+      b: num & 255,
+    };
+  }
+
+  const rgbMatch = color.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+  if (rgbMatch) {
+    return {
+      r: Math.max(0, Math.min(255, Number(rgbMatch[1]))),
+      g: Math.max(0, Math.min(255, Number(rgbMatch[2]))),
+      b: Math.max(0, Math.min(255, Number(rgbMatch[3]))),
+    };
+  }
+
+  return { r: 255, g: 255, b: 255 };
 }
 
-function normalizeColor(color?: string) {
-  return typeof color === 'string' ? color.trim().toLowerCase() : undefined;
+function withAlpha(color: string, alpha: number) {
+  const { r, g, b } = parseColorToRgb(color);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function darkenHexColor(hex: string, amount = 0.55) {
-  const safe = hex.replace('#', '');
-  const normalized =
-    safe.length === 3
-      ? safe.split('').map((char) => char + char).join('')
-      : safe.padEnd(6, '0').slice(0, 6);
+function mixWithBlack(color: string, amount = 0.7) {
+  const { r, g, b } = parseColorToRgb(color);
+  return `rgb(${Math.round(r * (1 - amount))}, ${Math.round(g * (1 - amount))}, ${Math.round(
+    b * (1 - amount)
+  )})`;
+}
 
-  const num = parseInt(normalized, 16);
-  const r = Math.max(0, Math.min(255, Math.round(((num >> 16) & 255) * (1 - amount))));
-  const g = Math.max(0, Math.min(255, Math.round(((num >> 8) & 255) * (1 - amount))));
-  const b = Math.max(0, Math.min(255, Math.round((num & 255) * (1 - amount))));
-  return `rgb(${r}, ${g}, ${b})`;
+function makePlayerWash(accent: string, alpha = 0.05) {
+  return withAlpha(accent, alpha);
+}
+
+function glowStyle(color: string, opacity = 0.34, radius = 10, elevation = 8) {
+  return {
+    shadowColor: color,
+    shadowOpacity: opacity,
+    shadowRadius: radius,
+    shadowOffset: { width: 0, height: 0 },
+    elevation,
+  };
 }
 
 function createObjectiveBonusRounds(
@@ -162,275 +214,346 @@ function buildEditStateFromRound(
   };
 }
 
-function PrestigeCounter({
-  label,
-  value,
-  onChange,
-  accentColor,
-  tintColor,
+function AnimatedLeaderboardPill({
+  player,
+  rank,
+  activePlayerId,
+  totals,
 }: {
-  label: string;
-  value: number;
-  onChange: (next: number) => void;
-  accentColor?: string;
-  tintColor?: string;
+  player: Player;
+  rank: number;
+  activePlayerId?: string;
+  totals: Record<string, any>;
 }) {
+  const motion = React.useRef(new Animated.Value(0)).current;
+  const previousRankRef = React.useRef(rank);
+
+  useEffect(() => {
+    const previousRank = previousRankRef.current;
+    if (previousRank === rank) return;
+
+    const direction = previousRank > rank ? -1 : 1;
+    motion.stopAnimation();
+    motion.setValue(direction);
+
+    Animated.spring(motion, {
+      toValue: 0,
+      tension: 120,
+      friction: 12,
+      useNativeDriver: true,
+    }).start();
+
+    previousRankRef.current = rank;
+  }, [rank, motion]);
+
+  const accent = getPlayerAccentColor(resolveStoredPlayerColor(player.color, rank));
+  const isActive = player.id === activePlayerId;
+  const totalPrestige = getTotalPrestigeFromTotals(totals[player.id] as PlayerTotals) || 0;
+  const direct = toNumber(totals[player.id]?.directPrestige);
+
   return (
-    <View
-      style={[
-        styles.prestigeBlock,
-        accentColor ? { borderColor: `${accentColor}66` } : null,
-        tintColor ? { backgroundColor: tintColor } : null,
-      ]}
+    <Animated.View
+      style={{
+        transform: [
+          {
+            translateY: motion.interpolate({
+              inputRange: [-1, 0, 1],
+              outputRange: [-10, 0, 10],
+            }),
+          },
+          {
+            scale: motion.interpolate({
+              inputRange: [-1, 0, 1],
+              outputRange: [1.03, 1, 0.985],
+            }),
+          },
+        ],
+      }}
     >
-      <Text
+      <View
         style={[
-          styles.prestigeLabel,
-          accentColor ? { color: accentColor } : null,
+          styles.playerPill,
+          {
+            opacity: isActive ? 1 : 0.76,
+            borderColor: withAlpha(accent, isActive ? 0.62 : 0.3),
+            backgroundColor: UI.card,
+          },
+          isActive ? glowStyle(withAlpha(accent, 0.95), 0.3, 10, 10) : null,
         ]}
       >
-        {label}
-      </Text>
-
-      <View style={styles.prestigeRow}>
-        <Pressable
-          style={[
-            styles.prestigeButton,
-            accentColor ? { borderColor: accentColor } : null,
-          ]}
-          onPress={() => onChange(value - 1)}
-        >
-          <Text style={styles.prestigeButtonText}>−</Text>
-        </Pressable>
-
         <View
           style={[
-            styles.prestigeValueCard,
-            accentColor
-              ? {
-                  borderColor: accentColor,
-                  backgroundColor: `${accentColor}22`,
-                }
-              : null,
-          ]}
-        >
-          <Text style={styles.prestigeValue}>{value}</Text>
-        </View>
-
-        <Pressable
-          style={[
-            styles.prestigeButton,
-            accentColor ? { borderColor: accentColor } : null,
-          ]}
-          onPress={() => onChange(value + 1)}
-        >
-          <Text style={styles.prestigeButtonText}>+</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function TurnHeader({
-  currentPlayerName,
-  currentAccent,
-  roundNumber,
-  isEditing,
-}: {
-  currentPlayerName: string;
-  currentAccent: string;
-  roundNumber: number;
-  isEditing: boolean;
-}) {
-  return (
-    <>
-      <View style={styles.stickyHeaderWrap}>
-        <View style={styles.headerBoard}>
-          <Text style={styles.headerBoardTitle}>🌙 Moonraker&apos;s</Text>
-          <Text style={styles.headerBoardSubtitle}>Active Game</Text>
-        </View>
-      </View>
-
-      <View style={[styles.heroCard, { borderColor: `${currentAccent}88` }]}>
-        <View
-          style={[
-            styles.heroAccentBar,
-            { backgroundColor: currentAccent },
+            styles.playerPillRail,
+            { backgroundColor: withAlpha(accent, isActive ? 0.92 : 0.62) },
           ]}
         />
-        <View style={styles.heroTopRow}>
-          <View style={styles.heroTitleWrap}>
-            <Text style={styles.heroSubtext}>
-              {isEditing ? 'Editing Previous Turn' : 'Current Turn'}
-            </Text>
-            <View style={styles.currentPlayerRow}>
-              <Text style={[styles.currentPlayer, { color: currentAccent }]}>
-                {currentPlayerName}
-              </Text>
-              <View style={[styles.roundChip, { borderColor: `${currentAccent}66` }]}>
-                <Text style={[styles.roundChipText, { color: currentAccent }]}>
-                  Round {roundNumber}
-                </Text>
-              </View>
-            </View>
+        <Text style={styles.playerPillName} numberOfLines={1}>
+          {player.name}
+        </Text>
+
+        <View style={styles.playerPillMetrics}>
+          <View style={styles.metricChip}>
+            <Text style={styles.metricChipText}>P {totalPrestige}</Text>
+          </View>
+          <View style={styles.metricChip}>
+            <Text style={styles.metricChipText}>S {direct}</Text>
           </View>
         </View>
       </View>
-    </>
+    </Animated.View>
   );
 }
 
-function LeaderboardSection({
-  gameId,
+function CompactPlayerStrip({
   players,
+  activePlayerId,
+  totals,
 }: {
-  gameId?: string;
-  players: Array<{
-    id: string;
-    name: string;
-    color?: string;
-    totalPrestige?: number;
-    directPrestige?: number;
-    objectivePrestige?: number;
-    assistPrestigeReceived?: number;
-    score?: number;
-    contracts?: number;
-    assists?: number;
-    momentumLabel?: string | null;
-  }>;
+  players: Player[];
+  activePlayerId?: string;
+  totals: Record<string, any>;
 }) {
   return (
-    <View style={styles.leaderboardCompactWrap}>
-      <LiveLeaderboard
-        key={gameId ?? 'active-game'}
-        gameId={gameId}
-        title="Current Game"
-        players={players}
-      />
-    </View>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.playerStripRow}
+    >
+      {players.map((player, index) => (
+        <AnimatedLeaderboardPill
+          key={player.id}
+          player={player}
+          rank={index}
+          activePlayerId={activePlayerId}
+          totals={totals}
+        />
+      ))}
+    </ScrollView>
   );
 }
 
-function TurnStatsSection({
-  contractChoice,
-  failureChoice,
-  onSelectContract,
-  onSelectFailure,
-  currentAccent,
-  stayAtBaseSelected,
-  collapsed,
-  onToggleCollapsed,
+function ScaleButton({
+  onPress,
+  disabled,
+  style,
+  children,
 }: {
-  contractChoice: BinaryChoice;
-  failureChoice: BinaryChoice;
-  onSelectContract: (value: 0 | 1) => void;
-  onSelectFailure: (value: 0 | 1) => void;
-  currentAccent: string;
-  stayAtBaseSelected: boolean;
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
+  onPress?: () => void;
+  disabled?: boolean;
+  style?: any;
+  children: React.ReactNode;
 }) {
-  const outcomeStatus = stayAtBaseSelected
-    ? 'Base Mode'
-    : contractChoice === 1
-      ? 'Contract Succeeded'
-      : failureChoice === 1
-        ? 'Contract Failed'
-        : 'Incomplete';
-  const contractActive = contractChoice === 1;
-  const failureActive = failureChoice === 1;
-
   return (
-    <View style={styles.card}>
-      <Pressable onPress={onToggleCollapsed} style={styles.outcomeHeaderRow}>
-        <Text style={styles.sectionTitle}>Missions • {outcomeStatus}</Text>
-        <View style={styles.outcomeHeaderRight}>
-          {stayAtBaseSelected ? (
-            <View style={[styles.modeChip, { borderColor: `${currentAccent}66` }]}>
-              <Text style={[styles.modeChipText, { color: currentAccent }]}>
-                Base Mode
-              </Text>
-            </View>
-          ) : null}
-          <Text style={styles.chevronText}>{collapsed ? '▼' : '▲'}</Text>
-        </View>
-      </Pressable>
-
-      {!collapsed ? (
-        <View style={styles.outcomeRow}>
-          <Pressable
-            onPress={() => onSelectContract(contractActive ? 0 : 1)}
-            style={[
-              styles.outcomeButton,
-              {
-                borderColor: currentAccent,
-                backgroundColor: contractActive ? currentAccent : 'rgba(30,41,59,0.92)',
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.outcomeButtonLabel,
-                contractActive && styles.outcomeButtonLabelActive,
-              ]}
-            >
-              Contract Succeeded
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => onSelectFailure(failureActive ? 0 : 1)}
-            style={[
-              styles.outcomeButton,
-              {
-                borderColor: failureActive ? '#ef4444' : '#7f1d1d',
-                backgroundColor: failureActive ? '#7f1d1d' : 'rgba(30,41,59,0.92)',
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.outcomeButtonLabel,
-                failureActive && styles.outcomeButtonLabelActive,
-              ]}
-            >
-              Contract Failed
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        style,
+        pressed && { transform: [{ scale: UI.pressedScale }] },
+        disabled && styles.disabled,
+      ]}
+    >
+      {children}
+    </Pressable>
   );
 }
 
 function DirectPrestigeSection({
   currentDirectPrestige,
   currentAccent,
-  currentTint,
   onSetDirectPrestige,
+  contractChoice,
+  failureChoice,
+  onSelectContract,
+  onSelectFailure,
+  stayAtBaseSelected,
 }: {
   currentDirectPrestige: number;
   currentAccent: string;
-  currentTint: string;
   onSetDirectPrestige: (next: number) => void;
+  contractChoice: BinaryChoice;
+  failureChoice: BinaryChoice;
+  onSelectContract: (value: 0 | 1) => void;
+  onSelectFailure: (value: 0 | 1) => void;
+  stayAtBaseSelected: boolean;
 }) {
+  const successSelected = contractChoice === 1;
+  const failureSelected = failureChoice === 1;
+  const darkerAccent = mixWithBlack(currentAccent, 0.82);
+
+  const counterTintAlpha =
+    currentDirectPrestige <= 0 ? 0.1 : Math.min(0.1 + currentDirectPrestige * 0.025, 0.22);
+
   return (
-    <View style={styles.card}>
-      <View style={[styles.sectionAccentBar, { backgroundColor: currentAccent }]} />
-      <View style={styles.directPrestigeCenterWrap}>
-        <PrestigeCounter
-          label="Direct Prestige"
-          value={currentDirectPrestige}
-          onChange={onSetDirectPrestige}
-          accentColor={currentAccent}
-          tintColor={currentTint}
-        />
+    <View
+      style={[
+        styles.sectionCard,
+        {
+          borderColor: withAlpha(currentAccent, 0.42),
+          backgroundColor: mixWithBlack(currentAccent, 0.82),
+        },
+        glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8),
+      ]}
+    >
+      <View
+        style={[
+          styles.directPrestigeFrame,
+          stayAtBaseSelected && styles.directPrestigeFrameMinimized,
+          {
+            backgroundColor: stayAtBaseSelected
+              ? withAlpha(UI.gold, 0.05)
+              : withAlpha(currentAccent, 0.12),
+            borderColor: stayAtBaseSelected
+              ? withAlpha(UI.gold, 0.5)
+              : withAlpha(currentAccent, 0.5),
+          },
+          stayAtBaseSelected
+            ? glowStyle(withAlpha(UI.gold, 0.92), 0.16, 8, 6)
+            : glowStyle(withAlpha(currentAccent, 0.95), 0.18, 8, 6),
+        ]}
+      >
+        <Text style={styles.sectionTitle}>Direct Prestige</Text>
+
+        {stayAtBaseSelected ? (
+          <View style={styles.baseModeBoxElite}>
+            <Text style={styles.baseModeTextElite}>BASE</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.prestigeCounterRow}>
+              <ScaleButton
+                onPress={() => onSetDirectPrestige(currentDirectPrestige - 1)}
+                style={[
+                  styles.prestigeStepperButton,
+                  { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: darkerAccent },
+                ]}
+              >
+                <Text style={styles.prestigeStepperText}>-</Text>
+              </ScaleButton>
+
+              <View style={styles.prestigeCenterWrap}>
+                <View
+                  style={[
+                    styles.prestigeValueBox,
+                    {
+                      backgroundColor: withAlpha(currentAccent, counterTintAlpha),
+                      borderColor: withAlpha(currentAccent, 0.5),
+                    },
+                  ]}
+                >
+                  <Text style={styles.prestigeValueText}>{currentDirectPrestige}</Text>
+                </View>
+              </View>
+
+              <ScaleButton
+                onPress={() => onSetDirectPrestige(currentDirectPrestige + 1)}
+                style={[
+                  styles.prestigeStepperButton,
+                  { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: darkerAccent },
+                ]}
+              >
+                <Text style={styles.prestigeStepperText}>+</Text>
+              </ScaleButton>
+            </View>
+
+            <View style={styles.contractRow}>
+              <ScaleButton
+                onPress={() => onSelectContract(successSelected ? 0 : 1)}
+                style={[
+                  styles.contractButton,
+                  successSelected
+                    ? styles.contractButtonExpanded
+                    : failureSelected
+                    ? styles.contractButtonMinimized
+                    : styles.contractButtonExpanded,
+                  {
+                    borderColor: successSelected ? withAlpha(UI.success, 0.46) : UI.lineStrong,
+                    backgroundColor: successSelected ? withAlpha(UI.success, 0.08) : UI.cardMuted,
+                  },
+                ]}
+              >
+                <Text style={[styles.contractIcon, { color: UI.success }]}>✓</Text>
+                {!failureSelected ? <Text style={styles.contractLabel}>Contract Succeeded</Text> : null}
+              </ScaleButton>
+
+              <ScaleButton
+                onPress={() => onSelectFailure(failureSelected ? 0 : 1)}
+                style={[
+                  styles.contractButton,
+                  failureSelected
+                    ? styles.contractButtonExpanded
+                    : successSelected
+                    ? styles.contractButtonMinimized
+                    : styles.contractButtonExpanded,
+                  {
+                    borderColor: failureSelected ? withAlpha(UI.failure, 0.46) : UI.lineStrong,
+                    backgroundColor: failureSelected ? withAlpha(UI.failure, 0.08) : UI.cardMuted,
+                  },
+                ]}
+              >
+                <Text style={[styles.contractIcon, { color: UI.failure }]}>✕</Text>
+                {!successSelected ? <Text style={styles.contractLabel}>Contract Failed</Text> : null}
+              </ScaleButton>
+            </View>
+          </>
+        )}
       </View>
     </View>
   );
 }
 
+function AssistAnimatedRow({
+  collapsing,
+  children,
+}: {
+  collapsing: boolean;
+  children: React.ReactNode;
+}) {
+  const progress = React.useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    Animated.timing(progress, {
+      toValue: collapsing ? 0 : 1,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [collapsing, progress]);
+
+  const animatedHeight = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 56],
+  });
+
+  const animatedMarginBottom = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 5],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        height: animatedHeight,
+        opacity: progress,
+        marginBottom: animatedMarginBottom,
+        overflow: 'hidden',
+        transform: [
+          {
+            scaleY: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.92, 1],
+            }),
+          },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 function AssistSection({
+  currentAccent,
   otherPlayers,
   currentAssistRecipients,
   currentAssistPrestigeRecipients,
@@ -440,8 +563,13 @@ function AssistSection({
   onToggleCollapsed,
   onSelectNone,
   collapsedByPlayer,
-  onTogglePlayerCollapsed,
+  setCollapsedAssistPlayers,
+  hiddenAssistPlayers,
+  onRestoreHiddenPlayer,
+  collapsingAssistPlayers,
+  onHideAssistAnimated,
 }: {
+  currentAccent: string;
   otherPlayers: Player[];
   currentAssistRecipients: Record<string, number>;
   currentAssistPrestigeRecipients: Record<string, number>;
@@ -451,178 +579,173 @@ function AssistSection({
   onToggleCollapsed: () => void;
   onSelectNone: () => void;
   collapsedByPlayer: Record<string, boolean>;
-  onTogglePlayerCollapsed: (playerId: string) => void;
+  setCollapsedAssistPlayers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  hiddenAssistPlayers: Record<string, boolean>;
+  onRestoreHiddenPlayer: (playerId: string) => void;
+  collapsingAssistPlayers: Record<string, boolean>;
+  onHideAssistAnimated: (playerId: string) => void;
 }) {
-  const completedCount = otherPlayers.filter((player) =>
-    Object.prototype.hasOwnProperty.call(currentAssistRecipients ?? {}, player.id)
-  ).length;
-
-  const assistStatus =
-    otherPlayers.length === 0
-      ? 'None'
-      : completedCount === otherPlayers.length
-        ? 'Complete'
-        : `${completedCount}/${otherPlayers.length}`;
+  const visiblePlayers = otherPlayers.filter((player) => !hiddenAssistPlayers[player.id]);
+  const hiddenPlayers = otherPlayers.filter((player) => hiddenAssistPlayers[player.id]);
 
   return (
-    <View style={styles.card}>
-      <View style={styles.collapsibleHeaderRow}>
-        <Pressable onPress={onToggleCollapsed} style={styles.flexHeaderTitle}>
-          <Text style={styles.sectionTitle}>Assists • {assistStatus}</Text>
-          <Text style={styles.chevronText}>{collapsed ? '▼' : '▲'}</Text>
-        </Pressable>
+    <View
+      style={[
+        styles.sectionCard,
+        { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: UI.card },
+        glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8),
+      ]}
+    >
+      <View style={styles.sectionHeaderRow}>
+  <ScaleButton onPress={onToggleCollapsed} style={styles.headerTapZone}>
+    <View style={styles.assistHeaderTitleRow}>
+      <Text style={styles.sectionTitle}>Assists</Text>
+      <Text style={styles.chevron}>{collapsed ? '▾' : '▴'}</Text>
+    </View>
+  </ScaleButton>
 
-        <Pressable onPress={onSelectNone} style={styles.noneButton}>
-          <Text style={styles.noneButtonText}>None</Text>
-        </Pressable>
-      </View>
+  <View style={styles.assistHeaderRight}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.assistDotsScroll}
+      contentContainerStyle={styles.assistHeaderActions}
+    >
+      {hiddenPlayers.map((player, index) => {
+        const accent = getPlayerAccentColor(resolveStoredPlayerColor(player.color, index));
+        return (
+          <ScaleButton
+            key={player.id}
+            onPress={() => onRestoreHiddenPlayer(player.id)}
+            style={[
+              styles.headerRestoreDotButton,
+              {
+                borderColor: withAlpha(accent, 0.42),
+                backgroundColor: withAlpha(accent, 0.12),
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.headerRestoreDotOnly,
+                { backgroundColor: withAlpha(accent, 0.92) },
+              ]}
+            />
+          </ScaleButton>
+        );
+      })}
+    </ScrollView>
+
+    <ScaleButton onPress={onSelectNone} style={styles.noneChip}>
+      <Text style={styles.noneChipText}>None</Text>
+    </ScaleButton>
+  </View>
+</View>
 
       {!collapsed ? (
-        <View style={styles.verticalList}>
-          {otherPlayers.map((player) => {
+        <View style={styles.rowsStack}>
+          {visiblePlayers.map((player, index) => {
+            const accent = getPlayerAccentColor(resolveStoredPlayerColor(player.color, index));
             const assistOn = toNumber(currentAssistRecipients[player.id]) > 0;
-            const assistMarked = Object.prototype.hasOwnProperty.call(
-              currentAssistRecipients ?? {},
-              player.id
-            );
-            const assistAccent = getPlayerAccentColor(player.color);
-            const assistTint = getPlayerTintColor(player.color);
             const rowCollapsed = !!collapsedByPlayer[player.id];
+            const rowIsCollapsing = !!collapsingAssistPlayers[player.id];
 
             return (
-              <View
-                key={player.id}
-                style={[
-                  styles.assistRowCard,
-                  styles.fullWidthCard,
-                  {
-                    borderColor: assistAccent,
-                    backgroundColor: assistOn ? assistTint : '#111a2b',
-                  },
-                ]}
-              >
-                <Pressable
-                  style={styles.playerRowHeader}
-                  onPress={() => onTogglePlayerCollapsed(player.id)}
+              <AssistAnimatedRow key={player.id} collapsing={rowIsCollapsing}>
+                <View
+                  style={[
+                    styles.playerRowCard,
+                    {
+                      backgroundColor: assistOn ? withAlpha(accent, 0.08) : UI.cardSoft,
+                      borderColor: assistOn ? withAlpha(accent, 0.45) : withAlpha(accent, 0.2),
+                    },
+                    glowStyle(
+                      withAlpha(accent, 0.9),
+                      assistOn ? 0.2 : 0.12,
+                      assistOn ? 10 : 7,
+                      assistOn ? 7 : 4
+                    ),
+                  ]}
                 >
-                  <View style={styles.playerInfo}>
-                    <View
+                  <View style={styles.assistSingleLine}>
+                    <ScaleButton
+                      onPress={() =>
+                        setCollapsedAssistPlayers((prev) => ({
+                          ...prev,
+                          [player.id]: !rowCollapsed,
+                        }))
+                      }
                       style={[
-                        styles.colorDot,
-                        { backgroundColor: assistAccent },
+                        styles.assistNameWrap,
+                        {
+                          backgroundColor: withAlpha(accent, 0.1),
+                          borderColor: withAlpha(accent, 0.22),
+                        },
                       ]}
-                    />
-                    <View style={styles.playerTextWrap}>
-                      <Text style={styles.listTitle}>{player.name}</Text>
-                      <Text style={styles.listMeta}>
-                        {assistMarked
-                          ? assistOn
-                            ? 'Assisting this turn'
-                            : 'Marked as not assisting'
-                          : 'Assist not marked yet'}
-                      </Text>
-                    </View>
+                    >
+                      <View style={[styles.colorBullet, { backgroundColor: accent }]} />
+                      <Text style={styles.playerRowTitle}>{player.name}</Text>
+                      <Text style={styles.chevron}>{rowCollapsed ? '▾' : '▴'}</Text>
+                    </ScaleButton>
+
+                    {!rowCollapsed ? (
+                      <View style={styles.assistInlineControls}>
+                        <ScaleButton
+                          onPress={() => onHideAssistAnimated(player.id)}
+                          style={[styles.choiceChip, styles.choiceChipQuiet]}
+                        >
+                          <Text style={styles.choiceChipText}>No</Text>
+                        </ScaleButton>
+
+                        <ScaleButton
+                          onPress={() => onToggleAssist(player.id, 1)}
+                          style={[
+                            styles.choiceChip,
+                            {
+                              borderColor: assistOn ? withAlpha(accent, 0.42) : UI.lineStrong,
+                              backgroundColor: assistOn ? withAlpha(accent, 0.1) : UI.cardMuted,
+                            },
+                          ]}
+                        >
+                          <Text style={styles.choiceChipText}>Yes</Text>
+                        </ScaleButton>
+
+                        <View style={[styles.assistInlinePrestige, !assistOn && styles.disabled]}>
+                          <ScaleButton
+                            disabled={!assistOn}
+                            onPress={() =>
+                              onSetAssistPrestige(
+                                player.id,
+                                toNumber(currentAssistPrestigeRecipients[player.id]) - 1
+                              )
+                            }
+                            style={styles.miniStepper}
+                          >
+                            <Text style={styles.miniStepperText}>-</Text>
+                          </ScaleButton>
+
+                          <Text style={styles.miniValue}>
+                            {toNumber(currentAssistPrestigeRecipients[player.id])}
+                          </Text>
+
+                          <ScaleButton
+                            disabled={!assistOn}
+                            onPress={() =>
+                              onSetAssistPrestige(
+                                player.id,
+                                toNumber(currentAssistPrestigeRecipients[player.id]) + 1
+                              )
+                            }
+                            style={styles.miniStepper}
+                          >
+                            <Text style={styles.miniStepperText}>+</Text>
+                          </ScaleButton>
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
-
-                  <Text style={styles.chevronText}>{rowCollapsed ? '▼' : '▲'}</Text>
-                </Pressable>
-
-                <View style={styles.yesNoRow}>
-                  <Pressable
-                    style={[
-                      styles.choiceChip,
-                      { borderColor: assistAccent },
-                      !assistOn && assistMarked ? { backgroundColor: assistAccent } : null,
-                    ]}
-                    onPress={() => onToggleAssist(player.id, 0)}
-                  >
-                    <Text
-                      style={[
-                        styles.choiceChipText,
-                        !assistOn && assistMarked && styles.choiceChipTextActive,
-                      ]}
-                    >
-                      No
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.choiceChip,
-                      { borderColor: assistAccent },
-                      assistOn ? { backgroundColor: assistAccent } : null,
-                    ]}
-                    onPress={() => onToggleAssist(player.id, 1)}
-                  >
-                    <Text
-                      style={[
-                        styles.choiceChipText,
-                        assistOn && styles.choiceChipTextActive,
-                      ]}
-                    >
-                      Yes
-                    </Text>
-                  </Pressable>
                 </View>
-
-                {!rowCollapsed ? (
-                  <View
-                    style={[
-                      styles.inlineAssistPrestigeWrap,
-                      !assistOn && styles.inlineAssistPrestigeWrapDisabled,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.inlineAssistPrestigeLabel,
-                        { color: assistAccent },
-                      ]}
-                    >
-                      Assist Prestige
-                    </Text>
-
-                    <View style={styles.assistPrestigeBox}>
-                      <Pressable
-                        disabled={!assistOn}
-                        style={[
-                          styles.miniButton,
-                          { borderColor: assistAccent },
-                          !assistOn && styles.disabledMiniButton,
-                        ]}
-                        onPress={() =>
-                          onSetAssistPrestige(
-                            player.id,
-                            toNumber(currentAssistPrestigeRecipients[player.id]) - 1
-                          )
-                        }
-                      >
-                        <Text style={styles.miniButtonText}>−</Text>
-                      </Pressable>
-
-                      <Text style={styles.assistPrestigeValue}>
-                        {toNumber(currentAssistPrestigeRecipients[player.id])}
-                      </Text>
-
-                      <Pressable
-                        disabled={!assistOn}
-                        style={[
-                          styles.miniButton,
-                          { borderColor: assistAccent },
-                          !assistOn && styles.disabledMiniButton,
-                        ]}
-                        onPress={() =>
-                          onSetAssistPrestige(
-                            player.id,
-                            toNumber(currentAssistPrestigeRecipients[player.id]) + 1
-                          )
-                        }
-                      >
-                        <Text style={styles.miniButtonText}>+</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
-              </View>
+              </AssistAnimatedRow>
             );
           })}
         </View>
@@ -631,159 +754,109 @@ function AssistSection({
   );
 }
 
-function ObjectiveCounterCard({
+function ObjectiveRow({
   title,
   value,
+  accent,
   onChange,
-  accentColor,
-  tintColor,
-  collapsed,
-  onToggleCollapsed,
 }: {
   title: string;
   value: number;
+  accent: string;
   onChange: (next: number) => void;
-  accentColor?: string;
-  tintColor?: string;
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
 }) {
   return (
     <View
       style={[
-        styles.smallObjectiveBlock,
-        styles.fullWidthCard,
-        accentColor ? { borderColor: `${accentColor}66` } : null,
-        tintColor ? { backgroundColor: tintColor } : null,
+        styles.objectiveRowCard,
+        {
+          backgroundColor: value > 0 ? withAlpha(accent, 0.1) : UI.cardSoft,
+          borderColor: value > 0 ? withAlpha(accent, 0.45) : withAlpha(accent, 0.2),
+        },
+        glowStyle(withAlpha(accent, 0.9), value > 0 ? 0.2 : 0.12, value > 0 ? 10 : 7, value > 0 ? 7 : 4),
       ]}
     >
-      <Pressable style={styles.playerRowHeader} onPress={onToggleCollapsed}>
-        <View style={styles.playerTextWrap}>
-          <Text
-            style={[
-              styles.smallObjectiveTitle,
-              accentColor ? { color: accentColor } : null,
-            ]}
-          >
-            {title}
-          </Text>
+      <View
+        style={[
+          styles.objectiveNameWrap,
+          {
+            backgroundColor: withAlpha(accent, 0.1),
+            borderColor: withAlpha(accent, 0.22),
+          },
+        ]}
+      >
+        <Text style={styles.objectiveName}>{title}</Text>
+      </View>
+      <View style={styles.objectiveControlsRight}>
+        <ScaleButton onPress={() => onChange(Math.max(0, value - 1))} style={styles.objectiveMiniButton}>
+          <Text style={styles.objectiveMiniButtonText}>-</Text>
+        </ScaleButton>
+        <View style={styles.objectiveValuePill}>
+          <Text style={styles.objectiveValueText}>{value}</Text>
         </View>
-
-        <Text style={styles.chevronText}>{collapsed ? '▼' : '▲'}</Text>
-      </Pressable>
-
-      {!collapsed ? (
-        <View style={styles.smallObjectiveRow}>
-          <Pressable
-            style={[
-              styles.smallObjectiveButton,
-              accentColor ? { borderColor: accentColor } : null,
-            ]}
-            onPress={() => onChange(Math.max(0, value - 1))}
-          >
-            <Text style={styles.smallObjectiveButtonText}>−</Text>
-          </Pressable>
-
-          <View
-            style={[
-              styles.smallObjectiveValueCard,
-              accentColor
-                ? {
-                    borderColor: accentColor,
-                    backgroundColor: `${accentColor}22`,
-                  }
-                : null,
-            ]}
-          >
-            <Text style={styles.smallObjectiveValue}>{value}</Text>
-          </View>
-
-          <Pressable
-            style={[
-              styles.smallObjectiveButton,
-              accentColor ? { borderColor: accentColor } : null,
-            ]}
-            onPress={() => onChange(value + 1)}
-          >
-            <Text style={styles.smallObjectiveButtonText}>+</Text>
-          </Pressable>
-        </View>
-      ) : null}
+        <ScaleButton onPress={() => onChange(value + 1)} style={styles.objectiveMiniButton}>
+          <Text style={styles.objectiveMiniButtonText}>+</Text>
+        </ScaleButton>
+      </View>
     </View>
   );
 }
 
 function ObjectivesSection({
+  currentAccent,
   currentPlayerName,
   currentObjectiveCount,
   onSetCurrentObjectiveCount,
   otherPlayers,
   objectiveAwardsByPlayer,
   onSetOtherPlayerObjective,
-  currentAccent,
-  currentTint,
   collapsed,
   onToggleCollapsed,
   onSelectNone,
-  collapsedByPlayer,
-  onTogglePlayerCollapsed,
 }: {
+  currentAccent: string;
   currentPlayerName: string;
   currentObjectiveCount: number;
   onSetCurrentObjectiveCount: (next: number) => void;
   otherPlayers: Player[];
   objectiveAwardsByPlayer: Record<string, number>;
   onSetOtherPlayerObjective: (playerId: string, next: number) => void;
-  currentAccent: string;
-  currentTint: string;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onSelectNone: () => void;
-  collapsedByPlayer: Record<string, boolean>;
-  onTogglePlayerCollapsed: (playerId: string) => void;
 }) {
   const totalAwarded =
-    currentObjectiveCount +
-    otherPlayers.reduce(
-      (sum, player) => sum + clampCount(objectiveAwardsByPlayer[player.id]),
-      0
-    );
+    currentObjectiveCount + otherPlayers.reduce((sum, p) => sum + clampCount(objectiveAwardsByPlayer[p.id]), 0);
 
   return (
-    <View style={styles.card}>
-      <View style={styles.collapsibleHeaderRow}>
-        <Pressable onPress={onToggleCollapsed} style={styles.flexHeaderTitle}>
-          <Text style={styles.sectionTitle}>Objectives • {totalAwarded} awarded</Text>
-          <Text style={styles.chevronText}>{collapsed ? '▼' : '▲'}</Text>
-        </Pressable>
-
-        <Pressable onPress={onSelectNone} style={styles.noneButton}>
-          <Text style={styles.noneButtonText}>None</Text>
-        </Pressable>
+    <View style={[styles.sectionCard, { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: UI.card }, glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8)]}>
+      <View style={styles.sectionHeaderRow}>
+        <ScaleButton onPress={onToggleCollapsed} style={styles.headerTapZone}>
+          <Text style={styles.sectionTitle}>Objectives {totalAwarded} awarded</Text>
+        </ScaleButton>
+        <View style={styles.headerActions}>
+          <Text style={styles.chevron}>{collapsed ? '▾' : '▴'}</Text>
+          <ScaleButton onPress={onSelectNone} style={styles.noneChip}>
+            <Text style={styles.noneChipText}>None</Text>
+          </ScaleButton>
+        </View>
       </View>
 
       {!collapsed ? (
-        <View style={styles.verticalList}>
-          <ObjectiveCounterCard
-            title={`${currentPlayerName} Objectives`}
-            value={currentObjectiveCount}
+        <View style={styles.rowsStack}>
+          <ObjectiveRow
+            title={currentPlayerName}
+            value={clampCount(currentObjectiveCount)}
+            accent={currentAccent}
             onChange={onSetCurrentObjectiveCount}
-            accentColor={currentAccent}
-            tintColor={currentTint}
-            collapsed={!!collapsedByPlayer.self}
-            onToggleCollapsed={() => onTogglePlayerCollapsed('self')}
           />
-
-          {otherPlayers.map((player) => (
-            <ObjectiveCounterCard
-              key={`obj-${player.id}`}
-              title={`${player.name} Objectives`}
+          {otherPlayers.map((player, index) => (
+            <ObjectiveRow
+              key={player.id}
+              title={player.name}
               value={clampCount(objectiveAwardsByPlayer[player.id])}
+              accent={getPlayerAccentColor(resolveStoredPlayerColor(player.color, index))}
               onChange={(next) => onSetOtherPlayerObjective(player.id, next)}
-              accentColor={getPlayerAccentColor(player.color)}
-              tintColor={getPlayerTintColor(player.color)}
-              collapsed={!!collapsedByPlayer[player.id]}
-              onToggleCollapsed={() => onTogglePlayerCollapsed(player.id)}
             />
           ))}
         </View>
@@ -797,6 +870,7 @@ function ActionsSection({
   canSubmitTurn,
   canEditPreviousTurn,
   showPreviousRounds,
+  stayAtBaseSelected,
   onStayAtBase,
   onEditPreviousTurn,
   onSaveOrAdvance,
@@ -806,67 +880,54 @@ function ActionsSection({
   canSubmitTurn: boolean;
   canEditPreviousTurn: boolean;
   showPreviousRounds: boolean;
+  stayAtBaseSelected: boolean;
   onStayAtBase: () => void;
   onEditPreviousTurn: () => void;
   onSaveOrAdvance: () => void;
   onFinishGame: () => void;
 }) {
   return (
-    <View style={styles.actionsStack}>
-      <View style={styles.buttonRow}>
-        <Pressable
+    <View style={styles.actionsWrap}>
+      <View style={styles.actionRow}>
+        <ScaleButton
           disabled={!canEditPreviousTurn}
-          style={[
-            styles.actionButton,
-            styles.halfRowButton,
-            styles.secondaryActionButton,
-            styles.editPreviousButton,
-            !canEditPreviousTurn && styles.disabledActionButton,
-          ]}
           onPress={onEditPreviousTurn}
+          style={[styles.actionButton, styles.actionButtonCompact, styles.secondaryAction]}
         >
-          <Text style={styles.actionButtonText}>
-            {showPreviousRounds ? 'Hide Previous Rounds' : 'Edit Previous Turn'}
+          <Text style={styles.actionText}>
+            {showPreviousRounds ? 'Hide Previous Turn' : 'Edit Previous Turn'}
           </Text>
-        </Pressable>
+        </ScaleButton>
 
-        <Pressable
+        <ScaleButton
+          onPress={onStayAtBase}
           style={[
             styles.actionButton,
-            styles.halfRowButton,
-            styles.stayAtBaseButton,
+            styles.actionButtonCompact,
+            stayAtBaseSelected ? styles.baseActionActive : styles.baseAction,
           ]}
-          onPress={onStayAtBase}
         >
-          <Text style={styles.actionButtonText}>Stay at Base</Text>
-        </Pressable>
+          <Text style={[styles.actionText, stayAtBaseSelected && styles.baseActionText]}>
+            {stayAtBaseSelected ? 'Undo Base' : 'Stay at Base'}
+          </Text>
+        </ScaleButton>
       </View>
 
-      <View style={styles.buttonRow}>
-        <Pressable
+      <View style={styles.actionRow}>
+        <ScaleButton
           disabled={!canSubmitTurn}
-          style={[
-            styles.actionButton,
-            styles.primaryActionButtonTall,
-            styles.endTurnButton,
-            !canSubmitTurn && styles.disabledActionButton,
-          ]}
           onPress={onSaveOrAdvance}
+          style={[styles.actionButton, styles.actionButtonTall, styles.endTurnAction]}
         >
-          <Text style={styles.endTurnButtonText}>
-            {editingRoundId ? 'Save & Return to Active Turn' : 'End Turn'}
-          </Text>
-        </Pressable>
+          <Text style={styles.actionText}>{editingRoundId ? 'Save Turn' : 'End Turn'}</Text>
+        </ScaleButton>
 
-        <Pressable
-          style={[
-            styles.actionButton,
-            styles.finishGameButton,
-          ]}
+        <ScaleButton
           onPress={onFinishGame}
+          style={[styles.actionButton, styles.actionButtonTall, styles.finishAction]}
         >
-          <Text style={styles.finishGameButtonText}>Finish Game</Text>
-        </Pressable>
+          <Text style={styles.actionText}>Finish Game</Text>
+        </ScaleButton>
       </View>
     </View>
   );
@@ -877,59 +938,46 @@ function PreviousRoundsSection({
   allRounds,
   players,
   onEditPreviousRound,
-  editingRoundId,
 }: {
   displayRounds: StoredRound[];
   allRounds: StoredRound[];
   players: Player[];
   onEditPreviousRound: (round: StoredRound) => void;
-  editingRoundId: string | null;
 }) {
+  if (!displayRounds.length) return null;
+
   return (
-    <View style={styles.card}>
+    <View style={[styles.sectionCard, { backgroundColor: UI.card, borderColor: UI.lineStrong }]}>
       <Text style={styles.sectionTitle}>Previous Rounds</Text>
-
-      {displayRounds.length === 0 ? (
-        <Text style={styles.emptyText}>No saved rounds yet.</Text>
-      ) : (
-        <View style={styles.compactListTight}>
-          {displayRounds.map((round, index) => {
-            const linkedBonusRounds = allRounds.filter(
-              (candidate) => candidate.linkedTurnId === round.id
+      <View style={styles.rowsStack}>
+        {displayRounds.map((round, index) => {
+          const player = players.find((p) => p.id === round.playerId);
+          const accent = getPlayerAccentColor(resolveStoredPlayerColor(player?.color, index));
+          const linked = allRounds.filter((candidate) => candidate.linkedTurnId === round.id);
+          const objectivePrestige =
+            clampCount(round.objectiveCount ?? round.objectivePrestige) +
+            linked.reduce(
+              (sum, candidate) =>
+                sum + clampCount(candidate.objectiveCount ?? candidate.objectivePrestige),
+              0
             );
-            const roundPlayer = players.find((p) => p.id === round.playerId);
-            const roundAccent = getPlayerAccentColor(roundPlayer?.color);
-            const assistCount = getAssistCount(round.assistRecipients);
-            const objectivePrestige =
-              clampCount(round.objectiveCount ?? round.objectivePrestige) +
-              linkedBonusRounds.reduce(
-                (sum, candidate) =>
-                  sum + clampCount(candidate.objectiveCount ?? candidate.objectivePrestige),
-                0
-              );
 
-            return (
-              <Pressable
-                key={round.id}
-                style={[
-                  styles.roundRowDense,
-                  { borderColor: `${roundAccent}55` },
-                  editingRoundId === round.id ? styles.roundRowDenseActive : null,
-                ]}
-                onPress={() => onEditPreviousRound(round)}
-              >
-                <View style={[styles.roundColorDot, { backgroundColor: roundAccent }]} />
-                <Text style={styles.roundDensePrimary}>
-                  R{index + 1} • {roundPlayer?.name ?? 'Unknown'}
-                </Text>
-                <Text style={styles.roundDenseMetric}>{toNumber(round.prestige)} Direct</Text>
-                <Text style={styles.roundDenseMetric}>+{objectivePrestige} Obj</Text>
-                <Text style={styles.roundDenseMetric}>{assistCount} Assist</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
+          return (
+            <ScaleButton
+              key={round.id}
+              onPress={() => onEditPreviousRound(round)}
+              style={[
+                styles.previousRoundRow,
+                { borderColor: withAlpha(accent, 0.24), backgroundColor: UI.cardSoft },
+              ]}
+            >
+              <Text style={styles.previousRoundText}>R{index + 1} {player?.name ?? 'Unknown'}</Text>
+              <Text style={styles.previousRoundMetric}>{toNumber(round.prestige)} direct</Text>
+              <Text style={styles.previousRoundMetric}>+{objectivePrestige} obj</Text>
+            </ScaleButton>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -945,27 +993,31 @@ export default function Game() {
   const [contractChoice, setContractChoice] = useState<BinaryChoice>(0);
   const [failureChoice, setFailureChoice] = useState<BinaryChoice>(0);
   const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
-  const [objectiveAwardsByPlayer, setObjectiveAwardsByPlayer] = useState<Record<string, number>>(
-    {}
-  );
+  const [objectiveAwardsByPlayer, setObjectiveAwardsByPlayer] = useState<Record<string, number>>({});
   const [stayAtBaseSelected, setStayAtBaseSelected] = useState(false);
   const [assistsCollapsed, setAssistsCollapsed] = useState(false);
   const [objectivesCollapsed, setObjectivesCollapsed] = useState(false);
-  const [missionsCollapsed, setMissionsCollapsed] = useState(false);
   const [showPreviousRounds, setShowPreviousRounds] = useState(false);
   const [collapsedAssistPlayers, setCollapsedAssistPlayers] = useState<Record<string, boolean>>({});
-  const [collapsedObjectivePlayers, setCollapsedObjectivePlayers] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [hiddenAssistPlayers, setHiddenAssistPlayers] = useState<Record<string, boolean>>({});
+  const [collapsingAssistPlayers, setCollapsingAssistPlayers] = useState<Record<string, boolean>>({});
 
   const scrollViewRef = useRef<ScrollView>(null);
+  const preBaseSnapshotRef = useRef<{
+    current: CurrentTurnStats;
+    contractChoice: BinaryChoice;
+    failureChoice: BinaryChoice;
+    assistsCollapsed: boolean;
+    collapsedAssistPlayers: Record<string, boolean>;
+    hiddenAssistPlayers: Record<string, boolean>;
+  } | null>(null);
 
   const players = useMemo<Player[]>(
     () =>
       Array.isArray(activeGame?.players)
-        ? activeGame.players.map((player: Player) => ({
+        ? activeGame.players.map((player: Player, index: number) => ({
             ...player,
-            color: normalizeColor(player.color),
+            color: resolveStoredPlayerColor(player.color, index),
           }))
         : [],
     [activeGame?.players]
@@ -974,6 +1026,7 @@ export default function Game() {
   const activeTurnPlayer = players[activeGame?.turnIndex ?? 0] as Player | undefined;
   const rounds = (activeGame?.rounds ?? []) as StoredRound[];
   const current = (activeGame?.current ?? initialCurrentState) as CurrentTurnStats;
+  const displayRounds = useMemo(() => getDisplayRounds(rounds), [rounds]);
 
   const editingRound = useMemo(
     () => rounds.find((round) => round.id === editingRoundId) ?? null,
@@ -989,89 +1042,26 @@ export default function Game() {
     [players, currentPlayer?.id]
   );
 
-  const totals = useMemo(
-    () => buildTotals(rounds as any, players as any),
-    [rounds, players]
+  const totals = useMemo(() => buildTotals(rounds as any, players as any), [rounds, players]);
+
+  const leaderboardPlayers = useMemo(
+    () => getLeaderboard(totals as any, players as any, rounds as any).map((entry) => entry.player as Player),
+    [totals, players, rounds]
   );
 
-  const displayRounds = useMemo(() => getDisplayRounds(rounds), [rounds]);
-
-  const liveLeaderboardPlayers = useMemo(
-    () =>
-      players.map((player) => {
-        const playerTotals = (totals?.[player.id] ?? {}) as Record<string, unknown>;
-        const playerRounds = displayRounds.filter((round) => round.playerId === player.id);
-        const latestRound = playerRounds[playerRounds.length - 1];
-
-        return {
-          id: player.id,
-          name: player.name,
-          color: player.color,
-          totalPrestige: toNumber(playerTotals.totalPrestige),
-          directPrestige: toNumber(playerTotals.directPrestige),
-          objectivePrestige: toNumber(playerTotals.objectivePrestige),
-          assistPrestigeReceived: toNumber(playerTotals.assistPrestigeReceived),
-          score: toNumber(playerTotals.score),
-          contracts: playerRounds.reduce((sum, round) => sum + toNumber(round.contracts), 0),
-          assists: playerRounds.reduce((sum, round) => sum + getAssistCount(round.assistRecipients), 0),
-          momentumLabel: latestRound
-            ? `Last turn: ${toNumber(latestRound.prestige)} prestige`
-            : null,
-        };
-      }),
-    [players, totals, displayRounds]
+  const currentAccent = getPlayerAccentColor(
+    currentPlayer?.color ?? getFallbackPlayerColor(0)
   );
-
-  const currentAccent = getPlayerAccentColor(currentPlayer?.color);
-  const currentTint = getPlayerTintColor(currentPlayer?.color);
-  const targetBackground = getPlayerBackgroundColor(currentPlayer?.color);
-  const targetGradientTop = darkenHexColor(currentAccent, stayAtBaseSelected ? 0.78 : 0.62);
-
-  const [baseBackground, setBaseBackground] = useState(targetBackground);
-  const [gradientTop, setGradientTop] = useState(targetGradientTop);
-  const [overlayBackground, setOverlayBackground] = useState(targetBackground);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (targetBackground === baseBackground) return;
-
-    setOverlayBackground(baseBackground);
-    setBaseBackground(targetBackground);
-    fadeAnim.setValue(1);
-
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 320,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [targetBackground, baseBackground, fadeAnim]);
-
-  useEffect(() => {
-    setGradientTop(targetGradientTop);
-  }, [targetGradientTop]);
-
-  useEffect(() => {
-    if (!editingRoundId) return;
-    if (!rounds.some((round) => round.id === editingRoundId)) {
-      setEditingRoundId(null);
-    }
-  }, [editingRoundId, rounds]);
-
+  const currentDark = mixWithBlack(currentAccent, 0.8);
+  const currentDarker = mixWithBlack(currentAccent, 0.88);
+  const appBackground = getPlayerBackgroundColor(currentPlayer?.color ?? getFallbackPlayerColor(0));
   const hasOutcomeSelection = current.contracts === 1 || current.failures === 1;
 
   const canSubmitTurn = useMemo(() => {
     if (!activeGame || !currentPlayer) return false;
     if (players.length < 2) return false;
     if (!stayAtBaseSelected && !hasOutcomeSelection) return false;
-    if (current.contracts < 0 || current.failures < 0) return false;
-    if (current.contracts > 1 || current.failures > 1) return false;
     if (current.contracts === 1 && current.failures === 1) return false;
-
-    for (const value of Object.values(objectiveAwardsByPlayer)) {
-      if (clampCount(value) < 0) return false;
-    }
-
     return true;
   }, [
     activeGame,
@@ -1079,8 +1069,8 @@ export default function Game() {
     players.length,
     stayAtBaseSelected,
     hasOutcomeSelection,
-    current,
-    objectiveAwardsByPlayer,
+    current.contracts,
+    current.failures,
   ]);
 
   const latestDisplayRound = useMemo(() => {
@@ -1096,17 +1086,9 @@ export default function Game() {
 
   if (!activeGame?.players?.length || !activeTurnPlayer || !currentPlayer) {
     return (
-      <View style={[styles.screen, { backgroundColor: '#081120' }]}>
-        <View style={styles.backgroundLayer}>
-          <StarryNight />
-          <View style={styles.backgroundDim} />
-        </View>
-
-        <View style={styles.centerEmptyWrap}>
-          <View style={styles.headerBoard}>
-            <Text style={styles.headerBoardTitle}>🌙 Moonraker&apos;s</Text>
-            <Text style={styles.headerBoardSubtitle}>No active game</Text>
-          </View>
+      <View style={[styles.screen, { backgroundColor: UI.black }]}>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>No active game</Text>
         </View>
       </View>
     );
@@ -1122,9 +1104,9 @@ export default function Game() {
   }
 
   function applyContractChoice(next: 0 | 1) {
+    preBaseSnapshotRef.current = null;
     setStayAtBaseSelected(false);
     setContractChoice(next);
-    setMissionsCollapsed(next === 1);
 
     if (next === 1) {
       setFailureChoice(0);
@@ -1136,9 +1118,9 @@ export default function Game() {
   }
 
   function applyFailureChoice(next: 0 | 1) {
+    preBaseSnapshotRef.current = null;
     setStayAtBaseSelected(false);
     setFailureChoice(next);
-    setMissionsCollapsed(next === 1);
 
     if (next === 1) {
       setContractChoice(0);
@@ -1157,23 +1139,51 @@ export default function Game() {
 
     if (next === 1) {
       assistPrestigeRecipients[playerId] = toNumber(assistPrestigeRecipients[playerId]);
-      setCollapsedAssistPlayers((prev) => ({ ...prev, [playerId]: false }));
+
+      setHiddenAssistPlayers((prev) => ({
+        ...prev,
+        [playerId]: false,
+      }));
+
+      setCollapsedAssistPlayers((prev) => ({
+        ...prev,
+        [playerId]: false,
+      }));
     } else {
       assistPrestigeRecipients[playerId] = 0;
-      setCollapsedAssistPlayers((prev) => ({ ...prev, [playerId]: true }));
-    }
 
-    const allMarkedNo =
-      otherPlayers.length > 0 &&
-      otherPlayers.every((player) => toNumber(assistRecipients[player.id]) === 0);
+      setHiddenAssistPlayers((prev) => ({
+        ...prev,
+        [playerId]: true,
+      }));
+
+      setCollapsedAssistPlayers((prev) => ({
+        ...prev,
+        [playerId]: true,
+      }));
+    }
 
     updateCurrent({ assistRecipients, assistPrestigeRecipients });
+  }
 
-    if (allMarkedNo) {
-      setAssistsCollapsed(true);
-    } else {
-      setAssistsCollapsed(false);
-    }
+  function hideAssistPlayerAnimated(playerId: string) {
+    setCollapsingAssistPlayers((prev) => ({
+      ...prev,
+      [playerId]: true,
+    }));
+
+    setTimeout(() => {
+      toggleAssist(playerId, 0);
+      setCollapsingAssistPlayers((prev) => ({
+        ...prev,
+        [playerId]: false,
+      }));
+    }, 180);
+  }
+
+  function restoreHiddenAssistPlayer(playerId: string) {
+    setHiddenAssistPlayers((prev) => ({ ...prev, [playerId]: false }));
+    setCollapsedAssistPlayers((prev) => ({ ...prev, [playerId]: false }));
   }
 
   function setAssistPrestige(playerId: string, value: number) {
@@ -1204,9 +1214,7 @@ export default function Game() {
 
   function sanitizeCurrentForRound(source: CurrentTurnStats): CurrentTurnStats {
     const sanitizedAssistRecipients = Object.fromEntries(
-      Object.entries(source.assistRecipients ?? {}).filter(
-        ([, value]) => toNumber(value) > 0
-      )
+      Object.entries(source.assistRecipients ?? {}).filter(([, value]) => toNumber(value) > 0)
     ) as Record<string, number>;
 
     const sanitizedAssistPrestigeRecipients = Object.fromEntries(
@@ -1222,17 +1230,10 @@ export default function Game() {
     };
   }
 
-  function clearObjectivesAndCollapse() {
-    const clearedObjectives: Record<string, number> = {};
-    const nextCollapsed: Record<string, boolean> = { self: true };
-
-    for (const player of otherPlayers) {
-      clearedObjectives[player.id] = 0;
-      nextCollapsed[player.id] = true;
-    }
-
-    setObjectiveAwardsByPlayer(clearedObjectives);
-    setCollapsedObjectivePlayers(nextCollapsed);
+  function clearObjectives() {
+    const cleared: Record<string, number> = {};
+    for (const player of otherPlayers) cleared[player.id] = 0;
+    setObjectiveAwardsByPlayer(cleared);
     updateCurrent({ objectiveCount: 0 });
     setObjectivesCollapsed(true);
   }
@@ -1241,16 +1242,20 @@ export default function Game() {
     const assistRecipients: Record<string, number> = {};
     const assistPrestigeRecipients: Record<string, number> = {};
     const nextCollapsed: Record<string, boolean> = {};
+    const nextHidden: Record<string, boolean> = {};
 
     for (const player of otherPlayers) {
       assistRecipients[player.id] = 0;
       assistPrestigeRecipients[player.id] = 0;
-      nextCollapsed[player.id] = true;
+      nextCollapsed[player.id] = false;
+      nextHidden[player.id] = true;
     }
 
     setCollapsedAssistPlayers(nextCollapsed);
+    setHiddenAssistPlayers(nextHidden);
+    setCollapsingAssistPlayers({});
     updateCurrent({ assistRecipients, assistPrestigeRecipients });
-    setAssistsCollapsed(true);
+    setAssistsCollapsed(false);
   }
 
   function resetTurnEditorState() {
@@ -1259,16 +1264,13 @@ export default function Game() {
     setObjectiveAwardsByPlayer({});
     setEditingRoundId(null);
     setStayAtBaseSelected(false);
-    setMissionsCollapsed(false);
     setAssistsCollapsed(false);
     setObjectivesCollapsed(false);
     setShowPreviousRounds(false);
     setCollapsedAssistPlayers({});
-    setCollapsedObjectivePlayers({});
-
-    requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-    });
+    setHiddenAssistPlayers({});
+    setCollapsingAssistPlayers({});
+    preBaseSnapshotRef.current = null;
   }
 
   function buildCandidateRoundsForSubmit() {
@@ -1276,20 +1278,13 @@ export default function Game() {
       ...(createRound(activeTurnPlayer.id, sanitizeCurrentForRound(current) as any) as StoredRound),
       metaType: 'main' as const,
     };
-
     const linkedTurnId = mainRound.id;
     const bonusRounds = createObjectiveBonusRounds(linkedTurnId, objectiveAwardsByPlayer);
-
-    return {
-      mainRound,
-      bonusRounds,
-      nextRounds: [...rounds, mainRound, ...bonusRounds] as any[],
-    };
+    return { mainRound, nextRounds: [...rounds, mainRound, ...bonusRounds] as any[] };
   }
 
   function buildCandidateRoundsForEdit() {
     if (!editingRoundId) return null;
-
     const originalMainRound = rounds.find((round) => round.id === editingRoundId);
     if (!originalMainRound) return null;
 
@@ -1303,62 +1298,80 @@ export default function Game() {
     const filteredRounds = rounds.filter(
       (round) => round.id !== editingRoundId && round.linkedTurnId !== editingRoundId
     );
-
-    const replacementBonusRounds = createObjectiveBonusRounds(
-      editingRoundId,
-      objectiveAwardsByPlayer
-    );
-
-    const nextRounds = [
-      ...filteredRounds,
-      replacementMainRound,
-      ...replacementBonusRounds,
-    ].sort((a, b) => a.createdAt - b.createdAt) as any[];
-
-    return {
-      nextRounds,
-      replacementMainRound,
-    };
+    const replacementBonusRounds = createObjectiveBonusRounds(editingRoundId, objectiveAwardsByPlayer);
+    const nextRounds = [...filteredRounds, replacementMainRound, ...replacementBonusRounds].sort(
+      (a, b) => a.createdAt - b.createdAt
+    ) as any[];
+    return { nextRounds };
   }
 
   function validateNoNegativeTotalPrestige(candidateRounds: any[]) {
-    const nextTotals = buildTotals(candidateRounds as any, players as any);
-
-    for (const player of players) {
-      const totalPrestige = getTotalPrestigeFromTotals(
-        nextTotals[player.id] as PlayerTotals
-      );
-
-      if (totalPrestige < 0) {
-        Alert.alert(
-          'Invalid prestige total',
-          `${player.name} can gain or lose prestige on a turn, but their cumulative total (direct + objective + assist prestige) cannot go below 0.`
-        );
-        return null;
-      }
-    }
-
-    return nextTotals;
+    return buildTotals(candidateRounds as any, players as any);
   }
 
-  function stayAtBase() {
-    resetTurnEditorState();
+  function toggleStayAtBase() {
+    if (stayAtBaseSelected) {
+      const snapshot = preBaseSnapshotRef.current;
+      setStayAtBaseSelected(false);
+      preBaseSnapshotRef.current = null;
+
+      if (snapshot) {
+        setContractChoice(snapshot.contractChoice);
+        setFailureChoice(snapshot.failureChoice);
+        setAssistsCollapsed(snapshot.assistsCollapsed);
+        setCollapsedAssistPlayers(snapshot.collapsedAssistPlayers);
+        setHiddenAssistPlayers(snapshot.hiddenAssistPlayers);
+
+        patchActiveGame({
+          current: {
+            ...snapshot.current,
+            assistRecipients: { ...(snapshot.current.assistRecipients ?? {}) },
+            assistPrestigeRecipients: { ...(snapshot.current.assistPrestigeRecipients ?? {}) },
+          },
+        });
+      } else {
+        setContractChoice(0);
+        setFailureChoice(0);
+        setAssistsCollapsed(false);
+        patchActiveGame({
+          current: {
+            ...current,
+            contracts: 0,
+            failures: 0,
+          },
+        });
+      }
+
+      return;
+    }
+
+    preBaseSnapshotRef.current = {
+      current: {
+        ...current,
+        assistRecipients: { ...(current.assistRecipients ?? {}) },
+        assistPrestigeRecipients: { ...(current.assistPrestigeRecipients ?? {}) },
+      },
+      contractChoice,
+      failureChoice,
+      assistsCollapsed,
+      collapsedAssistPlayers: { ...collapsedAssistPlayers },
+      hiddenAssistPlayers: { ...hiddenAssistPlayers },
+    };
+
     setStayAtBaseSelected(true);
-    setMissionsCollapsed(true);
+    setContractChoice(0);
+    setFailureChoice(0);
+    setAssistsCollapsed(true);
 
     patchActiveGame({
       current: {
-        prestige: 0,
+        prestige: current.prestige ?? 0,
         contracts: 0,
         failures: 0,
-        assistRecipients: {},
-        assistPrestigeRecipients: {},
-        objectiveCount: 0,
+        assistRecipients: current.assistRecipients ?? {},
+        assistPrestigeRecipients: current.assistPrestigeRecipients ?? {},
+        objectiveCount: current.objectiveCount ?? 0,
       },
-    });
-
-    requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     });
   }
 
@@ -1370,17 +1383,10 @@ export default function Game() {
       }
 
       const candidate = buildCandidateRoundsForSubmit();
-
-      if (!candidate.mainRound?.id) {
-        Alert.alert('Error', 'Could not create the turn round.');
-        return;
-      }
-
       const nextTotals = validateNoNegativeTotalPrestige(candidate.nextRounds);
       if (!nextTotals) return;
 
       const leaders = getLeadingPlayerIds(nextTotals, players as any);
-
       patchActiveGame({
         rounds: candidate.nextRounds,
         current: { ...initialCurrentState },
@@ -1400,10 +1406,8 @@ export default function Game() {
   function saveEdit() {
     try {
       if (!editingRoundId) return;
-
       const candidate = buildCandidateRoundsForEdit();
       if (!candidate) return;
-
       const nextTotals = validateNoNegativeTotalPrestige(candidate.nextRounds);
       if (!nextTotals) return;
 
@@ -1423,23 +1427,15 @@ export default function Game() {
 
   function editPreviousRound(round: StoredRound) {
     try {
-      const linkedRounds = rounds.filter(
-        (candidate) => candidate.linkedTurnId === round.id
-      );
-
+      const linkedRounds = rounds.filter((candidate) => candidate.linkedTurnId === round.id);
       const editState = buildEditStateFromRound(round, linkedRounds);
       const nextAssistCollapsed: Record<string, boolean> = {};
-      const nextObjectiveCollapsed: Record<string, boolean> = {};
+      const nextHidden: Record<string, boolean> = {};
 
       for (const player of players) {
         if (player.id === round.playerId) continue;
-        nextAssistCollapsed[player.id] = toNumber(editState.current.assistRecipients[player.id]) <= 0;
-      }
-
-      nextObjectiveCollapsed.self = false;
-      for (const player of players) {
-        if (player.id === round.playerId) continue;
-        nextObjectiveCollapsed[player.id] = false;
+        nextAssistCollapsed[player.id] = false;
+        nextHidden[player.id] = toNumber(editState.current.assistRecipients?.[player.id]) <= 0;
       }
 
       setEditingRoundId(round.id);
@@ -1447,25 +1443,20 @@ export default function Game() {
       setFailureChoice(editState.failureChoice);
       setObjectiveAwardsByPlayer(editState.bonusObjectiveCounts);
       setStayAtBaseSelected(editState.current.contracts === 0 && editState.current.failures === 0);
-      setMissionsCollapsed(false);
       setAssistsCollapsed(false);
       setObjectivesCollapsed(false);
       setShowPreviousRounds(false);
       setCollapsedAssistPlayers(nextAssistCollapsed);
-      setCollapsedObjectivePlayers(nextObjectiveCollapsed);
+      setHiddenAssistPlayers(nextHidden);
+      setCollapsingAssistPlayers({});
+      preBaseSnapshotRef.current = null;
 
       patchActiveGame({
         current: {
           ...editState.current,
           assistRecipients: { ...(editState.current.assistRecipients ?? {}) },
-          assistPrestigeRecipients: {
-            ...(editState.current.assistPrestigeRecipients ?? {}),
-          },
+          assistPrestigeRecipients: { ...(editState.current.assistPrestigeRecipients ?? {}) },
         },
-      });
-
-      requestAnimationFrame(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       });
     } catch (error) {
       console.error('Edit Previous Round failed:', error);
@@ -1478,7 +1469,6 @@ export default function Game() {
       Alert.alert('No previous turn', 'There are no saved turns to edit yet.');
       return;
     }
-
     setShowPreviousRounds((prev) => !prev);
   }
 
@@ -1486,21 +1476,17 @@ export default function Game() {
     try {
       const finalTotals = buildTotals(rounds as any, players as any);
       const leaderboard = getLeaderboard(finalTotals, players as any);
-
       if (!leaderboard.length) {
         Alert.alert('No turns saved', 'Save at least one turn before finishing.');
         return;
       }
 
       const winnerId = leaderboard[0]?.id;
-
       addGame({
         id: activeGame.id,
         players: players.map((player) => ({
           ...player,
-          totalPrestige: getTotalPrestigeFromTotals(
-            finalTotals[player.id] as PlayerTotals
-          ),
+          totalPrestige: getTotalPrestigeFromTotals(finalTotals[player.id] as PlayerTotals),
           directPrestige: finalTotals[player.id]?.directPrestige ?? 0,
           objectivePrestige: finalTotals[player.id]?.objectivePrestige ?? 0,
           score: finalTotals[player.id]?.score ?? 0,
@@ -1526,79 +1512,94 @@ export default function Game() {
   }
 
   function confirmFinishGame() {
-    Alert.alert(
-      'Finish Game?',
-      'Are you sure you want to end the game? This will save the final result and leave the active game screen.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Finish Game', style: 'destructive', onPress: commitFinishGame },
-      ]
-    );
+    Alert.alert('Finish Game?', 'Are you sure you want to end the game?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Finish Game', style: 'destructive', onPress: commitFinishGame },
+    ]);
   }
 
   return (
-    <View style={[styles.screen, { backgroundColor: baseBackground }]}>
-      <View style={styles.backgroundLayer}>
-        <StarryNight />
-        <View style={styles.backgroundDim} />
-        <Animated.View
-          pointerEvents="none"
+    <View style={[styles.screen, { backgroundColor: appBackground }]}>
+      <StarryNight />
+
+      <View
+        pointerEvents="none"
+        style={[
+          styles.starfieldDim,
+          { backgroundColor: withAlpha(UI.black, 0.54) },
+        ]}
+      />
+
+      <View
+        pointerEvents="none"
+        style={[
+          styles.pageWash,
+          {
+            backgroundColor: stayAtBaseSelected
+              ? withAlpha(UI.gold, 0.025)
+              : makePlayerWash(currentAccent, 0.05),
+          },
+        ]}
+      />
+
+      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
+        <View
           style={[
-            styles.spaceGradientTop,
-            { backgroundColor: gradientTop },
-          ]}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.animatedAccentOverlay,
+            styles.heroCard,
             {
-              backgroundColor: currentTint,
-              opacity: fadeAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.1, 0.22],
-              }),
+              borderColor: editingRoundId ? withAlpha(UI.gold, 0.28) : withAlpha(currentAccent, 0.24),
+              backgroundColor: UI.panelElevated,
             },
           ]}
-        />
-      </View>
+        >
+          {editingRoundId ? (
+            <Text style={styles.heroEyebrow}>Editing Previous Turn</Text>
+          ) : null}
 
-      <ScrollView
-        ref={scrollViewRef}
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-      >
-        <TurnHeader
-          currentPlayerName={currentPlayer.name}
-          currentAccent={currentAccent}
-          roundNumber={editingDisplayRoundNumber ?? (displayRounds.length + 1)}
-          isEditing={!!editingRoundId}
-        />
+          <View style={styles.heroIdentityRow}>
+            <View
+              style={[
+                styles.nameBadge,
+                {
+                  backgroundColor: currentDark,
+                  borderColor: withAlpha(currentAccent, 0.34),
+                },
+              ]}
+            >
+              <Text style={styles.nameBadgeText}>{currentPlayer.name}</Text>
+            </View>
 
-        <LeaderboardSection
-          gameId={activeGame?.id}
-          players={liveLeaderboardPlayers as any}
-        />
+            <View
+              style={[
+                styles.roundBadge,
+                {
+                  backgroundColor: currentDarker,
+                  borderColor: withAlpha(currentAccent, 0.22),
+                },
+              ]}
+            >
+              <Text style={styles.roundBadgeText}>
+                Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <CompactPlayerStrip players={leaderboardPlayers} activePlayerId={currentPlayer.id} totals={totals} />
 
         <DirectPrestigeSection
           currentDirectPrestige={toNumber(current.prestige)}
           onSetDirectPrestige={(next) => updateCurrent({ prestige: next })}
           currentAccent={currentAccent}
-          currentTint={currentTint}
-        />
-
-        <TurnStatsSection
           contractChoice={contractChoice}
           failureChoice={failureChoice}
           onSelectContract={applyContractChoice}
           onSelectFailure={applyFailureChoice}
-          currentAccent={currentAccent}
           stayAtBaseSelected={stayAtBaseSelected}
-          collapsed={missionsCollapsed}
-          onToggleCollapsed={() => setMissionsCollapsed((value) => !value)}
         />
 
         <AssistSection
+          currentAccent={currentAccent}
           otherPlayers={otherPlayers}
           currentAssistRecipients={current.assistRecipients ?? {}}
           currentAssistPrestigeRecipients={current.assistPrestigeRecipients ?? {}}
@@ -1608,33 +1609,24 @@ export default function Game() {
           onToggleCollapsed={() => setAssistsCollapsed((value) => !value)}
           onSelectNone={clearAssistsAndCollapse}
           collapsedByPlayer={collapsedAssistPlayers}
-          onTogglePlayerCollapsed={(playerId) =>
-            setCollapsedAssistPlayers((prev) => ({
-              ...prev,
-              [playerId]: !prev[playerId],
-            }))
-          }
+          setCollapsedAssistPlayers={setCollapsedAssistPlayers}
+          hiddenAssistPlayers={hiddenAssistPlayers}
+          onRestoreHiddenPlayer={restoreHiddenAssistPlayer}
+          collapsingAssistPlayers={collapsingAssistPlayers}
+          onHideAssistAnimated={hideAssistPlayerAnimated}
         />
 
         <ObjectivesSection
+          currentAccent={currentAccent}
           currentPlayerName={currentPlayer.name}
           currentObjectiveCount={clampCount(current.objectiveCount)}
           onSetCurrentObjectiveCount={(next) => updateCurrent({ objectiveCount: next })}
           otherPlayers={otherPlayers}
           objectiveAwardsByPlayer={objectiveAwardsByPlayer}
           onSetOtherPlayerObjective={setOtherPlayerObjective}
-          currentAccent={currentAccent}
-          currentTint={currentTint}
           collapsed={objectivesCollapsed}
           onToggleCollapsed={() => setObjectivesCollapsed((value) => !value)}
-          onSelectNone={clearObjectivesAndCollapse}
-          collapsedByPlayer={collapsedObjectivePlayers}
-          onTogglePlayerCollapsed={(playerId) =>
-            setCollapsedObjectivePlayers((prev) => ({
-              ...prev,
-              [playerId]: !prev[playerId],
-            }))
-          }
+          onSelectNone={clearObjectives}
         />
 
         {showPreviousRounds ? (
@@ -1643,7 +1635,6 @@ export default function Game() {
             allRounds={rounds}
             players={players}
             onEditPreviousRound={editPreviousRound}
-            editingRoundId={editingRoundId}
           />
         ) : null}
 
@@ -1652,7 +1643,8 @@ export default function Game() {
           canSubmitTurn={canSubmitTurn}
           canEditPreviousTurn={!!latestDisplayRound}
           showPreviousRounds={showPreviousRounds}
-          onStayAtBase={stayAtBase}
+          stayAtBaseSelected={stayAtBaseSelected}
+          onStayAtBase={toggleStayAtBase}
           onEditPreviousTurn={togglePreviousRounds}
           onSaveOrAdvance={editingRoundId ? saveEdit : saveRoundAndAdvance}
           onFinishGame={confirmFinishGame}
@@ -1665,534 +1657,501 @@ export default function Game() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#081120',
+    backgroundColor: UI.black,
   },
-  backgroundLayer: {
+  starfieldDim: {
     ...StyleSheet.absoluteFillObject,
   },
-  backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(3,8,18,0.48)',
-  },
-  spaceGradientTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '58%',
-    opacity: 0.9,
-  },
-  animatedAccentOverlay: {
+  pageWash: {
     ...StyleSheet.absoluteFillObject,
   },
   container: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 24,
+    paddingHorizontal: 8,
+    paddingTop: 10,
+    paddingBottom: 14,
     gap: 8,
-    alignItems: 'stretch',
-  },
-  stickyHeaderWrap: {
-    paddingTop: 2,
-    paddingBottom: 4,
-    backgroundColor: 'transparent',
-  },
-  headerBoard: {
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: 'rgba(10, 18, 32, 0.96)',
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.35)',
-  },
-  headerBoardTitle: {
-    color: '#a855f7',
-    fontSize: 22,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  headerBoardSubtitle: {
-    color: '#c4b5fd',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-    textAlign: 'center',
   },
   heroCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: 'rgba(7, 14, 26, 0.94)',
-    borderRadius: 14,
-    padding: 10,
+    borderRadius: 10,
     borderWidth: 1,
+    padding: 10,
     gap: 6,
   },
-  heroAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-  },
-  heroTopRow: {
-    gap: 6,
-  },
-  heroTitleWrap: {
-    gap: 4,
-    alignItems: 'center',
-  },
-  currentPlayerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  roundChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(15,23,42,0.92)',
-  },
-  roundChipText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  heroSubtext: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  currentPlayer: {
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  leaderboardCompactWrap: {
-    minHeight: 52,
-    maxHeight: 64,
-    overflow: 'hidden',
-    alignSelf: 'stretch',
-    marginTop: -2,
-    marginBottom: 2,
-  },
-  card: {
-    backgroundColor: 'rgba(11, 18, 31, 0.92)',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(71, 85, 105, 0.42)',
-    gap: 10,
-    alignSelf: 'stretch',
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#f8fafc',
-  },
-  collapsibleHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  flexHeaderTitle: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  playerRowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  chevronText: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  noneButton: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(15,23,42,0.92)',
-    borderColor: 'rgba(148,163,184,0.5)',
-  },
-  noneButtonText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#f8fafc',
-  },
-  compactListTight: {
-    gap: 4,
-  },
-  listTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#F8FAFC',
-  },
-  listMeta: {
-    marginTop: 1,
-    fontSize: 11,
-    color: '#8EA6C8',
-  },
-  directPrestigeCenterWrap: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  prestigeBlock: {
-    gap: 8,
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    width: '100%',
-    maxWidth: 280,
-    alignSelf: 'center',
-  },
-  prestigeLabel: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
+  heroEyebrow: {
+    color: UI.textMuted,
+    fontSize: 10,
+    fontWeight: '600',
     textAlign: 'center',
   },
-  prestigeRow: {
+  heroIdentityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-  },
-  prestigeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10243f',
-    borderWidth: 1,
-  },
-  prestigeButtonText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  prestigeValueCard: {
-    minWidth: 72,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  prestigeValue: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  twoColumnGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  halfWidthCard: {
-    width: '48.5%',
-  },
-  verticalList: {
-    width: '100%',
-    gap: 8,
-    alignSelf: 'stretch',
-  },
-  fullWidthCard: {
-    width: '100%',
-    alignSelf: 'stretch',
-  },
-  assistRowCard: {
-    backgroundColor: '#111a2b',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    gap: 10,
-    alignSelf: 'stretch',
-  },
-  playerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  playerTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  colorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-  yesNoRow: {
-    flexDirection: 'row',
-    gap: 8,
-    width: '100%',
-  },
-  choiceChip: {
-    minWidth: 0,
-    flex: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#10243f',
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  choiceChipText: {
-    color: '#cbd5e1',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  choiceChipTextActive: {
-    color: '#fff',
-  },
-  inlineAssistPrestigeWrap: {
     gap: 6,
-    alignItems: 'center',
-    width: '100%',
   },
-  inlineAssistPrestigeWrapDisabled: {
-    opacity: 0.45,
-  },
-  inlineAssistPrestigeLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  assistPrestigeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  miniButton: {
-    width: 28,
-    height: 28,
+  nameBadge: {
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1e293b',
     borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
-  disabledMiniButton: {
-    opacity: 0.45,
-  },
-  miniButtonText: {
-    color: '#fff',
+  nameBadgeText: {
+    color: UI.text,
     fontSize: 16,
     fontWeight: '800',
   },
-  assistPrestigeValue: {
-    color: '#fff',
-    minWidth: 20,
-    textAlign: 'center',
-    fontWeight: '800',
-  },
-  smallObjectiveBlock: {
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+  roundBadge: {
+    borderRadius: 8,
     borderWidth: 1,
-    alignSelf: 'stretch',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  smallObjectiveTitle: {
-    color: '#fff',
-    fontSize: 12,
+  roundBadgeText: {
+    color: UI.text,
+    fontSize: 11,
     fontWeight: '700',
   },
-  smallObjectiveRow: {
+  playerStripRow: {
+    gap: 4,
+    paddingRight: 8,
+    alignItems: 'center',
+  },
+  playerPill: {
+    minHeight: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    width: '100%',
   },
-  smallObjectiveButton: {
-    width: 36,
-    height: 36,
+  playerPillRail: {
+    width: 8,
+    height: 24,
+    borderRadius: 999,
+  },
+  playerPillName: {
+    color: UI.text,
+    fontSize: 12,
+    fontWeight: '800',
+    maxWidth: 96,
+  },
+  playerPillMetrics: {
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+  },
+  metricChip: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: UI.cardMuted,
+    borderWidth: 1,
+    borderColor: UI.line,
+  },
+  metricChipText: {
+    color: UI.text,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  sectionCard: {
     borderRadius: 10,
+    borderWidth: 1,
+    padding: 8,
+    gap: 6,
+  },
+  directPrestigeFrame: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 6,
+    gap: 4,
+  },
+  directPrestigeFrameMinimized: {
+    paddingVertical: 9,
+  },
+  prestigeCounterRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10243f',
-    borderWidth: 1,
+    gap: 7,
   },
-  smallObjectiveButtonText: {
-    color: '#fff',
+  prestigeStepperButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prestigeStepperText: {
+    color: UI.text,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  prestigeCenterWrap: {
+    width: 108,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  prestigeValueBox: {
+    width: 108,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#000000',
+    borderWidth: 1.5,
+    borderColor: withAlpha(UI.gold, 0.52),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prestigeValueText: {
+    color: UI.text,
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  contractRow: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  contractButton: {
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 1.25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  contractButtonExpanded: {
+    flex: 1,
+  },
+  contractButtonMinimized: {
+    width: 56,
+  },
+  contractIcon: {
     fontSize: 20,
     fontWeight: '800',
   },
-  smallObjectiveValueCard: {
-    minWidth: 56,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+  contractLabel: {
+    color: UI.text,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  baseModeBoxElite: {
+    minHeight: 52,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: withAlpha(UI.gold, 0.72),
+    backgroundColor: '#000000',
     alignItems: 'center',
-    borderWidth: 1,
-    flex: 1,
+    justifyContent: 'center',
   },
-  smallObjectiveValue: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
+  baseModeTextElite: {
+    color: UI.gold,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
-  sectionAccentBar: {
-    height: 4,
-    borderRadius: 999,
-    marginBottom: 2,
-  },
-  outcomeHeaderRow: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 6,
   },
-  outcomeHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  modeChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(15,23,42,0.92)',
-  },
-  modeChipText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  outcomeRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  outcomeButton: {
+  headerTapZone: {
     flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    gap: 4,
+    borderRadius: 8,
   },
-  outcomeButtonLabel: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  outcomeButtonLabelActive: {
-    color: '#ffffff',
-  },
-  roundRowDense: {
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(15,23,42,0.92)',
-    borderWidth: 1,
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 6,
   },
-  roundColorDot: {
+  assistHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  assistHeaderRight: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+},
+
+assistDotsScroll: {
+  flexGrow: 0,
+  flexShrink: 1,
+},
+
+assistHeaderActions: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 6,
+  paddingLeft: 6,
+},
+
+noneChip: {
+  marginLeft: 'auto',
+  minWidth: 66,
+  height: 36,
+  borderRadius: 8,
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderWidth: 1,
+  borderColor: UI.lineStrong,
+  backgroundColor: UI.cardMuted,
+},
+  noneChipText: {
+    color: UI.text,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  headerRestoreDotButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRestoreDotOnly: {
     width: 8,
     height: 8,
     borderRadius: 999,
   },
-  roundRowDenseActive: {
-    backgroundColor: 'rgba(51, 65, 85, 0.95)',
-    borderWidth: 2,
+  rowsStack: {
+    gap: 0,
   },
-  roundDensePrimary: {
-    color: '#f8fafc',
+  playerRowCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    overflow: 'hidden',
+  },
+  assistSingleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  assistNameWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    minWidth: 78,
+    flexShrink: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  assistInlineControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+  },
+  assistInlinePrestige: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  colorBullet: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  playerRowTitle: {
+    color: UI.text,
     fontSize: 11,
-    fontWeight: '900',
-  },
-  roundDenseMetric: {
-    color: '#94a3b8',
-    fontSize: 10,
     fontWeight: '700',
   },
-  actionsStack: {
-    gap: 8,
-    marginTop: 4,
-    marginBottom: 8,
+  choiceChip: {
+    minWidth: 48,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  buttonRow: {
+  choiceChipQuiet: {
+    borderColor: UI.line,
+    backgroundColor: UI.cardMuted,
+  },
+  choiceChipText: {
+    color: UI.text,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  miniStepper: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: UI.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: UI.cardMuted,
+  },
+  miniStepperText: {
+    color: UI.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  miniValue: {
+    color: UI.text,
+    fontSize: 15,
+    fontWeight: '700',
+    minWidth: 14,
+    textAlign: 'center',
+  },
+  objectiveRowCard: {
+    minHeight: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  objectiveNameWrap: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginRight: 6,
+  },
+  objectiveName: {
+    color: UI.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  objectiveControlsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  objectiveMiniButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: UI.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: UI.cardMuted,
+  },
+  objectiveMiniButtonText: {
+    color: UI.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  objectiveValuePill: {
+    minWidth: 40,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: UI.cardMuted,
+    borderWidth: 1,
+    borderColor: UI.line,
+  },
+  objectiveValueText: {
+    color: UI.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  previousRoundRow: {
+    borderRadius: 10,
+    borderWidth: 1,
+    minHeight: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  previousRoundText: {
+    color: UI.text,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  previousRoundMetric: {
+    color: UI.textMuted,
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  actionsWrap: {
+    gap: 5,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 6,
   },
   actionButton: {
     flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
+    borderRadius: 8,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
-  halfRowButton: {
-    flex: 1,
+  actionButtonCompact: {
+    minHeight: 38,
+    paddingVertical: 5,
   },
-  primaryActionButtonTall: {
-    paddingVertical: 15,
+  actionButtonTall: {
+    minHeight: 76,
+    paddingVertical: 12,
   },
-  secondaryActionButton: {
-    backgroundColor: '#374151',
-    borderColor: '#6b7280',
+  secondaryAction: {
+    backgroundColor: UI.cardMuted,
+    borderColor: UI.lineStrong,
   },
-  editPreviousButton: {
-    borderColor: '#ffffff',
+  baseAction: {
+    backgroundColor: '#0a0a0a',
+    borderColor: withAlpha(UI.gold, 0.36),
   },
-  stayAtBaseButton: {
-    backgroundColor: '#7f3f63',
-    borderColor: '#ff4fa3',
-    borderWidth: 2,
+  baseActionActive: {
+    backgroundColor: '#000000',
+    borderColor: withAlpha(UI.gold, 0.68),
   },
-  endTurnButton: {
-    backgroundColor: '#7f1d1d',
-    borderColor: '#ff3b30',
-    borderWidth: 2,
-    shadowColor: '#ff3b30',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.75,
-    shadowRadius: 8,
-    elevation: 10,
+  baseActionText: {
+    color: UI.gold,
   },
-  endTurnButtonText: {
-    color: '#ffffff',
-    fontWeight: '900',
+  endTurnAction: {
+    backgroundColor: withAlpha(UI.success, 0.08),
+    borderColor: withAlpha(UI.success, 0.34),
   },
-  disabledActionButton: {
+  finishAction: {
+    backgroundColor: withAlpha(UI.failure, 0.08),
+    borderColor: withAlpha(UI.failure, 0.32),
+  },
+  actionText: {
+    color: UI.text,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  disabled: {
     opacity: 0.45,
   },
-  actionButtonText: {
-    color: '#fff',
-    fontWeight: '900',
-  },
-  finishGameButton: {
-    backgroundColor: '#05070b',
-    borderColor: '#fbbf24',
-  },
-  finishGameButtonText: {
-    color: '#f8fafc',
-    fontWeight: '900',
-  },
-  emptyText: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: '#AFC3E0',
-  },
-  centerEmptyWrap: {
+  emptyWrap: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+  },
+  emptyTitle: {
+    color: UI.text,
+    fontSize: 18,
+    fontWeight: '800',
   },
 });
+
+

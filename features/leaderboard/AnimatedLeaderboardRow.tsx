@@ -90,3 +90,5 @@ export default function AnimatedLeaderboardRow({
     </Animated.View>
   );
 }
+
+

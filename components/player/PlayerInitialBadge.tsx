@@ -25,62 +25,22 @@ function getInitials(name?: string, initials?: string): string {
 function getBadgePalette(color?: string) {
   switch ((color ?? '').toLowerCase()) {
     case 'green':
-      return {
-        base: '#22c55e',
-        dark: '#052e16',
-        ring: 'rgba(34,197,94,0.45)',
-        glow: 'rgba(34,197,94,0.30)',
-      };
+      return { base: '#22c55e', dark: '#052e16', ring: 'rgba(34,197,94,0.45)', glow: 'rgba(34,197,94,0.30)' };
     case 'purple':
-      return {
-        base: '#a855f7',
-        dark: '#2e1065',
-        ring: 'rgba(168,85,247,0.46)',
-        glow: 'rgba(168,85,247,0.30)',
-      };
+      return { base: '#a855f7', dark: '#2e1065', ring: 'rgba(168,85,247,0.46)', glow: 'rgba(168,85,247,0.30)' };
     case 'orange':
-      return {
-        base: '#f97316',
-        dark: '#431407',
-        ring: 'rgba(249,115,22,0.46)',
-        glow: 'rgba(249,115,22,0.28)',
-      };
+      return { base: '#f97316', dark: '#431407', ring: 'rgba(249,115,22,0.46)', glow: 'rgba(249,115,22,0.28)' };
     case 'yellow':
-      return {
-        base: '#eab308',
-        dark: '#3a2f00',
-        ring: 'rgba(234,179,8,0.42)',
-        glow: 'rgba(234,179,8,0.24)',
-      };
+      return { base: '#eab308', dark: '#3a2f00', ring: 'rgba(234,179,8,0.42)', glow: 'rgba(234,179,8,0.24)' };
     case 'blue':
-      return {
-        base: '#3b82f6',
-        dark: '#0c1f3f',
-        ring: 'rgba(59,130,246,0.46)',
-        glow: 'rgba(59,130,246,0.30)',
-      };
+      return { base: '#3b82f6', dark: '#0c1f3f', ring: 'rgba(59,130,246,0.46)', glow: 'rgba(59,130,246,0.30)' };
     case 'red':
-      return {
-        base: '#ef4444',
-        dark: '#450a0a',
-        ring: 'rgba(239,68,68,0.44)',
-        glow: 'rgba(239,68,68,0.28)',
-      };
+      return { base: '#ef4444', dark: '#450a0a', ring: 'rgba(239,68,68,0.44)', glow: 'rgba(239,68,68,0.28)' };
     case 'pink':
-      return {
-        base: '#ec4899',
-        dark: '#4a044e',
-        ring: 'rgba(236,72,153,0.44)',
-        glow: 'rgba(236,72,153,0.28)',
-      };
+      return { base: '#ec4899', dark: '#4a044e', ring: 'rgba(236,72,153,0.44)', glow: 'rgba(236,72,153,0.28)' };
     default: {
       const fallback = color || '#94a3b8';
-      return {
-        base: fallback,
-        dark: '#0f172a',
-        ring: 'rgba(148,163,184,0.34)',
-        glow: 'rgba(148,163,184,0.22)',
-      };
+      return { base: fallback, dark: '#0f172a', ring: 'rgba(148,163,184,0.34)', glow: 'rgba(148,163,184,0.22)' };
     }
   }
 }
@@ -93,34 +53,14 @@ function PlayerInitialBadge({
   fontSize,
 }: Props) {
   const displayInitials = getInitials(name, initials);
-
   const palette = useMemo(() => getBadgePalette(color), [color]);
-
   const resolvedFontSize = fontSize ?? Math.max(10, size * 0.34);
   const ringInset = Math.max(2, size * 0.08);
   const orbitSize = Math.max(4, size * 0.16);
 
   return (
-    <View
-      style={[
-        styles.wrapper,
-        {
-          width: size,
-          height: size,
-        },
-      ]}
-    >
-      <View
-        pointerEvents="none"
-        style={[
-          styles.outerGlow,
-          {
-            borderRadius: size / 2,
-            backgroundColor: palette.glow,
-          },
-        ]}
-      />
-
+    <View style={[styles.wrapper, { width: size, height: size }]}>
+      <View pointerEvents="none" style={[styles.outerGlow, { borderRadius: size / 2, backgroundColor: palette.glow }]} />
       <View
         style={[
           styles.container,
@@ -133,17 +73,7 @@ function PlayerInitialBadge({
           },
         ]}
       >
-        <View
-          pointerEvents="none"
-          style={[
-            styles.innerSurface,
-            {
-              borderRadius: size / 2,
-              backgroundColor: palette.base,
-            },
-          ]}
-        />
-
+        <View pointerEvents="none" style={[styles.innerSurface, { borderRadius: size / 2, backgroundColor: palette.base }]} />
         <View
           pointerEvents="none"
           style={[
@@ -158,7 +88,6 @@ function PlayerInitialBadge({
             },
           ]}
         />
-
         <View
           pointerEvents="none"
           style={[
@@ -170,7 +99,6 @@ function PlayerInitialBadge({
             },
           ]}
         />
-
         <View
           pointerEvents="none"
           style={[
@@ -185,7 +113,6 @@ function PlayerInitialBadge({
             },
           ]}
         />
-
         <RNText
           style={[
             styles.text,
@@ -260,3 +187,5 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
 });
+
+

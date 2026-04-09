@@ -163,7 +163,7 @@ function MetricCard({
 }) {
   return (
     <View style={styles.metricCard}>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricLabel} numberOfLines={1}>{label}</Text>
       <Text style={styles.metricValue}>{value}</Text>
       {!!sublabel && <Text style={styles.metricSub}>{sublabel}</Text>}
     </View>
@@ -430,3 +430,5 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
 });
+
+

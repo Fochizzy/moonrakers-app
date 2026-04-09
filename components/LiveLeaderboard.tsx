@@ -87,12 +87,12 @@ export default function LiveLeaderboard({ players }: Props) {
 
                 <View style={styles.bottomRow}>
                   <View style={[styles.statPill, styles.prestigePill]}>
-                    <Text style={styles.statLabel}>P</Text>
+                    <Text style={styles.statLabel} numberOfLines={1}>P</Text>
                     <Text style={styles.statValue}>{toNumber(player.totalPrestige)}</Text>
                   </View>
 
                   <View style={[styles.statPill, styles.scorePill]}>
-                    <Text style={styles.statLabel}>S</Text>
+                    <Text style={styles.statLabel} numberOfLines={1}>S</Text>
                     <Text style={styles.statValueMuted}>{toNumber(player.score)}</Text>
                   </View>
                 </View>
@@ -230,3 +230,5 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
   },
 });
+
+

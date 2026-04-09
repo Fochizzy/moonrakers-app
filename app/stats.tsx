@@ -1,183 +1,235 @@
-import React, { useMemo } from 'react';
-import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useStore } from '@/store/useStore';
-import StarryNight from '@/components/ui/StarryNight';
-import Text from '@/components/ui/Text';
-import PlayerInitialBadge from '@/components/player/PlayerInitialBadge';
+import React, { useMemo, useState } from "react";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  TouchableOpacity,
+} from "react-native";
+import { useRouter } from "expo-router";
 
-type Player = {
-  id: string;
-  name: string;
-  initials?: string;
-  color?: string;
+import { useStore } from "@/store/useStore";
+import StarryNight from "@/components/ui/StarryNight";
+import Text from "@/components/ui/Text";
+
+import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+
+import {
+  buildLeaderboard,
+  buildLeagueSummary,
+  type Player,
+  type Game,
+} from "@/utils/statsEngine";
+import { buildDerivedPlayerStats } from "@/utils/derivedMetricsEngine";
+import { buildGlobalCorrelations } from "@/utils/correlationEngine";
+import { buildIndividualCorrelations } from "@/utils/individualCorrelationEngine";
+import { buildGameCorrelations } from "@/utils/gameCorrelationEngine";
+
+type StatsTab = "overview" | "players" | "correlations" | "games";
+type CorrelationTab = "global" | "individual" | "game";
+
+const GLOBAL_CORRELATION_TIERS = [
+  {
+    title: "Tier 1 · Primary Signals",
+    keys: [
+      "allContractsEfficiency",
+      "failureRate",
+      "earlyLeadRate",
+      "lateLeadRate",
+      "objectivesPerGame",
+      "assists",
+      "assistPrestigeReceived",
+      "prestigePerTurn",
+    ],
+  },
+  {
+    title: "Tier 2 · Conversion + Advanced",
+    keys: [
+      "consistencyScore",
+      "clutchScore",
+      "leadConversion",
+      "objectiveConversionRate",
+      "supportConversionRate",
+      "opponentStrength",
+    ],
+  },
+  {
+    title: "Tier 3 · Meta / Style",
+    keys: ["avgStartSeat", "interactionIndex", "aggroIndex", "tempoIndex"],
+  },
+];
+
+const INDIVIDUAL_CORRELATION_TIERS = [
+  {
+    title: "Tier 1 · Core",
+    keys: [
+      "allContractsEfficiency",
+      "earlyLeadRate",
+      "lateLeadRate",
+      "objectivesPerGame",
+    ],
+  },
+  {
+    title: "Tier 2 · Support",
+    keys: ["assists", "assistPrestigeReceived", "clutchScore"],
+  },
+  {
+    title: "Tier 3 · Context",
+    keys: ["opponentStrength", "tempoIndex"],
+  },
+];
+
+const GAME_CORRELATION_TIERS = [
+  {
+    title: "Tier 2 · Match Conditions",
+    keys: [
+      "totalAssistsVsEarlyLeaderWinning",
+      "totalObjectivesVsObjectiveLeaderWinning",
+      "supportDensityVsSupportLeaderWinning",
+    ],
+  },
+  {
+    title: "Tier 3 · Environment",
+    keys: [
+      "averageEfficiencyVsEarlyLeaderWinning",
+      "failuresVsSupportLeaderWinning",
+      "interactionDensityVsObjectiveLeaderWinning",
+    ],
+  },
+];
+
+function getRowsForTier(rows: any[], keys: string[]) {
+  return keys.map((k) => rows.find((r) => r.key === k)).filter(Boolean);
+}
+
+const COLORS = {
+  bg: "#040814",
+  surface: "#0A1428",
+  surfaceAlt: "#0F172A",
+  surfaceGlass: "#0B1323",
+
+  borderSoft: "rgba(148, 163, 184, 0.18)",
+  borderStrong: "rgba(139, 92, 246, 0.36)",
+
+  textPrimary: "#F8FBFF",
+  textSecondary: "#C7D6F3",
+  textMuted: "#8EA6C8",
+
+  brand: "#8B5CF6",
+  brandTint: "rgba(139, 92, 246, 0.16)",
+
+  cyan: "#67E8F9",
+  blueGlow: "#60A5FA",
+
+  success: "#22c55e",
+  danger: "#ef4444",
+  gold: "#FBBF24",
+  purple: "#A855F7",
+  blue: "#3B82F6",
+  teal: "#22D3EE",
+  pink: "#EC4899",
 };
 
-type Totals = {
-  prestige?: number;
-  totalPrestige?: number;
-  directPrestige?: number;
-  assistPrestigeReceived?: number;
-  assistPrestigeBySource?: Record<string, number>;
-  assistCountBySource?: Record<string, number>;
-  contracts?: number;
-  assists?: number;
-  failures?: number;
-  score?: number;
-};
-
-type GamePlayer = {
-  id: string;
-  startOrder?: number;
-  turnOrder?: number;
-  position?: number;
-};
-
-type Game = {
-  id?: string;
-  winnerId?: string;
-  selectedWinnerId?: string;
-  manualWinnerId?: string;
-  totals?: Record<string, Totals>;
-  players?: GamePlayer[];
-};
-
-type PlayerStats = {
-  id: string;
-  name: string;
-  initials?: string;
-  color?: string;
-  totalPrestige: number;
-  directPrestige: number;
-  assistPrestigeReceived: number;
-  assistPrestigeSent: number;
-  assistCountBySource: number;
-  score: number;
-  assists: number;
-  contracts: number;
-  failures: number;
-  games: number;
-  wins: number;
-  avgPrestigePerGame: number;
-  avgScorePerGame: number;
-  allContractsEfficiency: number;
-  assistanceEfficiency: number;
-  directEfficiency: number;
-  contractFailureRatio: number;
-  winRate: number;
-  failureRate: number;
-  assistShareOfPrestige: number;
-  assistPrestigePerGame: number;
-  assistPrestigePerAssist: number;
-  closeGames: number;
-  closeGameRate: number;
-  bestPrestigeMargin: number;
-  avgPrestigeMarginPerGame: number;
-  avgStartSeat: number;
-  turnOrderWinCorrelation: number;
-};
-
-function toNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function formatPercent(value: number) {
+  if (!Number.isFinite(value)) return "0%";
+  return `${(value * 100).toFixed(0)}%`;
 }
 
-function safeDivide(numerator: number, denominator: number) {
-  return denominator > 0 ? numerator / denominator : 0;
-}
-
-function getTotalPrestige(stats?: Totals) {
-  const explicit = stats?.totalPrestige ?? stats?.prestige;
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
-    return explicit;
-  }
-  return toNumber(stats?.directPrestige) + toNumber(stats?.assistPrestigeReceived);
-}
-
-function getWinnerId(game?: Game): string | undefined {
-  if (!game) return undefined;
-  return game.winnerId ?? game.selectedWinnerId ?? game.manualWinnerId;
-}
-
-function getRecordedSeat(player?: GamePlayer): number | null {
-  if (!player) return null;
-
-  const raw =
-    typeof player.startOrder === 'number' && Number.isFinite(player.startOrder)
-      ? player.startOrder
-      : typeof player.turnOrder === 'number' && Number.isFinite(player.turnOrder)
-        ? player.turnOrder
-        : typeof player.position === 'number' && Number.isFinite(player.position)
-          ? player.position
-          : null;
-
-  return raw === null ? null : raw + 1;
-}
-
-function average(values: number[]) {
-  return values.length
-    ? values.reduce((sum, value) => sum + value, 0) / values.length
-    : 0;
-}
-
-function getPearsonCorrelation(points: Array<{ x: number; y: number }>) {
-  if (points.length < 2) return 0;
-
-  const meanX = average(points.map((point) => point.x));
-  const meanY = average(points.map((point) => point.y));
-
-  let numerator = 0;
-  let sumX = 0;
-  let sumY = 0;
-
-  for (const point of points) {
-    const dx = point.x - meanX;
-    const dy = point.y - meanY;
-    numerator += dx * dy;
-    sumX += dx * dx;
-    sumY += dy * dy;
-  }
-
-  if (sumX === 0 || sumY === 0) return 0;
-  return numerator / Math.sqrt(sumX * sumY);
+function formatSigned(value: number, digits = 1) {
+  if (!Number.isFinite(value)) return "";
+  if (value > 0) return `+${value.toFixed(digits)}`;
+  if (value < 0) return value.toFixed(digits);
+  return `0.${"0".repeat(Math.max(0, digits - 1))}`;
 }
 
 function formatCorrelation(value: number) {
-  if (!Number.isFinite(value)) return '0.00';
+  if (!Number.isFinite(value)) return "0.00";
   return value.toFixed(2);
 }
 
-function getPlayerColor(color?: string) {
-  switch ((color ?? '').toLowerCase()) {
-    case 'green':
-      return '#22C55E';
-    case 'purple':
-      return '#A855F7';
-    case 'blue':
-      return '#3B82F6';
-    case 'orange':
-      return '#F97316';
-    case 'yellow':
-      return '#EAB308';
-    case 'pink':
-      return '#EC4899';
-    case 'red':
-      return '#EF4444';
-    default:
-      return color || '#94A3B8';
+function formatCorrelationValue(value: number) {
+  if (!Number.isFinite(value)) return "0.00";
+  return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
+}
+
+function getCorrelationStrength(value: number) {
+  const abs = Math.abs(value);
+  if (abs >= 0.7) return "Very Strong";
+  if (abs >= 0.5) return "Strong";
+  if (abs >= 0.3) return "Moderate";
+  if (abs >= 0.1) return "Weak";
+  return "Minimal";
+}
+
+function getCorrelationTone(value: number) {
+  const abs = Math.abs(value);
+  if (abs < 0.1) return "Neutral";
+  return value > 0 ? "Positive" : "Negative";
+}
+
+function getCorrelationMeaning(label: string, value: number) {
+  if (!Number.isFinite(value)) {
+    return `${label} currently has no usable signal.`;
   }
+
+  const abs = Math.abs(value);
+
+  if (abs < 0.1) {
+    return `${label} is not showing a meaningful relationship to winning yet.`;
+  }
+
+  const lower = label.toLowerCase();
+
+  if (value > 0) {
+    return `${getCorrelationStrength(
+      value
+    )} positive relationship. Higher ${lower} tends to line up with more winning.`;
+  }
+
+  return `${getCorrelationStrength(
+    value
+  )} negative relationship. Higher ${lower} tends to line up with less winning.`;
+}
+
+function getTopWinningSignals(rows: any[]) {
+  return [...rows]
+    .filter((row) => Number.isFinite(row?.value))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+    .slice(0, 3);
+}
+
+function getPlayerColor(color?: string) {
+  if (!color) return COLORS.brand;
+  return color;
 }
 
 function getGlowColor(color?: string) {
-  const resolved = getPlayerColor(color);
-  return `${resolved}22`;
+  const base = getPlayerColor(color);
+  return `${base}22`;
 }
 
-function formatPercent(value: number) {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-function formatSigned(value: number) {
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
+function TabButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.tabButton}>
+      <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.tabButtonUnderline,
+          active && styles.tabButtonUnderlineActive,
+        ]}
+      />
+    </Pressable>
+  );
 }
 
 function StatPill({
@@ -185,11 +237,15 @@ function StatPill({
   value,
   accent,
   strong = false,
+  metricKey,
+  onInfoPress,
 }: {
   label: string;
   value: string | number;
   accent?: string;
   strong?: boolean;
+  metricKey?: string;
+  onInfoPress?: () => void;
 }) {
   return (
     <View
@@ -199,7 +255,17 @@ function StatPill({
         accent ? { borderColor: accent, backgroundColor: `${accent}12` } : null,
       ]}
     >
-      <Text style={styles.statPillLabel}>{label}</Text>
+      <View style={styles.statPillHeader}>
+        <Text style={styles.statPillLabel}>{label}</Text>
+        {metricKey && onInfoPress ? (
+          <TouchableOpacity
+            onPress={onInfoPress}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.infoButtonText}>?</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       <Text style={[styles.statPillValue, strong && styles.statPillValueStrong]}>
         {value}
       </Text>
@@ -207,8 +273,106 @@ function StatPill({
   );
 }
 
+function CorrelationRowCard({ row }: { row: any }) {
+  const tone = getCorrelationTone(row.value);
+  const accent =
+    tone === "Neutral"
+      ? COLORS.textMuted
+      : tone === "Positive"
+        ? COLORS.success
+        : COLORS.danger;
+
+  return (
+    <View style={[styles.correlationCard, { borderColor: `${accent}55` }]}>
+      <View style={styles.correlationHeader}>
+        <Text style={styles.correlationLabel}>{row.label}</Text>
+        <View
+          style={[
+            styles.correlationBadge,
+            { borderColor: `${accent}66`, backgroundColor: `${accent}16` },
+          ]}
+        >
+          <Text style={[styles.correlationBadgeText, { color: accent }]}>
+            {formatCorrelationValue(row.value)} · {getCorrelationStrength(row.value)}{" "}
+            {tone}
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.correlationMeaning}>
+        {getCorrelationMeaning(row.label, row.value)}
+      </Text>
+    </View>
+  );
+}
+
+function PlayerSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.playerSection}>
+      <Text style={styles.playerSectionTitle}>{title}</Text>
+      <View style={styles.compactGrid}>{children}</View>
+    </View>
+  );
+}
+
+function safeMetric(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function getGameWinnerId(game: any) {
+  return game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId ?? null;
+}
+
+function getGameRows(game: any) {
+  const totals = game?.totals ?? {};
+  return Object.entries(totals).map(([playerId, stats]: any) => ({
+    playerId,
+    prestige:
+      safeMetric(
+        stats?.totalPrestige ?? stats?.prestige ?? stats?.directPrestige
+      ) + safeMetric(stats?.assistPrestigeReceived),
+    assists: safeMetric(stats?.assists),
+    objectives: safeMetric(stats?.contracts),
+    failures: safeMetric(stats?.failures),
+  }));
+}
+
+function buildSelectableGames(games: any[]) {
+  return [...games].reverse().map((game: any, index: number) => {
+    const rows = getGameRows(game).sort((a, b) => b.prestige - a.prestige);
+    const winnerId = getGameWinnerId(game) ?? rows[0]?.playerId ?? null;
+    const leader = rows[0];
+    const runnerUp = rows[1];
+    const margin = leader && runnerUp ? leader.prestige - runnerUp.prestige : 0;
+
+    return {
+      id: String(game?.id ?? `game-${index}`),
+      label: `Game ${games.length - index}`,
+      winnerId,
+      margin,
+      assists: rows.reduce((sum, row) => sum + row.assists, 0),
+      objectives: rows.reduce((sum, row) => sum + row.objectives, 0),
+      failures: rows.reduce((sum, row) => sum + row.failures, 0),
+      rows,
+    };
+  });
+}
+
 export default function StatsScreen() {
   const router = useRouter();
+
+  const [activeTab, setActiveTab] = useState<StatsTab>("overview");
+  const [activeCorrelationTab, setActiveCorrelationTab] =
+    useState<CorrelationTab>("global");
+  const [selectedCorrelationPlayerId, setSelectedCorrelationPlayerId] =
+    useState<string | null>(null);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
   const players = useStore((s: any) =>
     Array.isArray(s.players) ? s.players : []
@@ -217,200 +381,727 @@ export default function StatsScreen() {
     Array.isArray(s.games) ? s.games : []
   ) as Game[];
 
-  const leaderboard = useMemo<PlayerStats[]>(() => {
-    if (!players.length) return [];
-
-    const totals: Record<string, PlayerStats> = {};
-    const prestigeMarginsByPlayer: Record<string, number[]> = {};
-    const seatsByPlayer: Record<string, number[]> = {};
-    const seatWinPointsByPlayer: Record<string, Array<{ x: number; y: number }>> = {};
-
-    players.forEach((player) => {
-      totals[player.id] = {
-        id: player.id,
-        name: player.name,
-        initials: player.initials,
-        color: player.color,
-        totalPrestige: 0,
-        directPrestige: 0,
-        assistPrestigeReceived: 0,
-        assistPrestigeSent: 0,
-        assistCountBySource: 0,
-        score: 0,
-        assists: 0,
-        contracts: 0,
-        failures: 0,
-        games: 0,
-        wins: 0,
-        avgPrestigePerGame: 0,
-        avgScorePerGame: 0,
-        allContractsEfficiency: 0,
-        assistanceEfficiency: 0,
-        directEfficiency: 0,
-        contractFailureRatio: 0,
-        winRate: 0,
-        failureRate: 0,
-        assistShareOfPrestige: 0,
-        assistPrestigePerGame: 0,
-        assistPrestigePerAssist: 0,
-        closeGames: 0,
-        closeGameRate: 0,
-        bestPrestigeMargin: 0,
-        avgPrestigeMarginPerGame: 0,
-        avgStartSeat: 0,
-        turnOrderWinCorrelation: 0,
-      };
-      prestigeMarginsByPlayer[player.id] = [];
-      seatsByPlayer[player.id] = [];
-      seatWinPointsByPlayer[player.id] = [];
+  const goToDefinition = (metricKey: string) => {
+    router.push({
+      pathname: "/definitions",
+      params: { metric: metricKey },
     });
+  };
 
-    games.forEach((game) => {
-      const gameTotals = game.totals;
-      if (!gameTotals) return;
+  const baseLeaderboard = useMemo(
+    () => buildLeaderboard(players, games),
+    [players, games]
+  );
 
-      const gamePrestigeRows = Object.entries(gameTotals).map(([playerId, stats]) => ({
-        playerId,
-        totalPrestige: getTotalPrestige(stats ?? {}),
-      }));
-      gamePrestigeRows.sort((a, b) => b.totalPrestige - a.totalPrestige);
-      const leaderPrestige = gamePrestigeRows[0]?.totalPrestige ?? 0;
-      const runnerUpPrestige = gamePrestigeRows[1]?.totalPrestige ?? leaderPrestige;
-      const isCloseGame = Math.abs(leaderPrestige - runnerUpPrestige) <= 3;
+  const leaderboard = useMemo(
+    () => buildDerivedPlayerStats(baseLeaderboard, games),
+    [baseLeaderboard, games]
+  );
 
-      Object.entries(gameTotals).forEach(([playerId, rawStats]) => {
-        const player = totals[playerId];
-        if (!player) return;
+  const summary = useMemo(
+    () => buildLeagueSummary(baseLeaderboard, games),
+    [baseLeaderboard, games]
+  );
 
-        const stats = rawStats ?? {};
-        const totalPrestige = getTotalPrestige(stats);
-        const directPrestige = toNumber(stats.directPrestige);
-        const assistPrestigeReceived =
-          typeof stats.assistPrestigeReceived === 'number'
-            ? toNumber(stats.assistPrestigeReceived)
-            : Math.max(0, totalPrestige - directPrestige);
+  const globalCorrelations = useMemo(
+    () => buildGlobalCorrelations(leaderboard),
+    [leaderboard]
+  );
 
-        player.games += 1;
-        player.totalPrestige += totalPrestige;
-        player.directPrestige += directPrestige;
-        player.assistPrestigeReceived += assistPrestigeReceived;
-        player.score += toNumber(stats.score);
-        player.assists += toNumber(stats.assists);
-        player.contracts += toNumber(stats.contracts);
-        player.failures += toNumber(stats.failures);
+  const topSignals = useMemo(
+    () => getTopWinningSignals(globalCorrelations),
+    [globalCorrelations]
+  );
 
-        const assistCountBySource = stats.assistCountBySource ?? {};
-        player.assistCountBySource += Object.values(assistCountBySource).reduce(
-          (sum, value) => sum + toNumber(value),
-          0
-        );
+  const resolvedCorrelationPlayerId =
+    selectedCorrelationPlayerId ?? leaderboard[0]?.id ?? null;
+  const resolvedPlayerId = selectedPlayerId ?? leaderboard[0]?.id ?? null;
 
-        const gamePlayer = (game.players ?? []).find((entry) => entry.id === playerId);
-        const seat = getRecordedSeat(gamePlayer);
-        const won = getWinnerId(game) === playerId;
+  const individualCorrelations = useMemo(
+    () =>
+      buildIndividualCorrelations(
+        leaderboard,
+        resolvedCorrelationPlayerId ?? undefined
+      ),
+    [leaderboard, resolvedCorrelationPlayerId]
+  );
 
-        if (won) {
-          player.wins += 1;
-        }
+  const selectedCorrelationPlayer = useMemo(
+    () =>
+      leaderboard.find((p: any) => p.id === resolvedCorrelationPlayerId) ?? null,
+    [leaderboard, resolvedCorrelationPlayerId]
+  );
 
-        if (seat !== null) {
-          seatsByPlayer[playerId].push(seat);
-          seatWinPointsByPlayer[playerId].push({ x: seat, y: won ? 1 : 0 });
-        }
+  const selectedPlayer = useMemo(
+    () => leaderboard.find((p: any) => p.id === resolvedPlayerId) ?? null,
+    [leaderboard, resolvedPlayerId]
+  );
 
-        if (isCloseGame) {
-          player.closeGames += 1;
-        }
+  const selectableGames = useMemo(() => buildSelectableGames(games), [games]);
 
-        prestigeMarginsByPlayer[playerId].push(totalPrestige - runnerUpPrestige);
-      });
+  const resolvedGameId = selectedGameId ?? selectableGames[0]?.id ?? null;
 
-      Object.entries(gameTotals).forEach(([receiverId, receiverStats]) => {
-        const bySource = receiverStats?.assistPrestigeBySource ?? {};
-        Object.entries(bySource).forEach(([sourceId, value]) => {
-          if (!totals[sourceId]) return;
-          totals[sourceId].assistPrestigeSent += toNumber(value);
-        });
-      });
-    });
+  const selectedGame = useMemo(
+    () => selectableGames.find((g) => g.id === resolvedGameId) ?? null,
+    [selectableGames, resolvedGameId]
+  );
 
-    Object.values(totals).forEach((player) => {
-      const attempts = player.contracts + player.failures;
-      const prestigeMargins = prestigeMarginsByPlayer[player.id];
+  const gameCorrelations = useMemo(
+    () => buildGameCorrelations(games),
+    [games]
+  );
 
-      player.avgPrestigePerGame = safeDivide(player.totalPrestige, player.games);
-      player.avgScorePerGame = safeDivide(player.score, player.games);
-      player.allContractsEfficiency = safeDivide(
-        player.directPrestige + player.assistPrestigeReceived,
-        player.contracts + player.assists
+  const renderOverviewTab = () => (
+    <View style={styles.card}>
+      <Text style={styles.eyebrow}>Overview</Text>
+      <Pressable
+        style={styles.compareButtonTop}
+        onPress={() => router.push("/charts/compare")}
+      >
+        <Text style={styles.compareButtonText}>Compare Players</Text>
+      </Pressable>
+
+      <View style={styles.compactGrid}>
+        <StatPill label="Players" value={leaderboard.length} strong />
+        <StatPill label="Games" value={games.length} strong />
+        <StatPill
+          label="Prestige"
+          value={summary.totalPrestige}
+          accent={COLORS.blueGlow}
+          strong
+          metricKey="totalPrestige"
+          onInfoPress={() => goToDefinition("totalPrestige")}
+        />
+        <StatPill
+          label="Total Score"
+          value={summary.totalScore}
+          accent={COLORS.purple}
+          strong
+          metricKey="score"
+          onInfoPress={() => goToDefinition("score")}
+        />
+        <StatPill
+          label="Assist Sent"
+          value={summary.totalAssistSent.toFixed(1)}
+          accent={COLORS.teal}
+          metricKey="assistPrestigeSent"
+          onInfoPress={() => goToDefinition("assistPrestigeSent")}
+        />
+        <StatPill
+          label="Assist Received"
+          value={summary.totalAssistReceived.toFixed(1)}
+          accent={COLORS.blueGlow}
+          metricKey="assistPrestigeReceived"
+          onInfoPress={() => goToDefinition("assistPrestigeReceived")}
+        />
+        <StatPill
+          label="Avg Winner Seat"
+          value={summary.avgWinnerSeat > 0 ? summary.avgWinnerSeat.toFixed(2) : ""}
+          accent={COLORS.blue}
+        />
+        <StatPill
+          label="Seat ? Win Corr"
+          value={formatCorrelation(summary.turnOrderWinCorrelation)}
+          accent={COLORS.success}
+        />
+      </View>
+
+      <View style={styles.signalSection}>
+        <Text style={styles.compactSectionTitle}>Top 3 Winning Signals</Text>
+        <View style={styles.signalList}>
+          {topSignals.map((signal: any, index: number) => {
+            const accent = signal.value >= 0 ? COLORS.success : COLORS.danger;
+            return (
+              <View
+                key={signal.key}
+                style={[styles.signalCard, { borderColor: `${accent}55` }]}
+              >
+                <View style={styles.signalRank}>
+                  <Text style={styles.signalRankText}>#{index + 1}</Text>
+                </View>
+                <View style={styles.signalBody}>
+                  <Text style={styles.signalLabel}>{signal.label}</Text>
+                  <Text style={[styles.signalValue, { color: accent }]}>
+                    {formatCorrelationValue(signal.value)} ·{" "}
+                    {getCorrelationStrength(signal.value)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderPlayersTab = () => {
+    if (!leaderboard.length) {
+      return (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No stats yet</Text>
+          <Text style={styles.emptyText}>
+            Finish a few games to populate the stats view.
+          </Text>
+        </View>
       );
-      player.assistanceEfficiency = safeDivide(
-        player.assistPrestigeReceived,
-        player.assists
-      );
-      player.directEfficiency = safeDivide(
-        player.directPrestige,
-        player.contracts
-      );
-      player.contractFailureRatio = safeDivide(player.contracts, Math.max(1, player.failures));
-      player.winRate = safeDivide(player.wins, player.games);
-      player.failureRate = safeDivide(player.failures, attempts);
-      player.assistShareOfPrestige = safeDivide(player.assistPrestigeReceived, player.totalPrestige);
-      player.assistPrestigePerGame = safeDivide(player.assistPrestigeReceived, player.games);
-      player.assistPrestigePerAssist = safeDivide(player.assistPrestigeReceived, Math.max(1, player.assists));
-      player.closeGameRate = safeDivide(player.closeGames, player.games);
-      player.bestPrestigeMargin = prestigeMargins.length ? Math.max(...prestigeMargins) : 0;
-      player.avgPrestigeMarginPerGame = prestigeMargins.length
-        ? prestigeMargins.reduce((sum, value) => sum + value, 0) / prestigeMargins.length
-        : 0;
-      player.avgStartSeat = average(seatsByPlayer[player.id]);
-      player.turnOrderWinCorrelation = getPearsonCorrelation(
-        seatWinPointsByPlayer[player.id]
-      );
-    });
-
-    return Object.values(totals).sort((a, b) => {
-      if (b.totalPrestige !== a.totalPrestige) return b.totalPrestige - a.totalPrestige;
-      if (b.winRate !== a.winRate) return b.winRate - a.winRate;
-      if (b.score !== a.score) return b.score - a.score;
-      return a.name.localeCompare(b.name);
-    });
-  }, [players, games]);
-
-  const summary = useMemo(() => {
-    const totalPrestige = leaderboard.reduce((sum, player) => sum + player.totalPrestige, 0);
-    const totalScore = leaderboard.reduce((sum, player) => sum + player.score, 0);
-    const totalAssistSent = leaderboard.reduce((sum, player) => sum + player.assistPrestigeSent, 0);
-    const totalAssistReceived = leaderboard.reduce((sum, player) => sum + player.assistPrestigeReceived, 0);
-
-    const globalSeatPoints: Array<{ x: number; y: number }> = [];
-    const winnerSeats: number[] = [];
-
-    for (const game of games) {
-      const winnerId = getWinnerId(game);
-
-      for (const gamePlayer of game.players ?? []) {
-        const seat = getRecordedSeat(gamePlayer);
-        if (seat === null) continue;
-
-        const won = winnerId === gamePlayer.id;
-        globalSeatPoints.push({ x: seat, y: won ? 1 : 0 });
-
-        if (won) {
-          winnerSeats.push(seat);
-        }
-      }
     }
 
-    return {
-      totalPrestige,
-      totalScore,
-      totalAssistSent,
-      totalAssistReceived,
-      avgWinnerSeat: average(winnerSeats),
-      turnOrderWinCorrelation: getPearsonCorrelation(globalSeatPoints),
-    };
-  }, [leaderboard, games]);
+    if (!selectedPlayer) {
+      return (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No player selected</Text>
+          <Text style={styles.emptyText}>
+            Choose a player to view their stats breakdown.
+          </Text>
+        </View>
+      );
+    }
+
+    const accent = getPlayerColor(selectedPlayer.color);
+    const selectedIndex = leaderboard.findIndex(
+      (p: any) => p.id === selectedPlayer.id
+    );
+
+    return (
+      <View style={styles.playersList}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.selectorWrap}
+        >
+          {leaderboard.map((player: any) => {
+            const active = player.id === resolvedPlayerId;
+            return (
+              <Pressable
+                key={player.id}
+                onPress={() => setSelectedPlayerId(player.id)}
+                style={styles.selectorTab}
+              >
+                <Text
+                  style={[
+                    styles.selectorTabText,
+                    active && styles.selectorTabTextActive,
+                  ]}
+                >
+                  {player.name}
+                </Text>
+                <View
+                  style={[
+                    styles.selectorTabUnderline,
+                    active && styles.selectorTabUnderlineActive,
+                  ]}
+                />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <View style={[styles.playerCard, { borderColor: `${accent}33` }]}>
+          <View style={[styles.playerAccent, { backgroundColor: accent }]} />
+          <View
+            style={[
+              styles.playerGlow,
+              { backgroundColor: getGlowColor(selectedPlayer.color) },
+            ]}
+          />
+
+          <View style={styles.playerHeader}>
+            <View style={styles.playerHeaderLeft}>
+              <View
+                style={[
+                  styles.playerCardBadgeWrap,
+                  { shadowColor: getPlayerColor(selectedPlayer.color) },
+                ]}
+              >
+                <PlayerCardIcon
+                  player={selectedPlayer as any}
+                  size={42}
+                  borderRadius={10}
+                  showInitial={false}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.rankText, { color: accent }]}>
+                  #{selectedIndex + 1}
+                </Text>
+                <Text style={styles.playerName}>{selectedPlayer.name}</Text>
+                <Text style={styles.playerMeta}>
+                  {formatPercent(selectedPlayer.winRate)} win ·{" "}
+                  {selectedPlayer.games} games ·{" "}
+                  {selectedPlayer.avgPrestigePerGame.toFixed(1)} prestige/game
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.playerPrimaryValueWrap}>
+              <Text style={styles.playerPrimaryValue}>
+                {selectedPlayer.totalPrestige}
+              </Text>
+              <Text style={styles.playerPrimaryLabel}>prestige</Text>
+            </View>
+          </View>
+
+          <PlayerSection title="Core">
+            <StatPill
+              label="Wins"
+              value={selectedPlayer.wins}
+              accent={COLORS.success}
+              strong
+              metricKey="wins"
+              onInfoPress={() => goToDefinition("wins")}
+            />
+            <StatPill
+              label="Direct"
+              value={selectedPlayer.directPrestige}
+              accent={COLORS.blueGlow}
+              strong
+              metricKey="directPrestige"
+              onInfoPress={() => goToDefinition("directPrestige")}
+            />
+            <StatPill
+              label="Assist In"
+              value={selectedPlayer.assistPrestigeReceived.toFixed(1)}
+              accent={COLORS.teal}
+              strong
+              metricKey="assistPrestigeReceived"
+              onInfoPress={() => goToDefinition("assistPrestigeReceived")}
+            />
+            <StatPill
+              label="Assist Out"
+              value={selectedPlayer.assistPrestigeSent.toFixed(1)}
+              accent={COLORS.purple}
+              strong
+              metricKey="assistPrestigeSent"
+              onInfoPress={() => goToDefinition("assistPrestigeSent")}
+            />
+            <StatPill
+              label="All Eff"
+              value={selectedPlayer.allContractsEfficiency.toFixed(2)}
+              accent={COLORS.success}
+              metricKey="allContractsEfficiency"
+              onInfoPress={() => goToDefinition("allContractsEfficiency")}
+            />
+            <StatPill
+              label="Assist Eff"
+              value={selectedPlayer.assistanceEfficiency.toFixed(2)}
+              accent={COLORS.purple}
+              metricKey="assistanceEfficiency"
+              onInfoPress={() => goToDefinition("assistanceEfficiency")}
+            />
+            <StatPill
+              label="Direct Eff"
+              value={selectedPlayer.directEfficiency.toFixed(2)}
+              accent={COLORS.blueGlow}
+              metricKey="directEfficiency"
+              onInfoPress={() => goToDefinition("directEfficiency")}
+            />
+            <StatPill
+              label="Fail %"
+              value={formatPercent(selectedPlayer.failureRate)}
+              accent={COLORS.danger}
+              metricKey="failureRate"
+              onInfoPress={() => goToDefinition("failureRate")}
+            />
+          </PlayerSection>
+
+          <PlayerSection title="Performance">
+            <StatPill
+              label="Consistency"
+              value={selectedPlayer.consistencyScore.toFixed(2)}
+              accent={COLORS.success}
+              metricKey="consistencyScore"
+              onInfoPress={() => goToDefinition("consistencyScore")}
+            />
+            <StatPill
+              label="Clutch"
+              value={formatPercent(selectedPlayer.clutchScore)}
+              accent={COLORS.blue}
+              metricKey="clutchScore"
+              onInfoPress={() => goToDefinition("clutchScore")}
+            />
+            <StatPill
+              label="Carry"
+              value={formatPercent(selectedPlayer.carryFactor)}
+              accent={COLORS.blueGlow}
+              metricKey="carryFactor"
+              onInfoPress={() => goToDefinition("carryFactor")}
+            />
+            <StatPill
+              label="Momentum"
+              value={formatSigned(selectedPlayer.momentum)}
+              accent={COLORS.purple}
+              metricKey="momentum"
+              onInfoPress={() => goToDefinition("momentum")}
+            />
+            <StatPill
+              label="Prestige / Turn"
+              value={selectedPlayer.prestigePerTurn.toFixed(2)}
+              accent={COLORS.teal}
+              metricKey="prestigePerTurn"
+              onInfoPress={() => goToDefinition("prestigePerTurn")}
+            />
+            <StatPill
+              label="Early Lead %"
+              value={formatPercent(selectedPlayer.earlyLeadRate)}
+              accent={COLORS.blue}
+            />
+            <StatPill
+              label="Late Lead %"
+              value={formatPercent(selectedPlayer.lateLeadRate)}
+              accent={COLORS.gold}
+            />
+            <StatPill
+              label="Lead Conv"
+              value={formatPercent(selectedPlayer.leadConversion)}
+              accent={COLORS.success}
+              metricKey="leadConversion"
+              onInfoPress={() => goToDefinition("leadConversion")}
+            />
+            <StatPill
+              label="Late Lead Conv"
+              value={formatPercent(selectedPlayer.lateLeadConversion)}
+              accent="#10B981"
+              metricKey="lateLeadConversion"
+              onInfoPress={() => goToDefinition("lateLeadConversion")}
+            />
+            <StatPill
+              label="Objective Conv"
+              value={formatPercent(selectedPlayer.objectiveConversionRate)}
+              accent={COLORS.cyan}
+            />
+            <StatPill
+              label="Support Conv"
+              value={formatPercent(selectedPlayer.supportConversionRate)}
+              accent={COLORS.purple}
+            />
+            <StatPill
+              label="Avg Margin"
+              value={formatSigned(selectedPlayer.avgPrestigeMarginPerGame)}
+              accent={COLORS.blueGlow}
+            />
+            <StatPill
+              label="Best Margin"
+              value={formatSigned(selectedPlayer.bestPrestigeMargin)}
+              accent={COLORS.blueGlow}
+            />
+            <StatPill
+              label="Objectives / Game"
+              value={selectedPlayer.objectivesPerGame.toFixed(2)}
+              accent={COLORS.gold}
+            />
+            <StatPill
+              label="Assists / Game"
+              value={selectedPlayer.assistsGivenPerGame.toFixed(2)}
+              accent={COLORS.teal}
+            />
+            <StatPill
+              label="Assist In / Game"
+              value={selectedPlayer.assistsReceivedPerGame.toFixed(2)}
+              accent={COLORS.blueGlow}
+            />
+          </PlayerSection>
+
+          <PlayerSection title="Context">
+            <StatPill
+              label="Opponent Str"
+              value={selectedPlayer.opponentStrength.toFixed(2)}
+              accent={COLORS.textSecondary}
+            />
+            <StatPill
+              label="Tempo"
+              value={selectedPlayer.tempoIndex.toFixed(2)}
+              accent={COLORS.pink}
+              metricKey="tempoIndex"
+              onInfoPress={() => goToDefinition("tempoIndex")}
+            />
+            <StatPill
+              label="Interaction"
+              value={selectedPlayer.interactionIndex.toFixed(2)}
+              accent={COLORS.cyan}
+            />
+            <StatPill
+              label="Aggro"
+              value={selectedPlayer.aggroIndex.toFixed(2)}
+              accent={COLORS.danger}
+            />
+            <StatPill
+              label="Seat ? Win Corr"
+              value={formatCorrelation(selectedPlayer.turnOrderWinCorrelation)}
+              accent={COLORS.success}
+            />
+            <StatPill
+              label="Assist Count In"
+              value={selectedPlayer.assistCountBySource}
+            />
+          </PlayerSection>
+        </View>
+      </View>
+    );
+  };
+
+  const renderCorrelationTab = () => (
+    <View style={styles.card}>
+      <Text style={styles.eyebrow}>Correlations</Text>
+      <Text style={styles.title}>Win Signals</Text>
+
+      <View style={styles.subtabWrap}>
+        <TabButton
+          label="Global"
+          active={activeCorrelationTab === "global"}
+          onPress={() => setActiveCorrelationTab("global")}
+        />
+        <TabButton
+          label="Individual"
+          active={activeCorrelationTab === "individual"}
+          onPress={() => setActiveCorrelationTab("individual")}
+        />
+        <TabButton
+          label="Game"
+          active={activeCorrelationTab === "game"}
+          onPress={() => setActiveCorrelationTab("game")}
+        />
+      </View>
+
+      {activeCorrelationTab === "global" && (
+        <View style={styles.list}>
+          <Text style={styles.subtitle}>
+            Across all players, these are the strongest league-wide win signals.
+          </Text>
+
+          {GLOBAL_CORRELATION_TIERS.map((tier) => {
+            const rows = getRowsForTier(globalCorrelations, tier.keys);
+            if (!rows.length) return null;
+
+            return (
+              <View key={tier.title} style={styles.tierSection}>
+                <Text style={styles.compactSectionTitle}>{tier.title}</Text>
+                <View style={styles.list}>
+                  {rows.map((row: any) => (
+                    <CorrelationRowCard key={row.key} row={row} />
+                  ))}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {activeCorrelationTab === "individual" && (
+        <View style={styles.list}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.selectorWrap}
+          >
+            {leaderboard.map((player: any) => {
+              const active = player.id === resolvedCorrelationPlayerId;
+              return (
+                <Pressable
+                  key={player.id}
+                  onPress={() => setSelectedCorrelationPlayerId(player.id)}
+                  style={styles.selectorTab}
+                >
+                  <Text
+                    style={[
+                      styles.selectorTabText,
+                      active && styles.selectorTabTextActive,
+                    ]}
+                  >
+                    {player.name}
+                  </Text>
+                  <View
+                    style={[
+                      styles.selectorTabUnderline,
+                      active && styles.selectorTabUnderlineActive,
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {selectedCorrelationPlayer ? (
+            <Text style={styles.subtitle}>
+              What tends to drive wins specifically for{" "}
+              {selectedCorrelationPlayer.name}.
+            </Text>
+          ) : null}
+
+          {INDIVIDUAL_CORRELATION_TIERS.map((tier) => {
+            const rows = getRowsForTier(individualCorrelations, tier.keys);
+            if (!rows.length) return null;
+
+            return (
+              <View key={tier.title} style={styles.tierSection}>
+                <Text style={styles.compactSectionTitle}>{tier.title}</Text>
+                <View style={styles.list}>
+                  {rows.map((row: any) => (
+                    <CorrelationRowCard key={row.key} row={row} />
+                  ))}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {activeCorrelationTab === "game" && (
+        <View style={styles.list}>
+          <Text style={styles.subtitle}>
+            Match-condition signals showing what kinds of games favor a certain
+            type of winner.
+          </Text>
+
+          {GAME_CORRELATION_TIERS.map((tier) => {
+            const rows = getRowsForTier(gameCorrelations, tier.keys);
+            if (!rows.length) return null;
+
+            return (
+              <View key={tier.title} style={styles.tierSection}>
+                <Text style={styles.compactSectionTitle}>{tier.title}</Text>
+                <View style={styles.list}>
+                  {rows.map((row: any) => (
+                    <CorrelationRowCard key={row.key} row={row} />
+                  ))}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+
+  const renderGamesTab = () => (
+    <View style={styles.card}>
+      <Text style={styles.eyebrow}>Games</Text>
+      <Text style={styles.subtitle}>
+        Select a game to inspect its outcome, environment, and margin.
+      </Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.selectorWrap}
+      >
+        {selectableGames.map((game) => {
+          const active = game.id === resolvedGameId;
+          return (
+            <Pressable
+              key={game.id}
+              onPress={() => setSelectedGameId(game.id)}
+              style={styles.selectorTab}
+            >
+              <Text
+                style={[
+                  styles.selectorTabText,
+                  active && styles.selectorTabTextActive,
+                ]}
+              >
+                {game.label}
+              </Text>
+              <View
+                style={[
+                  styles.selectorTabUnderline,
+                  active && styles.selectorTabUnderlineActive,
+                ]}
+              />
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {selectedGame ? (
+        <View style={styles.gamePanel}>
+          <Text style={styles.compactSectionTitle}>{selectedGame.label}</Text>
+
+          <View style={styles.compactGrid}>
+            <StatPill
+              label="Margin"
+              value={selectedGame.margin.toFixed(1)}
+              accent={COLORS.blueGlow}
+              strong
+            />
+            <StatPill
+              label="Assists"
+              value={selectedGame.assists}
+              accent={COLORS.teal}
+              strong
+            />
+            <StatPill
+              label="Objectives"
+              value={selectedGame.objectives}
+              accent={COLORS.gold}
+              strong
+            />
+            <StatPill
+              label="Failures"
+              value={selectedGame.failures}
+              accent={COLORS.danger}
+              strong
+            />
+          </View>
+
+          <View style={styles.list}>
+            {selectedGame.rows.map((row: any, index: number) => {
+              const isWinner = row.playerId === selectedGame.winnerId;
+              const player = leaderboard.find((p: any) => p.id === row.playerId);
+
+              return (
+                <View key={row.playerId} style={styles.gameRowCard}>
+                  <View style={styles.gameRowIdentity}>
+                    <View
+                      style={[
+                        styles.gamePlayerCardWrap,
+                        { shadowColor: getPlayerColor(player?.color) },
+                      ]}
+                    >
+                      <PlayerCardIcon
+                        player={(player ?? {
+                          id: row.playerId,
+                          name: player?.name ?? row.playerId,
+                          color: player?.color,
+                          assignedCardArtIndex: player?.assignedCardArtIndex,
+                          initials:
+                            player?.initials ??
+                            (player?.name?.slice(0, 2)?.toUpperCase() ?? "?"),
+                        }) as any}
+                        size={26}
+                        borderRadius={6}
+                        showInitial={true}
+                      />
+                    </View>
+                    <View style={styles.gameRowIdentityText}>
+                      <Text style={styles.gameRowTitle}>
+                        {index + 1}. {player?.name ?? row.playerId}
+                      </Text>
+                      <Text style={styles.gameRowMeta}>
+                        {isWinner ? "Winner" : "Participant"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.gameRowStats}>
+                    <Text style={styles.gameRowStat}>
+                      P {row.prestige.toFixed(1)}
+                    </Text>
+                    <Text style={styles.gameRowStat}>A {row.assists}</Text>
+                    <Text style={styles.gameRowStat}>O {row.objectives}</Text>
+                    <Text style={styles.gameRowStat}>F {row.failures}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>No games yet</Text>
+          <Text style={styles.emptyText}>Finish a game to inspect it here.</Text>
+        </View>
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.root}>
@@ -426,162 +1117,40 @@ export default function StatsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroCard}>
-          <View style={styles.heroGlowLeft} />
-          <View style={styles.heroGlowRight} />
-
-          <Text style={styles.brandTitle}>Moonrakers</Text>
-          <Text style={styles.heroTitle}>Statistics</Text>
-          <Text style={styles.heroSubtitle}>
-            Unified league analytics, mission efficiency, assist economy, and turn-order insight in a premium space dashboard.
-          </Text>
+          <View style={styles.heroTitleWrap}>
+            <Text style={styles.heroEyebrow}>View Your Mission Log</Text>
+            <Text style={styles.brandTitle}>Moonraker&apos;s</Text>
+            <Text style={styles.heroTitle}>Statistics</Text>
+          </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.eyebrow}>Overview</Text>
-          <Text style={styles.title}>League Snapshot</Text>
-          <Text style={styles.subtitle}>
-            Total prestige leads the ranking, with assist flow, execution quality, and seat-order influence surfaced as secondary signals.
-          </Text>
-
-          <View style={styles.primarySummaryGrid}>
-            <StatPill label="Players" value={leaderboard.length} strong />
-            <StatPill label="Games" value={games.length} strong />
-            <StatPill label="Total Prestige" value={summary.totalPrestige} accent="#60A5FA" strong />
-            <StatPill label="Total Score" value={summary.totalScore} accent="#A855F7" strong />
-          </View>
-
-          <View style={styles.summaryDivider} />
-
-          <View style={styles.secondarySummaryGrid}>
-            <StatPill label="Assist Sent" value={summary.totalAssistSent.toFixed(1)} accent="#22D3EE" />
-            <StatPill label="Assist Received" value={summary.totalAssistReceived.toFixed(1)} accent="#0EA5E9" />
-            <StatPill
-              label="Avg Winner Seat"
-              value={summary.avgWinnerSeat > 0 ? summary.avgWinnerSeat.toFixed(2) : '—'}
-              accent="#F59E0B"
-            />
-            <StatPill
-              label="Seat ↔ Win Corr"
-              value={formatCorrelation(summary.turnOrderWinCorrelation)}
-              accent="#22C55E"
-            />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.compareButton,
-              pressed && styles.compareButtonPressed,
-            ]}
-            onPress={() => router.push('/charts/compare')}
-          >
-            <View style={styles.compareButtonGlow} />
-            <Text style={styles.compareButtonText}>Compare Players →</Text>
-          </Pressable>
+        <View style={styles.tabWrap}>
+          <TabButton
+            label="Home"
+            active={activeTab === "overview"}
+            onPress={() => setActiveTab("overview")}
+          />
+          <TabButton
+            label="Players"
+            active={activeTab === "players"}
+            onPress={() => setActiveTab("players")}
+          />
+          <TabButton
+            label="Insights"
+            active={activeTab === "correlations"}
+            onPress={() => setActiveTab("correlations")}
+          />
+          <TabButton
+            label="Games"
+            active={activeTab === "games"}
+            onPress={() => setActiveTab("games")}
+          />
         </View>
 
-        {leaderboard.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No stats yet</Text>
-            <Text style={styles.emptyText}>
-              Finish a few games to build the statistics screen.
-            </Text>
-          </View>
-        ) : (
-          leaderboard.map((player, index) => {
-            const accent = getPlayerColor(player.color);
-            return (
-              <View
-                key={player.id}
-                style={[
-                  styles.playerCard,
-                  { borderColor: `${accent}2A` },
-                ]}
-              >
-                <View style={[styles.playerCardAccent, { backgroundColor: accent }]} />
-                <View style={[styles.playerGlow, { backgroundColor: getGlowColor(player.color) }]} />
-
-                <View style={styles.playerHeader}>
-                  <View style={styles.playerHeaderLeft}>
-                    <PlayerInitialBadge
-                      initials={player.initials}
-                      color={player.color}
-                      size={42}
-                      fontSize={15}
-                    />
-                    <View style={styles.playerTextWrap}>
-                      <Text style={[styles.rankText, { color: accent }]}>#{index + 1}</Text>
-                      <Text style={styles.name}>{player.name}</Text>
-                      <Text style={styles.playerMeta}>
-                        {formatPercent(player.winRate)} win · {player.games} games · {player.avgPrestigePerGame.toFixed(1)} prestige/game
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.primaryValueWrap}>
-                    <Text style={styles.primaryValue}>{player.totalPrestige}</Text>
-                    <Text style={styles.primaryValueLabel}>total prestige</Text>
-                  </View>
-                </View>
-
-                <View style={styles.playerHeroMetricsRow}>
-                  <StatPill label="Wins" value={player.wins} accent="#22C55E" strong />
-                  <StatPill label="Direct" value={player.directPrestige} accent="#60A5FA" strong />
-                  <StatPill label="Assist In" value={player.assistPrestigeReceived.toFixed(1)} accent="#22D3EE" strong />
-                  <StatPill label="Assist Out" value={player.assistPrestigeSent.toFixed(1)} accent="#A855F7" strong />
-                </View>
-
-                <View style={styles.sectionBlock}>
-                  <Text style={styles.sectionTitle}>Prestige Output</Text>
-                  <View style={styles.statsGrid}>
-                    <StatPill label="Total Prestige" value={player.totalPrestige} accent="#60A5FA" />
-                    <StatPill label="Score" value={player.score} />
-                    <StatPill label="Score / Game" value={player.avgScorePerGame.toFixed(1)} />
-                    <StatPill label="Prestige / Game" value={player.avgPrestigePerGame.toFixed(1)} accent="#60A5FA" />
-                    <StatPill label="Assist Share" value={formatPercent(player.assistShareOfPrestige)} accent="#22D3EE" />
-                    <StatPill label="Assist In / Game" value={player.assistPrestigePerGame.toFixed(2)} />
-                  </View>
-                </View>
-
-                <View style={styles.sectionBlock}>
-                  <Text style={styles.sectionTitle}>Mission Execution</Text>
-                  <View style={styles.statsGrid}>
-                    <StatPill label="Contracts" value={player.contracts} />
-                    <StatPill label="Assists" value={player.assists} />
-                    <StatPill label="Failures" value={player.failures} accent="#EF4444" />
-                    <StatPill label="All Eff" value={player.allContractsEfficiency.toFixed(2)} accent="#22C55E" />
-                    <StatPill label="Assist Eff" value={player.assistanceEfficiency.toFixed(2)} accent="#A855F7" />
-                    <StatPill label="Direct Eff" value={player.directEfficiency.toFixed(2)} accent="#60A5FA" />
-                    <StatPill label="C/F Ratio" value={player.contractFailureRatio.toFixed(2)} />
-                    <StatPill label="Fail %" value={formatPercent(player.failureRate)} accent="#EF4444" />
-                    <StatPill label="Assist / Assist" value={player.assistPrestigePerAssist.toFixed(2)} />
-                  </View>
-                </View>
-
-                <View style={styles.sectionBlock}>
-                  <Text style={styles.sectionTitle}>Outcome Patterns</Text>
-                  <View style={styles.statsGrid}>
-                    <StatPill label="Win %" value={formatPercent(player.winRate)} accent="#22C55E" />
-                    <StatPill
-                      label="Avg Start Seat"
-                      value={player.avgStartSeat > 0 ? player.avgStartSeat.toFixed(2) : '—'}
-                      accent="#F59E0B"
-                    />
-                    <StatPill
-                      label="Seat ↔ Win Corr"
-                      value={formatCorrelation(player.turnOrderWinCorrelation)}
-                      accent="#22C55E"
-                    />
-                    <StatPill label="Close Games" value={player.closeGames} />
-                    <StatPill label="Close Rate" value={formatPercent(player.closeGameRate)} />
-                    <StatPill label="Avg Margin" value={formatSigned(player.avgPrestigeMarginPerGame)} accent="#60A5FA" />
-                    <StatPill label="Best Margin" value={formatSigned(player.bestPrestigeMargin)} accent="#60A5FA" />
-                    <StatPill label="Assist Count In" value={player.assistCountBySource} />
-                  </View>
-                </View>
-              </View>
-            );
-          })
-        )}
+        {activeTab === "overview" && renderOverviewTab()}
+        {activeTab === "players" && renderPlayersTab()}
+        {activeTab === "correlations" && renderCorrelationTab()}
+        {activeTab === "games" && renderGamesTab()}
       </ScrollView>
     </View>
   );
@@ -590,291 +1159,485 @@ export default function StatsScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#050814',
+    backgroundColor: COLORS.bg,
   },
   backgroundLayer: {
     ...StyleSheet.absoluteFillObject,
   },
   backgroundNebulaPurple: {
-    position: 'absolute',
+    position: "absolute",
     top: -80,
     left: -30,
     width: 220,
     height: 220,
     borderRadius: 999,
-    backgroundColor: 'rgba(168,85,247,0.14)',
+    backgroundColor: "rgba(168,85,247,0.14)",
   },
   backgroundNebulaBlue: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -120,
     right: -20,
     width: 260,
     height: 260,
     borderRadius: 999,
-    backgroundColor: 'rgba(59,130,246,0.10)',
+    backgroundColor: "rgba(59,130,246,0.10)",
   },
   backgroundDim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.20)',
+    backgroundColor: "rgba(0,0,0,0.20)",
   },
   content: {
-    padding: 14,
-    paddingBottom: 28,
-    gap: 12,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 20,
+    gap: 8,
   },
   heroCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: 22,
-    padding: 18,
-    backgroundColor: 'rgba(12, 20, 36, 0.92)',
+    backgroundColor: COLORS.surfaceGlass,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.22)',
+    borderColor: COLORS.borderStrong,
     gap: 6,
-  },
-  heroGlowLeft: {
-    position: 'absolute',
-    left: -30,
-    top: -40,
-    width: 160,
-    height: 160,
-    borderRadius: 999,
-    backgroundColor: 'rgba(168,85,247,0.14)',
-  },
-  heroGlowRight: {
-    position: 'absolute',
-    right: -30,
-    bottom: -50,
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    backgroundColor: 'rgba(34,211,238,0.08)',
+    shadowColor: "#8B5CF6",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
   },
   brandTitle: {
-    color: '#A855F7',
-    fontSize: 30,
-    fontWeight: '900',
-    textShadowColor: 'rgba(168,85,247,0.40)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    color: COLORS.brand,
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  heroTitleWrap: {
+    gap: 2,
+  },
+  heroEyebrow: {
+    color: COLORS.cyan,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '900',
+    color: COLORS.textPrimary,
+    fontSize: 20,
+    fontWeight: "900",
   },
   heroSubtitle: {
-    color: '#CBD5E1',
-    fontSize: 13,
-    lineHeight: 18,
-    maxWidth: 360,
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  tabWrap: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 14,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  subtabWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 14,
+    rowGap: 8,
+    alignItems: "flex-end",
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    gap: 6,
+  },
+  tabButtonText: {
+    color: "#AFC3E8",
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "center",
+    letterSpacing: 0.15,
+  },
+  tabButtonTextActive: {
+    color: COLORS.textPrimary,
+  },
+  tabButtonUnderline: {
+    width: "100%",
+    minWidth: 40,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  tabButtonUnderlineActive: {
+    backgroundColor: COLORS.cyan,
   },
   card: {
-    borderRadius: 20,
-    padding: 14,
-    backgroundColor: 'rgba(16, 26, 43, 0.94)',
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 10,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.14)',
-    gap: 10,
+    borderColor: "rgba(99, 102, 241, 0.18)",
+    gap: 8,
   },
   eyebrow: {
-    color: '#A5B4FC',
-    fontSize: 11,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    color: COLORS.cyan,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
     letterSpacing: 1,
+    marginBottom: 2,
   },
   title: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '900',
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
   subtitle: {
-    color: '#CBD5E1',
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  compactGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  list: {
+    gap: 8,
+  },
+  signalSection: {
+    gap: 6,
+    marginTop: 2,
+  },
+  compactSectionTitle: {
+    color: COLORS.textPrimary,
     fontSize: 12,
-    lineHeight: 18,
+    fontWeight: "900",
   },
-  primarySummaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  signalList: {
+    gap: 6,
+  },
+  signalCard: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    backgroundColor: COLORS.surfaceAlt,
   },
-  secondarySummaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  signalRank: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: 'rgba(148,163,184,0.10)',
-    marginVertical: 2,
+  signalRankText: {
+    color: COLORS.textPrimary,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  signalBody: {
+    flex: 1,
+    gap: 2,
+  },
+  signalLabel: {
+    color: COLORS.textPrimary,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  signalValue: {
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   statPill: {
-    minWidth: 98,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    backgroundColor: 'rgba(22, 35, 56, 0.96)',
+    width: "48.5%",
+    minWidth: 0,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    backgroundColor: "rgba(22,35,56,0.96)",
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.14)',
+    borderColor: COLORS.borderSoft,
   },
   statPillStrong: {
-    backgroundColor: 'rgba(20, 34, 54, 1)',
+    backgroundColor: "rgba(20,34,54,1)",
+  },
+  statPillHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    marginBottom: 2,
   },
   statPillLabel: {
-    fontSize: 10,
-    color: '#8EA6C8',
-    marginBottom: 2,
-    fontWeight: '700',
+    fontSize: 8,
+    color: COLORS.textMuted,
+    fontWeight: "700",
   },
   statPillValue: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#F8FAFC',
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
   },
   statPillValueStrong: {
-    fontSize: 13,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: "900",
   },
-  compareButton: {
-    position: 'relative',
-    overflow: 'hidden',
-    marginTop: 10,
-    borderRadius: 999,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(168,85,247,0.16)',
+  infoButtonText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  compareButtonTop: {
+    marginTop: 2,
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(168,85,247,0.16)",
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.45)',
-    shadowColor: '#A855F7',
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-  },
-  compareButtonPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.99 }],
-  },
-  compareButtonGlow: {
-    position: 'absolute',
-    left: -24,
-    top: -18,
-    width: 120,
-    height: 70,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: "rgba(168,85,247,0.45)",
   },
   compareButtonText: {
-    color: '#E9D5FF',
-    fontWeight: '900',
-    fontSize: 13,
-    letterSpacing: 0.6,
+    color: "#E9D5FF",
+    fontWeight: "900",
+    fontSize: 11,
+    letterSpacing: 0.4,
   },
   emptyCard: {
     borderRadius: 18,
     padding: 14,
-    backgroundColor: 'rgba(16, 26, 43, 0.94)',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.14)',
+    borderColor: COLORS.borderSoft,
+    gap: 6,
   },
   emptyTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
-    marginBottom: 6,
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
   },
   emptyText: {
-    color: '#CBD5E1',
-    fontSize: 13,
-    lineHeight: 18,
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  playerSection: {
+    gap: 6,
+    marginTop: 2,
+  },
+  playerSectionTitle: {
+    color: COLORS.cyan,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+  },
+  playersList: {
+    gap: 8,
   },
   playerCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: 22,
-    padding: 14,
-    backgroundColor: 'rgba(16, 26, 43, 0.96)',
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 18,
+    padding: 10,
+    backgroundColor: COLORS.surfaceAlt,
     borderWidth: 1,
-    gap: 12,
+    gap: 8,
   },
-  playerCardAccent: {
-    position: 'absolute',
+  playerAccent: {
+    position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
     width: 4,
   },
   playerGlow: {
-    position: 'absolute',
-    top: -28,
-    right: -28,
-    width: 120,
-    height: 120,
+    position: "absolute",
+    top: -24,
+    right: -24,
+    width: 90,
+    height: 90,
     borderRadius: 999,
   },
+  playerCardBadgeWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 3,
+  },
   playerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
   },
   playerHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  playerTextWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     flex: 1,
   },
   rankText: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 10,
+    fontWeight: "900",
     marginBottom: 2,
   },
-  name: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '900',
+  playerName: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
   },
   playerMeta: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 3,
-  },
-  primaryValueWrap: {
-    alignItems: 'flex-end',
-  },
-  primaryValue: {
-    color: '#F8FAFC',
-    fontSize: 26,
-    fontWeight: '900',
-    lineHeight: 28,
-  },
-  primaryValueLabel: {
-    color: '#8EA6C8',
+    color: COLORS.textMuted,
     fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    marginTop: 2,
   },
-  playerHeroMetricsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  playerPrimaryValueWrap: {
+    alignItems: "flex-end",
+  },
+  playerPrimaryValue: {
+    color: COLORS.textPrimary,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 24,
+  },
+  playerPrimaryLabel: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  selectorWrap: {
+    gap: 14,
+    paddingRight: 12,
+    alignItems: "center",
+  },
+  selectorTab: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+    gap: 6,
+  },
+  selectorTabText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  selectorTabTextActive: {
+    color: COLORS.textPrimary,
+    fontWeight: "900",
+  },
+  selectorTabUnderline: {
+    width: "100%",
+    minWidth: 44,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  selectorTabUnderlineActive: {
+    backgroundColor: COLORS.cyan,
+  },
+  tierSection: {
+    gap: 6,
+    marginTop: 2,
+  },
+  gamePanel: {
+    gap: 8,
+    marginTop: 2,
+  },
+  gameRowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  gameRowIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  gameRowIdentityText: {
+    flex: 1,
+  },
+  gameRowTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  gameRowMeta: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    marginTop: 2,
+  },
+  gameRowStats: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+  gameRowStat: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  correlationCard: {
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    backgroundColor: COLORS.surfaceAlt,
+    gap: 6,
+  },
+  correlationHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     gap: 8,
   },
-  sectionBlock: {
-    gap: 8,
+  correlationBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
   },
-  sectionTitle: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '900',
+  correlationBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
   },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  correlationLabel: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: "900",
+    flex: 1,
+  },
+  correlationMeaning: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 17,
   },
 });

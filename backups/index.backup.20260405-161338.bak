@@ -1,0 +1,2174 @@
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  Animated,
+  Dimensions,
+  Easing,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  UIManager,
+  View,
+  Image,
+} from "react-native";
+import { usePathname, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { useStore } from "@/store/useStore";
+import StarryNight from "@/components/ui/StarryNight";
+
+const SHEET = require("@/assets/images/player-card-sheet.png");
+
+type PlayerLike = {
+  id: string;
+  name: string;
+  color?: string;
+  elo?: number;
+  rating?: number;
+  wins?: number;
+  gamesPlayed?: number;
+  totalPrestige?: number;
+  prestige?: number;
+};
+
+type GroupLike = {
+  id: string;
+  name: string;
+  playerIds?: string[];
+  createdAt?: number;
+};
+
+type HomeTab = "Games" | "Leaderboard" | "Navigation";
+type LeaderboardSort = "elo" | "wins" | "games" | "prestige" | "name";
+
+const COLORS = {
+  bg: "#040814",
+  surface: "#0A1428",
+  surfaceAlt: "#0F172A",
+  surfaceMuted: "#0B1220",
+  surfaceGlass: "#0B1323",
+
+  border: "rgba(99, 102, 241, 0.22)",
+  borderSoft: "rgba(148, 163, 184, 0.18)",
+
+  textPrimary: "#F8FBFF",
+  textSecondary: "#C7D6F3",
+  textMuted: "#8EA6C8",
+
+  brand: "#8B5CF6",
+  brandTint: "rgba(139, 92, 246, 0.16)",
+  brandSoft: "#C4B5FD",
+
+  cyan: "#67E8F9",
+  success: "#22c55e",
+
+  danger: "#ef4444",
+  dangerBg: "rgba(90, 24, 24, 0.88)",
+  dangerBorder: "rgba(248, 113, 113, 0.28)",
+  dangerText: "#FCA5A5",
+
+  gold: "#FBBF24",
+  silver: "#CBD5E1",
+  bronze: "#D97706",
+};
+
+const SHEET_COLUMNS = 5;
+const SHEET_ROWS = 6;
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const H_PADDING = 12;
+const GRID_GAP = 8;
+const PLAYER_GRID_COLUMNS = 4;
+const PLAYER_CARD_WIDTH =
+  (SCREEN_WIDTH - H_PADDING * 2 - GRID_GAP * (PLAYER_GRID_COLUMNS - 1)) / PLAYER_GRID_COLUMNS;
+const PLAYER_CARD_HEIGHT = PLAYER_CARD_WIDTH * 1.42;
+const INITIAL_BADGE = 28;
+
+function toNumber(v: any) {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+function getInitials(name?: string) {
+  if (!name?.trim()) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
+}
+
+function getPlayerColor(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "green":
+      return "#22c55e";
+    case "purple":
+      return "#a855f7";
+    case "blue":
+      return "#3b82f6";
+    case "orange":
+      return "#f97316";
+    case "yellow":
+      return "#eab308";
+    case "red":
+      return "#ef4444";
+    case "pink":
+      return "#ec4899";
+    default:
+      return "#a855f7";
+  }
+}
+
+function getPlayerGlow(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "green":
+      return "rgba(34, 197, 94, 0.48)";
+    case "purple":
+      return "rgba(168, 85, 247, 0.52)";
+    case "blue":
+      return "rgba(59, 130, 246, 0.52)";
+    case "orange":
+      return "rgba(249, 115, 22, 0.48)";
+    case "yellow":
+      return "rgba(234, 179, 8, 0.50)";
+    case "red":
+      return "rgba(239, 68, 68, 0.44)";
+    case "pink":
+      return "rgba(236, 72, 153, 0.44)";
+    default:
+      return "rgba(168, 85, 247, 0.40)";
+  }
+}
+
+function getPlayerTint(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "green":
+      return "rgba(34, 197, 94, 0.16)";
+    case "purple":
+      return "rgba(168, 85, 247, 0.16)";
+    case "blue":
+      return "rgba(59, 130, 246, 0.16)";
+    case "orange":
+      return "rgba(249, 115, 22, 0.16)";
+    case "yellow":
+      return "rgba(234, 179, 8, 0.16)";
+    case "red":
+      return "rgba(239, 68, 68, 0.14)";
+    case "pink":
+      return "rgba(236, 72, 153, 0.16)";
+    default:
+      return "rgba(168, 85, 247, 0.14)";
+  }
+
+
+function getPlayerGradient(color?: string): [string, string] {
+  switch ((color ?? "").toLowerCase()) {
+    case "red": return ["#7F1D1D", "#DC2626"];
+    case "blue": return ["#1E3A8A", "#2563EB"];
+    case "green": return ["#064E3B", "#10B981"];
+    case "yellow": return ["#78350F", "#F59E0B"];
+    case "purple": return ["#4C1D95", "#8B5CF6"];
+    case "pink": return ["#831843", "#EC4899"];
+    case "orange": return ["#7C2D12", "#F97316"];
+    default: return ["#1F2937", "#374151"];
+  }
+}
+
+
+function getPlayerGradient(color?: string): [string, string] {
+  switch ((color ?? "").toLowerCase()) {
+    case "red": return ["#7F1D1D", "#DC2626"];
+    case "blue": return ["#1E3A8A", "#2563EB"];
+    case "green": return ["#064E3B", "#10B981"];
+    case "yellow": return ["#78350F", "#F59E0B"];
+    case "purple": return ["#4C1D95", "#8B5CF6"];
+    case "pink": return ["#831843", "#EC4899"];
+    case "orange": return ["#7C2D12", "#F97316"];
+    default: return ["#1F2937", "#374151"];
+  }
+}
+}
+
+function getColorColumn(color?: string) {
+  switch ((color ?? "").toLowerCase()) {
+    case "blue":
+      return 0;
+    case "green":
+      return 1;
+    case "purple":
+      return 2;
+    case "orange":
+      return 3;
+    case "yellow":
+      return 4;
+    default:
+      return 2;
+  }
+}
+
+function getPodiumAccent(rank: number) {
+  if (rank === 0) return { color: COLORS.gold, tint: "rgba(251,191,36,0.14)" };
+  if (rank === 1) return { color: COLORS.silver, tint: "rgba(203,213,225,0.14)" };
+  if (rank === 2) return { color: COLORS.bronze, tint: "rgba(217,119,6,0.14)" };
+  return null;
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value)}%`;
+}
+
+function cropPosition(index: number) {
+  return {
+    row: Math.floor(index / SHEET_COLUMNS),
+    col: index % SHEET_COLUMNS,
+  };
+}
+
+function derivePlayerStats(player: PlayerLike, games: any[]) {
+  const directWins = toNumber(player?.wins);
+  const directGames = toNumber(player?.gamesPlayed);
+  const directPrestige = toNumber(player?.totalPrestige ?? player?.prestige);
+  const elo = toNumber(player?.elo ?? player?.rating);
+
+  let winsFromGames = 0;
+  let gamesFromGames = 0;
+  let prestigeFromGames = 0;
+  let recentPoints = 0;
+  let recentCount = 0;
+
+  const safeGames = Array.isArray(games) ? [...games] : [];
+  safeGames.sort((a, b) => toNumber(b?.createdAt) - toNumber(a?.createdAt));
+
+  for (const game of safeGames) {
+    const gamePlayers = Array.isArray(game?.players) ? game.players : [];
+    const result = gamePlayers.find(
+      (p: any) => p?.id === player.id || p?.playerId === player.id
+    );
+    if (!result) continue;
+
+    gamesFromGames += 1;
+    const prestige = toNumber(
+      result?.totalPrestige ??
+        result?.prestige ??
+        result?.score ??
+        result?.finalPrestige
+    );
+    prestigeFromGames += prestige;
+
+    const placement = toNumber(result?.placement ?? result?.place ?? result?.rank);
+    const isWinner =
+      result?.isWinner === true || placement === 1 || result?.won === true;
+
+    if (isWinner) winsFromGames += 1;
+
+    if (recentCount < 5) {
+      recentPoints += isWinner ? 3 : prestige > 0 ? 1 : 0;
+      recentCount += 1;
+    }
+  }
+
+  const wins = Math.max(directWins, winsFromGames);
+  const gamesPlayed = Math.max(directGames, gamesFromGames);
+  const prestige = Math.max(directPrestige, prestigeFromGames);
+  const winRate = gamesPlayed > 0 ? (wins / gamesPlayed) * 100 : 0;
+  const avgPrestige = gamesPlayed > 0 ? prestige / gamesPlayed : 0;
+  const recentForm = recentCount > 0 ? recentPoints / recentCount : 0;
+
+  return {
+    elo,
+    wins,
+    games: gamesPlayed,
+    prestige,
+    winRate,
+    avgPrestige,
+    recentForm,
+  };
+}
+
+function CropCardArt({
+  artIndex,
+  width,
+  height,
+}: {
+  artIndex: number;
+  width: number;
+  height: number;
+}) {
+  const { row, col } = cropPosition(artIndex);
+
+  return (
+    <View style={[styles.cropWindow, { width, height }]}>
+      <Image
+        source={SHEET}
+        resizeMode="stretch"
+        style={{
+          position: "absolute",
+          width: width * SHEET_COLUMNS,
+          height: height * SHEET_ROWS,
+          left: -(col * width),
+          top: -(row * height),
+        }}
+      />
+    </View>
+  );
+}
+
+function UnderlineTab({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={styles.underlineTabButton} onPress={onPress}>
+      <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
+        {label}
+      </Text>
+      <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
+    </Pressable>
+  );
+}
+
+function LeaderboardSortPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.sortPill,
+        active && styles.sortPillActive,
+      ]}
+    >
+      <Text style={[styles.sortPillText, active && styles.sortPillTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function PlayerSelectionCard({
+  player,
+  selected,
+  artIndex,
+  onToggle,
+}: any) {
+  const accent = getPlayerColor(player.color);
+  const gradient = getPlayerGradient(player.color);
+
+  return (
+    <Pressable
+      style={[
+        styles.playerCardShell,
+        {
+          borderColor: selected ? accent : "#000",
+          shadowColor: accent,
+          shadowOpacity: selected ? 0.4 : 0.15,
+        },
+      ]}
+      onPress={onToggle}
+    >
+      <LinearGradient
+        colors={selected ? gradient : ["#0F172A", "#1E293B"]}
+        style={styles.playerGradient}
+      >
+        <View style={styles.playerCardInner}>
+          <Text style={styles.playerCardName}>{player.name}</Text>
+        </View>
+      </LinearGradient>
+    </Pressable>
+  );
+}function GroupCard({
+  group,
+  selected,
+  favorite,
+  count,
+  onPress,
+  onDelete,
+  onFavorite,
+}: {
+  group: GroupLike;
+  selected: boolean;
+  favorite: boolean;
+  count: number;
+  onPress: () => void;
+  onDelete: () => void;
+  onFavorite: () => void;
+}) {
+  return (
+    <View
+      style={[
+        styles.groupCardRow,
+        selected && styles.groupCardRowSelected,
+      ]}
+    >
+      <Pressable style={styles.groupCardMain} onPress={onPress}>
+        <View style={styles.groupTitleRow}>
+          <Text style={styles.groupName}>{group.name}</Text>
+          {favorite ? <Text style={styles.groupStar}>?</Text> : null}
+        </View>
+        <Text style={styles.groupMeta}>{count} player{count === 1 ? "" : "s"}</Text>
+      </Pressable>
+
+      <View style={styles.groupCardActions}>
+        <Pressable onPress={onFavorite} style={styles.smallIconButton}>
+          <Text style={styles.smallIconButtonText}>?</Text>
+        </Pressable>
+        <Pressable onPress={onDelete} style={styles.smallDeleteButton}>
+          <Text style={styles.smallDeleteButtonText}>Delete</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+export default function HomeScreen() {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const players = useStore((s: any) =>
+    Array.isArray(s.players) ? s.players : []
+  ) as PlayerLike[];
+
+  const groups = useStore((s: any) =>
+    Array.isArray(s.groups) ? s.groups : []
+  ) as GroupLike[];
+
+  const games = useStore((s: any) =>
+    Array.isArray(s.games) ? s.games : []
+  ) as any[];
+
+  const activeGame = useStore((s: any) => s.activeGame);
+  const addGroup = useStore((s: any) => s.addGroup);
+  const removeGroup = useStore((s: any) => s.removeGroup);
+  const removePlayer = useStore((s: any) => s.removePlayer);
+  const clearActiveGame = useStore((s: any) => s.clearActiveGame);
+
+  const [activeTab, setActiveTab] = useState<HomeTab>("Games");
+  const [groupName, setGroupName] = useState("");
+  const [groupDraftPlayerIds, setGroupDraftPlayerIds] = useState<string[]>([]);
+  const [manualSelectedPlayerIds, setManualSelectedPlayerIds] = useState<string[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<LeaderboardSort>("elo");
+  const [favoriteGroupIds, setFavoriteGroupIds] = useState<string[]>([]);
+  const [deleteMode, setDeleteMode] = useState(false);
+
+  const selectedGroup = useMemo(
+    () => groups.find((g) => g.id === selectedGroupId) ?? null,
+    [groups, selectedGroupId]
+  );
+
+  const activeSelectedPlayerIds = useMemo(() => {
+    if (selectedGroup) {
+      return Array.isArray(selectedGroup.playerIds)
+        ? selectedGroup.playerIds.filter(Boolean)
+        : [];
+    }
+    return manualSelectedPlayerIds;
+  }, [manualSelectedPlayerIds, selectedGroup]);
+
+  const manualSelectedPlayers = useMemo(() => {
+    const selected = new Set(manualSelectedPlayerIds);
+    return players.filter((player) => selected.has(player.id));
+  }, [players, manualSelectedPlayerIds]);
+
+  const selectedGroupLeadPlayer = useMemo(() => {
+    const firstId = selectedGroup?.playerIds?.[0];
+    return players.find((p) => p.id === firstId) ?? null;
+  }, [players, selectedGroup]);
+
+  const activeColor =
+    manualSelectedPlayers[0]?.color ?? selectedGroupLeadPlayer?.color ?? "purple";
+  const accent = getPlayerColor(activeColor);
+  const accentTint = getPlayerTint(activeColor);
+
+  useEffect(() => {
+    if (
+      Platform.OS === "android" &&
+      UIManager.setLayoutAnimationEnabledExperimental
+    ) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  const animatedBg = useRef(new Animated.Value(0)).current;
+  const previousAccent = useRef(accentTint);
+
+  useEffect(() => {
+    if (previousAccent.current !== accentTint) {
+      animatedBg.setValue(0);
+      Animated.timing(animatedBg, {
+        toValue: 1,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+      previousAccent.current = accentTint;
+    }
+  }, [accentTint, animatedBg]);
+
+  const bgOverlayOpacity = animatedBg.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.06, 0.24],
+  });
+
+  const randomizedArtMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    players.forEach((player, index) => {
+      const col = getColorColumn(player.color);
+      const row = (index + Math.floor(Math.random() * SHEET_ROWS)) % SHEET_ROWS;
+      map[String(player.id)] = row * SHEET_COLUMNS + col;
+    });
+    return map;
+  }, [players]);
+
+  const leaderboard = useMemo(() => {
+    const mapped = players.map((player) => {
+      const stats = derivePlayerStats(player, games);
+      return {
+        ...player,
+        ...stats,
+      };
+    });
+
+    mapped.sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "wins":
+          return b.wins - a.wins || b.elo - a.elo || a.name.localeCompare(b.name);
+        case "games":
+          return b.games - a.games || b.elo - a.elo || a.name.localeCompare(b.name);
+        case "prestige":
+          return b.prestige - a.prestige || b.elo - a.elo || a.name.localeCompare(b.name);
+        case "elo":
+        default:
+          return b.elo - a.elo || b.wins - a.wins || a.name.localeCompare(b.name);
+      }
+    });
+
+    return mapped;
+  }, [players, games, sortBy]);
+
+  const leaderboardRankByPlayerId = useMemo(() => {
+    const map: Record<string, number> = {};
+    leaderboard.forEach((player, index) => {
+      map[player.id] = index + 1;
+    });
+    return map;
+  }, [leaderboard]);
+
+  const orderedGroups = useMemo(() => {
+    const favorites = new Set(favoriteGroupIds);
+
+    return [...groups].sort((a, b) => {
+      const aFav = favorites.has(a.id) ? 1 : 0;
+      const bFav = favorites.has(b.id) ? 1 : 0;
+      if (aFav !== bFav) return bFav - aFav;
+      return toNumber(b.createdAt) - toNumber(a.createdAt);
+    });
+  }, [groups, favoriteGroupIds]);
+
+  useEffect(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  }, [manualSelectedPlayerIds.join("|"), selectedGroupId, activeTab, sortBy, deleteMode]);
+
+  const toggleSelectedPlayer = (playerId: string) => {
+    setSelectedGroupId(null);
+    setManualSelectedPlayerIds((current) =>
+      current.includes(playerId)
+        ? current.filter((id) => id !== playerId)
+        : [...current, playerId]
+    );
+  };
+
+  const toggleDraftPlayer = (playerId: string) => {
+    setGroupDraftPlayerIds((current) =>
+      current.includes(playerId)
+        ? current.filter((id) => id !== playerId)
+        : [...current, playerId]
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedGroupId(null);
+    setManualSelectedPlayerIds([]);
+  };
+
+  const clearGroupDraft = () => {
+    setGroupName("");
+    setGroupDraftPlayerIds([]);
+  };
+
+  const handleSelectGroup = (group: GroupLike) => {
+    setSelectedGroupId(group.id);
+    setManualSelectedPlayerIds([]);
+  };
+
+  const toggleFavoriteGroup = (groupId: string) => {
+    setFavoriteGroupIds((current) =>
+      current.includes(groupId)
+        ? current.filter((id) => id !== groupId)
+        : [groupId, ...current]
+    );
+  };
+
+  const handleCreateGroup = () => {
+    const trimmed = groupName.trim();
+
+    if (!trimmed) {
+      Alert.alert("Missing group name", "Enter a name for the group.");
+      return;
+    }
+
+    if (groupDraftPlayerIds.length === 0) {
+      Alert.alert("No players selected", "Select at least one player for the group.");
+      return;
+    }
+
+    if (typeof addGroup !== "function") {
+      Alert.alert("Store update needed", "Your store needs addGroup support before groups can be saved.");
+      return;
+    }
+
+    addGroup({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: trimmed,
+      playerIds: groupDraftPlayerIds,
+      createdAt: Date.now(),
+    });
+
+    setGroupName("");
+    setGroupDraftPlayerIds([]);
+  };
+
+  const handleDeletePlayer = (player: PlayerLike) => {
+    Alert.alert(
+      "Delete Player",
+      `Remove ${player.name}? This should also remove them from saved groups and stats views.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            if (typeof removePlayer !== "function") {
+              Alert.alert("Store update needed", "Your store needs removePlayer support before players can be deleted.");
+              return;
+            }
+
+            removePlayer(player.id);
+            setManualSelectedPlayerIds((current) => current.filter((id) => id !== player.id));
+            setGroupDraftPlayerIds((current) => current.filter((id) => id !== player.id));
+            if (selectedGroup?.playerIds?.includes(player.id)) {
+              setSelectedGroupId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteGroup = (groupId: string, groupNameValue: string) => {
+    Alert.alert("Delete Group", `Remove ${groupNameValue}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          if (typeof removeGroup === "function") {
+            removeGroup(groupId);
+            if (selectedGroupId === groupId) {
+              setSelectedGroupId(null);
+            }
+            setFavoriteGroupIds((current) => current.filter((id) => id !== groupId));
+          }
+        },
+      },
+    ]);
+  };
+
+  const getPlayerProfilePath = (playerId: string) =>
+    `/player-profile/${encodeURIComponent(String(playerId))}`;
+
+  const goToGameSetup = (playerIds: string[], group?: GroupLike) => {
+    const cleanIds = playerIds.filter(Boolean);
+
+    if (cleanIds.length === 0) {
+      Alert.alert("No players selected", "Select at least one player first.");
+      return;
+    }
+
+    router.push({
+      pathname: "/game-setup",
+      params: {
+        playerIds: JSON.stringify(cleanIds),
+        groupId: group?.id,
+        groupName: group?.name,
+      },
+    });
+  };
+
+  const startButtonLabel = useMemo(() => {
+    const count = activeSelectedPlayerIds.length;
+    if (count === 0) return "Start Game";
+    if (selectedGroup?.name) return `Launch ${selectedGroup.name}`;
+    if (count === 1) return "Launch Solo Session";
+    return `Launch ${count}-Player Session`;
+  }, [activeSelectedPlayerIds, selectedGroup]);
+
+  const canStart = activeSelectedPlayerIds.length > 0;
+
+const isNavigationTab = activeTab === "Navigation";
+const isLeaderboardTab = activeTab === "Leaderboard";
+
+const isNavigationTab = activeTab === "Navigation";
+const isLeaderboardTab = activeTab === "Leaderboard";
+
+  const handleStartGame = () => {
+    if (!canStart) return;
+    goToGameSetup(activeSelectedPlayerIds, selectedGroup ?? undefined);
+  };
+
+  const handleContinueGame = () => {
+    if (!activeGame) return;
+    router.push("/game");
+  };
+
+  const handleDeleteActiveGame = () => {
+    if (!activeGame) return;
+
+    Alert.alert("Delete Active Game", "Are you sure you want to delete the active game?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          if (typeof clearActiveGame === "function") {
+            clearActiveGame();
+          }
+        },
+      },
+    ]);
+  };
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.backgroundLayer}>
+        <StarryNight />
+        <View pointerEvents="none" style={styles.nebulaPurple} />
+        <View pointerEvents="none" style={styles.nebulaBlue} />
+        <View pointerEvents="none" style={styles.stellarRingOne} />
+        <View pointerEvents="none" style={styles.stellarRingTwo} />
+        <View style={styles.backgroundDim} />
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.animatedAccentOverlay,
+            {
+              backgroundColor: accentTint,
+              opacity: bgOverlayOpacity,
+            },
+          ]}
+        />
+      </View>
+
+      <View style={styles.page}>
+        <ScrollView
+          contentContainerStyle={[styles.container, isNavigationTab && styles.containerNavigation, isLeaderboardTab && styles.containerLeaderboard]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.headerCard}>
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.kicker}>Moonrakers</Text>
+              <Text style={styles.title}>Home</Text>
+              <Text style={styles.subtitle}>
+                ELO-styled command center for games, leaderboard, and navigation.
+              </Text>
+            </View>
+
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>
+                {activeTab.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.tabCard}>
+            <View style={styles.tabGridRowThree}>
+              {(["Games", "Leaderboard", "Navigation"] as HomeTab[]).map((tab) => {
+                const active = tab === activeTab;
+                return (
+                  <UnderlineTab
+                    key={tab}
+                    label={tab}
+                    active={active}
+                    onPress={() => setActiveTab(tab)}
+                  />
+                );
+              })}
+            </View>
+          </View>
+
+          {activeTab === "Games" ? (
+            <>
+              {activeGame ? (
+                <View style={styles.sectionCompact}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitle}>Active Game</Text>
+                    <Text style={styles.sectionSub}>Resume or remove</Text>
+                  </View>
+
+                  <View style={styles.activeGameActionsRow}>
+                    <Pressable
+                      onPress={handleContinueGame}
+                      style={[styles.primaryButton, styles.continueGameButton]}
+                    >
+                      <Text style={styles.primaryButtonText}>Continue Active Game</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={handleDeleteActiveGame}
+                      style={styles.deleteActiveGameButton}
+                    >
+                      <Text style={styles.deleteActiveGameButtonText}>Delete</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.sectionCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Selection</Text>
+                  <Text style={styles.sectionSub}>
+                    Tap cards to select players for the next game
+                  </Text>
+                </View>
+
+                <View style={styles.selectionHeaderActions}>
+                  <Pressable
+                    onPress={clearSelection}
+                    style={[
+                      styles.headerUtilityButton,
+                      activeSelectedPlayerIds.length === 0 && styles.headerUtilityButtonDisabled,
+                    ]}
+                    disabled={activeSelectedPlayerIds.length === 0}
+                  >
+                    <Text style={styles.headerUtilityButtonText}>Clear</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => setDeleteMode((v) => !v)}
+                    style={[
+                      styles.headerUtilityButton,
+                      deleteMode && styles.deleteModeButtonActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.headerUtilityButtonText,
+                        deleteMode && styles.deleteModeButtonTextActive,
+                      ]}
+                    >
+                      {deleteMode ? "Done Managing" : "Manage Players"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {activeSelectedPlayerIds.length > 0 ? (
+                  <View style={styles.selectedRosterWrap}>
+                    {activeSelectedPlayerIds.map((playerId, index) => {
+                      const player = players.find((p) => p.id === playerId);
+                      if (!player) return null;
+                      const accentLocal = getPlayerColor(player.color);
+                      return (
+                        <View
+                          key={playerId}
+                          style={[
+                            styles.selectedRosterChip,
+                            { borderColor: accentLocal, backgroundColor: `${accentLocal}12` },
+                          ]}
+                        >
+                          <Text style={styles.selectedRosterChipText}>
+                            {index + 1}. {player.name}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.emptyText}>No players selected yet.</Text>
+                )}
+
+                <View style={styles.playerGrid}>
+                  {players.length === 0 ? (
+                    <Text style={styles.emptyText}>No players yet. Add a player profile first.</Text>
+                  ) : (
+                    players.map((player) => (
+                      <PlayerSelectionCard
+                        key={player.id}
+                        player={player}
+                        selected={!selectedGroupId && manualSelectedPlayerIds.includes(player.id)}
+                        artIndex={randomizedArtMap[String(player.id)]}
+                        rank={
+                          !selectedGroupId && manualSelectedPlayerIds.includes(player.id)
+                            ? manualSelectedPlayerIds.indexOf(player.id)
+                            : null
+                        }
+                        deleteMode={deleteMode}
+                        onToggle={() => toggleSelectedPlayer(player.id)}
+                        onDelete={() => handleDeletePlayer(player)}
+                        onOpenProfile={() => router.push(getPlayerProfilePath(player.id))}
+                      />
+                    ))
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.sectionCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Management</Text>
+                  <Text style={styles.sectionSub}>Add players, build groups, open profiles</Text>
+                </View>
+
+                <View style={styles.managementActionRow}>
+                  <Pressable
+                    onPress={() => router.push("/add-players" as any)}
+                    style={[styles.headerUtilityButton, styles.headerUtilityButtonSoft]}
+                  >
+                    <Text style={[styles.headerUtilityButtonText, { color: COLORS.brandSoft }]}>
+                      Add Player
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => router.push("/player-profile" as any)}
+                    style={[styles.headerUtilityButton, styles.headerUtilityButtonSoft]}
+                  >
+                    <Text style={[styles.headerUtilityButtonText, { color: COLORS.brandSoft }]}>
+                      Full Player Profile
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <TextInput
+                  value={groupName}
+                  onChangeText={setGroupName}
+                  placeholder="New group name"
+                  placeholderTextColor="#94a3b8"
+                  style={styles.input}
+                />
+
+                <View style={styles.selectableList}>
+                  {players.map((player) => {
+                    const selected = groupDraftPlayerIds.includes(player.id);
+                    const playerColor = getPlayerColor(player.color);
+
+                    return (
+                      <Pressable
+                        key={player.id}
+                        onPress={() => toggleDraftPlayer(player.id)}
+                        style={[
+                          styles.groupSelectChip,
+                          selected && {
+                            backgroundColor: `${playerColor}16`,
+                            borderColor: playerColor,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.colorDot, { backgroundColor: playerColor }]} />
+                        <Text
+                          style={[
+                            styles.groupSelectChipText,
+                            selected && { color: COLORS.textPrimary },
+                          ]}
+                        >
+                          {player.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.managementActionRow}>
+                  <Pressable
+                    style={[styles.primaryButton, styles.saveGroupButton]}
+                    onPress={handleCreateGroup}
+                  >
+                    <Text style={styles.primaryButtonText}>Save Group</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={clearGroupDraft}
+                    style={styles.headerUtilityButton}
+                  >
+                    <Text style={styles.headerUtilityButtonText}>Clear Draft</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.groupList}>
+                  {orderedGroups.length === 0 ? (
+                    <Text style={styles.emptyText}>No saved groups yet.</Text>
+                  ) : (
+                    orderedGroups.map((group) => {
+                      const count = Array.isArray(group.playerIds) ? group.playerIds.length : 0;
+                      const selected = group.id === selectedGroupId;
+                      const favorite = favoriteGroupIds.includes(group.id);
+
+                      return (
+                        <GroupCard
+                          key={group.id}
+                          group={group}
+                          selected={selected}
+                          favorite={favorite}
+                          count={count}
+                          onPress={() => handleSelectGroup(group)}
+                          onDelete={() => handleDeleteGroup(group.id, group.name)}
+                          onFavorite={() => toggleFavoriteGroup(group.id)}
+                        />
+                      );
+                    })
+                  )}
+                </View>
+              </View>
+            </>
+          ) : null}
+
+          {activeTab === "Leaderboard" ? (
+            <>
+              <View style={styles.sectionCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Leaderboard Mode</Text>
+                  <Text style={styles.sectionSub}>Toggle between all ranking options</Text>
+                </View>
+
+                <View style={styles.sortPillRow}>
+                  <LeaderboardSortPill label="ELO" active={sortBy === "elo"} onPress={() => setSortBy("elo")} />
+                  <LeaderboardSortPill label="Wins" active={sortBy === "wins"} onPress={() => setSortBy("wins")} />
+                  <LeaderboardSortPill label="Games" active={sortBy === "games"} onPress={() => setSortBy("games")} />
+                  <LeaderboardSortPill label="Prestige" active={sortBy === "prestige"} onPress={() => setSortBy("prestige")} />
+                  <LeaderboardSortPill label="Name" active={sortBy === "name"} onPress={() => setSortBy("name")} />
+                </View>
+              </View>
+
+              <View style={styles.sectionCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Rankings</Text>
+                  <Text style={styles.sectionSub}>{leaderboard.length} players</Text>
+                </View>
+
+                <View style={styles.leaderboardList}>
+                  {leaderboard.map((player, index) => {
+                    const accentLocal = getPlayerColor(player.color);
+                    const artIndex = randomizedArtMap[String(player.id)];
+                    return (
+                      <Pressable
+                        key={player.id}
+                        style={styles.leaderboardRow}
+                        onPress={() => router.push(getPlayerProfilePath(player.id))}
+                      >
+                        <View style={styles.leaderboardLeft}>
+                          <View style={styles.rankBadge}>
+                            <Text style={styles.rankText}>{index + 1}</Text>
+                          </View>
+
+                          <View style={styles.leaderboardAvatarWrap}>
+                            <CropCardArt artIndex={artIndex} width={30} height={30} />
+                            <View style={styles.initialBadgeDim} />
+                            <Text style={styles.leaderboardAvatarText}>{getInitials(player.name)}</Text>
+                          </View>
+
+                          <View style={styles.leaderboardNameWrap}>
+                            <Text style={styles.leaderboardName}>{player.name}</Text>
+                            <Text style={styles.leaderboardMeta}>
+                              Win {formatPercent(player.winRate)} • Avg {Math.round(player.avgPrestige)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.leaderboardRight}>
+                          <Text style={[styles.leaderboardValue, { color: accentLocal }]}>
+                            {sortBy === "elo"
+                              ? Math.round(player.elo)
+                              : sortBy === "wins"
+                              ? player.wins
+                              : sortBy === "games"
+                              ? player.games
+                              : sortBy === "prestige"
+                              ? Math.round(player.prestige)
+                              : player.name}
+                          </Text>
+                          <Text style={styles.leaderboardMeta}>{sortBy.toUpperCase()}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </>
+          ) : null}
+
+          {activeTab === "Navigation" ? (
+  <View style={styles.fullScreenNav}>
+    <Text style={styles.fullScreenNavTitle}>Navigation</Text>
+
+    <View style={styles.fullScreenNavGrid}>
+      {[
+        { label: "Stats", route: "/stats" },
+        { label: "ELO", route: "/elo" },
+        { label: "History", route: "/history" },
+        { label: "Charts", route: "/charts" },
+        { label: "Compare", route: "/charts/compare" },
+      ].map((tab) => (
+        <Pressable
+          key={tab.route}
+          onPress={() => router.push(tab.route as any)}
+          style={styles.fullScreenNavCard}
+        >
+          <Text style={styles.fullScreenNavText}>{tab.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  </View>
+) : null}>
+    <Text style={styles.fullScreenNavTitle}>Navigation</Text>
+
+    <View style={styles.fullScreenNavGrid}>
+      {[
+        { label: "Stats", route: "/stats" },
+        { label: "ELO", route: "/elo" },
+        { label: "History", route: "/history" },
+        { label: "Charts", route: "/charts" },
+        { label: "Compare", route: "/charts/compare" },
+      ].map((tab) => (
+        <Pressable
+          key={tab.route}
+          onPress={() => router.push(tab.route as any)}
+          style={styles.fullScreenNavCard}
+        >
+          <Text style={styles.fullScreenNavText}>{tab.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  </View>
+) : null}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Navigation</Text>
+                <Text style={styles.sectionSub}>Quick links from the old home header</Text>
+              </View>
+
+              <View style={styles.navGrid}>
+                {[
+                  { label: "Stats", route: "/stats" },
+                  { label: "ELO", route: "/elo" },
+                  { label: "History", route: "/history" },
+                  { label: "Charts", route: "/charts" },
+                  { label: "Compare", route: "/charts/compare" },
+                  { label: "Player Card", route: "/ColorPlayerCard" },
+                ].map((tab) => (
+                  <Pressable
+                    key={tab.route}
+                    onPress={() => router.push(tab.route as any)}
+                    style={[
+                      styles.navCard,
+                      pathname === tab.route && styles.navCardActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.navCardText,
+                        pathname === tab.route && styles.navCardTextActive,
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </ScrollView>
+
+        {!isNavigationTab ? (
+  {!isNavigationTab ? (
+  <View style={styles.stickyFooterWrap}>
+    <Text style={styles.stickyFooterTitle}>Start Game</Text>
+  </View>
+) : null}
+) : null}
+
+            <Pressable
+              style={[
+                styles.stickyStartButton,
+                {
+                  backgroundColor: canStart ? "#FFFFFF" : COLORS.brand,
+                  borderColor: "#A78BFA",
+                },
+              ]}
+              onPress={handleStartGame}
+              disabled={!canStart}
+            >
+              <Text
+                style={[
+                  styles.stickyStartButtonText,
+                  { color: canStart ? COLORS.brand : "#FFFFFF" },
+                ]}
+              >
+                {startButtonLabel}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
+
+  backgroundLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  nebulaPurple: {
+    position: "absolute",
+    width: 280,
+    height: 280,
+    borderRadius: 999,
+    top: 36,
+    right: -72,
+    backgroundColor: "rgba(139, 92, 246, 0.12)",
+    shadowColor: "#8B5CF6",
+    shadowOpacity: 0.22,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+
+  nebulaBlue: {
+    position: "absolute",
+    width: 240,
+    height: 240,
+    borderRadius: 999,
+    bottom: 110,
+    left: -56,
+    backgroundColor: "rgba(96, 165, 250, 0.10)",
+    shadowColor: "#60A5FA",
+    shadowOpacity: 0.18,
+    shadowRadius: 34,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
+
+  stellarRingOne: {
+    position: "absolute",
+    width: 420,
+    height: 420,
+    borderRadius: 999,
+    top: -140,
+    left: -120,
+    borderWidth: 1,
+    borderColor: "rgba(103, 232, 249, 0.06)",
+  },
+
+  stellarRingTwo: {
+    position: "absolute",
+    width: 340,
+    height: 340,
+    borderRadius: 999,
+    bottom: -120,
+    right: -80,
+    borderWidth: 1,
+    borderColor: "rgba(139, 92, 246, 0.06)",
+  },
+
+  backgroundDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(2, 6, 18, 0.34)",
+  },
+
+  animatedAccentOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  page: {
+    flex: 1,
+  },
+
+  container: {
+  padding: 12,
+  paddingBottom: 120,
+},
+
+containerNavigation: {
+  paddingBottom: 24,
+  flexGrow: 1,
+},
+
+containerLeaderboard: {
+  paddingBottom: 80,
+},
+
+containerNavigation: {
+  paddingBottom: 24,
+  flexGrow: 1,
+},
+
+containerLeaderboard: {
+  paddingBottom: 80,
+},
+
+  headerCard: {
+    backgroundColor: "rgba(12,18,38,0.92)",
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+
+  headerTextWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
+  kicker: {
+    color: "#3B82F6",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginBottom: 4,
+  },
+
+  title: {
+    color: "#E2E8F0",
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 24,
+  },
+
+  subtitle: {
+    color: "#94A3B8",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 6,
+  },
+
+  headerBadge: {
+    backgroundColor: "rgba(168,85,247,0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  headerBadgeText: {
+    color: "#A855F7",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  tabCard: {
+    backgroundColor: "rgba(12,18,38,0.92)",
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  sectionCompact: {
+    backgroundColor: "rgba(12,18,38,0.92)",
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 8,
+  },
+
+  sectionTitle: {
+    color: "#E2E8F0",
+    fontSize: 15,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+
+  sectionSub: {
+    color: "#94A3B8",
+    fontSize: 10,
+    textAlign: "right",
+    flexShrink: 1,
+  },
+
+  underlineTabButton: {
+    flex: 1,
+    paddingBottom: 4,
+    alignItems: "center",
+  },
+
+  underlineTabText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  underlineTabTextActive: {
+    color: "#A855F7",
+  },
+
+  underlineTabLine: {
+    marginTop: 5,
+    height: 3,
+    width: "100%",
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+
+  underlineTabLineActive: {
+    backgroundColor: "#A855F7",
+  },
+
+  tabGridRowThree: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  selectionHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 8,
+  },
+
+  managementActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 8,
+  },
+
+  headerUtilityButton: {
+    backgroundColor: "rgba(10, 16, 30, 0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.16)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  headerUtilityButtonSoft: {
+    backgroundColor: "rgba(139, 92, 246, 0.12)",
+    borderColor: "rgba(139, 92, 246, 0.28)",
+  },
+
+  headerUtilityButtonDisabled: {
+    opacity: 0.45,
+  },
+
+  headerUtilityButtonText: {
+    color: "#D6E3FF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  deleteModeButtonActive: {
+    backgroundColor: COLORS.dangerBg,
+    borderColor: COLORS.dangerBorder,
+  },
+
+  deleteModeButtonTextActive: {
+    color: COLORS.dangerText,
+  },
+
+  activeGameActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  primaryButton: {
+    backgroundColor: "#8B5CF6",
+    borderWidth: 1,
+    borderColor: "rgba(167,139,250,0.85)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  continueGameButton: {
+    flex: 1,
+  },
+
+  saveGroupButton: {
+    minWidth: 120,
+  },
+
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  deleteActiveGameButton: {
+    backgroundColor: COLORS.dangerBg,
+    borderWidth: 1,
+    borderColor: COLORS.dangerBorder,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  deleteActiveGameButtonText: {
+    color: COLORS.dangerText,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  selectedRosterWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
+
+  selectedRosterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  selectedRosterChipText: {
+    color: COLORS.textPrimary,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  emptyText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+  },
+
+  playerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+  },
+
+  playerCardShell: {
+    width: PLAYER_CARD_WIDTH,
+    height: PLAYER_CARD_HEIGHT,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#000000",
+    backgroundColor: "#111827",
+    overflow: "hidden",
+  },
+
+  playerCardInner: {
+    flex: 1,
+  },
+
+  cropWindow: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    overflow: "hidden",
+    backgroundColor: "#111827",
+  },
+
+  playerCardDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.14)",
+  },
+
+  playerGlowOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  playerCardTopRow: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    right: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+
+  initialBadgeWrap: {
+    width: INITIAL_BADGE,
+    height: INITIAL_BADGE,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 2,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  initialBadgeDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.22)",
+  },
+
+  initialBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
+    zIndex: 2,
+  },
+
+  rankMiniBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+
+  rankMiniBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  deleteBadge: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.82)",
+    borderWidth: 1,
+    borderColor: COLORS.dangerBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  deleteBadgeText: {
+    color: COLORS.dangerText,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 14,
+  },
+
+  playerCardFooter: {
+    position: "absolute",
+    left: 4,
+    right: 4,
+    bottom: 4,
+    backgroundColor: "rgba(0,0,0,0.82)",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  playerCardName: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "900",
+    lineHeight: 12,
+  },
+
+  playerCardMeta: {
+    color: "#CBD5E1",
+    fontSize: 9,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+
+  input: {
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    color: COLORS.textPrimary,
+    backgroundColor: COLORS.surfaceMuted,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+
+  selectableList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+
+  groupSelectChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "#1e293b",
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+  },
+
+  groupSelectChipText: {
+    color: "#e2e8f0",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
+  colorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+
+  groupList: {
+    gap: 6,
+  },
+
+  groupCardRow: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#22324d",
+    padding: 10,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+
+  groupCardRowSelected: {
+    borderColor: "#FFFFFF",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+
+  groupCardMain: {
+    flex: 1,
+  },
+
+  groupTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  groupName: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  groupMeta: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  groupStar: {
+    color: COLORS.gold,
+    fontSize: 12,
+  },
+
+  groupCardActions: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
+
+  smallIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+  },
+
+  smallIconButtonText: {
+    color: COLORS.gold,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  smallDeleteButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: COLORS.dangerBg,
+    borderWidth: 1,
+    borderColor: COLORS.dangerBorder,
+  },
+
+  smallDeleteButtonText: {
+    color: COLORS.dangerText,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  sortPillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  sortPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: COLORS.surfaceMuted,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+  },
+
+  sortPillActive: {
+    backgroundColor: COLORS.brandTint,
+    borderColor: COLORS.brand,
+  },
+
+  sortPillText: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  sortPillTextActive: {
+    color: COLORS.brandSoft,
+  },
+
+  leaderboardList: {
+    gap: 6,
+  },
+
+  leaderboardRow: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  leaderboardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    paddingRight: 10,
+  },
+
+  leaderboardRight: {
+    alignItems: "flex-end",
+  },
+
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  rankText: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  leaderboardAvatarWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#000000",
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  leaderboardAvatarText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+    zIndex: 2,
+  },
+
+  leaderboardNameWrap: {
+    flex: 1,
+  },
+
+  leaderboardName: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  leaderboardMeta: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    marginTop: 2,
+  },
+
+  leaderboardValue: {
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  navGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  navCard: {
+    minWidth: "31%",
+    flexGrow: 1,
+    backgroundColor: COLORS.surfaceMuted,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  navCardActive: {
+    borderColor: COLORS.brand,
+    backgroundColor: COLORS.brandTint,
+  },
+
+  navCardText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  navCardTextActive: {
+    color: COLORS.brandSoft,
+  },
+
+  stickyFooterWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    paddingTop: 8,
+    backgroundColor: "rgba(4,8,20,0.78)",
+  },
+
+  stickyFooterCard: {
+    borderRadius: 18,
+    padding: 10,
+    backgroundColor: "#0A1428",
+    borderWidth: 1,
+    borderColor: "rgba(139, 92, 246, 0.24)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  stickyFooterTextWrap: {
+    flex: 1,
+  },
+
+  stickyFooterTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  stickyFooterSub: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  stickyStartButton: {
+    minWidth: 150,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  stickyStartButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+});
+
+const styles = StyleSheet.create({
+  playerGradient: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+
+  playerCardShell: {
+    width: 120,
+    height: 160,
+    borderRadius: 14,
+    borderWidth: 2,
+    margin: 6,
+  },
+
+  playerCardInner: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  playerCardName: {
+    color: "#FFF",
+    fontWeight: "900",
+  },
+
+  fullScreenNav: {
+    flex: 1,
+    padding: 12,
+  },
+
+  fullScreenNavTitle: {
+    fontSize: 18,
+    color: "#FFF",
+    marginBottom: 10,
+  },
+
+  fullScreenNavGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+
+  fullScreenNavCard: {
+    width: "48%",
+    height: 100,
+    margin: 4,
+    borderRadius: 14,
+    backgroundColor: "#1E293B",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  fullScreenNavText: {
+    color: "#FFF",
+    fontWeight: "800",
+  },
+
+  stickyFooterWrap: {
+    padding: 10,
+    backgroundColor: "#0A1428",
+  },
+
+  stickyFooterTitle: {
+    color: "#FFF",
+    textAlign: "center",
+  },
+});
+
+const styles = StyleSheet.create({
+  playerGradient: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+
+  playerCardShell: {
+    width: 120,
+    height: 160,
+    borderRadius: 14,
+    borderWidth: 2,
+    margin: 6,
+  },
+
+  playerCardInner: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  playerCardName: {
+    color: "#FFF",
+    fontWeight: "900",
+  },
+
+  fullScreenNav: {
+    flex: 1,
+    padding: 12,
+  },
+
+  fullScreenNavTitle: {
+    fontSize: 18,
+    color: "#FFF",
+    marginBottom: 10,
+  },
+
+  fullScreenNavGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+
+  fullScreenNavCard: {
+    width: "48%",
+    height: 100,
+    margin: 4,
+    borderRadius: 14,
+    backgroundColor: "#1E293B",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  fullScreenNavText: {
+    color: "#FFF",
+    fontWeight: "800",
+  },
+
+  stickyFooterWrap: {
+    padding: 10,
+    backgroundColor: "#0A1428",
+  },
+
+  stickyFooterTitle: {
+    color: "#FFF",
+    textAlign: "center",
+  },
+});

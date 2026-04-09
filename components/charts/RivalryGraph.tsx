@@ -1,40 +1,31 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, {
-  Circle,
-  Defs,
-  Line,
-  LinearGradient,
-  Rect,
-  Stop,
-  Text as SvgText,
-} from 'react-native-svg';
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  Layout,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  LayoutChangeEvent,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-import Text from '@/components/ui/Text';
-import ChartShell from './ChartShell';
-import { chartColors, withAlpha } from '@/utils/chartTheme';
+import Text from "@/components/ui/Text";
 
-const WIDTH = 340;
-const PAD_X = 12;
-const PAD_TOP = 12;
-const PAD_BOTTOM = 12;
-const LABEL_W = 104;
-const VALUE_W = 60;
-const CENTER_GAP = 8;
-const ROW_H = 42;
-
-const CHART_W = WIDTH - PAD_X * 2 - LABEL_W - VALUE_W;
-const MID_X = PAD_X + LABEL_W + CHART_W / 2;
-const HALF_W = CHART_W / 2 - CENTER_GAP;
+const COLORS = {
+  card: "rgba(12,18,38,0.92)",
+  cardAlt: "rgba(16,24,48,0.95)",
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  muted: "#64748B",
+  accent: "#A855F7",
+  accentSoft: "rgba(168,85,247,0.18)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  green: "#22C55E",
+  greenSoft: "rgba(34,197,94,0.16)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.18)",
+  red: "#EF4444",
+  border: "rgba(255,255,255,0.08)",
+  whiteSoft: "rgba(255,255,255,0.06)",
+};
 
 type Player = {
   id: string;
@@ -65,7 +56,7 @@ type Game = {
   totals?: Record<string, GameTotals>;
 };
 
-type ModeKey = 'dominance' | 'winRate' | 'prestigeMargin' | 'synergy';
+type ModeKey = "dominance" | "winRate" | "prestigeMargin" | "synergy";
 
 type RivalryRow = {
   opponentId: string;
@@ -96,11 +87,20 @@ const EMPTY_GAMES: Game[] = [];
 const EMPTY_PLAYERS: Player[] = [];
 
 function toNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : Number(value) || 0;
 }
 
 function safeDiv(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
+}
+
+function withAlpha(hex: string, alphaHex: string): string {
+  if (typeof hex === "string" && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
+    return `${hex}${alphaHex}`;
+  }
+  return hex;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -114,11 +114,11 @@ function getWinnerId(game?: Game): string | undefined {
 function getTotalPrestige(totals?: GameTotals | null): number {
   if (!totals) return 0;
 
-  if (typeof totals.totalPrestige === 'number' && Number.isFinite(totals.totalPrestige)) {
+  if (typeof totals.totalPrestige === "number" && Number.isFinite(totals.totalPrestige)) {
     return totals.totalPrestige;
   }
 
-  if (typeof totals.prestige === 'number' && Number.isFinite(totals.prestige)) {
+  if (typeof totals.prestige === "number" && Number.isFinite(totals.prestige)) {
     return totals.prestige;
   }
 
@@ -135,17 +135,29 @@ function getAssistOut(totals?: GameTotals | null): number {
     toNumber(totals?.assistPrestigeSent) ||
       toNumber(totals?.assistPrestigeGiven) ||
       toNumber(totals?.assistsGiven) ||
-      toNumber(totals?.assists),
+      toNumber(totals?.assists)
   );
 }
 
-function getPlayerColor(color?: string): string {
-  if (typeof color === 'string' && color.trim()) return color;
-  return chartColors.accent;
+function getPlayerColor(color?: string, index = 0): string {
+  if (typeof color === "string" && color.trim()) return color.trim();
+
+  const fallback = [
+    COLORS.accent,
+    COLORS.blue,
+    COLORS.green,
+    COLORS.blue,
+    COLORS.red,
+    "#14B8A6",
+    "#E879F9",
+    "#F97316",
+  ];
+
+  return fallback[index % fallback.length];
 }
 
 function formatSigned(value: number, digits = 2): string {
-  return `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
+  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}`;
 }
 
 function formatPct(value: number): string {
@@ -154,43 +166,43 @@ function formatPct(value: number): string {
 
 function getModeLabel(mode: ModeKey): string {
   switch (mode) {
-    case 'dominance':
-      return 'Dominance';
-    case 'winRate':
-      return 'Win Rate';
-    case 'prestigeMargin':
-      return 'Avg Prestige Margin';
-    case 'synergy':
-      return 'Synergy';
+    case "dominance":
+      return "Dominance";
+    case "winRate":
+      return "Win Rate";
+    case "prestigeMargin":
+      return "Prestige Margin";
+    case "synergy":
+      return "Synergy";
     default:
-      return 'Value';
+      return "Value";
   }
 }
 
 function getModeDescription(mode: ModeKey): string {
   switch (mode) {
-    case 'dominance':
-      return 'Wins minus losses per shared game';
-    case 'winRate':
-      return 'Share of wins against this opponent';
-    case 'prestigeMargin':
-      return 'Average prestige edge per shared game';
-    case 'synergy':
-      return 'Relative assist in/out edge per shared game';
+    case "dominance":
+      return "Wins minus losses per shared game";
+    case "winRate":
+      return "Share of wins against this opponent";
+    case "prestigeMargin":
+      return "Average prestige edge per shared game";
+    case "synergy":
+      return "Relative assist in/out edge per shared game";
     default:
-      return 'Comparison value';
+      return "Comparison value";
   }
 }
 
 function getModeValue(row: RivalryRow, mode: ModeKey): number {
   switch (mode) {
-    case 'winRate':
+    case "winRate":
       return row.winRate * 2 - 1;
-    case 'prestigeMargin':
+    case "prestigeMargin":
       return row.prestigeMargin;
-    case 'synergy':
+    case "synergy":
       return row.synergy;
-    case 'dominance':
+    case "dominance":
     default:
       return row.dominance;
   }
@@ -198,13 +210,13 @@ function getModeValue(row: RivalryRow, mode: ModeKey): number {
 
 function formatModeValue(row: RivalryRow, mode: ModeKey): string {
   switch (mode) {
-    case 'winRate':
+    case "winRate":
       return formatPct(row.winRate);
-    case 'prestigeMargin':
+    case "prestigeMargin":
       return formatSigned(row.prestigeMargin);
-    case 'synergy':
+    case "synergy":
       return formatSigned(row.synergy);
-    case 'dominance':
+    case "dominance":
     default:
       return formatSigned(row.dominance);
   }
@@ -213,15 +225,15 @@ function formatModeValue(row: RivalryRow, mode: ModeKey): string {
 function getDeltaWord(value: number, mode: ModeKey): string {
   const amount = Math.abs(value);
 
-  if (mode === 'winRate') {
-    if (amount < 0.08) return 'slightly';
-    if (amount < 0.2) return 'clearly';
-    return 'heavily';
+  if (mode === "winRate") {
+    if (amount < 0.08) return "slightly";
+    if (amount < 0.2) return "clearly";
+    return "heavily";
   }
 
-  if (amount < 0.2) return 'slightly';
-  if (amount < 0.75) return 'clearly';
-  return 'heavily';
+  if (amount < 0.2) return "slightly";
+  if (amount < 0.75) return "clearly";
+  return "heavily";
 }
 
 function getOverallEdgeText(row: RivalryRow, playerAName: string): string {
@@ -232,15 +244,14 @@ function getOverallEdgeText(row: RivalryRow, playerAName: string): string {
   const dominanceGap = row.dominance;
   const prestigeGap = row.prestigeMargin;
   const synergyGap = row.synergy;
-  const favoredName =
-    row.winRate >= 0.5 ? playerAName : row.opponentName;
-  const intensityWord = getDeltaWord(Math.abs(row.winRate - 0.5) * 2, 'winRate');
+  const favoredName = row.winRate >= 0.5 ? playerAName : row.opponentName;
+  const intensityWord = getDeltaWord(Math.abs(row.winRate - 0.5) * 2, "winRate");
 
   if (Math.abs(row.winRate - 0.5) < 0.08 && Math.abs(prestigeGap) < 0.35) {
     return `${playerAName} and ${row.opponentName} are very even overall.`;
   }
 
-  let detail = '';
+  let detail = "";
   if (Math.abs(prestigeGap) >= Math.abs(synergyGap) && Math.abs(prestigeGap) > 0.15) {
     detail =
       prestigeGap > 0
@@ -266,13 +277,13 @@ function getOverallEdgeText(row: RivalryRow, playerAName: string): string {
 function getSimpleMetricSentence(
   row: RivalryRow,
   mode: ModeKey,
-  playerAName: string,
+  playerAName: string
 ): string {
   const value = getModeValue(row, mode);
   const absValue = Math.abs(value);
   const strength = getDeltaWord(absValue, mode);
 
-  if (mode === 'winRate') {
+  if (mode === "winRate") {
     if (Math.abs(row.winRate - 0.5) < 0.05) {
       return `${playerAName} and ${row.opponentName} win at almost the same rate.`;
     }
@@ -281,7 +292,7 @@ function getSimpleMetricSentence(
       : `${row.opponentName} ${strength} wins this matchup more often than ${playerAName}.`;
   }
 
-  if (mode === 'prestigeMargin') {
+  if (mode === "prestigeMargin") {
     if (absValue < 0.15) {
       return `${playerAName} and ${row.opponentName} score almost the same prestige per game.`;
     }
@@ -290,7 +301,7 @@ function getSimpleMetricSentence(
       : `${row.opponentName} ${strength} scores more prestige per game than ${playerAName}.`;
   }
 
-  if (mode === 'synergy') {
+  if (mode === "synergy") {
     if (absValue < 0.15) {
       return `${playerAName} and ${row.opponentName} get about the same support value from assists.`;
     }
@@ -302,6 +313,7 @@ function getSimpleMetricSentence(
   if (absValue < 0.08) {
     return `${playerAName} and ${row.opponentName} have very similar overall results.`;
   }
+
   return value >= 0
     ? `${playerAName} ${strength} controls more of the results in this matchup.`
     : `${row.opponentName} ${strength} controls more of the results in this matchup.`;
@@ -318,19 +330,23 @@ function getMomentumSentence(row: RivalryRow, playerAName: string): string {
 }
 
 function getVerdict(row: RivalryRow, playerAName: string): string {
-  if (row.gamesTogether < 2) return 'Tiny sample';
+  if (row.gamesTogether < 2) return "Tiny sample";
   if (row.winRate >= 0.75) return `${playerAName} favored`;
   if (row.winRate <= 0.25) return `${row.opponentName} favored`;
-  if (Math.abs(row.momentum) > 0.22) return row.momentum > 0 ? `${playerAName} trending up` : `${row.opponentName} trending up`;
-  if (Math.abs(row.prestigeMargin) < 0.35) return 'Usually close';
-  return row.prestigeMargin > 0 ? `${playerAName} edges on points` : `${row.opponentName} edges on points`;
+  if (Math.abs(row.momentum) > 0.22) {
+    return row.momentum > 0 ? `${playerAName} trending up` : `${row.opponentName} trending up`;
+  }
+  if (Math.abs(row.prestigeMargin) < 0.35) return "Usually close";
+  return row.prestigeMargin > 0
+    ? `${playerAName} edges on points`
+    : `${row.opponentName} edges on points`;
 }
 
 function getGameSortValue(game: Game, index: number): number {
   const createdAt = toNumber(game.createdAt);
   if (createdAt > 0) return createdAt;
-  if (typeof game.id === 'number') return game.id;
-  if (typeof game.id === 'string' && /^\d+$/.test(game.id)) return Number(game.id);
+  if (typeof game.id === "number") return game.id;
+  if (typeof game.id === "string" && /^\d+$/.test(game.id)) return Number(game.id);
   return index;
 }
 
@@ -338,94 +354,167 @@ function getRivalryIntensity(
   gamesTogether: number,
   winRate: number,
   prestigeMargin: number,
-  momentum: number,
+  momentum: number
 ): number {
   const parity = 1 - Math.abs(winRate - 0.5) * 2;
   const closeness = 1 - Math.min(1, Math.abs(prestigeMargin) / 4);
   return gamesTogether * 0.65 + parity * 7 + closeness * 3 + Math.abs(momentum) * 2;
 }
 
-type AnimatedBarProps = {
-  row: RivalryRow;
-  mode: ModeKey;
-  maxAbs: number;
-  selected: boolean;
-  playerAColor: string;
-  playerBColor: string;
-  y: number;
-};
+function buildRivalryRows(
+  games: Game[],
+  players: Player[],
+  selectedPlayerAId: string
+): RivalryRow[] {
+  const orderedGames = [...games]
+    .map((game, index) => ({ game, sortValue: getGameSortValue(game, index) }))
+    .sort((a, b) => a.sortValue - b.sortValue)
+    .map((entry) => entry.game);
 
-function AnimatedLadderBar({
-  row,
-  mode,
-  maxAbs,
-  selected,
-  playerAColor,
-  playerBColor,
-  y,
-}: AnimatedBarProps) {
-  const rawValue = getModeValue(row, mode);
-  const positive = rawValue >= 0;
-  const progress = useSharedValue(0);
+  return players
+    .filter((player) => player.id !== selectedPlayerAId)
+    .map((opponent, index) => {
+      const sharedGames = orderedGames.filter((game) => {
+        const ids = (game.players ?? []).map((player) => String(player.id));
+        return ids.includes(String(selectedPlayerAId)) && ids.includes(String(opponent.id));
+      });
 
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withTiming(Math.abs(rawValue) / Math.max(1, maxAbs), {
-      duration: 500,
-      easing: Easing.out(Easing.cubic),
+      let wins = 0;
+      let losses = 0;
+      let playerPrestigeTotal = 0;
+      let opponentPrestigeTotal = 0;
+      let netAssistBenefitTotal = 0;
+
+      const recentSharedGames = sharedGames.slice(-Math.min(3, sharedGames.length));
+      let recentScore = 0;
+
+      for (const game of sharedGames) {
+        const playerTotals = game.totals?.[selectedPlayerAId] ?? {};
+        const opponentTotals = game.totals?.[opponent.id] ?? {};
+
+        const winnerId = getWinnerId(game);
+        if (String(winnerId) === String(selectedPlayerAId)) wins += 1;
+        if (String(winnerId) === String(opponent.id)) losses += 1;
+
+        const playerPrestige = getTotalPrestige(playerTotals);
+        const opponentPrestige = getTotalPrestige(opponentTotals);
+
+        playerPrestigeTotal += playerPrestige;
+        opponentPrestigeTotal += opponentPrestige;
+
+        const playerAssistOut = getAssistOut(playerTotals);
+        const opponentAssistOut = getAssistOut(opponentTotals);
+        netAssistBenefitTotal += playerAssistOut - opponentAssistOut;
+      }
+
+      for (const game of recentSharedGames) {
+        const winnerId = getWinnerId(game);
+        const playerTotals = game.totals?.[selectedPlayerAId] ?? {};
+        const opponentTotals = game.totals?.[opponent.id] ?? {};
+
+        const playerPrestige = getTotalPrestige(playerTotals);
+        const opponentPrestige = getTotalPrestige(opponentTotals);
+
+        let edge = 0;
+        if (String(winnerId) === String(selectedPlayerAId)) edge += 1;
+        if (String(winnerId) === String(opponent.id)) edge -= 1;
+        edge += clamp((playerPrestige - opponentPrestige) / 10, -1, 1);
+
+        recentScore += edge;
+      }
+
+      const gamesTogether = sharedGames.length;
+      const dominance = gamesTogether > 0 ? safeDiv(wins - losses, gamesTogether) : 0;
+      const winRate = gamesTogether > 0 ? safeDiv(wins, gamesTogether) : 0.5;
+      const prestigeMargin =
+        gamesTogether > 0
+          ? safeDiv(playerPrestigeTotal - opponentPrestigeTotal, gamesTogether)
+          : 0;
+      const synergy =
+        gamesTogether > 0 ? safeDiv(netAssistBenefitTotal, gamesTogether) : 0;
+      const recentEdge =
+        recentSharedGames.length > 0 ? safeDiv(recentScore, recentSharedGames.length) : 0;
+      const momentum = recentEdge - dominance;
+      const intensity = getRivalryIntensity(
+        gamesTogether,
+        winRate,
+        prestigeMargin,
+        momentum
+      );
+
+      return {
+        opponentId: opponent.id,
+        opponentName: opponent.name ?? "Unknown",
+        opponentColor: getPlayerColor(opponent.color, index + 1),
+        gamesTogether,
+        wins,
+        losses,
+        playerPrestigeTotal,
+        opponentPrestigeTotal,
+        netAssistBenefitTotal,
+        dominance,
+        winRate,
+        prestigeMargin,
+        synergy,
+        intensity,
+        recentEdge,
+        momentum,
+      };
+    })
+    .sort((a, b) => {
+      if (b.intensity !== a.intensity) return b.intensity - a.intensity;
+      if (b.gamesTogether !== a.gamesTogether) return b.gamesTogether - a.gamesTogether;
+      return a.opponentName.localeCompare(b.opponentName);
     });
-  }, [maxAbs, rawValue, progress]);
+}
 
-  const barStyle = useAnimatedStyle(() => ({
-    width: HALF_W * progress.value,
-    opacity: selected ? 1 : 0.84,
-    transform: [{ scaleY: selected ? 1.08 : 1 }],
-  }));
-
-  const haloStyle = useAnimatedStyle(() => ({
-    width: HALF_W * progress.value,
-    opacity: selected ? 0.18 : 0,
-  }));
-
-  const anchorStyle = positive ? styles.barAnchorRight : styles.barAnchorLeft;
-  const fill = positive ? playerAColor : playerBColor;
-  const dotX =
-    positive
-      ? MID_X + CENTER_GAP + HALF_W * (Math.abs(rawValue) / Math.max(1, maxAbs))
-      : MID_X - CENTER_GAP - HALF_W * (Math.abs(rawValue) / Math.max(1, maxAbs));
-
+function SectionHeader({
+  title,
+  sub,
+}: {
+  title: string;
+  sub: string;
+}) {
   return (
-    <>
-      <Animated.View
+    <View style={styles.sectionHeaderRow}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionSub}>{sub}</Text>
+    </View>
+  );
+}
+
+function UnderlineOption({
+  label,
+  active,
+  activeColor = COLORS.accent,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  activeColor?: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.underlineTabButton}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      <Text
         style={[
-          styles.barHalo,
-          anchorStyle,
-          {
-            top: y + 8,
-            backgroundColor: fill,
-          },
-          haloStyle,
+          styles.underlineTabText,
+          active && { color: activeColor },
+        ]}
+      >
+        {label}
+      </Text>
+      <View
+        style={[
+          styles.underlineTabLine,
+          active && { backgroundColor: activeColor },
         ]}
       />
-      <Animated.View
-        style={[
-          styles.barFill,
-          anchorStyle,
-          {
-            top: y + 12,
-            backgroundColor: fill,
-          },
-          barStyle,
-        ]}
-      />
-      <Circle
-        cx={dotX}
-        cy={y + 18}
-        r={selected ? 5 : 3.5}
-        fill={positive ? playerAColor : playerBColor}
-        opacity={0.95}
-      />
-    </>
+    </TouchableOpacity>
   );
 }
 
@@ -434,9 +523,10 @@ export default function RivalryGraph({
   games = EMPTY_GAMES,
   players = EMPTY_PLAYERS,
 }: Props) {
-  const [mode, setMode] = useState<ModeKey>('dominance');
+  const [mode, setMode] = useState<ModeKey>("dominance");
   const [selectedPlayerAId, setSelectedPlayerAId] = useState<string | null>(playerId ?? null);
   const [selectedPlayerBId, setSelectedPlayerBId] = useState<string | null>(null);
+  const [chartWidth, setChartWidth] = useState(0);
 
   useEffect(() => {
     if (!players.length) {
@@ -450,8 +540,8 @@ export default function RivalryGraph({
       selectedPlayerAId && ids.has(selectedPlayerAId)
         ? selectedPlayerAId
         : ids.has(playerId)
-          ? playerId
-          : players[0]?.id ?? null;
+        ? playerId
+        : players[0]?.id ?? null;
 
     const fallbackB = players.find((player) => player.id !== nextA)?.id ?? null;
     const nextB =
@@ -464,318 +554,165 @@ export default function RivalryGraph({
   }, [playerId, players, selectedPlayerAId, selectedPlayerBId]);
 
   const playerA = useMemo(
-    () => players.find((p) => p.id === selectedPlayerAId) ?? null,
-    [selectedPlayerAId, players],
+    () => players.find((player) => player.id === selectedPlayerAId) ?? null,
+    [players, selectedPlayerAId]
   );
 
   const playerB = useMemo(
-    () => players.find((p) => p.id === selectedPlayerBId) ?? null,
-    [selectedPlayerBId, players],
+    () => players.find((player) => player.id === selectedPlayerBId) ?? null,
+    [players, selectedPlayerBId]
   );
 
-  const data = useMemo(() => {
-    if (!selectedPlayerAId) return [];
-
-    const orderedGames = [...games]
-      .map((game, index) => ({ game, sortValue: getGameSortValue(game, index) }))
-      .sort((a, b) => a.sortValue - b.sortValue);
-
-    const rows: RivalryRow[] = players
-      .filter((p) => p.id !== selectedPlayerAId)
-      .map((opponent) => {
-        let gamesTogether = 0;
-        let wins = 0;
-        let losses = 0;
-        let playerPrestigeTotal = 0;
-        let opponentPrestigeTotal = 0;
-        let netAssistBenefitTotal = 0;
-        let recentWeightedEdge = 0;
-        let recentWeightTotal = 0;
-        let recentWins = 0;
-        let recentLosses = 0;
-
-        orderedGames.forEach(({ game }, index) => {
-          const mine = game.totals?.[selectedPlayerAId];
-          const theirs = game.totals?.[opponent.id];
-          if (!mine || !theirs) return;
-
-          const ids = new Set((game.players ?? []).map((p) => p.id));
-          if (ids.size > 0 && (!ids.has(selectedPlayerAId) || !ids.has(opponent.id))) return;
-
-          gamesTogether += 1;
-
-          const myPrestige = getTotalPrestige(mine);
-          const theirPrestige = getTotalPrestige(theirs);
-
-          const myAssistIn = toNumber(mine.assistPrestigeReceived);
-          const myAssistOut = getAssistOut(mine);
-          const theirAssistIn = toNumber(theirs.assistPrestigeReceived);
-          const theirAssistOut = getAssistOut(theirs);
-
-          playerPrestigeTotal += myPrestige;
-          opponentPrestigeTotal += theirPrestige;
-          netAssistBenefitTotal += (myAssistIn - myAssistOut) - (theirAssistIn - theirAssistOut);
-
-          const winnerId = getWinnerId(game);
-          const playerWon = winnerId === selectedPlayerAId;
-          const opponentWon = winnerId === opponent.id;
-
-          if (playerWon) wins += 1;
-          if (opponentWon) losses += 1;
-
-          const recencyWeight = 1 + index / Math.max(1, orderedGames.length);
-          const signedEdge =
-            playerWon ? 1 : opponentWon ? -1 : clamp((myPrestige - theirPrestige) / 10, -1, 1);
-
-          recentWeightedEdge += signedEdge * recencyWeight;
-          recentWeightTotal += recencyWeight;
-
-          const recencyThreshold = Math.max(0, orderedGames.length - 5);
-          if (index >= recencyThreshold) {
-            if (playerWon) recentWins += 1;
-            if (opponentWon) recentLosses += 1;
-          }
-        });
-
-        const dominance = safeDiv(wins - losses, Math.max(1, gamesTogether));
-        const winRate = safeDiv(wins, gamesTogether);
-        const prestigeMargin = safeDiv(playerPrestigeTotal - opponentPrestigeTotal, gamesTogether);
-        const synergy = safeDiv(netAssistBenefitTotal, gamesTogether);
-        const recentEdge = safeDiv(recentWeightedEdge, recentWeightTotal);
-        const recentWinRate = safeDiv(recentWins, Math.max(1, recentWins + recentLosses));
-        const momentum = recentWinRate - winRate;
-        const intensity = getRivalryIntensity(
-          gamesTogether,
-          winRate,
-          prestigeMargin,
-          momentum,
-        );
-
-        return {
-          opponentId: opponent.id,
-          opponentName: opponent.name,
-          opponentColor: getPlayerColor(opponent.color),
-          gamesTogether,
-          wins,
-          losses,
-          playerPrestigeTotal,
-          opponentPrestigeTotal,
-          netAssistBenefitTotal,
-          dominance,
-          winRate,
-          prestigeMargin,
-          synergy,
-          intensity,
-          recentEdge,
-          momentum,
-        };
-      })
-      .filter((row) => row.gamesTogether > 0);
-
-    rows.sort((a, b) => b.intensity - a.intensity || b.gamesTogether - a.gamesTogether);
-    return rows;
-  }, [games, selectedPlayerAId, players]);
-
-  const selected = useMemo(() => {
-    if (!selectedPlayerBId) return null;
-    return data.find((row) => row.opponentId === selectedPlayerBId) ?? null;
-  }, [data, selectedPlayerBId]);
+  const rows = useMemo(
+    () => (selectedPlayerAId ? buildRivalryRows(games, players, selectedPlayerAId) : []),
+    [games, players, selectedPlayerAId]
+  );
 
   useEffect(() => {
-    if (!data.length) return;
-    if (!selectedPlayerBId || !data.some((row) => row.opponentId === selectedPlayerBId)) {
-      const fallback = data[0]?.opponentId ?? null;
-      if (fallback !== selectedPlayerBId) setSelectedPlayerBId(fallback);
+    if (!rows.length) {
+      setSelectedPlayerBId(null);
+      return;
     }
-  }, [data, selectedPlayerBId]);
 
-  const playerAColor = playerA ? getPlayerColor(playerA.color) : chartColors.accent;
-  const playerBColor = playerB ? getPlayerColor(playerB.color) : chartColors.red;
+    const ids = new Set(rows.map((row) => row.opponentId));
+    if (selectedPlayerBId && ids.has(selectedPlayerBId)) return;
 
-  const maxAbs = useMemo(() => {
-    const rows = selected ? [selected] : [];
-    const values = rows.map((row) => Math.abs(getModeValue(row, mode)));
-    return Math.max(1, ...values, 1);
-  }, [selected, mode]);
+    setSelectedPlayerBId(rows[0]?.opponentId ?? null);
+  }, [rows, selectedPlayerBId]);
 
-  const chartRows = selected ? [selected] : [];
-  const height = Math.max(96, PAD_TOP + PAD_BOTTOM + Math.max(1, chartRows.length) * ROW_H);
+  const selected = useMemo(
+    () => rows.find((row) => row.opponentId === selectedPlayerBId) ?? rows[0] ?? null,
+    [rows, selectedPlayerBId]
+  );
+
+  const playerAName = playerA?.name ?? "Player A";
+  const playerAColor = getPlayerColor(playerA?.color, 0);
+  const playerBName = playerB?.name ?? selected?.opponentName ?? "Player B";
+  const playerBColor = playerB?.color
+    ? getPlayerColor(playerB.color, 1)
+    : selected?.opponentColor ?? getPlayerColor(undefined, 1);
 
   const noDirectMatchup =
-    !!selectedPlayerAId && !!selectedPlayerBId && !selected;
+    !!selectedPlayerBId &&
+    !rows.some((row) => row.opponentId === selectedPlayerBId && row.gamesTogether > 0);
 
-  const playerAName = playerA?.name ?? 'Player A';
-  const playerBName = playerB?.name ?? 'Player B';
+  const maxAbs = useMemo(() => {
+    const values = rows.map((row) => Math.abs(getModeValue(row, mode)));
+    return Math.max(1, ...values);
+  }, [rows, mode]);
 
-  const handleSelectPlayerA = (playerIdValue: string) => {
-    if (playerIdValue === selectedPlayerBId) return;
-    setSelectedPlayerAId(playerIdValue);
-  };
+  const summaryCards = useMemo(() => {
+    if (!selected) return [];
 
-  const handleSelectPlayerB = (playerIdValue: string) => {
-    if (playerIdValue === selectedPlayerAId) return;
-    setSelectedPlayerBId(playerIdValue);
+    return [
+      {
+        label: "Shared Games",
+        value: String(selected.gamesTogether),
+      },
+      {
+        label: "Record",
+        value: `${selected.wins}-${selected.losses}`,
+      },
+      {
+        label: getModeLabel(mode),
+        value: formatModeValue(selected, mode),
+      },
+      {
+        label: "Verdict",
+        value: getVerdict(selected, playerAName),
+      },
+    ];
+  }, [selected, mode, playerAName]);
+
+  const onChartLayout = (event: LayoutChangeEvent) => {
+    const nextWidth = Math.max(0, Math.floor(event.nativeEvent.layout.width));
+    if (nextWidth !== chartWidth) setChartWidth(nextWidth);
   };
 
   if (!players.length) {
     return (
-      <ChartShell
-        title="Rivalry Ladder"
-        subtitle="Pick the exact two players you want to compare."
-        playerColor={playerAColor}
-        badge={getModeLabel(mode)}
-        explanation="Choose Player A and Player B to compare one exact rivalry."
-        meaning="Positive values favor Player A. Negative values favor Player B."
-      >
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No players available yet.</Text>
-        </View>
-      </ChartShell>
+      <View style={styles.sectionCompact}>
+        <Text style={styles.emptyText}>Rivalry Graph needs players to compare.</Text>
+      </View>
+    );
+  }
+
+  if (!playerA) {
+    return (
+      <View style={styles.sectionCompact}>
+        <Text style={styles.emptyText}>No focus player selected yet.</Text>
+      </View>
     );
   }
 
   return (
-    <ChartShell
-      title="Rivalry Ladder"
-      subtitle="Pick the exact two players you want to compare."
-      playerColor={playerAColor}
-      badge={getModeLabel(mode)}
-      topStats={
-        selected
-          ? [
-              { label: 'Player A', value: playerAName },
-              { label: 'Player B', value: selected.opponentName },
-              { label: 'Games', value: String(selected.gamesTogether) },
-              {
-                label: mode === 'prestigeMargin' ? 'Prestige Δ' : getModeLabel(mode),
-                value: formatModeValue(selected, mode),
-              },
-            ]
-          : undefined
-      }
-      explanation="Use Player A and Player B below to lock the graph to one exact rivalry."
-      meaning={`${getModeDescription(mode)}. Right favors ${playerAName}, left favors ${playerBName}.`}
-    >
-      <View style={styles.selectorCard}>
-        <Text style={styles.selectorTitle}>Compare these two players</Text>
-
-        <Text style={styles.selectorLabel}>
-          Player A: <Text style={[styles.selectorValue, { color: playerAColor }]}>{playerAName}</Text>
-        </Text>
-        <View style={styles.selectorList}>
-          {players.map((p) => {
-            const isSelected = p.id === selectedPlayerAId;
-            const disabled = p.id === selectedPlayerBId;
-            const pillColor = getPlayerColor(p.color);
-
+    <View style={styles.container}>
+      <View style={styles.sectionCompact}>
+        <SectionHeader title="Player A" sub="Focus player" />
+        <View style={styles.underlineSelectorRow}>
+          {players.map((player, index) => {
+            const active = player.id === selectedPlayerAId;
+            const color = getPlayerColor(player.color, index);
             return (
-              <Pressable
-                key={`a-${p.id}`}
-                onPress={() => !disabled && handleSelectPlayerA(p.id)}
-                disabled={disabled}
-                style={[
-                  styles.playerPill,
-                  isSelected && {
-                    borderColor: withAlpha(pillColor, 0.8),
-                    backgroundColor: withAlpha(pillColor, 0.18),
-                  },
-                  disabled && styles.playerPillDisabled,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.playerDot,
-                    { backgroundColor: disabled ? withAlpha(pillColor, 0.35) : pillColor },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.playerPillText,
-                    isSelected && styles.playerPillTextSelected,
-                    disabled && styles.playerPillTextDisabled,
-                  ]}
-                >
-                  {p.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Text style={styles.selectorLabel}>
-          Player B: <Text style={[styles.selectorValue, { color: playerBColor }]}>{playerBName}</Text>
-        </Text>
-        <View style={styles.selectorList}>
-          {players.map((p) => {
-            const isSelected = p.id === selectedPlayerBId;
-            const disabled = p.id === selectedPlayerAId;
-            const pillColor = getPlayerColor(p.color);
-
-            return (
-              <Pressable
-                key={`b-${p.id}`}
-                onPress={() => !disabled && handleSelectPlayerB(p.id)}
-                disabled={disabled}
-                style={[
-                  styles.playerPill,
-                  isSelected && {
-                    borderColor: withAlpha(pillColor, 0.8),
-                    backgroundColor: withAlpha(pillColor, 0.18),
-                  },
-                  disabled && styles.playerPillDisabled,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.playerDot,
-                    { backgroundColor: disabled ? withAlpha(pillColor, 0.35) : pillColor },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.playerPillText,
-                    isSelected && styles.playerPillTextSelected,
-                    disabled && styles.playerPillTextDisabled,
-                  ]}
-                >
-                  {p.name}
-                </Text>
-              </Pressable>
+              <UnderlineOption
+                key={`a-${player.id}`}
+                label={player.name || "Unknown"}
+                active={active}
+                activeColor={color}
+                onPress={() => {
+                  setSelectedPlayerAId(player.id);
+                  if (player.id === selectedPlayerBId) {
+                    const fallback =
+                      players.find((entry) => entry.id !== player.id)?.id ?? null;
+                    setSelectedPlayerBId(fallback);
+                  }
+                }}
+              />
             );
           })}
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.modeRow}
-      >
-        {(['dominance', 'winRate', 'prestigeMargin', 'synergy'] as ModeKey[]).map((entry) => {
-          const active = entry === mode;
-          return (
-            <Pressable
-              key={entry}
-              onPress={() => setMode(entry)}
-              style={({ pressed }) => [
-                styles.modePill,
-                active && {
-                  borderColor: playerAColor,
-                  backgroundColor: withAlpha(playerAColor, 0.14),
-                },
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.modePillText, active && { color: playerAColor }]}>
-                {getModeLabel(entry)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.sectionCompact}>
+        <SectionHeader title="Player B" sub="Head-to-head target" />
+        <View style={styles.underlineSelectorRow}>
+          {players
+            .filter((player) => player.id !== selectedPlayerAId)
+            .map((player, index) => {
+              const active = player.id === selectedPlayerBId;
+              const color = getPlayerColor(player.color, index + 1);
+              return (
+                <UnderlineOption
+                  key={`b-${player.id}`}
+                  label={player.name || "Unknown"}
+                  active={active}
+                  activeColor={color}
+                  onPress={() => setSelectedPlayerBId(player.id)}
+                />
+              );
+            })}
+        </View>
+      </View>
+
+      <View style={styles.sectionCompact}>
+        <SectionHeader title="Mode" sub={getModeDescription(mode)} />
+        <View style={styles.underlineSelectorRow}>
+          {(["dominance", "winRate", "prestigeMargin", "synergy"] as ModeKey[]).map(
+            (entry) => (
+              <UnderlineOption
+                key={entry}
+                label={getModeLabel(entry)}
+                active={entry === mode}
+                activeColor={playerAColor}
+                onPress={() => setMode(entry)}
+              />
+            )
+          )}
+        </View>
+      </View>
 
       {noDirectMatchup ? (
-        <View style={styles.noticeCard}>
+        <View style={styles.sectionCompact}>
           <Text style={styles.noticeTitle}>No shared matchup found</Text>
           <Text style={styles.noticeText}>
             {playerAName} and {playerBName} do not have any games together in the current data.
@@ -784,376 +721,343 @@ export default function RivalryGraph({
       ) : null}
 
       {selected ? (
-        <>
-          <Animated.View
-            entering={FadeIn.duration(180)}
-            exiting={FadeOut.duration(120)}
-            layout={Layout.springify().damping(18).stiffness(180)}
+        <View style={styles.sectionCompact}>
+          <SectionHeader title="Focus" sub={`${playerAName} vs ${selected.opponentName}`} />
+
+          <View style={styles.metricGridDense}>
+            {summaryCards.map((card, index) => (
+              <View
+                key={`${card.label}-${index}`}
+                style={[
+                  styles.metricCardDense,
+                  card.label === "Verdict" && {
+                    backgroundColor: withAlpha(playerAColor, "14"),
+                    borderColor: withAlpha(playerAColor, "55"),
+                  },
+                ]}
+              >
+                <Text style={styles.metricLabelCompact}>{card.label}</Text>
+                <Text
+                  style={[
+                    styles.metricValueCompact,
+                    card.label === "Verdict" && { color: playerAColor },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {card.value}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <View
             style={[
-              styles.selectedCard,
+              styles.insightCardCompact,
               {
-                borderColor: withAlpha(playerAColor, 0.45),
-                backgroundColor: withAlpha(playerAColor, 0.08),
+                borderColor: withAlpha(playerAColor, "55"),
+                backgroundColor: withAlpha(playerAColor, "12"),
               },
             ]}
           >
-            <View style={styles.selectedHeader}>
-              <Text style={styles.selectedMatchupTitle}>
-                <Text style={{ color: playerAColor }}>{playerAName}</Text>
-                <Text style={styles.selectedMatchupVs}> vs </Text>
-                <Text style={{ color: playerBColor }}>{selected.opponentName}</Text>
-              </Text>
-
-              <View
-                style={[
-                  styles.verdictChip,
-                  { borderColor: withAlpha(playerAColor, 0.28) },
-                ]}
-              >
-                <Text style={styles.verdictChipText}>{getVerdict(selected, playerAName)}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.summarySentence}>
-              {getOverallEdgeText(selected, playerAName)}
-            </Text>
+            <Text style={styles.summarySentence}>{getOverallEdgeText(selected, playerAName)}</Text>
             <Text style={styles.summarySentence}>
               {getSimpleMetricSentence(selected, mode, playerAName)}
             </Text>
             <Text style={styles.summarySentence}>
               {getMomentumSentence(selected, playerAName)}
             </Text>
-
-            <View style={styles.selectedStatsGrid}>
-              <View style={styles.selectedStatCard}>
-                <Text style={styles.selectedStatLabel}>Games</Text>
-                <Text style={styles.selectedStatValue}>{selected.gamesTogether}</Text>
-              </View>
-              <View style={styles.selectedStatCard}>
-                <Text style={styles.selectedStatLabel}>W-L</Text>
-                <Text style={styles.selectedStatValue}>
-                  {selected.wins}-{selected.losses}
-                </Text>
-              </View>
-              <View style={styles.selectedStatCard}>
-                <Text style={styles.selectedStatLabel}>Prestige Δ</Text>
-                <Text style={styles.selectedStatValue}>
-                  {formatSigned(selected.prestigeMargin)}
-                </Text>
-              </View>
-              <View style={styles.selectedStatCard}>
-                <Text style={styles.selectedStatLabel}>Synergy Δ</Text>
-                <Text style={styles.selectedStatValue}>
-                  {formatSigned(selected.synergy)}
-                </Text>
-              </View>
-              <View style={styles.selectedStatCard}>
-                <Text style={styles.selectedStatLabel}>Recent Edge</Text>
-                <Text style={styles.selectedStatValue}>
-                  {formatSigned(selected.recentEdge)}
-                </Text>
-              </View>
-              <View style={styles.selectedStatCard}>
-                <Text style={styles.selectedStatLabel}>Momentum</Text>
-                <Text style={styles.selectedStatValue}>
-                  {formatSigned(selected.momentum)}
-                </Text>
-              </View>
-            </View>
-          </Animated.View>
-
-          <Svg width={WIDTH} height={height}>
-            <Defs>
-              <LinearGradient id="rivalryPanelGlow" x1="0" y1="0" x2="1" y2="1">
-                <Stop offset="0%" stopColor={withAlpha('#ffffff', 0.05)} />
-                <Stop offset="100%" stopColor={withAlpha('#ffffff', 0)} />
-              </LinearGradient>
-            </Defs>
-
-            <Rect
-              x={0}
-              y={0}
-              width={WIDTH}
-              height={height}
-              rx={16}
-              fill={chartColors.panelBg}
-              stroke={chartColors.borderStrong}
-            />
-            <Rect
-              x={1}
-              y={1}
-              width={WIDTH - 2}
-              height={height - 2}
-              rx={15}
-              fill="url(#rivalryPanelGlow)"
-            />
-
-            <Line
-              x1={MID_X}
-              y1={PAD_TOP - 2}
-              x2={MID_X}
-              y2={height - PAD_BOTTOM + 2}
-              stroke={chartColors.grid}
-              strokeDasharray="4 4"
-            />
-
-            {chartRows.map((row, index) => {
-              const y = PAD_TOP + index * ROW_H;
-              const centerY = y + 18;
-
-              return (
-                <React.Fragment key={row.opponentId}>
-                  <SvgText
-                    x={PAD_X}
-                    y={centerY - 2}
-                    fill={playerBColor}
-                    fontSize="12"
-                    fontWeight="800"
-                  >
-                    {row.opponentName.length > 14
-                      ? `${row.opponentName.slice(0, 13)}…`
-                      : row.opponentName}
-                  </SvgText>
-
-                  <SvgText
-                    x={PAD_X}
-                    y={centerY + 12}
-                    fill={chartColors.muted}
-                    fontSize="10"
-                    fontWeight="700"
-                  >
-                    {row.gamesTogether} games
-                  </SvgText>
-
-                  <AnimatedLadderBar
-                    row={row}
-                    mode={mode}
-                    maxAbs={maxAbs}
-                    selected
-                    playerAColor={playerAColor}
-                    playerBColor={playerBColor}
-                    y={y}
-                  />
-
-                  <SvgText
-                    x={WIDTH - PAD_X}
-                    y={centerY + 4}
-                    fill={chartColors.text}
-                    fontSize="12"
-                    fontWeight="800"
-                    textAnchor="end"
-                  >
-                    {formatModeValue(row, mode)}
-                  </SvgText>
-                </React.Fragment>
-              );
-            })}
-          </Svg>
-        </>
+          </View>
+        </View>
       ) : null}
 
-      <Text style={styles.axisNote}>
-        {getModeDescription(mode)} · right = favorable for {playerAName} · left = favorable for {playerBName}
-      </Text>
-    </ChartShell>
+      <View style={styles.sectionCompact}>
+        <SectionHeader title="Rivalries" sub={`${rows.length} opponents`} />
+
+        {!rows.length ? (
+          <Text style={styles.emptyText}>No rivalry data yet for {playerAName}.</Text>
+        ) : (
+          <View style={styles.chartWrap} onLayout={onChartLayout}>
+            {rows.map((row) => {
+              const isSelected = row.opponentId === selected?.opponentId;
+              const value = getModeValue(row, mode);
+              const positive = value >= 0;
+              const outerWidth = Math.max(240, chartWidth);
+              const labelWidth = Math.max(76, Math.min(118, outerWidth * 0.24));
+              const valueWidth = Math.max(60, Math.min(76, outerWidth * 0.18));
+              const laneWidth = Math.max(100, outerWidth - labelWidth - valueWidth - 16);
+              const halfWidth = laneWidth / 2;
+              const rawBarWidth = (Math.abs(value) / Math.max(1, maxAbs)) * (halfWidth - 6);
+              const barWidth = Math.max(value === 0 ? 0 : 6, rawBarWidth);
+
+              return (
+                <TouchableOpacity
+                  key={row.opponentId}
+                  style={[
+                    styles.rowCard,
+                    isSelected && {
+                      borderColor: withAlpha(row.opponentColor, "66"),
+                      backgroundColor: withAlpha(row.opponentColor, "12"),
+                    },
+                  ]}
+                  onPress={() => setSelectedPlayerBId(row.opponentId)}
+                  activeOpacity={0.92}
+                >
+                  <View style={[styles.rowLabelWrap, { width: labelWidth }]}>
+                    <Text
+                      style={[
+                        styles.rowLabel,
+                        isSelected && { color: row.opponentColor },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {row.opponentName}
+                    </Text>
+                    <Text style={styles.rowSubLabel} numberOfLines={1}>
+                      {row.gamesTogether} games
+                    </Text>
+                  </View>
+
+                  <View style={[styles.ladderWrap, { width: laneWidth }]}>
+                    <View style={styles.centerLine} />
+
+                    {value !== 0 ? (
+                      <View
+                        style={[
+                          styles.barFill,
+                          positive
+                            ? {
+                                left: halfWidth,
+                                width: barWidth,
+                                backgroundColor: playerAColor,
+                              }
+                            : {
+                                right: halfWidth,
+                                width: barWidth,
+                                backgroundColor: row.opponentColor,
+                              },
+                        ]}
+                      />
+                    ) : null}
+
+                    <View
+                      style={[
+                        styles.endpointDot,
+                        positive
+                          ? {
+                              left: halfWidth + Math.max(0, barWidth - 5),
+                              backgroundColor: playerAColor,
+                            }
+                          : {
+                              left: halfWidth - Math.max(0, barWidth - 5) - 10,
+                              backgroundColor: row.opponentColor,
+                            },
+                      ]}
+                    />
+                  </View>
+
+                  <View style={[styles.rowValueWrap, { width: valueWidth }]}>
+                    <Text
+                      style={[
+                        styles.rowValue,
+                        {
+                          color: positive ? playerAColor : row.opponentColor,
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {formatModeValue(row, mode)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  selectorCard: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    gap: 10,
-    marginBottom: 10,
-    backgroundColor: chartColors.panelBg,
-    borderColor: chartColors.borderStrong,
-  },
-  selectorTitle: {
-    color: chartColors.text,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  selectorLabel: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  selectorValue: {
-    color: chartColors.text,
-  },
-  selectorList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  playerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-    backgroundColor: withAlpha(chartColors.text, 0.04),
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  playerPillDisabled: {
-    opacity: 0.45,
-  },
-  playerDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 999,
-  },
-  playerPillText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  playerPillTextSelected: {
-    color: chartColors.text,
-  },
-  playerPillTextDisabled: {
-    color: withAlpha(chartColors.subtext, 0.75),
-  },
-  modeRow: {
-    gap: 8,
-    paddingRight: 12,
-    marginBottom: 10,
-  },
-  modePill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: chartColors.panelBg,
-    borderWidth: 1,
-    borderColor: chartColors.borderStrong,
-  },
-  modePillText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  noticeCard: {
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: withAlpha(chartColors.text, 0.04),
-    borderWidth: 1,
-    borderColor: withAlpha(chartColors.text, 0.1),
+  container: {
     gap: 6,
   },
-  noticeTitle: {
-    color: chartColors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  noticeText: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  selectedCard: {
-    borderWidth: 1,
+
+  sectionCompact: {
+    backgroundColor: COLORS.card,
     borderRadius: 14,
-    padding: 12,
-    gap: 8,
-    marginBottom: 10,
-  },
-  selectedHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-    alignItems: 'center',
-  },
-  selectedMatchupTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    flexShrink: 1,
-  },
-  selectedMatchupVs: {
-    color: chartColors.text,
-  },
-  summarySentence: {
-    color: chartColors.subtext,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  verdictChip: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: withAlpha(chartColors.text, 0.05),
+    padding: 8,
     borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 6,
   },
-  verdictChipText: {
-    color: chartColors.text,
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  selectedStatsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 2,
-  },
-  selectedStatCard: {
-    minWidth: '30%',
-    flexGrow: 1,
-    borderRadius: 12,
-    padding: 9,
-    backgroundColor: withAlpha(chartColors.text, 0.035),
+  insightCardCompact: {
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 14,
+    padding: 8,
     borderWidth: 1,
-    borderColor: withAlpha(chartColors.text, 0.08),
-    gap: 2,
-  },
-  selectedStatLabel: {
-    color: chartColors.muted,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  selectedStatValue: {
-    color: chartColors.text,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  emptyCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: chartColors.panelBg,
-    borderColor: chartColors.borderStrong,
-  },
-  emptyText: {
-    color: chartColors.muted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  barHalo: {
-    position: 'absolute',
-    height: 20,
-    borderRadius: 10,
-  },
-  barFill: {
-    position: 'absolute',
-    height: 12,
-    borderRadius: 6,
-  },
-  barAnchorRight: {
-    left: MID_X + CENTER_GAP,
-  },
-  barAnchorLeft: {
-    right: WIDTH - (MID_X - CENTER_GAP),
-  },
-  axisNote: {
-    color: chartColors.muted,
-    fontSize: 11,
-    fontWeight: '600',
     marginTop: 8,
   },
-  pressed: {
-    transform: [{ scale: 0.98 }],
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 12,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
+  sectionSub: {
+    color: COLORS.sub,
+    fontSize: 10,
+    textAlign: "right",
+    flexShrink: 1,
+  },
+  emptyText: {
+    color: COLORS.sub,
+    fontSize: 11,
+  },
+
+  underlineSelectorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 12,
+    rowGap: 8,
+    alignItems: "flex-end",
+  },
+  underlineTabButton: {
+    paddingBottom: 2,
+  },
+  underlineTabText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  underlineTabLine: {
+    marginTop: 4,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+
+  metricGridDense: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  metricCardDense: {
+    width: "49%",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minHeight: 52,
+    justifyContent: "center",
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  metricLabelCompact: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 12,
+    marginBottom: 4,
+  },
+  metricValueCompact: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  summarySentence: {
+    color: COLORS.text,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 6,
+  },
+
+  noticeTitle: {
+    color: COLORS.blue,
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  noticeText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+
+  chartWrap: {
+    gap: 6,
+  },
+  rowCard: {
+    minHeight: 46,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: COLORS.cardAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  rowLabelWrap: {
+    justifyContent: "center",
+  },
+  rowLabel: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  rowSubLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    marginTop: 2,
+  },
+
+  ladderWrap: {
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: COLORS.whiteSoft,
+    position: "relative",
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  centerLine: {
+    position: "absolute",
+    left: "50%",
+    marginLeft: -1,
+    width: 2,
+    top: 1,
+    bottom: 1,
+    borderRadius: 999,
+    backgroundColor: withAlpha(COLORS.text, "22"),
+  },
+  barFill: {
+    position: "absolute",
+    top: 3,
+    bottom: 3,
+    borderRadius: 999,
+  },
+  endpointDot: {
+    position: "absolute",
+    top: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+
+  rowValueWrap: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  rowValue: {
+    fontSize: 11,
+    fontWeight: "900",
   },
 });
