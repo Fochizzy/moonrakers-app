@@ -41,8 +41,22 @@ export type RelationshipEdge = {
   target?: string;
   fromId?: string;
   toId?: string;
+  sourceId?: string;
+  targetId?: string;
   value?: number;
   weight?: number;
+  assistCount?: number;
+  assistPrestige?: number;
+  assistEfficiency?: number;
+};
+
+type NormalizedRelationshipEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  assistCount: number;
+  assistPrestige: number;
+  assistEfficiency: number;
 };
 
 export type PlayerLike = {
@@ -70,23 +84,81 @@ function getNodeLabel(playerId: string, playersById: Map<string, PlayerLike>): s
 
 function normalizeRelationships(
   input: Relationships | RelationshipEdge[] | undefined
-): Relationships {
-  if (!input) return {};
+): NormalizedRelationshipEdge[] {
+  if (!input) return [];
 
   if (Array.isArray(input)) {
-    const out: Relationships = {};
-    for (const edge of input) {
-      const source = String(edge.source ?? edge.fromId ?? "").trim();
-      const target = String(edge.target ?? edge.toId ?? "").trim();
-      const value = clampMin(toNumber(edge.value ?? edge.weight), 0);
-      if (!source || !target || source === target || value <= 0) continue;
-      if (!out[source]) out[source] = {};
-      out[source][target] = (out[source][target] || 0) + value;
+    const out: NormalizedRelationshipEdge[] = [];
+    for (const raw of input) {
+      const sourceId = String(
+        raw.sourceId ?? raw.source ?? raw.fromId ?? ""
+      ).trim();
+      const targetId = String(
+        raw.targetId ?? raw.target ?? raw.toId ?? ""
+      ).trim();
+      if (!sourceId || !targetId || sourceId === targetId) continue;
+
+      const assistCount = clampMin(toNumber(raw.assistCount), 0);
+      const assistPrestige = clampMin(
+        toNumber(raw.assistPrestige ?? raw.value ?? raw.weight),
+        0
+      );
+      const hasExplicitAssistCount =
+        raw.assistCount !== undefined && raw.assistCount !== null;
+      const assistEfficiency =
+        assistCount > 0
+          ? assistPrestige / assistCount
+          : clampMin(toNumber(raw.assistEfficiency), 0);
+
+      if (
+        assistCount <= 0 &&
+        assistPrestige <= 0 &&
+        assistEfficiency <= 0
+      ) {
+        continue;
+      }
+
+      out.push({
+        id: `${sourceId}__${targetId}`,
+        sourceId,
+        targetId,
+        assistCount:
+          assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0 ? assistCount : 1,
+        assistPrestige,
+        assistEfficiency:
+          assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0
+            ? assistEfficiency
+            : assistPrestige,
+      });
     }
     return out;
   }
 
-  return input;
+  const out: NormalizedRelationshipEdge[] = [];
+
+  for (const [sourceIdRaw, nested] of Object.entries(input ?? {})) {
+    const sourceId = String(sourceIdRaw).trim();
+    if (!sourceId) continue;
+
+    for (const [targetIdRaw, rawWeight] of Object.entries(nested ?? {})) {
+      const targetId = String(targetIdRaw).trim();
+      if (!targetId || targetId === sourceId) continue;
+
+      const assistPrestige = clampMin(toNumber(rawWeight), 0);
+      if (assistPrestige <= 0) continue;
+
+      out.push({
+        id: `${sourceId}__${targetId}`,
+        sourceId,
+        targetId,
+        assistCount: 1,
+        assistPrestige,
+        assistEfficiency: assistPrestige,
+      });
+    }
+  }
+
+  return out;
 }
 
 export function buildAssistNetworkLayout(
@@ -119,54 +191,51 @@ export function buildAssistNetworkLayout(
     ensureNode(String(player.id));
   }
 
-  for (const [sourceIdRaw, nested] of Object.entries(relationships ?? {})) {
-    const sourceId = String(sourceIdRaw).trim();
-    if (!sourceId) continue;
+  for (const raw of relationships) {
+    const sourceId = String(raw.sourceId ?? "").trim();
+    const targetId = String(raw.targetId ?? "").trim();
+    if (!sourceId || !targetId || sourceId === targetId) continue;
 
-    ensureNode(sourceId);
+    const assistCount = clampMin(toNumber(raw.assistCount), 0);
+    const assistPrestige = clampMin(toNumber(raw.assistPrestige), 0);
+    const assistEfficiency =
+      assistCount > 0 ? assistPrestige / assistCount : 0;
 
-    for (const [targetIdRaw, rawWeight] of Object.entries(nested ?? {})) {
-      const targetId = String(targetIdRaw).trim();
-      if (!targetId || targetId === sourceId) continue;
+    if (assistCount <= 0 && assistPrestige <= 0 && assistEfficiency <= 0) continue;
 
-      const assistPrestige = clampMin(toNumber(rawWeight), 0);
-      if (assistPrestige <= 0) continue;
+    const sourceNode = ensureNode(sourceId);
+    const targetNode = ensureNode(targetId);
 
-      const assistCount = 1;
-      const assistEfficiency = assistPrestige / Math.max(1, assistCount);
+    sourceNode.outgoingValue += assistPrestige;
+    sourceNode.assistPrestige += assistPrestige;
+    sourceNode.assistCount += assistCount;
 
-      const sourceNode = ensureNode(sourceId);
-      const targetNode = ensureNode(targetId);
+    targetNode.incomingValue += assistPrestige;
+    targetNode.assistPrestige += assistPrestige;
+    targetNode.assistCount += assistCount;
 
-      sourceNode.outgoingValue += assistPrestige;
-      sourceNode.assistPrestige += assistPrestige;
-      sourceNode.assistCount += assistCount;
+    const linkId = raw.id || `${sourceId}__${targetId}`;
+    const existing = linkMap.get(linkId);
 
-      targetNode.incomingValue += assistPrestige;
-      targetNode.assistPrestige += assistPrestige;
-      targetNode.assistCount += assistCount;
-
-      const linkId = `${sourceId}__${targetId}`;
-      const existing = linkMap.get(linkId);
-
-      if (existing) {
-        existing.assistPrestige += assistPrestige;
-        existing.assistCount += assistCount;
-        existing.assistEfficiency =
-          existing.assistPrestige / Math.max(1, existing.assistCount);
-      } else {
-        linkMap.set(linkId, {
-          id: linkId,
-          source: sourceId,
-          target: targetId,
-          value: 0,
-          assistCount,
-          assistPrestige,
-          assistEfficiency,
-          sourceLabel: sourceNode.label,
-          targetLabel: targetNode.label,
-        });
-      }
+    if (existing) {
+      existing.assistPrestige += assistPrestige;
+      existing.assistCount += assistCount;
+      existing.assistEfficiency =
+        existing.assistCount > 0
+          ? existing.assistPrestige / existing.assistCount
+          : 0;
+    } else {
+      linkMap.set(linkId, {
+        id: linkId,
+        source: sourceId,
+        target: targetId,
+        value: 0,
+        assistCount,
+        assistPrestige,
+        assistEfficiency,
+        sourceLabel: sourceNode.label,
+        targetLabel: targetNode.label,
+      });
     }
   }
 
