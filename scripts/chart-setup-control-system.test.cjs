@@ -14,28 +14,28 @@ assert.match(
   "expected the chart setup to always expose Assist metric for the profile assist network"
 );
 
-assert.doesNotMatch(
+assert.match(
   source,
-  /type GraphMode = "flow" \| "network";/,
-  "expected the old relationship_graph graph-mode type contract to be removed"
+  /function replaceChartHubRoute\(chart: ChartCatalogEntry, setupOpen: boolean\)\s*\{[\s\S]*params:\s*buildChartHubParams\(chart,\s*setupOpen\)/,
+  "expected the charts hub route state to keep relationship_graph as the hub chart key"
 );
 
-assert.doesNotMatch(
+assert.match(
   source,
-  /GRAPH_MODE_OPTIONS/,
-  "expected the old relationship_graph graph-mode options to be removed"
+  /function getDetailRouteChartKey\(chartKey: ChartCatalogKey\)\s*\{[\s\S]*chartKey === "relationship_graph"\s*\?\s*"assist_network_overview"\s*:\s*chartKey[\s\S]*\}/,
+  "expected the detail launch contract to alias relationship_graph to assist_network_overview until the detail route is replaced"
 );
 
-assert.doesNotMatch(
+assert.match(
   source,
-  /normalizeGraphMode/,
-  "expected the old relationship_graph graph-mode route normalization to be removed"
+  /function openChart\(chart: ChartCatalogEntry\)\s*\{[\s\S]*const detailParams = buildChartHubParams\(\s*chart,\s*true,\s*getDetailRouteChartKey\(chart\.key\)\s*\)/,
+  "expected launching the Assist Network card to use the assist-network detail-route key"
 );
 
-assert.doesNotMatch(
+assert.match(
   source,
-  /params\.mode\s*=/,
-  "expected the charts hub to stop serializing the old relationship_graph mode route param"
+  /function openSetup\(\)\s*\{[\s\S]*setChartSetupOpen\(true\)/,
+  "expected tapping Adjust to keep setup route state aligned with the open setup UI"
 );
 
 assert.doesNotMatch(

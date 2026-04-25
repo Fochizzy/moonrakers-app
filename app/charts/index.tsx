@@ -159,6 +159,12 @@ function supportsLineView(chartKey: ChartCatalogKey) {
   );
 }
 
+function getDetailRouteChartKey(chartKey: ChartCatalogKey) {
+  return chartKey === "relationship_graph"
+    ? "assist_network_overview"
+    : chartKey;
+}
+
 function canUseSegmentedControl(items: readonly SetupOption[]) {
   return (
     items.length >= 2 &&
@@ -799,9 +805,13 @@ export default function ChartsIndexScreen() {
     });
   }
 
-  function buildChartHubParams(chart: ChartCatalogEntry, setupOpen: boolean) {
+  function buildChartHubParams(
+    chart: ChartCatalogEntry,
+    setupOpen: boolean,
+    chartKeyOverride?: string
+  ) {
     const params: Record<string, string | undefined> = {
-      chartKey: chart.key,
+      chartKey: chartKeyOverride ?? chart.key,
       setup: setupOpen ? "true" : undefined,
       playerId: selectedPlayer?.id ? String(selectedPlayer.id) : undefined,
     };
@@ -865,6 +875,11 @@ export default function ChartsIndexScreen() {
 
   function openChart(chart: ChartCatalogEntry) {
     const hubParams = buildChartHubParams(chart, true);
+    const detailParams = buildChartHubParams(
+      chart,
+      true,
+      getDetailRouteChartKey(chart.key)
+    );
 
     replaceChartHubRoute(chart, true);
 
@@ -883,11 +898,11 @@ export default function ChartsIndexScreen() {
         return;
       }
 
-      const { setup: _setup, ...detailParams } = hubParams;
+      const { setup: _setup, ...detailRouteParams } = detailParams;
 
       router.push({
         pathname: "/charts/[chartKey]",
-        params: detailParams,
+        params: detailRouteParams,
       } as any);
     });
   }
