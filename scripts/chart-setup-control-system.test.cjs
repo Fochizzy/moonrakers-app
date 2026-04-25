@@ -20,16 +20,28 @@ assert.match(
   "expected the charts hub route state to keep relationship_graph as the hub chart key"
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
-  /function getDetailRouteChartKey\(chartKey: ChartCatalogKey\)\s*\{[\s\S]*chartKey === "relationship_graph"\s*\?\s*"assist_network_overview"\s*:\s*chartKey[\s\S]*\}/,
-  "expected the detail launch contract to alias relationship_graph to assist_network_overview until the detail route is replaced"
+  /assist_network_overview/,
+  "expected the charts hub launch contract to stop relying on the retired assist_network_overview alias"
 );
 
 assert.match(
   source,
-  /function openChart\(chart: ChartCatalogEntry\)\s*\{[\s\S]*const detailParams = buildChartHubParams\(\s*chart,\s*true,\s*getDetailRouteChartKey\(chart\.key\)\s*\)/,
-  "expected launching the Assist Network card to use the assist-network detail-route key"
+  /function buildChartHubParams\([\s\S]*if \(chart\.key === "relationship_graph"\) \{[\s\S]*if \(detailMode\) \{[\s\S]*params\.graphVariant = "assist_network";[\s\S]*params\.assistMode = selectedAssistMode;/,
+  "expected the Assist Network detail launch contract to serialize graphVariant=assist_network alongside assistMode"
+);
+
+assert.match(
+  source,
+  /function openChart\(chart: ChartCatalogEntry\)\s*\{[\s\S]*const detailParams = buildChartHubParams\(\s*chart,\s*true,\s*true\s*\)/,
+  "expected launching the Assist Network card to build detail params in assist-network detail mode"
+);
+
+assert.match(
+  source,
+  /function openChart\(chart: ChartCatalogEntry\)\s*\{[\s\S]*router\.push\(\{[\s\S]*params: detailRouteParams,/,
+  "expected the detail launch to push the relationship_graph route params built for detail mode"
 );
 
 assert.match(

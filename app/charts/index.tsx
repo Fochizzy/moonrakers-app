@@ -159,12 +159,6 @@ function supportsLineView(chartKey: ChartCatalogKey) {
   );
 }
 
-function getDetailRouteChartKey(chartKey: ChartCatalogKey) {
-  return chartKey === "relationship_graph"
-    ? "assist_network_overview"
-    : chartKey;
-}
-
 function canUseSegmentedControl(items: readonly SetupOption[]) {
   return (
     items.length >= 2 &&
@@ -808,10 +802,10 @@ export default function ChartsIndexScreen() {
   function buildChartHubParams(
     chart: ChartCatalogEntry,
     setupOpen: boolean,
-    chartKeyOverride?: string
+    detailMode = false
   ) {
     const params: Record<string, string | undefined> = {
-      chartKey: chartKeyOverride ?? chart.key,
+      chartKey: chart.key,
       setup: setupOpen ? "true" : undefined,
       playerId: selectedPlayer?.id ? String(selectedPlayer.id) : undefined,
     };
@@ -840,6 +834,9 @@ export default function ChartsIndexScreen() {
     }
 
     if (chart.key === "relationship_graph") {
+      if (detailMode) {
+        params.graphVariant = "assist_network";
+      }
       params.assistMode = selectedAssistMode;
     }
 
@@ -875,11 +872,7 @@ export default function ChartsIndexScreen() {
 
   function openChart(chart: ChartCatalogEntry) {
     const hubParams = buildChartHubParams(chart, true);
-    const detailParams = buildChartHubParams(
-      chart,
-      true,
-      getDetailRouteChartKey(chart.key)
-    );
+    const detailParams = buildChartHubParams(chart, true, true);
 
     replaceChartHubRoute(chart, true);
 
