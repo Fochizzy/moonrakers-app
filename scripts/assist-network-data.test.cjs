@@ -29,6 +29,14 @@ const { buildAssistNetworkDataset } = require(path.join(
   "AssistNetworkOverview",
   "buildAssistNetworkDataset.ts"
 ));
+const { buildAssistNetworkLayout } = require(path.join(
+  __dirname,
+  "..",
+  "components",
+  "charts",
+  "AssistNetworkOverview",
+  "buildAssistNetworkLayout.ts"
+));
 
 function run(name, fn) {
   try {
@@ -84,6 +92,42 @@ run("buildAssistNetworkDataset applies exact composition filtering and preserves
   assert.equal(dataset.edges[0].assistEfficiency, 2);
 });
 
+run("buildAssistNetworkDataset matches exact scope with normalized game player ids", () => {
+  const dataset = buildAssistNetworkDataset({
+    games: [
+      {
+        id: "trimmed-match",
+        players: [{ id: " james " }, { id: " greg " }],
+        rounds: [
+          {
+            id: "r1",
+            playerId: " james ",
+            assistRecipients: { " greg ": 1 },
+            assistPrestigeRecipients: { " greg ": 3 },
+          },
+        ],
+        timeline: [],
+        totals: {},
+      },
+      {
+        id: "extra-player",
+        players: [{ id: "james" }, { id: "greg" }, { id: "izzy" }],
+        rounds: [],
+        timeline: [],
+        totals: {},
+      },
+    ],
+    scopedPlayerIds: ["james", "greg"],
+  });
+
+  assert.deepEqual(dataset.includedGameIds, ["trimmed-match"]);
+  assert.equal(dataset.gameCount, 1);
+  assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].assistCount, 1);
+  assert.equal(dataset.edges[0].assistPrestige, 3);
+});
+
 run("buildAssistNetworkDataset does not create counted edges from prestige-only recipient data", () => {
   const dataset = buildAssistNetworkDataset({
     games: [
@@ -126,4 +170,30 @@ run("buildAssistNetworkDataset does not create counted edges from prestige-only 
       supportBalance: 0,
     },
   ]);
+});
+
+run("buildAssistNetworkLayout preserves explicit array-supplied assistEfficiency", () => {
+  const layout = buildAssistNetworkLayout(
+    [
+      {
+        sourceId: "james",
+        targetId: "greg",
+        assistCount: 2,
+        assistPrestige: 10,
+        assistEfficiency: 99,
+      },
+    ],
+    [
+      { id: "james", name: "James" },
+      { id: "greg", name: "Greg" },
+    ],
+    "assistEfficiency"
+  );
+
+  assert.equal(layout.links.length, 1);
+  assert.equal(layout.links[0].assistCount, 2);
+  assert.equal(layout.links[0].assistPrestige, 10);
+  assert.equal(layout.links[0].assistEfficiency, 99);
+  assert.equal(layout.links[0].value, 99);
+  assert.equal(layout.maxValue, 99);
 });

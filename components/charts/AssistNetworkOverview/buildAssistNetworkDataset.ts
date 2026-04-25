@@ -49,10 +49,28 @@ function normalizeScopedPlayerIds(scopedPlayerIds?: string[]): string[] {
   return normalized;
 }
 
+function normalizeAssistMap(
+  input: Record<string, unknown> | undefined
+): Record<string, number> {
+  const normalized: Record<string, number> = {};
+
+  for (const [targetIdRaw, rawValue] of Object.entries(input ?? {})) {
+    const targetId = normalizePlayerId(targetIdRaw);
+    if (!targetId) continue;
+    normalized[targetId] = toNumber(rawValue);
+  }
+
+  return normalized;
+}
+
 function matchesExactPlayerScope(game: NormalizedGame, scopedPlayerIds: string[]) {
-  const gameIds = new Set(game.players.map((player) => String(player.id)));
+  const gameIds = new Set(
+    (game.players ?? [])
+      .map((player) => normalizePlayerId(player?.id))
+      .filter(Boolean)
+  );
   if (gameIds.size !== scopedPlayerIds.length) return false;
-  return scopedPlayerIds.every((id) => gameIds.has(String(id)));
+  return scopedPlayerIds.every((id) => gameIds.has(normalizePlayerId(id)));
 }
 
 export function buildAssistNetworkDataset({
@@ -100,7 +118,9 @@ export function buildAssistNetworkDataset({
       if (!sourceId) continue;
 
       const assistRecipients = round?.assistRecipients ?? {};
-      const assistPrestigeRecipients = round?.assistPrestigeRecipients ?? {};
+      const assistPrestigeRecipients = normalizeAssistMap(
+        round?.assistPrestigeRecipients as Record<string, unknown> | undefined
+      );
 
       for (const [targetIdRaw, rawAssist] of Object.entries(assistRecipients)) {
         const targetId = normalizePlayerId(targetIdRaw);
@@ -109,7 +129,7 @@ export function buildAssistNetworkDataset({
 
         const assistPrestige = Math.max(
           0,
-          toNumber((assistPrestigeRecipients as Record<string, unknown>)?.[targetId])
+          toNumber(assistPrestigeRecipients[targetId])
         );
         const linkId = `${sourceId}__${targetId}`;
 

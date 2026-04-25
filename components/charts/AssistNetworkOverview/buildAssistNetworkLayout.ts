@@ -57,6 +57,7 @@ type NormalizedRelationshipEdge = {
   assistCount: number;
   assistPrestige: number;
   assistEfficiency: number;
+  hasExplicitAssistEfficiency: boolean;
 };
 
 export type PlayerLike = {
@@ -103,10 +104,18 @@ function normalizeRelationships(
         toNumber(raw.assistPrestige ?? raw.value ?? raw.weight),
         0
       );
+      const explicitAssistEfficiency = clampMin(
+        toNumber(raw.assistEfficiency),
+        0
+      );
       const hasExplicitAssistCount =
         raw.assistCount !== undefined && raw.assistCount !== null;
+      const hasExplicitAssistEfficiency =
+        raw.assistEfficiency !== undefined && raw.assistEfficiency !== null;
       const assistEfficiency =
-        assistCount > 0
+        hasExplicitAssistEfficiency
+          ? explicitAssistEfficiency
+          : assistCount > 0
           ? assistPrestige / assistCount
           : clampMin(toNumber(raw.assistEfficiency), 0);
 
@@ -126,9 +135,12 @@ function normalizeRelationships(
           assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0 ? assistCount : 1,
         assistPrestige,
         assistEfficiency:
-          assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0
+          hasExplicitAssistEfficiency
+            ? explicitAssistEfficiency
+            : assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0
             ? assistEfficiency
             : assistPrestige,
+        hasExplicitAssistEfficiency,
       });
     }
     return out;
@@ -154,6 +166,7 @@ function normalizeRelationships(
         assistCount: 1,
         assistPrestige,
         assistEfficiency: assistPrestige,
+        hasExplicitAssistEfficiency: false,
       });
     }
   }
@@ -198,8 +211,11 @@ export function buildAssistNetworkLayout(
 
     const assistCount = clampMin(toNumber(raw.assistCount), 0);
     const assistPrestige = clampMin(toNumber(raw.assistPrestige), 0);
-    const assistEfficiency =
-      assistCount > 0 ? assistPrestige / assistCount : 0;
+    const assistEfficiency = raw.hasExplicitAssistEfficiency
+      ? clampMin(toNumber(raw.assistEfficiency), 0)
+      : assistCount > 0
+        ? assistPrestige / assistCount
+        : 0;
 
     if (assistCount <= 0 && assistPrestige <= 0 && assistEfficiency <= 0) continue;
 
@@ -221,7 +237,9 @@ export function buildAssistNetworkLayout(
       existing.assistPrestige += assistPrestige;
       existing.assistCount += assistCount;
       existing.assistEfficiency =
-        existing.assistCount > 0
+        raw.hasExplicitAssistEfficiency
+          ? assistEfficiency
+          : existing.assistCount > 0
           ? existing.assistPrestige / existing.assistCount
           : 0;
     } else {
