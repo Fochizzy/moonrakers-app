@@ -70,7 +70,6 @@ type StorePlayer = {
   color?: string;
 };
 
-type GraphMode = "flow" | "network";
 type AssistMetricMode =
   | "assistPrestige"
   | "assistCount"
@@ -87,7 +86,6 @@ type SetupOption = {
   label: string;
 };
 
-const GRAPH_MODE_OPTIONS: readonly GraphMode[] = ["flow", "network"];
 const ASSIST_MODE_OPTIONS: ReadonlyArray<{
   key: AssistMetricMode;
   label: string;
@@ -113,12 +111,6 @@ function titleCase(value: string) {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function normalizeGraphMode(value?: string | string[]) {
-  return String(getParam(value) ?? "flow").trim().toLowerCase() === "network"
-    ? "network"
-    : "flow";
 }
 
 function normalizeAssistMode(value?: string | string[]) {
@@ -157,10 +149,6 @@ function normalizeEloTab(value?: string | string[]) {
     ELO_VIEW_OPTIONS.find((tab) => tab.toLowerCase() === normalized) ??
     "Leaderboard"
   );
-}
-
-function supportsGraphMode(chartKey: ChartCatalogKey) {
-  return chartKey === "relationship_graph";
 }
 
 function supportsLineView(chartKey: ChartCatalogKey) {
@@ -481,7 +469,6 @@ export default function ChartsIndexScreen() {
     compareId?: string | string[];
     ids?: string | string[];
     metric?: string | string[];
-    mode?: string | string[];
     assistMode?: string | string[];
     lineMode?: string | string[];
     eloTab?: string | string[];
@@ -498,7 +485,6 @@ export default function ChartsIndexScreen() {
   const routeIdsParam = getParam(params.ids);
   const routeIds = useMemo(() => getParamList(routeIdsParam), [routeIdsParam]);
   const routeMetric = getParam(params.metric);
-  const routeGraphMode = normalizeGraphMode(params.mode);
   const routeAssistMode = normalizeAssistMode(params.assistMode);
   const routeLineMode = normalizeLineMode(params.lineMode);
   const routeEloTab = normalizeEloTab(params.eloTab);
@@ -527,8 +513,6 @@ export default function ChartsIndexScreen() {
   const [selectedChartKey, setSelectedChartKey] =
     useState<ChartCatalogKey>(routeChartKey);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(routeIds);
-  const [selectedGraphMode, setSelectedGraphMode] =
-    useState<GraphMode>(routeGraphMode);
   const [selectedAssistMode, setSelectedAssistMode] =
     useState<AssistMetricMode>(routeAssistMode);
   const [selectedLineMode, setSelectedLineMode] =
@@ -549,12 +533,6 @@ export default function ChartsIndexScreen() {
       setSetupOpen(routeSetupOpen);
     }
   }, [params.setup, routeSetupOpen]);
-
-  useEffect(() => {
-    if (getParam(params.mode) != null) {
-      setSelectedGraphMode(routeGraphMode);
-    }
-  }, [params.mode, routeGraphMode]);
 
   useEffect(() => {
     if (getParam(params.assistMode) != null) {
@@ -767,14 +745,6 @@ export default function ChartsIndexScreen() {
         })),
     [selectedPlayer?.id, sortedPlayers]
   );
-  const graphModeOptions = useMemo<SetupOption[]>(
-    () =>
-      GRAPH_MODE_OPTIONS.map((mode) => ({
-        key: mode,
-        label: titleCase(mode),
-      })),
-    []
-  );
   const assistModeOptions = useMemo<SetupOption[]>(
     () =>
       ASSIST_MODE_OPTIONS.map((option) => ({
@@ -859,8 +829,7 @@ export default function ChartsIndexScreen() {
         normalizeMetricForChart(chart.key, selectedMetric) ?? "totalPrestige";
     }
 
-    if (supportsGraphMode(chart.key)) {
-      params.mode = selectedGraphMode;
+    if (chart.key === "relationship_graph") {
       params.assistMode = selectedAssistMode;
     }
 
@@ -1009,16 +978,6 @@ export default function ChartsIndexScreen() {
                       onPress={() => setSelectedMetric(metric)}
                     />
                   ))}
-                </SetupSection>
-              ) : null}
-
-              {supportsGraphMode(selectedChart.key) ? (
-                <SetupSection title="Graph mode">
-                  <SetupTabs
-                    items={graphModeOptions}
-                    value={selectedGraphMode}
-                    onChange={(next) => setSelectedGraphMode(next as GraphMode)}
-                  />
                 </SetupSection>
               ) : null}
 
