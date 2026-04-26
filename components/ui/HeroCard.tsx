@@ -19,6 +19,7 @@ type HeroCardProps = {
   style?: StyleProp<ViewStyle>;
   subtitle?: string;
   title: string;
+  variant?: "default" | "minimal" | "stat";
 };
 
 export default function HeroCard({
@@ -30,12 +31,22 @@ export default function HeroCard({
   style,
   subtitle,
   title,
+  variant = "default",
 }: HeroCardProps) {
   const theme = useTheme();
-  const compact = size === "compact";
+  const compact = size === "compact" || variant === "minimal" || variant === "stat";
+  const minimal = variant === "minimal";
+  const stat = variant === "stat";
 
   const cardContent = (
-    <View style={[styles.inner, compact ? styles.innerCompact : null]}>
+    <View
+      style={[
+        styles.inner,
+        compact ? styles.innerCompact : null,
+        minimal ? styles.innerMinimal : null,
+        stat ? styles.innerStat : null,
+      ]}
+    >
       {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
       <Text variant="pageTitle">{title}</Text>
       {subtitle ? <Text variant="heroSubtitle">{subtitle}</Text> : null}
@@ -93,6 +104,13 @@ const styles = StyleSheet.create({
   innerCompact: {
     gap: 8,
     padding: 14,
+  },
+  innerMinimal: {
+    gap: 6,
+    paddingVertical: 12,
+  },
+  innerStat: {
+    gap: 8,
   },
   actions: {
     flexDirection: "row",

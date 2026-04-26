@@ -11,6 +11,7 @@ export default function AppHeader({
   size = "default",
   subtitle,
   title = "Moonrakers",
+  variant,
 }: {
   actions?: React.ReactNode;
   eyebrow?: string;
@@ -18,11 +19,14 @@ export default function AppHeader({
   size?: "default" | "compact";
   subtitle?: string;
   title?: string;
+  variant?: "compact" | "hero";
 }) {
-  const compact = size === "compact";
+  const resolvedVariant =
+    variant ?? (size === "compact" ? "compact" : "hero");
+  const compact = resolvedVariant === "compact";
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, compact && styles.wrapCompact]}>
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       <View style={styles.headerRow}>
         <View style={styles.row}>
@@ -56,6 +60,9 @@ const styles = StyleSheet.create({
   wrap: {
     paddingTop: 4,
     paddingBottom: 10,
+  },
+  wrapCompact: {
+    paddingBottom: 6,
   },
   eyebrow: {
     marginBottom: 6,

@@ -5,8 +5,9 @@ import Text from "@/components/ui/Text";
 import { APP_ICONS, type AppIconKey } from "@/utils/iconAccess";
 
 type HubTileCardProps = {
-  description: string;
-  iconKey: AppIconKey;
+  description?: string;
+  iconKey?: AppIconKey | null;
+  layout?: "graphic" | "text";
   title: string;
   onPress: () => void;
   badge?: string;
@@ -17,32 +18,45 @@ type HubTileCardProps = {
 export default function HubTileCard({
   description,
   iconKey,
+  layout,
   title,
   onPress,
   badge,
   style,
   tint = "rgba(96,165,250,0.14)",
 }: HubTileCardProps) {
+  const hasIcon = Boolean(iconKey);
+  const resolvedLayout = layout ?? (hasIcon ? "graphic" : "text");
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
+        resolvedLayout === "text" ? styles.cardText : null,
         style,
         pressed && styles.cardPressed,
       ]}
     >
-      <View style={[styles.iconFrame, { backgroundColor: tint }]}>
-        <Image source={APP_ICONS[iconKey]} resizeMode="contain" style={styles.icon} />
-      </View>
+      {iconKey ? (
+        <View style={[styles.iconFrame, { backgroundColor: tint }]}>
+          <Image source={APP_ICONS[iconKey]} resizeMode="contain" style={styles.icon} />
+        </View>
+      ) : null}
 
-      <View style={styles.copy}>
+      <View style={[styles.copy, resolvedLayout === "text" ? styles.copyText : null]}>
         <Text variant="sectionTitle" style={styles.title}>
           {title}
         </Text>
-        <Text variant="caption" numberOfLines={2} style={styles.description}>
-          {description}
-        </Text>
+        {description ? (
+          <Text
+            variant="caption"
+            numberOfLines={2}
+            style={[styles.description, resolvedLayout === "text" ? styles.descriptionText : null]}
+          >
+            {description}
+          </Text>
+        ) : null}
       </View>
 
       {badge ? (
@@ -72,6 +86,10 @@ const styles = StyleSheet.create({
   cardPressed: {
     transform: [{ scale: 0.985 }],
   },
+  cardText: {
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+  },
   iconFrame: {
     width: 82,
     height: 82,
@@ -90,12 +108,18 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: "center",
   },
+  copyText: {
+    alignItems: "flex-start",
+  },
   title: {
     textAlign: "center",
   },
   description: {
     textAlign: "center",
     lineHeight: 18,
+  },
+  descriptionText: {
+    textAlign: "left",
   },
   badge: {
     marginTop: "auto",

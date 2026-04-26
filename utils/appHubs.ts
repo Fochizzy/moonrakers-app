@@ -6,7 +6,7 @@ export type HubCard = {
   title: string;
   description: string;
   route: AppRoute;
-  iconKey: AppIconKey;
+  iconKey?: AppIconKey | null;
   eyebrow?: string;
   bestFor?: string;
 };
@@ -15,7 +15,7 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
   {
     key: "compare",
     title: "Compare",
-    description: "Head-to-head and rivalry reads.",
+    description: "Rivalries",
     route: APP_ROUTES.compare,
     iconKey: "damage",
     eyebrow: "Matchup",
@@ -24,7 +24,7 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
   {
     key: "charts",
     title: "Charts",
-    description: "Question-first chart browser.",
+    description: "Question-first charts",
     route: APP_ROUTES.charts,
     iconKey: "ships",
     eyebrow: "Browse",
@@ -33,7 +33,7 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
   {
     key: "stats",
     title: "Stats",
-    description: "League summaries and breakdowns.",
+    description: "League totals",
     route: APP_ROUTES.stats,
     iconKey: "shield",
     eyebrow: "Summary",
@@ -42,7 +42,7 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
   {
     key: "elo",
     title: "ELO",
-    description: "Ratings and ranking history.",
+    description: "Ratings history",
     route: APP_ROUTES.elo,
     iconKey: "reactor",
     eyebrow: "Trend",
@@ -51,7 +51,7 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
   {
     key: "insights",
     title: "Insights",
-    description: "Meta trends and table signals.",
+    description: "Meta signals",
     route: APP_ROUTES.insights,
     iconKey: "thruster",
     eyebrow: "Meta",
@@ -63,7 +63,7 @@ const PLAYERS_HUB_CARDS: HubCard[] = [
   {
     key: "roster",
     title: "Roster",
-    description: "Add players, manage saved groups, and keep the card/color identity flow in one working surface.",
+    description: "Roster tools",
     route: APP_ROUTES.roster,
     iconKey: "addRemoves",
     eyebrow: "Manage",
@@ -72,7 +72,7 @@ const PLAYERS_HUB_CARDS: HubCard[] = [
   {
     key: "directory",
     title: "Profiles",
-    description: "Browse the player directory and jump straight into a specific profile or matchup context.",
+    description: "Player lookup",
     route: APP_ROUTES.playerDirectory,
     iconKey: "billBendo",
     eyebrow: "Browse",
@@ -81,7 +81,7 @@ const PLAYERS_HUB_CARDS: HubCard[] = [
   {
     key: "cards",
     title: "Cards",
-    description: "Open the gallery-style player cards view when you want a quick visual scan of the whole table.",
+    description: "Card gallery",
     route: APP_ROUTES.playerCards,
     iconKey: "playerCard",
     eyebrow: "Gallery",
@@ -93,7 +93,7 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   {
     key: "history",
     title: "History",
-    description: "Replays and backups.",
+    description: "Past sessions",
     route: APP_ROUTES.history,
     iconKey: "miss",
     eyebrow: "Archive",
@@ -102,7 +102,7 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   {
     key: "analytics",
     title: "Analytics",
-    description: "Charts and league reads.",
+    description: "League reads",
     route: APP_ROUTES.analytics,
     iconKey: "shield",
     eyebrow: "Data",
@@ -111,7 +111,7 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   {
     key: "players",
     title: "Players",
-    description: "Roster and profiles.",
+    description: "Roster hub",
     route: APP_ROUTES.players,
     iconKey: "orangePerson",
     eyebrow: "Roster",
@@ -120,7 +120,7 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   {
     key: "definitions",
     title: "Definitions",
-    description: "Metric glossary.",
+    description: "Metric lookup",
     route: APP_ROUTES.definitions,
     iconKey: "thruster",
     eyebrow: "Reference",
