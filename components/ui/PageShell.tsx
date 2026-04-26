@@ -15,23 +15,30 @@ import ScreenBackground, {
 type PageShellProps = {
   children: React.ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  density?: "default" | "compact";
   edges?: Edge[];
   preset?: ScreenBackgroundPreset;
   scroll?: boolean;
   showsVerticalScrollIndicator?: boolean;
   style?: StyleProp<ViewStyle>;
+  viewport?: "scroll" | "fit";
 };
 
 export default function PageShell({
   children,
   contentContainerStyle,
+  density = "default",
   edges = ["left", "right"],
   preset = "quiet",
   scroll = true,
   showsVerticalScrollIndicator = false,
   style,
+  viewport,
 }: PageShellProps) {
   const theme = useTheme();
+  const compact = density === "compact";
+  const resolvedViewport = viewport ?? (scroll ? "scroll" : "fit");
+  const shouldScroll = resolvedViewport === "scroll";
 
   const content = (
     <View
@@ -40,9 +47,10 @@ export default function PageShell({
         styles.content,
         {
           paddingHorizontal: theme.spacing.lg,
-          paddingTop: theme.spacing.xl,
-          paddingBottom: theme.spacing["2xl"],
+          paddingTop: compact ? theme.spacing.lg : theme.spacing.xl,
+          paddingBottom: compact ? theme.spacing.xl : theme.spacing["2xl"],
         },
+        compact ? styles.contentCompact : null,
         contentContainerStyle,
       ]}
     >
@@ -67,7 +75,7 @@ export default function PageShell({
         <View style={styles.shellMidGlow} />
       </View>
 
-      {scroll ? (
+      {shouldScroll ? (
         <ScrollView
           contentContainerStyle={styles.scrollGrow}
           showsVerticalScrollIndicator={showsVerticalScrollIndicator}
@@ -113,5 +121,8 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: 14,
+  },
+  contentCompact: {
+    gap: 12,
   },
 });
