@@ -7,6 +7,17 @@ export type AssistNetworkDatasetEdge = {
   assistCount: number;
   assistPrestige: number;
   assistEfficiency: number;
+  assistFrequencyPerGame: number;
+};
+
+export type AssistNetworkDatasetNode = {
+  id: string;
+  incomingCount: number;
+  outgoingCount: number;
+  incomingPrestige: number;
+  outgoingPrestige: number;
+  supportBalance: number;
+  involvementFrequencyPerGame: number;
 };
 
 export type AssistNetworkDataset = {
@@ -14,17 +25,10 @@ export type AssistNetworkDataset = {
   gameCount: number;
   exactScopeApplied: boolean;
   edges: AssistNetworkDatasetEdge[];
-  nodes: Array<{
-    id: string;
-    incomingCount: number;
-    outgoingCount: number;
-    incomingPrestige: number;
-    outgoingPrestige: number;
-    supportBalance: number;
-  }>;
+  nodes: AssistNetworkDatasetNode[];
 };
 
-type AssistNetworkNode = AssistNetworkDataset["nodes"][number];
+type AssistNetworkNode = AssistNetworkDatasetNode;
 
 function toNumber(value: unknown): number {
   const parsed = Number(value);
@@ -110,6 +114,7 @@ export function buildAssistNetworkDataset({
         incomingPrestige: 0,
         outgoingPrestige: 0,
         supportBalance: 0,
+        involvementFrequencyPerGame: 0,
       });
     }
 
@@ -175,21 +180,30 @@ export function buildAssistNetworkDataset({
           assistCount: 1,
           assistPrestige,
           assistEfficiency: assistPrestige,
+          assistFrequencyPerGame: 0,
         });
       }
     }
   }
 
+  const sampleGames = Math.max(includedGames.length, 1);
   const nodes = Array.from(nodeMap.values()).map((node) => ({
     ...node,
     supportBalance: node.incomingPrestige - node.outgoingPrestige,
+    involvementFrequencyPerGame:
+      (node.incomingCount + node.outgoingCount) / sampleGames,
   }));
 
-  const edges = Array.from(edgeMap.values()).sort((a, b) => {
-    if (b.assistCount !== a.assistCount) return b.assistCount - a.assistCount;
-    if (b.assistPrestige !== a.assistPrestige) return b.assistPrestige - a.assistPrestige;
-    return a.id.localeCompare(b.id);
-  });
+  const edges = Array.from(edgeMap.values())
+    .map((edge) => ({
+      ...edge,
+      assistFrequencyPerGame: edge.assistCount / sampleGames,
+    }))
+    .sort((a, b) => {
+      if (b.assistCount !== a.assistCount) return b.assistCount - a.assistCount;
+      if (b.assistPrestige !== a.assistPrestige) return b.assistPrestige - a.assistPrestige;
+      return a.id.localeCompare(b.id);
+    });
 
   return {
     includedGameIds: includedGames.map((game) => String(game.id)),

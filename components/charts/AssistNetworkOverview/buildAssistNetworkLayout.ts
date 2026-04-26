@@ -8,10 +8,7 @@ export type AssistNetworkNode = {
   id: string;
   label: string;
   value: number;
-  incomingValue: number;
-  outgoingValue: number;
-  assistCount: number;
-  assistPrestige: number;
+  involvementFrequencyPerGame: number;
   supportBalance: number;
 };
 
@@ -23,6 +20,8 @@ export type AssistNetworkLink = {
   assistCount: number;
   assistPrestige: number;
   assistEfficiency: number;
+  assistFrequencyPerGame: number;
+  labelText: string;
   sourceLabel: string;
   targetLabel: string;
 };
@@ -48,6 +47,7 @@ export type RelationshipEdge = {
   assistCount?: number;
   assistPrestige?: number;
   assistEfficiency?: number;
+  assistFrequencyPerGame?: number;
 };
 
 type NormalizedRelationshipEdge = {
@@ -57,7 +57,17 @@ type NormalizedRelationshipEdge = {
   assistCount: number;
   assistPrestige: number;
   assistEfficiency: number;
+  assistFrequencyPerGame: number;
   hasExplicitAssistEfficiency: boolean;
+};
+
+type WorkingAssistNetworkNode = {
+  id: string;
+  label: string;
+  incomingPrestige: number;
+  outgoingPrestige: number;
+  incomingFrequency: number;
+  outgoingFrequency: number;
 };
 
 export type PlayerLike = {
@@ -127,11 +137,19 @@ function normalizeRelationships(
           : assistCount > 0
           ? assistPrestige / assistCount
           : clampMin(toNumber(raw.assistEfficiency), 0);
+      const assistFrequencyPerGame = clampMin(
+        toNumber(
+          raw.assistFrequencyPerGame ??
+            (assistCount > 0 ? assistCount : raw.weight ?? raw.value)
+        ),
+        0
+      );
 
       if (
         assistCount <= 0 &&
         assistPrestige <= 0 &&
-        assistEfficiency <= 0
+        assistEfficiency <= 0 &&
+        assistFrequencyPerGame <= 0
       ) {
         continue;
       }
@@ -149,6 +167,7 @@ function normalizeRelationships(
             : assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0
             ? assistEfficiency
             : assistPrestige,
+        assistFrequencyPerGame,
         hasExplicitAssistEfficiency,
       });
     }
@@ -175,6 +194,7 @@ function normalizeRelationships(
         assistCount: 1,
         assistPrestige,
         assistEfficiency: assistPrestige,
+        assistFrequencyPerGame: assistPrestige,
         hasExplicitAssistEfficiency: false,
       });
     }
@@ -186,11 +206,11 @@ function normalizeRelationships(
 export function buildAssistNetworkLayout(
   relationshipsInput: Relationships | RelationshipEdge[] = {},
   players: PlayerLike[] = [],
-  mode: AssistNetworkMode = "assistPrestige"
+  _mode: AssistNetworkMode = "assistPrestige"
 ): AssistNetworkLayout {
   const relationships = normalizeRelationships(relationshipsInput);
   const playersById = new Map(players.map((player) => [String(player.id), player]));
-  const nodeMap = new Map<string, AssistNetworkNode>();
+  const nodeMap = new Map<string, WorkingAssistNetworkNode>();
   const linkMap = new Map<string, AssistNetworkLink>();
 
   const ensureNode = (playerId: string) => {
@@ -198,12 +218,10 @@ export function buildAssistNetworkLayout(
       nodeMap.set(playerId, {
         id: playerId,
         label: getNodeLabel(playerId, playersById),
-        value: 0,
-        incomingValue: 0,
-        outgoingValue: 0,
-        assistCount: 0,
-        assistPrestige: 0,
-        supportBalance: 0,
+        incomingPrestige: 0,
+        outgoingPrestige: 0,
+        incomingFrequency: 0,
+        outgoingFrequency: 0,
       });
     }
     return nodeMap.get(playerId)!;
@@ -225,19 +243,28 @@ export function buildAssistNetworkLayout(
       : assistCount > 0
         ? assistPrestige / assistCount
         : 0;
+    const assistFrequencyPerGame = clampMin(
+      toNumber(raw.assistFrequencyPerGame),
+      0
+    );
 
-    if (assistCount <= 0 && assistPrestige <= 0 && assistEfficiency <= 0) continue;
+    if (
+      assistCount <= 0 &&
+      assistPrestige <= 0 &&
+      assistEfficiency <= 0 &&
+      assistFrequencyPerGame <= 0
+    ) {
+      continue;
+    }
 
     const sourceNode = ensureNode(sourceId);
     const targetNode = ensureNode(targetId);
 
-    sourceNode.outgoingValue += assistPrestige;
-    sourceNode.assistPrestige += assistPrestige;
-    sourceNode.assistCount += assistCount;
+    sourceNode.outgoingPrestige += assistPrestige;
+    sourceNode.outgoingFrequency += assistFrequencyPerGame;
 
-    targetNode.incomingValue += assistPrestige;
-    targetNode.assistPrestige += assistPrestige;
-    targetNode.assistCount += assistCount;
+    targetNode.incomingPrestige += assistPrestige;
+    targetNode.incomingFrequency += assistFrequencyPerGame;
 
     const linkId = raw.id || `${sourceId}__${targetId}`;
     const existing = linkMap.get(linkId);
@@ -256,6 +283,7 @@ export function buildAssistNetworkLayout(
 
       existing.assistPrestige += assistPrestige;
       existing.assistCount += assistCount;
+      existing.assistFrequencyPerGame += assistFrequencyPerGame;
       existing.assistEfficiency =
         existingEfficiencyWeight + incomingEfficiencyWeight > 0
           ? (
@@ -273,6 +301,8 @@ export function buildAssistNetworkLayout(
         assistCount,
         assistPrestige,
         assistEfficiency,
+        assistFrequencyPerGame,
+        labelText: "",
         sourceLabel: sourceNode.label,
         targetLabel: targetNode.label,
       });
@@ -280,36 +310,26 @@ export function buildAssistNetworkLayout(
   }
 
   const nodes = Array.from(nodeMap.values()).map((node) => {
-    const supportBalance = node.incomingValue - node.outgoingValue;
-
-    let value = node.assistPrestige;
-    if (mode === "assistCount") value = node.assistCount;
-    if (mode === "assistEfficiency") {
-      value = node.assistPrestige / Math.max(1, node.assistCount);
-    }
-    if (mode === "supportBalance") {
-      value = Math.abs(supportBalance);
-    }
+    const supportBalance = node.incomingPrestige - node.outgoingPrestige;
+    const involvementFrequencyPerGame =
+      node.incomingFrequency + node.outgoingFrequency;
 
     return {
-      ...node,
-      value,
+      id: node.id,
+      label: node.label,
+      value: involvementFrequencyPerGame,
+      involvementFrequencyPerGame,
       supportBalance,
     };
   });
 
   const links = Array.from(linkMap.values()).map((link) => {
-    let value = link.assistPrestige;
-    if (mode === "assistCount") value = link.assistCount;
-    if (mode === "assistEfficiency") value = link.assistEfficiency;
-    if (mode === "supportBalance") {
-      const reverse = linkMap.get(`${link.target}__${link.source}`);
-      value = Math.abs(link.assistPrestige - toNumber(reverse?.assistPrestige));
-    }
+    const value = clampMin(link.assistFrequencyPerGame, 0);
 
     return {
       ...link,
-      value: clampMin(value, 0),
+      value,
+      labelText: `${value.toFixed(1)}/game`,
     };
   });
 
