@@ -21,6 +21,9 @@ import {
   type EloMetricTab,
   type MetricContext,
 } from "@/utils/elo/metricRegistry";
+import MoonrakersIntelSection from "@/components/player/MoonrakersIntelSection";
+import { buildPlaystyleSamples } from "@/utils/playstyleEngine";
+import { buildMoonrakersIntelProfile } from "@/utils/playerProfileMoonrakers";
 
 const SHEET = require("@/assets/images/player-card-sheet.png");
 
@@ -37,8 +40,6 @@ const COLORS = {
   blueSoft: "rgba(59,130,246,0.18)",
   green: "#22C55E",
   greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
   red: "#EF4444",
   redSoft: "rgba(239,68,68,0.16)",
   border: "rgba(255,255,255,0.08)",
@@ -809,6 +810,20 @@ export default function PlayerProfileDetailScreen() {
     [sortedPlayers, playerId]
   );
 
+  const profilePlayers = useMemo(
+    () =>
+      sortedPlayers.map((player) => ({
+        id: String(player.id),
+        name: player.name || "Player",
+      })),
+    [sortedPlayers]
+  );
+
+  const playstyleSamples = useMemo(
+    () => buildPlaystyleSamples(profilePlayers as any, games),
+    [profilePlayers, games]
+  );
+
   const playerRows = useMemo(
     () => (playerId ? buildAllRowsForPlayer(games, String(playerId)) : []),
     [games, playerId]
@@ -867,6 +882,24 @@ export default function PlayerProfileDetailScreen() {
     [activeTab, filteredRows, selectedPlayerName, selectedOpponentName]
   );
 
+  const moonrakersIntel = useMemo(() => {
+    if (!playerId) {
+      return {
+        hasData: false as const,
+        emptyTitle: "Not enough Moonrakers data yet",
+        emptyBody:
+          "Finish or import a few more games to unlock player-specific playstyle reads.",
+      };
+    }
+
+    return buildMoonrakersIntelProfile({
+      playerId: String(playerId),
+      players: profilePlayers as any,
+      games,
+      samples: playstyleSamples,
+    });
+  }, [playerId, profilePlayers, games, playstyleSamples]);
+
   const featuredCard = topCards[0];
   const secondaryCards = topCards.slice(1, 3);
 
@@ -914,6 +947,7 @@ export default function PlayerProfileDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[2]}
       >
         
         
@@ -1014,67 +1048,88 @@ export default function PlayerProfileDetailScreen() {
           </View>
         </View>
 
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Profile Tabs</Text>
-            <Text style={styles.sectionSub}>Custom player breakdown</Text>
-          </View>
-
-          <View style={styles.tabGrid}>
-            <View style={styles.tabGridRowTwo}>
-              {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
-                const active = tab === activeTab;
-                return (
-                  <Pressable
-                    key={tab}
-                    style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
-                    onPress={() => setActiveTab(tab)}
-                  >
-                    <Text
-                      style={[
-                        styles.underlineMainTabText,
-                        active && styles.underlineMainTabTextActive,
-                      ]}
-                    >
-                      {tab}
-                    </Text>
-                    <View
-                      style={[
-                        styles.underlineMainTabLine,
-                        active && styles.underlineMainTabLineActive,
-                      ]}
-                    />
-                  </Pressable>
-                );
-              })}
+        <View style={styles.stickyProfileTabShell}>
+          <View style={styles.sectionCompact}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Profile Tabs</Text>
+              <Text style={styles.sectionSub}>Custom player breakdown</Text>
             </View>
 
-            <View style={styles.tabGridRowThree}>
-              {(["Skills", "Context", "Projection"] as EloMetricTab[]).map((tab) => {
-                const active = tab === activeTab;
-                return (
-                  <Pressable
-                    key={tab}
-                    style={[styles.underlineMainTab, styles.underlineMainTabThreeCol]}
-                    onPress={() => setActiveTab(tab)}
-                  >
-                    <Text
-                      style={[
-                        styles.underlineMainTabText,
-                        active && styles.underlineMainTabTextActive,
-                      ]}
+            <View style={styles.tabGrid}>
+              <View style={styles.tabGridRowTwo}>
+                {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
+                  const active = tab === activeTab;
+                  return (
+                    <Pressable
+                      key={tab}
+                      style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
+                      onPress={() => setActiveTab(tab)}
                     >
-                      {tab}
-                    </Text>
-                    <View
-                      style={[
-                        styles.underlineMainTabLine,
-                        active && styles.underlineMainTabLineActive,
-                      ]}
-                    />
-                  </Pressable>
-                );
-              })}
+                      <Text
+                        style={[
+                          styles.underlineMainTabText,
+                          active && styles.underlineMainTabTextActive,
+                        ]}
+                      >
+                        {tab}
+                      </Text>
+                      <View
+                        style={[
+                          styles.underlineMainTabLine,
+                          active && styles.underlineMainTabLineActive,
+                        ]}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.tabGridRowThree}>
+                {(["Skills", "Context", "Projection"] as EloMetricTab[]).map((tab) => {
+                  const active = tab === activeTab;
+                  return (
+                    <Pressable
+                      key={tab}
+                      style={[styles.underlineMainTab, styles.underlineMainTabThreeCol]}
+                      onPress={() => setActiveTab(tab)}
+                    >
+                      <Text
+                        style={[
+                          styles.underlineMainTabText,
+                          active && styles.underlineMainTabTextActive,
+                        ]}
+                      >
+                        {tab}
+                      </Text>
+                      <View
+                        style={[
+                          styles.underlineMainTabLine,
+                          active && styles.underlineMainTabLineActive,
+                        ]}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.profileSummaryCards}>
+            <View style={styles.profileSummaryCard}>
+              <Text style={styles.profileSummaryLabel}>View</Text>
+              <Text style={styles.profileSummaryValue}>{activeTab}</Text>
+            </View>
+            <View style={styles.profileSummaryCard}>
+              <Text style={styles.profileSummaryLabel}>Opponent</Text>
+              <Text style={styles.profileSummaryValue}>
+                {selectedOpponentId
+                  ? opponentOptions.find((player) => String(player.id) === String(selectedOpponentId))?.name ?? "Focused"
+                  : "All"}
+              </Text>
+            </View>
+            <View style={styles.profileSummaryCard}>
+              <Text style={styles.profileSummaryLabel}>Signals</Text>
+              <Text style={styles.profileSummaryValue}>{featuredCard ? "Ready" : "Pending"}</Text>
             </View>
           </View>
         </View>
@@ -1082,8 +1137,8 @@ export default function PlayerProfileDetailScreen() {
         {activeTab === "Context" ? (
           <View style={styles.sectionCompact}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Opponent Filter</Text>
-              <Text style={styles.sectionSub}>Optional head-to-head focus</Text>
+              <Text style={styles.sectionTitle}>Context Matchup</Text>
+              <Text style={styles.sectionSub}>Filter to one opponent only when you want a narrower read</Text>
             </View>
 
             <View style={styles.underlineSelectorRow}>
@@ -1245,6 +1300,8 @@ export default function PlayerProfileDetailScreen() {
           )}
         </View>
 
+        <MoonrakersIntelSection profile={moonrakersIntel} />
+
         <View style={styles.sectionCompact}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Recent Games</Text>
@@ -1337,6 +1394,41 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: uiPolish.spacing.sm,
     paddingBottom: uiPolish.spacing.xxl,
+  },
+  stickyProfileTabShell: {
+    backgroundColor: "rgba(8,17,32,0.94)",
+    borderRadius: 18,
+    marginBottom: 8,
+    paddingBottom: 6,
+  },
+  profileSummaryCards: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  profileSummaryCard: {
+    flex: 1,
+    minWidth: 96,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 4,
+  },
+  profileSummaryLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  profileSummaryValue: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   cropWindow: {

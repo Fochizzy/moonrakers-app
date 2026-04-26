@@ -13,6 +13,7 @@ import StarryNight from "@/components/ui/StarryNight";
 import Text from "@/components/ui/Text";
 
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+import PlaystyleSection from "@/components/stats/PlaystyleSection";
 
 import {
   buildLeaderboard,
@@ -25,7 +26,7 @@ import { buildGlobalCorrelations } from "@/utils/correlationEngine";
 import { buildIndividualCorrelations } from "@/utils/individualCorrelationEngine";
 import { buildGameCorrelations } from "@/utils/gameCorrelationEngine";
 
-type StatsTab = "overview" | "players" | "correlations" | "games";
+type StatsTab = "overview" | "players" | "playstyle" | "correlations" | "games";
 type CorrelationTab = "global" | "individual" | "game";
 
 const GLOBAL_CORRELATION_TIERS = [
@@ -232,6 +233,27 @@ function TabButton({
   );
 }
 
+function PrimaryTabPill({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.primaryTabPill, active && styles.primaryTabPillActive]}
+    >
+      <Text style={[styles.primaryTabPillText, active && styles.primaryTabPillTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function StatPill({
   label,
   value,
@@ -401,6 +423,17 @@ export default function StatsScreen() {
   const summary = useMemo(
     () => buildLeagueSummary(baseLeaderboard, games),
     [baseLeaderboard, games]
+  );
+  const statsHeroHighlights = useMemo(
+    () => [
+      { label: "Players", value: leaderboard.length },
+      { label: "Games", value: games.length },
+      {
+        label: "Takeaway",
+        value: leaderboard[0]?.name ? `${leaderboard[0].name} leads` : "Log a game",
+      },
+    ],
+    [games.length, leaderboard]
   );
 
   const globalCorrelations = useMemo(
@@ -839,6 +872,16 @@ export default function StatsScreen() {
     );
   };
 
+  const renderPlaystyleTab = () => (
+    <PlaystyleSection
+      players={players}
+      games={games}
+      leaderboard={leaderboard}
+      selectedPlayerId={resolvedPlayerId}
+      onSelectPlayer={setSelectedPlayerId}
+    />
+  );
+
   const renderCorrelationTab = () => (
     <View style={styles.card}>
       <Text style={styles.eyebrow}>Correlations</Text>
@@ -1045,7 +1088,7 @@ export default function StatsScreen() {
           <View style={styles.list}>
             {selectedGame.rows.map((row: any, index: number) => {
               const isWinner = row.playerId === selectedGame.winnerId;
-              const player = leaderboard.find((p: any) => p.id === row.playerId);
+              const player = leaderboard.find((p: any) => p.id === row.playerId) as any;
 
               return (
                 <View key={row.playerId} style={styles.gameRowCard}>
@@ -1118,29 +1161,47 @@ export default function StatsScreen() {
       >
         <View style={styles.heroCard}>
           <View style={styles.heroTitleWrap}>
-            <Text style={styles.heroEyebrow}>View Your Mission Log</Text>
-            <Text style={styles.brandTitle}>Moonraker&apos;s</Text>
-            <Text style={styles.heroTitle}>Statistics</Text>
+            <Text style={styles.heroEyebrow}>Statistics</Text>
+            <Text style={styles.heroTitle}>Mission Snapshot</Text>
+            <Text style={styles.heroSubtitle}>
+              {leaderboard[0]?.name
+                ? `${leaderboard[0].name} currently sets the pace while ${summary.totalPrestige} prestige has been logged across the league.`
+                : "Save a few games and this screen will open with a KPI-first league snapshot."}
+            </Text>
+          </View>
+
+          <View style={styles.statsHeroHighlights}>
+            {statsHeroHighlights.map((item) => (
+              <View key={item.label} style={styles.heroHighlightPill}>
+                <Text style={styles.heroHighlightLabel}>{item.label}</Text>
+                <Text style={styles.heroHighlightValue}>{item.value}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
-        <View style={styles.tabWrap}>
-          <TabButton
+        <View style={styles.primaryTabRail}>
+          <PrimaryTabPill
             label="Home"
             active={activeTab === "overview"}
             onPress={() => setActiveTab("overview")}
           />
-          <TabButton
+          <PrimaryTabPill
             label="Players"
             active={activeTab === "players"}
             onPress={() => setActiveTab("players")}
           />
-          <TabButton
+          <PrimaryTabPill
+            label="Playstyle"
+            active={activeTab === "playstyle"}
+            onPress={() => setActiveTab("playstyle")}
+          />
+          <PrimaryTabPill
             label="Insights"
             active={activeTab === "correlations"}
             onPress={() => setActiveTab("correlations")}
           />
-          <TabButton
+          <PrimaryTabPill
             label="Games"
             active={activeTab === "games"}
             onPress={() => setActiveTab("games")}
@@ -1149,6 +1210,7 @@ export default function StatsScreen() {
 
         {activeTab === "overview" && renderOverviewTab()}
         {activeTab === "players" && renderPlayersTab()}
+        {activeTab === "playstyle" && renderPlaystyleTab()}
         {activeTab === "correlations" && renderCorrelationTab()}
         {activeTab === "games" && renderGamesTab()}
       </ScrollView>
@@ -1212,7 +1274,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   heroTitleWrap: {
-    gap: 2,
+    gap: 6,
   },
   heroEyebrow: {
     color: COLORS.cyan,
@@ -1228,16 +1290,41 @@ const styles = StyleSheet.create({
   },
   heroSubtitle: {
     color: COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 12,
+    lineHeight: 18,
   },
-  tabWrap: {
+  statsHeroHighlights: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 14,
-    paddingHorizontal: 2,
-    paddingVertical: 2,
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 6,
+  },
+  heroHighlightPill: {
+    minWidth: 92,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    gap: 4,
+  },
+  heroHighlightLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  heroHighlightValue: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  primaryTabRail: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
   },
   subtabWrap: {
     flexDirection: "row",
@@ -1245,6 +1332,31 @@ const styles = StyleSheet.create({
     columnGap: 14,
     rowGap: 8,
     alignItems: "flex-end",
+  },
+  primaryTabPill: {
+    minHeight: 38,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryTabPillActive: {
+    backgroundColor: "rgba(96,165,250,0.16)",
+    borderColor: "rgba(96,165,250,0.30)",
+  },
+  primaryTabPillText: {
+    color: "#AFC3E8",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
+  },
+  primaryTabPillTextActive: {
+    color: COLORS.textPrimary,
   },
   tabButton: {
     flex: 1,
@@ -1574,6 +1686,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderSoft,
     backgroundColor: COLORS.surfaceAlt,
+  },
+  gamePlayerCardWrap: {
+    borderRadius: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 2,
   },
   gameRowIdentity: {
     flexDirection: "row",
