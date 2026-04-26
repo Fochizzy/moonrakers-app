@@ -79,6 +79,15 @@ function clampMin(value: number, min: number): number {
   return value < min ? min : value;
 }
 
+function getAssistEfficiencyWeight(
+  assistCount: number,
+  assistPrestige: number,
+  assistEfficiency: number
+): number {
+  if (assistCount > 0) return assistCount;
+  return assistPrestige > 0 || assistEfficiency > 0 ? 1 : 0;
+}
+
 function getNodeLabel(playerId: string, playersById: Map<string, PlayerLike>): string {
   return playersById.get(playerId)?.name?.trim() || playerId;
 }
@@ -234,13 +243,26 @@ export function buildAssistNetworkLayout(
     const existing = linkMap.get(linkId);
 
     if (existing) {
+      const existingEfficiencyWeight = getAssistEfficiencyWeight(
+        existing.assistCount,
+        existing.assistPrestige,
+        existing.assistEfficiency
+      );
+      const incomingEfficiencyWeight = getAssistEfficiencyWeight(
+        assistCount,
+        assistPrestige,
+        assistEfficiency
+      );
+
       existing.assistPrestige += assistPrestige;
       existing.assistCount += assistCount;
       existing.assistEfficiency =
-        raw.hasExplicitAssistEfficiency
-          ? assistEfficiency
-          : existing.assistCount > 0
-          ? existing.assistPrestige / existing.assistCount
+        existingEfficiencyWeight + incomingEfficiencyWeight > 0
+          ? (
+              existing.assistEfficiency * existingEfficiencyWeight +
+              assistEfficiency * incomingEfficiencyWeight
+            ) /
+            (existingEfficiencyWeight + incomingEfficiencyWeight)
           : 0;
     } else {
       linkMap.set(linkId, {

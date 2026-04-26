@@ -172,6 +172,27 @@ run("buildAssistNetworkDataset does not create counted edges from prestige-only 
   ]);
 });
 
+run("buildAssistNetworkDataset reports an empty exact-match sample when no game matches the scoped table", () => {
+  const dataset = buildAssistNetworkDataset({
+    games: [
+      {
+        id: "three-player-only",
+        players: [{ id: "james" }, { id: "greg" }, { id: "izzy" }],
+        rounds: [],
+        timeline: [],
+        totals: {},
+      },
+    ],
+    scopedPlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(dataset.exactScopeApplied, true);
+  assert.deepEqual(dataset.includedGameIds, []);
+  assert.equal(dataset.gameCount, 0);
+  assert.deepEqual(dataset.edges, []);
+  assert.deepEqual(dataset.nodes, []);
+});
+
 run("buildAssistNetworkLayout preserves explicit array-supplied assistEfficiency", () => {
   const layout = buildAssistNetworkLayout(
     [
@@ -196,4 +217,52 @@ run("buildAssistNetworkLayout preserves explicit array-supplied assistEfficiency
   assert.equal(layout.links[0].assistEfficiency, 99);
   assert.equal(layout.links[0].value, 99);
   assert.equal(layout.maxValue, 99);
+});
+
+run("buildAssistNetworkLayout merges duplicate explicit-efficiency edges deterministically", () => {
+  const forward = [
+    {
+      sourceId: "james",
+      targetId: "greg",
+      assistCount: 2,
+      assistPrestige: 10,
+      assistEfficiency: 99,
+    },
+    {
+      sourceId: "james",
+      targetId: "greg",
+      assistCount: 1,
+      assistPrestige: 4,
+      assistEfficiency: 6,
+    },
+  ];
+
+  const reversed = [...forward].reverse();
+  const players = [
+    { id: "james", name: "James" },
+    { id: "greg", name: "Greg" },
+  ];
+
+  const forwardLayout = buildAssistNetworkLayout(
+    forward,
+    players,
+    "assistEfficiency"
+  );
+  const reversedLayout = buildAssistNetworkLayout(
+    reversed,
+    players,
+    "assistEfficiency"
+  );
+
+  assert.equal(forwardLayout.links.length, 1);
+  assert.equal(reversedLayout.links.length, 1);
+  assert.equal(forwardLayout.links[0].assistCount, 3);
+  assert.equal(forwardLayout.links[0].assistPrestige, 14);
+  assert.equal(reversedLayout.links[0].assistCount, 3);
+  assert.equal(reversedLayout.links[0].assistPrestige, 14);
+  assert.equal(forwardLayout.links[0].assistEfficiency, 68);
+  assert.equal(reversedLayout.links[0].assistEfficiency, 68);
+  assert.equal(forwardLayout.links[0].value, 68);
+  assert.equal(reversedLayout.links[0].value, 68);
+  assert.deepEqual(forwardLayout.links, reversedLayout.links);
 });
