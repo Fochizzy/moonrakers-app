@@ -14,6 +14,30 @@ assert.match(
   "expected the chart setup route sync to preserve exact-scope ids through a chart-aware helper"
 );
 
+assert.match(
+  source,
+  /const appliedRouteScopeKeyRef = useRef<string \| null>\(null\);/,
+  "expected the chart setup to track which route scope seed has already been applied"
+);
+
+assert.match(
+  source,
+  /const routeScopeSeedKey = useMemo\(\s*\(\) => buildRouteScopeSeedKey\(selectedChartKey,\s*routeIds\),\s*\[selectedChartKey,\s*routeIds\]\s*\);/,
+  "expected the chart setup to derive a stable route scope seed key from the chart and route ids"
+);
+
+assert.match(
+  source,
+  /if \(routeScopeSeedKey && appliedRouteScopeKeyRef\.current === routeScopeSeedKey\) \{[\s\S]*return;[\s\S]*\}/,
+  "expected the chart setup route sync to seed route ids once instead of overwriting later chip edits"
+);
+
+assert.match(
+  source,
+  /const minimumScopeCount = selectedChart\.key === "relationship_graph" \? 2 : 1;[\s\S]*if \(current.length <= minimumScopeCount\) return current;/,
+  "expected the Assist Network setup to keep at least two players selected"
+);
+
 assert.doesNotMatch(
   source,
   /title="Assist metric"/,

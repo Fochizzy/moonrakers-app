@@ -11,6 +11,19 @@ function haveSameIds(
   return left.every((id, index) => String(id) === String(right[index]));
 }
 
+export function buildRouteScopeSeedKey(
+  chartKey: string,
+  routeIds: readonly string[]
+): string | null {
+  const normalizedIds = routeIds
+    .map((id) => String(id).trim())
+    .filter(Boolean)
+    .sort();
+
+  if (!normalizedIds.length) return null;
+  return `${String(chartKey).trim()}:${normalizedIds.join(",")}`;
+}
+
 export function getRouteSyncedGroupIds({
   routeIds,
   currentIds,

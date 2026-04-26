@@ -41,7 +41,10 @@ import {
   normalizeMetricForChart,
   type SimpleMetricKey,
 } from "@/utils/charts";
-import { getPreferredScopeIdsForChart } from "@/utils/chartHubRouteState";
+import {
+  buildRouteScopeSeedKey,
+  getPreferredScopeIdsForChart,
+} from "@/utils/chartHubRouteState";
 import { getMetricOrFallback } from "@/utils/metricMap";
 
 function getParam(value?: string | string[]) {
@@ -441,6 +444,7 @@ function SetupSection({
 export default function ChartsIndexScreen() {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const appliedRouteScopeKeyRef = useRef<string | null>(null);
   const params = useLocalSearchParams<{
     chartKey?: string | string[];
     playerId?: string | string[];
@@ -491,6 +495,10 @@ export default function ChartsIndexScreen() {
   const [selectedChartKey, setSelectedChartKey] =
     useState<ChartCatalogKey>(routeChartKey);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(routeIds);
+  const routeScopeSeedKey = useMemo(
+    () => buildRouteScopeSeedKey(selectedChartKey, routeIds),
+    [selectedChartKey, routeIds]
+  );
   const [selectedLineMode, setSelectedLineMode] =
     useState<LineMode>(routeLineMode);
   const [selectedEloTab, setSelectedEloTab] =
@@ -553,6 +561,15 @@ export default function ChartsIndexScreen() {
   }, [routeOpponentId, sortedPlayers]);
 
   useEffect(() => {
+    if (!routeScopeSeedKey) {
+      appliedRouteScopeKeyRef.current = null;
+      return;
+    }
+
+    if (routeScopeSeedKey && appliedRouteScopeKeyRef.current === routeScopeSeedKey) {
+      return;
+    }
+
     const nextRouteGroupIds = getPreferredScopeIdsForChart({
       chartKey: selectedChartKey,
       routeIds,
@@ -563,7 +580,9 @@ export default function ChartsIndexScreen() {
     if (nextRouteGroupIds) {
       setSelectedGroupIds(nextRouteGroupIds);
     }
-  }, [routeIds, selectedChartKey, selectedGroupIds, sortedPlayers]);
+
+    appliedRouteScopeKeyRef.current = routeScopeSeedKey;
+  }, [routeIds, routeScopeSeedKey, selectedChartKey, selectedGroupIds, sortedPlayers]);
 
   useEffect(() => {
     if (!selectedPlayerId && sortedPlayers.length) {
@@ -776,8 +795,9 @@ export default function ChartsIndexScreen() {
 
   function toggleGroupPlayer(playerId: string) {
     setSelectedGroupIds((current) => {
+      const minimumScopeCount = selectedChart.key === "relationship_graph" ? 2 : 1;
       if (current.includes(playerId)) {
-        if (current.length <= 1) return current;
+        if (current.length <= minimumScopeCount) return current;
         return current.filter((id) => id !== playerId);
       }
       return [...current, playerId];

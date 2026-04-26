@@ -284,6 +284,48 @@ run("buildAssistNetworkDataset derives frequency-per-game from the exact-match s
   );
 });
 
+run("buildAssistNetworkDataset falls back to assist-source totals when round logs are empty", () => {
+  const dataset = buildAssistNetworkDataset({
+    games: [
+      {
+        id: "totals-only-a",
+        players: [{ id: "james" }, { id: "greg" }],
+        rounds: [],
+        timeline: [],
+        totals: {
+          james: { totalPrestige: 11 },
+          greg: {
+            totalPrestige: 9,
+            assistPrestigeBySource: { james: 4 },
+          },
+        },
+      },
+      {
+        id: "totals-only-b",
+        players: [{ id: "james" }, { id: "greg" }],
+        rounds: [],
+        timeline: [],
+        totals: {
+          james: { totalPrestige: 10 },
+          greg: {
+            totalPrestige: 8,
+            assistPrestigeBySource: { james: 2 },
+          },
+        },
+      },
+    ],
+    scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(dataset.gameCount, 2);
+  assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].assistCount, 2);
+  assert.equal(dataset.edges[0].assistPrestige, 6);
+  assert.equal(dataset.edges[0].assistFrequencyPerGame, 1);
+});
+
 run("buildAssistNetworkImpact compares exact-table results against overall baseline", () => {
   const { buildAssistNetworkImpact } = requireAssistNetworkImpact();
   const impact = buildAssistNetworkImpact({
