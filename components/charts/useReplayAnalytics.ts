@@ -12,6 +12,7 @@ export type ReplayMetricKey =
   | "assistPrestigeReceived"
   | "objectivePrestige"
   | "score"
+  | "assists"
   | "contracts"
   | "failures"
   | "efficiency"
@@ -90,6 +91,7 @@ function readMetricValue(
     current?.objectivePrestige ?? current?.objectiveCount
   );
   const score = toNumber(current?.score);
+  const assists = toNumber(current?.assists);
   const contracts = toNumber(current?.contracts);
   const failures = toNumber(current?.failures);
   const efficiency = toNumber(current?.efficiency);
@@ -105,6 +107,8 @@ function readMetricValue(
       return objectivePrestige;
     case "score":
       return score;
+    case "assists":
+      return assists;
     case "contracts":
       return contracts;
     case "failures":
@@ -179,6 +183,7 @@ function buildSummary(
     assistPrestigeReceived: "assist prestige",
     objectivePrestige: "objective prestige",
     score: "score",
+    assists: "assists",
     contracts: "contracts",
     failures: "failures",
     efficiency: "efficiency",

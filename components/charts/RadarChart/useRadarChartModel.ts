@@ -37,6 +37,7 @@ export type RadarPoint = RadarEntry & {
 export type RadarSummary = {
   averageStrength: number;
   topTrait: RadarEntry | null;
+  weakestTrait: RadarEntry | null;
   largestEdge: RadarEntry | null;
 };
 
@@ -152,6 +153,7 @@ function buildModel(primary: RadarStats, comparison?: RadarStats, size = 280): R
       : 0;
 
   const topTrait = [...entries].sort((a, b) => b.value - a.value)[0] ?? null;
+  const weakestTrait = [...entries].sort((a, b) => a.value - b.value)[0] ?? null;
   const largestEdge =
     [...entries].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0] ?? null;
 
@@ -161,6 +163,7 @@ function buildModel(primary: RadarStats, comparison?: RadarStats, size = 280): R
     summary: {
       averageStrength: safeNum(averageStrength),
       topTrait,
+      weakestTrait,
       largestEdge,
     },
     primaryPath: buildPath(points.map((point) => ({ x: point.valueX, y: point.valueY }))),

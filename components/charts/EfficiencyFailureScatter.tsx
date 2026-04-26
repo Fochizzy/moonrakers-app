@@ -1,8 +1,15 @@
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle, Line, Rect, Text as SvgText } from "react-native-svg";
+
 import Text from "@/components/ui/Text";
 import { getChartMetricValue } from "@/utils/chartMetricValue";
+import { resolveStoredPlayerColor } from "@/utils/playerColor";
+import {
+  buildAvailableSnapshotPlayers,
+  filterSnapshotPlayers,
+} from "@/utils/snapshotPlayers";
+import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 type Player = { id: string; name?: string; color?: string };
 type SnapshotPoint = {
@@ -34,7 +41,11 @@ const COLORS = {
 };
 
 function getColor(color?: string, index = 0) {
-  if (typeof color === "string" && color.trim()) return color.trim();
+  const normalized = typeof color === "string" ? color.trim() : "";
+  if (/^#|^rgb|^hsl/i.test(normalized)) return normalized;
+  if (normalized) {
+    return getPlayerAccentColor(resolveStoredPlayerColor(normalized, index));
+  }
   const fallback = ["#A855F7", "#3B82F6", "#22C55E", "#3B82F6", "#EF4444"];
   return fallback[index % fallback.length];
 }
@@ -50,24 +61,29 @@ export default function EfficiencyFailureScatter({
   scopedPlayerIds,
   xMetric = "failures",
   yMetric = "efficiency",
-  title = "Efficiency vs Failures",
+  title = "Efficiency vs Failure",
   subtitle = "Average per-player positioning across unified snapshots.",
 }: Props) {
-  const visiblePlayers = useMemo(() => {
-    if (!scopedPlayerIds?.length) return players;
-    const allowed = new Set(scopedPlayerIds.map(String));
-    return players.filter((p) => allowed.has(String(p.id)));
-  }, [players, scopedPlayerIds]);
+  const availablePlayers = useMemo(
+    () => buildAvailableSnapshotPlayers(data as any, players as any) as Player[],
+    [data, players]
+  );
+
+  const visiblePlayers = useMemo(
+    () =>
+      filterSnapshotPlayers(availablePlayers as any, undefined, scopedPlayerIds) as Player[],
+    [availablePlayers, scopedPlayerIds]
+  );
 
   const points = useMemo(
     () =>
-      visiblePlayers.map((p, index) => {
+      visiblePlayers.map((player, index) => {
         let x = 0;
         let y = 0;
         let count = 0;
 
         for (const snap of data) {
-          const entry = snap?.snapshot?.[p.id];
+          const entry = snap?.snapshot?.[player.id];
           if (entry == null) continue;
           x += getChartMetricValue(entry, xMetric);
           y += getChartMetricValue(entry, yMetric);
@@ -75,9 +91,9 @@ export default function EfficiencyFailureScatter({
         }
 
         return {
-          id: p.id,
-          name: p.name || `Player ${index + 1}`,
-          color: getColor(p.color, index),
+          id: player.id,
+          name: player.name || `Player ${index + 1}`,
+          color: getColor(player.color, index),
           x: count ? x / count : 0,
           y: count ? y / count : 0,
         };
@@ -85,15 +101,21 @@ export default function EfficiencyFailureScatter({
     [data, visiblePlayers, xMetric, yMetric]
   );
 
-  const maxX = Math.max(1, ...points.map((p) => p.x));
-  const maxY = Math.max(1, ...points.map((p) => p.y));
-  const meanX = points.reduce((s, p) => s + p.x, 0) / Math.max(points.length, 1);
-  const meanY = points.reduce((s, p) => s + p.y, 0) / Math.max(points.length, 1);
+  const maxX = Math.max(1, ...points.map((point) => point.x));
+  const maxY = Math.max(1, ...points.map((point) => point.y));
+  const meanX = points.reduce((sum, point) => sum + point.x, 0) / Math.max(points.length, 1);
+  const meanY = points.reduce((sum, point) => sum + point.y, 0) / Math.max(points.length, 1);
+  const focusPoint = [...points].sort(
+    (left, right) =>
+      right.y / Math.max(1, maxY) -
+      right.x / Math.max(1, maxX) -
+      (left.y / Math.max(1, maxY) - left.x / Math.max(1, maxX))
+  )[0];
   const chartW = W - PAD * 2;
   const chartH = H - PAD * 2;
 
-  const xPos = (v: number) => PAD + (v / maxX) * chartW;
-  const yPos = (v: number) => PAD + chartH - (v / maxY) * chartH;
+  const xPos = (value: number) => PAD + (value / maxX) * chartW;
+  const yPos = (value: number) => PAD + chartH - (value / maxY) * chartH;
 
   if (!points.length) {
     return (
@@ -109,16 +131,10 @@ export default function EfficiencyFailureScatter({
   return (
     <View style={styles.container}>
       <View style={styles.sectionCompact}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.sectionSub}>
-            {xMetric} × {yMetric}
-          </Text>
+        <View style={styles.chartHeader}>
+          <Text style={styles.chartTitle}>{title}</Text>
+          <Text style={styles.chartSub}>{`${xMetric} vs ${yMetric}`}</Text>
         </View>
-        <Text style={styles.subtitle}>{subtitle}</Text>
-      </View>
-
-      <View style={styles.sectionCompact}>
         <Svg width={W} height={H}>
           <Rect
             x={0}
@@ -188,6 +204,25 @@ export default function EfficiencyFailureScatter({
           ))}
         </Svg>
       </View>
+
+      <View style={styles.proofRow}>
+        <View style={styles.proofCard}>
+          <Text style={styles.proofLabel}>Failures Avg</Text>
+          <Text style={styles.proofValue}>{compact(meanX)}</Text>
+        </View>
+        <View style={styles.proofCard}>
+          <Text style={styles.proofLabel}>Efficiency Avg</Text>
+          <Text style={styles.proofValue}>{compact(meanY)}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.takeaway}>
+        {focusPoint
+          ? `${focusPoint.name} sits closest to the efficient quadrant at ${compact(
+              focusPoint.y
+            )} ${yMetric} and ${compact(focusPoint.x)} ${xMetric}.`
+          : subtitle}
+      </Text>
     </View>
   );
 }
@@ -203,27 +238,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  sectionHeaderRow: {
+  chartHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: 10,
     marginBottom: 6,
   },
-  sectionTitle: {
+  chartTitle: {
     color: COLORS.text,
     fontSize: 14,
     fontWeight: "800",
   },
-  sectionSub: {
+  chartSub: {
     color: COLORS.sub,
     fontSize: 11,
     fontWeight: "700",
-  },
-  subtitle: {
-    color: COLORS.sub,
-    fontSize: 12,
-    lineHeight: 18,
   },
   emptyTitle: {
     color: COLORS.text,
@@ -235,5 +265,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  proofRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  proofCard: {
+    flex: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: COLORS.cardAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 3,
+  },
+  proofLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  proofValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  takeaway: {
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 16,
+  },
 });
-

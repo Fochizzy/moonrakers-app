@@ -1,8 +1,26 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  Line,
+  LinearGradient,
+  Path,
+  Rect,
+  Stop,
+} from "react-native-svg";
 
 import Text from "@/components/ui/Text";
+import { createSmoothPath } from "@/components/charts/ELO/eloChartUtils";
+import ChartFocusCard from "./ChartFocusCard";
+import ChartStage from "./ChartStage";
+import ChartUnderlineTabs from "./ChartUnderlineTabs";
+import {
+  CHART_COLORS,
+  getChartStagePreset,
+  withChartAlpha,
+} from "./chartVisualSystem";
 import { chartColors, withAlpha } from "@/utils/chartTheme";
 import {
   PLAYER_METRICS,
@@ -32,7 +50,7 @@ import type {
   SparklineProps,
 } from "./sparklineTypes";
 
-const DEFAULT_HEIGHT = 56;
+const DEFAULT_HEIGHT = 88;
 const DEFAULT_WIDTH = 280;
 const DEFAULT_STROKE_WIDTH = 2;
 const DEFAULT_PADDING = 10;
@@ -41,23 +59,11 @@ const DEFAULT_SELECTED_POINT_RADIUS = 4.5;
 const DEFAULT_POINT_HIT_RADIUS = 14;
 const DEFAULT_RECENT_WINDOW = 3;
 
-const COLORS = {
-  card: "rgba(12,18,38,0.92)",
-  cardAlt: "rgba(16,24,48,0.95)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  muted: "#64748B",
-  accent: "#A855F7",
-  accentSoft: "rgba(168,85,247,0.18)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-};
+const COLORS = CHART_COLORS;
+
+function sanitizeId(input: string) {
+  return input.replace(/[^a-z0-9_-]+/gi, "-").toLowerCase();
+}
 
 function buildDefaultMetricOptions(): SparkMetricOption[] {
   return PLAYER_METRICS.map((metric) => ({
@@ -109,25 +115,6 @@ function toneStyles(category: MetricCategory) {
     default:
       return { bg: COLORS.accentSoft, value: COLORS.accent };
   }
-}
-
-function UnderlineOption({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.underlineTabButton} onPress={onPress}>
-      <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
-        {label}
-      </Text>
-      <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-    </Pressable>
-  );
 }
 
 function Sparkline({
@@ -476,6 +463,37 @@ function Sparkline({
     showLatestButton &&
     latestIndex != null &&
     (!hideLatestWhenSelected || activeSelectedIndex !== latestIndex);
+  const selectedPointLabel =
+    selectedPoint?.label ?? (selectedPoint ? `Point ${selectedPoint.index + 1}` : null);
+  const selectedComparisonPoint =
+    activeSelectedIndex != null
+      ? comparisonGeometry.points[activeSelectedIndex] ?? null
+      : null;
+  const primaryPeakValue = metrics?.max ?? selectedPoint?.value ?? 0;
+  const deltaFromStart = metrics?.changeFromStart ?? 0;
+  const comparisonGap =
+    selectedPoint && selectedComparisonPoint
+      ? selectedPoint.value - selectedComparisonPoint.value
+      : null;
+  const stagePreset = getChartStagePreset("compact");
+  const safeMetricKey = currentMetricMeta?.key ?? currentMetricKey ?? "sparkline";
+  const defsKey = sanitizeId(
+    `${safeMetricKey}-${primaryLabel}-${comparisonLabel}-${dataLength}`
+  );
+  const backgroundId = `sparkline-bg-${defsKey}`;
+  const beamId = `sparkline-beam-${defsKey}`;
+  const primaryPath = useMemo(
+    () => createSmoothPath(geometry.points as any),
+    [geometry.points]
+  );
+  const comparisonPath = useMemo(
+    () => createSmoothPath(comparisonGeometry.points as any),
+    [comparisonGeometry.points]
+  );
+  const slotWidth =
+    dataLength > 1
+      ? Math.max(pointHitRadius * 2, (width - padding * 2) / (dataLength - 1))
+      : Math.max(pointHitRadius * 2.5, 40);
 
   if (!dataLength) {
     return (
@@ -502,14 +520,14 @@ function Sparkline({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.underlineSelectorRowScroll}
             >
-              {metricCategories.map((category) => (
-                <UnderlineOption
-                  key={category}
-                  label={category}
-                  active={activeCategory === category}
-                  onPress={() => setActiveCategory(category)}
-                />
-              ))}
+              <ChartUnderlineTabs
+                items={metricCategories.map((category) => ({
+                  key: category,
+                  label: category,
+                }))}
+                activeKey={activeCategory}
+                onChange={setActiveCategory}
+              />
             </ScrollView>
           </View>
 
@@ -526,17 +544,14 @@ function Sparkline({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.underlineSelectorRowScroll}
             >
-              {visibleMetricOptions.map((option) => {
-                const active = option.key === currentMetricKey;
-                return (
-                  <UnderlineOption
-                    key={option.key}
-                    label={option.shortLabel ?? option.label}
-                    active={active}
-                    onPress={() => handleChangeMetric(option.key)}
-                  />
-                );
-              })}
+              <ChartUnderlineTabs
+                items={visibleMetricOptions.map((option) => ({
+                  key: option.key,
+                  label: option.shortLabel ?? option.label,
+                }))}
+                activeKey={currentMetricKey}
+                onChange={handleChangeMetric}
+              />
             </ScrollView>
           </View>
         </>
@@ -553,105 +568,275 @@ function Sparkline({
         </View>
       ) : null}
 
-      <View style={styles.sectionCompact}>
+      <View style={styles.chartSection}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>{currentMetricMeta?.label ?? primaryLabel}</Text>
           <Text style={styles.sectionSub}>Sparkline</Text>
         </View>
 
-        <View style={styles.chartCard}>
-          <Svg width={width} height={height}>
-            <Rect
-              x={0}
-              y={0}
-              width={width}
-              height={height}
-              rx={12}
-              fill={COLORS.cardAlt}
-              stroke={COLORS.border}
-            />
+        <ChartStage
+          tone="compact"
+          style={styles.sparklineStage}
+          plotStyle={styles.chartStagePlot}
+        >
+          <View style={styles.chartPlotFrame}>
+            <Svg width={width} height={height}>
+              <Defs>
+                <LinearGradient id={backgroundId} x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0%" stopColor={withChartAlpha(color, 0.16)} />
+                  <Stop offset="62%" stopColor={withChartAlpha("#FFFFFF", 0.02)} />
+                  <Stop offset="100%" stopColor={withChartAlpha("#FFFFFF", 0)} />
+                </LinearGradient>
 
-            {showBaseline ? (
-              <Line
-                x1={padding}
-                y1={geometry.baselineY}
-                x2={width - padding}
-                y2={geometry.baselineY}
-                stroke={withAlpha(chartColors.text, 0.12)}
-                strokeWidth={1}
+                <LinearGradient id={beamId} x1="0" y1="0" x2="0" y2="1">
+                  <Stop
+                    offset="0%"
+                    stopColor={hasComparison ? withChartAlpha(color, 0.18) : stagePreset.beamFill}
+                  />
+                  <Stop offset="100%" stopColor={withChartAlpha(color, 0.01)} />
+                </LinearGradient>
+              </Defs>
+
+              <Rect
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                rx={16}
+                fill={`url(#${backgroundId})`}
+                stroke={stagePreset.plotBorder}
               />
-            ) : null}
 
-            {hasComparison && comparisonGeometry.path ? (
-              <Path
-                d={comparisonGeometry.path}
-                stroke={comparisonColor}
-                strokeWidth={strokeWidth}
-                fill="none"
-                opacity={0.9}
-              />
-            ) : null}
-
-            <Path
-              d={geometry.path}
-              stroke={color}
-              strokeWidth={strokeWidth}
-              fill="none"
-            />
-
-            {hasComparison
-              ? comparisonGeometry.points.map((point) => (
-                  <Circle
-                    key={`comparison-${point.index}`}
-                    cx={point.x}
-                    cy={point.y}
-                    r={pointRadius}
-                    fill={comparisonColor}
-                    opacity={0.82}
+              {[0.2, 0.5, 0.8].map((ratio, index) => {
+                const y = padding + (height - padding * 2) * ratio;
+                return (
+                  <Line
+                    key={`grid-${index}`}
+                    x1={padding}
+                    y1={y}
+                    x2={width - padding}
+                    y2={y}
+                    stroke={withChartAlpha("#FFFFFF", index === 1 ? 0.08 : 0.05)}
+                    strokeWidth={1}
+                    strokeDasharray="4 6"
                   />
-                ))
-              : null}
+                );
+              })}
 
-            {geometry.points.map((point) => {
-              const isSelected = point.index === activeSelectedIndex;
-              return (
-                <React.Fragment key={`primary-${point.index}`}>
-                  <Circle
-                    cx={point.x}
-                    cy={point.y}
-                    r={isSelected ? selectedPointRadius : pointRadius}
-                    fill={color}
+              {selectedPoint ? (
+                <>
+                  <Rect
+                    x={selectedPoint.x - Math.min(18, slotWidth / 2)}
+                    y={padding * 0.6}
+                    width={Math.min(36, slotWidth)}
+                    height={height - padding * 1.2}
+                    rx={14}
+                    fill={`url(#${beamId})`}
                   />
-                  <Circle
-                    cx={point.x}
-                    cy={point.y}
-                    r={pointHitRadius}
-                    fill="transparent"
-                    onPress={() => selectIndex(point.index)}
+                  <Line
+                    x1={selectedPoint.x}
+                    y1={padding * 0.6}
+                    x2={selectedPoint.x}
+                    y2={height - padding * 0.8}
+                    stroke={withChartAlpha(color, 0.28)}
+                    strokeWidth={1.5}
                   />
-                </React.Fragment>
-              );
-            })}
-          </Svg>
+                </>
+              ) : null}
 
-          {selectionText ? <Text style={styles.valueText}>{selectionText}</Text> : null}
-
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendSwatch, { backgroundColor: color }]} />
-              <Text style={styles.legendText}>{primaryLabel}</Text>
-            </View>
-
-            {hasComparison ? (
-              <View style={styles.legendItem}>
-                <View
-                  style={[styles.legendSwatch, { backgroundColor: comparisonColor }]}
+              {showBaseline ? (
+                <Line
+                  x1={padding}
+                  y1={geometry.baselineY}
+                  x2={width - padding}
+                  y2={geometry.baselineY}
+                  stroke={withAlpha(chartColors.text, 0.12)}
+                  strokeWidth={1}
                 />
-                <Text style={styles.legendText}>{comparisonLabel}</Text>
-              </View>
-            ) : null}
+              ) : null}
+
+              {hasComparison && comparisonPath ? (
+                <>
+                  <Path
+                    d={comparisonPath}
+                    stroke={withChartAlpha(comparisonColor, 0.22)}
+                    strokeWidth={strokeWidth + 4}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <Path
+                    d={comparisonPath}
+                    stroke={withChartAlpha(comparisonColor, 0.82)}
+                    strokeWidth={strokeWidth}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              ) : null}
+
+              {primaryPath ? (
+                <>
+                  <Path
+                    d={primaryPath}
+                    stroke={withChartAlpha(color, 0.24)}
+                    strokeWidth={strokeWidth + 4}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <Path
+                    d={primaryPath}
+                    stroke={color}
+                    strokeWidth={strokeWidth}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </>
+              ) : null}
+
+              {hasComparison
+                ? comparisonGeometry.points.map((point) => {
+                    const isSelected = point.index === activeSelectedIndex;
+                    return (
+                      <G key={`comparison-${point.index}`}>
+                        {isSelected ? (
+                          <Circle
+                            cx={point.x}
+                            cy={point.y}
+                            r={selectedPointRadius + 2}
+                            fill={withChartAlpha(comparisonColor, 0.14)}
+                          />
+                        ) : null}
+                        <Circle
+                          cx={point.x}
+                          cy={point.y}
+                          r={isSelected ? selectedPointRadius - 0.4 : pointRadius - 0.3}
+                          fill={comparisonColor}
+                          stroke={withChartAlpha("#FFFFFF", isSelected ? 0.78 : 0.32)}
+                          strokeWidth={isSelected ? 1.2 : 0.7}
+                          opacity={isSelected ? 0.96 : 0.72}
+                        />
+                      </G>
+                    );
+                  })
+                : null}
+
+              {geometry.points.map((point) => {
+                const isSelected = point.index === activeSelectedIndex;
+                return (
+                  <G key={`primary-${point.index}`}>
+                    {isSelected ? (
+                      <Circle
+                        cx={point.x}
+                        cy={point.y}
+                        r={selectedPointRadius + 3}
+                        fill={withChartAlpha(color, 0.2)}
+                      />
+                    ) : null}
+                    <Circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={isSelected ? selectedPointRadius : pointRadius}
+                      fill={color}
+                      stroke={withChartAlpha("#FFFFFF", isSelected ? 0.94 : 0.42)}
+                      strokeWidth={isSelected ? 1.4 : 0.8}
+                      opacity={isSelected ? 1 : 0.82}
+                    />
+                  </G>
+                );
+              })}
+            </Svg>
+
+            <View style={styles.touchRow} pointerEvents="box-none">
+              {geometry.points.map((point) => (
+                <Pressable
+                  key={`tap-${point.index}`}
+                  onPress={() => selectIndex(point.index)}
+                  style={[
+                    styles.touchSlot,
+                    {
+                      left: point.x - slotWidth / 2,
+                      width: slotWidth,
+                      height,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
           </View>
-        </View>
+
+          {selectedPoint && metrics ? (
+            <ChartFocusCard
+              title={primaryLabel}
+              value={compactValueFormatter(selectedPoint.value)}
+              helper={showValueLabel ? selectedPointLabel ?? undefined : undefined}
+              story={
+                comparisonGap != null
+                  ? `Peak ${compactValueFormatter(primaryPeakValue)} | Gap ${comparisonGap >= 0 ? "+" : ""}${compactValueFormatter(comparisonGap)} vs ${comparisonLabel}`
+                  : `Peak ${compactValueFormatter(primaryPeakValue)} | Delta ${deltaFromStart >= 0 ? "+" : ""}${compactValueFormatter(deltaFromStart)}`
+              }
+              tone="compact"
+              accentColor={color}
+              style={styles.sparklineFocusCard}
+              leading={<View style={[styles.legendDot, { backgroundColor: color }]} />}
+            />
+          ) : null}
+
+          {(hasComparison || selectionText) && (
+            <View style={styles.legendGrid}>
+              <View
+                style={[
+                  styles.legendMiniCard,
+                  {
+                    borderColor: withChartAlpha(color, 0.3),
+                    backgroundColor: withChartAlpha(color, 0.08),
+                  },
+                ]}
+              >
+                <View style={styles.legendMiniHeader}>
+                  <View style={[styles.legendDot, { backgroundColor: color }]} />
+                  <Text style={styles.legendName} numberOfLines={1}>
+                    {primaryLabel}
+                  </Text>
+                </View>
+                <Text style={[styles.legendValue, { color }]}>
+                  {compactValueFormatter(selectedPoint?.value ?? metrics?.current ?? 0)}
+                </Text>
+              </View>
+
+              {hasComparison ? (
+                <View
+                  style={[
+                    styles.legendMiniCard,
+                    {
+                      borderColor: withChartAlpha(comparisonColor, 0.26),
+                      backgroundColor: withChartAlpha(comparisonColor, 0.08),
+                    },
+                  ]}
+                >
+                  <View style={styles.legendMiniHeader}>
+                    <View
+                      style={[styles.legendDot, { backgroundColor: comparisonColor }]}
+                    />
+                    <Text style={styles.legendName} numberOfLines={1}>
+                      {comparisonLabel}
+                    </Text>
+                  </View>
+                  <Text style={[styles.legendValue, { color: comparisonColor }]}>
+                    {compactValueFormatter(
+                      selectedComparisonPoint?.value ??
+                        comparisonMetrics?.current ??
+                        0
+                    )}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+        </ChartStage>
       </View>
 
       {summaryText ? (
@@ -754,6 +939,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     gap: 6,
   },
+  chartSection: {
+    width: "100%",
+    gap: 8,
+  },
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -780,31 +969,29 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     alignItems: "flex-end",
   },
-  underlineTabButton: {
-    paddingBottom: 2,
+  sparklineStage: {
+    width: "100%",
   },
-  underlineTabText: {
-    color: COLORS.sub,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  underlineTabTextActive: {
-    color: COLORS.accent,
-  },
-  underlineTabLine: {
-    marginTop: 4,
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-  underlineTabLineActive: {
-    backgroundColor: COLORS.accent,
-  },
-
-  chartCard: {
+  chartStagePlot: {
     width: "100%",
     alignItems: "center",
     gap: 8,
+    padding: 0,
+  },
+  chartPlotFrame: {
+    position: "relative",
+  },
+  touchRow: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+  },
+  touchSlot: {
+    position: "absolute",
+    top: 0,
+  },
+  sparklineFocusCard: {
+    width: "100%",
   },
 
   explainerTitle: {
@@ -822,35 +1009,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 11,
     lineHeight: 15,
-  },
-  valueText: {
-    color: COLORS.sub,
-    fontSize: 11,
-    lineHeight: 15,
-    textAlign: "center",
-  },
-
-  legendRow: {
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legendSwatch: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-  legendText: {
-    color: COLORS.sub,
-    fontSize: 10,
-    fontWeight: "700",
   },
 
   statsStripScroll: {
@@ -890,6 +1048,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     textAlign: "center",
+  },
+  legendGrid: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  legendMiniCard: {
+    width: "48%",
+    minHeight: 56,
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  legendMiniHeader: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  legendDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+  },
+  legendName: {
+    flex: 1,
+    minWidth: 0,
+    color: "#E5E7EB",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  legendValue: {
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   narrativeTitle: {

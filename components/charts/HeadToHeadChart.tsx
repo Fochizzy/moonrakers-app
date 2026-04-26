@@ -1,6 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+
+import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import ChartStage from "@/components/charts/ChartStage";
 import Text from "@/components/ui/Text";
+import { CHART_COLORS, withChartAlpha } from "./chartVisualSystem";
+import { buildHeadToHeadVisualModel } from "./headToHeadModel";
 
 type Player = { id: string; name?: string; color?: string };
 
@@ -15,9 +20,6 @@ type GameLike = {
   id?: string;
   players?: Player[];
   totals?: Record<string, Record<string, number>>;
-  winnerId?: string;
-  selectedWinnerId?: string;
-  manualWinnerId?: string;
 };
 
 type Props = {
@@ -29,55 +31,25 @@ type Props = {
   compareId?: string | null;
   title?: string;
   subtitle?: string;
+  showHeader?: boolean;
 };
 
-type MatchupSummary = {
-  playerAId: string;
-  playerBId: string;
-  playerAName: string;
-  playerBName: string;
-  playerAColor: string;
-  playerBColor: string;
-  games: number;
-  aWins: number;
-  bWins: number;
-  ties: number;
-  aWinRate: number;
-  bWinRate: number;
-  avgPrestigeMargin: number;
-  avgScoreMargin: number;
-  recentFive: string;
-  verdict: string;
-};
-
-const COLORS = {
-  card: "rgba(12,18,38,0.92)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-};
+const COLORS = CHART_COLORS;
+const MIN_MOMENTUM_HEIGHT_PCT = 22;
+const MOMENTUM_BAR_WIDTH = 18;
 
 function n(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function getColor(color?: string, index = 0) {
-  if (typeof color === "string" && color.trim()) return color.trim();
-  const fallback = ["#A855F7", "#3B82F6", "#22C55E", "#3B82F6"];
-  return fallback[index % fallback.length];
-}
-
 function totalPrestige(row?: Record<string, number>) {
   return (
     n(row?.totalPrestige) ||
     n(row?.prestige) ||
-    n(row?.directPrestige) + n(row?.assistPrestigeReceived) + n(row?.objectivePrestige)
+    n(row?.directPrestige) +
+      n(row?.assistPrestigeReceived) +
+      n(row?.objectivePrestige)
   );
 }
 
@@ -85,20 +57,12 @@ function totalScore(row?: Record<string, number>) {
   return n(row?.score) || totalPrestige(row);
 }
 
-function pct(value: number) {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
 function signed(value: number) {
-  return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
 }
 
-function buildVerdict(aName: string, bName: string, aRate: number, margin: number) {
-  if (Math.abs(aRate - 0.5) < 0.08) {
-    return `${aName} and ${bName} are effectively even over the current sample.`;
-  }
-  const leader = aRate >= 0.5 ? aName : bName;
-  return `${leader} has the stronger long-run edge, with prestige margin ${signed(margin)}.`;
+function pct(value: number) {
+  return `${(value * 100).toFixed(0)}%`;
 }
 
 function gamesToSnapshots(games: GameLike[] = []): SnapshotPoint[] {
@@ -124,87 +88,6 @@ function gamesToSnapshots(games: GameLike[] = []): SnapshotPoint[] {
   });
 }
 
-function buildSummary(
-  players: Player[],
-  data: SnapshotPoint[],
-  aId?: string | null,
-  bId?: string | null
-): MatchupSummary | null {
-  if (players.length < 2) return null;
-
-  const playerA = players.find((p) => String(p.id) === String(aId)) ?? players[0];
-  const playerB =
-    players.find(
-      (p) => String(p.id) === String(bId) && String(p.id) !== String(playerA.id)
-    ) ?? players.find((p) => String(p.id) !== String(playerA.id));
-
-  if (!playerA || !playerB) return null;
-
-  let games = 0;
-  let aWins = 0;
-  let bWins = 0;
-  let ties = 0;
-  let prestigeMargin = 0;
-  let scoreMargin = 0;
-  const history: string[] = [];
-
-  for (const point of data || []) {
-    const a = point?.snapshot?.[playerA.id];
-    const b = point?.snapshot?.[playerB.id];
-    if (!a || !b) continue;
-
-    games += 1;
-
-    const aPrestige = totalPrestige(a);
-    const bPrestige = totalPrestige(b);
-    const aScore = totalScore(a);
-    const bScore = totalScore(b);
-
-    prestigeMargin += aPrestige - bPrestige;
-    scoreMargin += aScore - bScore;
-
-    if (aPrestige > bPrestige) {
-      aWins += 1;
-      history.push("A");
-    } else if (bPrestige > aPrestige) {
-      bWins += 1;
-      history.push("B");
-    } else {
-      ties += 1;
-      history.push("T");
-    }
-  }
-
-  if (!games) return null;
-
-  const aWinRate = aWins / games;
-  const bWinRate = bWins / games;
-
-  return {
-    playerAId: playerA.id,
-    playerBId: playerB.id,
-    playerAName: playerA.name || "Player A",
-    playerBName: playerB.name || "Player B",
-    playerAColor: getColor(playerA.color, 0),
-    playerBColor: getColor(playerB.color, 1),
-    games,
-    aWins,
-    bWins,
-    ties,
-    aWinRate,
-    bWinRate,
-    avgPrestigeMargin: prestigeMargin / games,
-    avgScoreMargin: scoreMargin / games,
-    recentFive: history.slice(-5).join(" "),
-    verdict: buildVerdict(
-      playerA.name || "Player A",
-      playerB.name || "Player B",
-      aWinRate,
-      prestigeMargin / games
-    ),
-  };
-}
-
 export default function HeadToHeadChart({
   data = [],
   games = [],
@@ -214,6 +97,7 @@ export default function HeadToHeadChart({
   compareId = null,
   title = "Head-to-Head",
   subtitle = "Direct two-player matchup across unified snapshots.",
+  showHeader = true,
 }: Props) {
   const visiblePlayers = useMemo(() => {
     if (!scopedPlayerIds?.length) return players;
@@ -226,38 +110,20 @@ export default function HeadToHeadChart({
     [data, games]
   );
 
-  const [selectedA, setSelectedA] = useState<string | null>(playerId);
-  const [selectedB, setSelectedB] = useState<string | null>(compareId);
-
-  useEffect(() => {
-    if (!selectedA && visiblePlayers.length) {
-      setSelectedA(String(visiblePlayers[0].id));
-    }
-
-    if ((!selectedB || selectedB === selectedA) && visiblePlayers.length > 1) {
-      const fallback = visiblePlayers.find(
-        (p) => String(p.id) !== String(selectedA ?? visiblePlayers[0].id)
-      );
-      setSelectedB(fallback ? String(fallback.id) : null);
-    }
-  }, [visiblePlayers, selectedA, selectedB]);
-
-  useEffect(() => {
-    if (playerId) setSelectedA(playerId);
-  }, [playerId]);
-
-  useEffect(() => {
-    if (compareId) setSelectedB(compareId);
-  }, [compareId]);
-
   const summary = useMemo(
-    () => buildSummary(visiblePlayers, effectiveData, selectedA, selectedB),
-    [visiblePlayers, effectiveData, selectedA, selectedB]
+    () =>
+      buildHeadToHeadVisualModel({
+        players: visiblePlayers,
+        data: effectiveData,
+        playerId,
+        compareId,
+      }),
+    [compareId, effectiveData, playerId, visiblePlayers]
   );
 
   if (!summary) {
     return (
-      <View style={styles.sectionCompact}>
+      <View style={styles.emptyCard}>
         <Text style={styles.emptyTitle}>No head-to-head data yet</Text>
         <Text style={styles.emptyText}>
           Pick two players with shared saved or imported game history to render this matchup.
@@ -268,292 +134,533 @@ export default function HeadToHeadChart({
 
   return (
     <View style={styles.container}>
-      <View style={styles.sectionCompact}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.sectionSub}>{summary.games} games</Text>
+      <ChartFocusCard
+        title={summary.leaderTone === "tie" ? "Even Matchup" : summary.leaderName}
+        value={signed(summary.avgPrestigeMargin)}
+        helper={`Prestige gap | ${summary.games} shared games`}
+        story={
+          summary.currentRunWinnerName
+            ? `${summary.currentRunWinnerName} on a ${summary.currentRunLength}-game run`
+            : summary.verdict
+        }
+        tone="comparison"
+        accentColor={
+          summary.leaderTone === "a"
+            ? summary.playerAColor
+            : summary.leaderTone === "b"
+              ? summary.playerBColor
+              : COLORS.accent
+        }
+        compact
+      />
+
+      <View style={styles.heroCard}>
+        <View style={styles.headerRow}>
+          {showHeader ? (
+            <View style={styles.headerText}>
+              <Text style={styles.title}>{title}</Text>
+              <Text style={styles.subtitle}>{subtitle}</Text>
+            </View>
+          ) : (
+            <View />
+          )}
         </View>
 
-        <Text style={styles.subtitle}>{subtitle}</Text>
-
-        <View style={styles.selectorBlock}>
-          <Text style={styles.selectorLabel}>Player A</Text>
-          <View style={styles.selectorList}>
-            {visiblePlayers.map((player, index) => (
-              <TouchableOpacity
-                key={`a-${player.id}`}
-                style={[
-                  styles.playerChip,
-                  String(player.id) === String(selectedA) && {
-                    borderColor: getColor(player.color, index),
-                    backgroundColor: `${getColor(player.color, index)}22`,
-                  },
-                ]}
-                onPress={() =>
-                  String(player.id) !== String(selectedB) && setSelectedA(String(player.id))
-                }
-                activeOpacity={0.9}
-              >
-                <View
-                  style={[styles.playerDot, { backgroundColor: getColor(player.color, index) }]}
-                />
-                <Text style={styles.playerChipText}>{player.name || "Unknown"}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.selectorBlock}>
-          <Text style={styles.selectorLabel}>Player B</Text>
-          <View style={styles.selectorList}>
-            {visiblePlayers.map((player, index) => (
-              <TouchableOpacity
-                key={`b-${player.id}`}
-                style={[
-                  styles.playerChip,
-                  String(player.id) === String(selectedB) && {
-                    borderColor: getColor(player.color, index),
-                    backgroundColor: `${getColor(player.color, index)}22`,
-                  },
-                ]}
-                onPress={() =>
-                  String(player.id) !== String(selectedA) && setSelectedB(String(player.id))
-                }
-                activeOpacity={0.9}
-              >
-                <View
-                  style={[styles.playerDot, { backgroundColor: getColor(player.color, index) }]}
-                />
-                <Text style={styles.playerChipText}>{player.name || "Unknown"}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.sectionCompact}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>
-            {summary.playerAName} vs {summary.playerBName}
-          </Text>
-          <Text style={styles.sectionSub}>
-            {pct(summary.aWinRate)} / {pct(summary.bWinRate)}
-          </Text>
-        </View>
-
-        <View style={styles.metricGridDense}>
-          <View style={[styles.metricCardDense, { backgroundColor: COLORS.blueSoft }]}>
-            <Text style={styles.metricLabelCompact}>{summary.playerAName}</Text>
-            <Text style={[styles.metricValueCompact, { color: COLORS.blue }]}>
+        <View style={styles.scoreboardRow}>
+          <View
+            style={[
+              styles.scoreCard,
+              {
+                borderColor: withChartAlpha(summary.playerAColor, 0.28),
+              },
+            ]}
+          >
+            <View style={[styles.playerDot, { backgroundColor: summary.playerAColor }]} />
+            <Text style={styles.scoreLabel}>{summary.playerAName}</Text>
+            <Text style={[styles.scoreValue, { color: summary.playerAColor }]}>
               {summary.aWins}
             </Text>
+            <Text style={styles.scoreHelper}>{pct(summary.aWins / summary.games)} wins</Text>
           </View>
 
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Games</Text>
-            <Text style={styles.metricValueCompact}>{summary.games}</Text>
-          </View>
-
-          <View style={[styles.metricCardDense, { backgroundColor: COLORS.greenSoft }]}>
-            <Text style={styles.metricLabelCompact}>{summary.playerBName}</Text>
-            <Text style={[styles.metricValueCompact, { color: COLORS.green }]}>
-              {summary.bWins}
+          <View style={styles.centerCard}>
+            <Text style={styles.centerValue}>{summary.games}</Text>
+            <Text style={styles.centerLabel}>Games</Text>
+            <Text style={styles.centerHelper}>
+              {summary.leaderTone === "tie" ? "Even so far" : `Leader ${summary.leaderName}`}
             </Text>
           </View>
 
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Prestige Δ</Text>
-            <Text style={styles.metricValueCompact}>{signed(summary.avgPrestigeMargin)}</Text>
-          </View>
-
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Score Δ</Text>
-            <Text style={styles.metricValueCompact}>{signed(summary.avgScoreMargin)}</Text>
-          </View>
-
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Recent 5</Text>
-            <Text style={styles.metricValueCompact}>{summary.recentFive || "—"}</Text>
-          </View>
-        </View>
-
-        <View style={styles.barWrap}>
-          <View style={styles.barTrack}>
-            <View
-              style={[
-                styles.barLeft,
-                { width: `${summary.aWinRate * 50}%`, backgroundColor: summary.playerAColor },
-              ]}
-            />
-            <View
-              style={[
-                styles.barRight,
-                { width: `${summary.bWinRate * 50}%`, backgroundColor: summary.playerBColor },
-              ]}
-            />
-            <View style={styles.barCenter} />
-          </View>
-
-          <View style={styles.barLabels}>
-            <Text style={styles.barLabel}>{summary.aWins} wins</Text>
-            <Text style={styles.barLabel}>{summary.ties} ties</Text>
-            <Text style={styles.barLabel}>{summary.bWins} wins</Text>
+          <View
+            style={[
+              styles.scoreCard,
+              {
+                borderColor: withChartAlpha(summary.playerBColor, 0.28),
+              },
+            ]}
+          >
+            <View style={[styles.playerDot, { backgroundColor: summary.playerBColor }]} />
+            <Text style={styles.scoreLabel}>{summary.playerBName}</Text>
+            <Text style={[styles.scoreValue, { color: summary.playerBColor }]}>
+              {summary.bWins}
+            </Text>
+            <Text style={styles.scoreHelper}>{pct(summary.bWins / summary.games)} wins</Text>
           </View>
         </View>
 
-        <Text style={styles.verdict}>{summary.verdict}</Text>
+        <View style={styles.proofRow}>
+          <View style={styles.proofCard}>
+            <Text style={styles.proofLabel}>Prestige Gap</Text>
+            <Text style={styles.proofValue}>{signed(summary.avgPrestigeMargin)}</Text>
+            <Text style={styles.proofHelper}>
+              {summary.playerAName} minus {summary.playerBName}
+            </Text>
+          </View>
+
+          <View style={styles.proofCard}>
+            <Text style={styles.proofLabel}>Score Gap</Text>
+            <Text style={styles.proofValue}>{signed(summary.avgScoreMargin)}</Text>
+            <Text style={styles.proofHelper}>Full score comparison</Text>
+          </View>
+
+          <View style={styles.proofCard}>
+            <Text style={styles.proofLabel}>Recent Swing</Text>
+            <Text style={styles.proofValue}>{summary.swingLeaderName ?? "Even"}</Text>
+            <Text style={styles.proofHelper}>
+              Latest {Math.min(3, summary.games)}-game window
+            </Text>
+          </View>
+        </View>
       </View>
+
+      <ChartStage
+        tone="comparison"
+        style={styles.timelineStage}
+        plotStyle={styles.timelineStagePlot}
+        header={
+          <View style={styles.timelineHeader}>
+            <Text style={styles.timelineTitle}>Momentum Strip</Text>
+            <Text style={styles.timelineSub}>
+              {summary.latestResult
+                ? `${summary.latestResult.winnerName ?? "Tie"} latest by ${signed(
+                    summary.latestResult.prestigeMargin
+                  )}`
+                : "No latest result"}
+            </Text>
+          </View>
+        }
+        footer={
+          <View style={styles.timelineFooter}>
+            <View style={styles.legendRow}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: summary.playerAColor }]} />
+                <Text style={styles.legendText}>{summary.playerAName} wins</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: summary.playerBColor }]} />
+                <Text style={styles.legendText}>{summary.playerBName} wins</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: COLORS.sub }]} />
+                <Text style={styles.legendText}>Tie</Text>
+              </View>
+            </View>
+
+          </View>
+        }
+      >
+        <View style={styles.timelineShell}>
+          <View style={styles.baseline} />
+          <View style={styles.timelineRow}>
+            {summary.timeline.map((point) => {
+              const heightPct = Math.max(
+                MIN_MOMENTUM_HEIGHT_PCT,
+                (Math.abs(point.prestigeMargin) / summary.maxAbsPrestigeMargin) * 100
+              );
+              const winnerColor =
+                point.winner === "a"
+                  ? summary.playerAColor
+                  : point.winner === "b"
+                    ? summary.playerBColor
+                    : COLORS.sub;
+
+              return (
+                <View key={point.key} style={styles.timelineColumn}>
+                  <Text style={styles.timelineGameLabel}>{point.label.replace("Game ", "G")}</Text>
+                  <View style={styles.barFrame}>
+                    {point === summary.latestResult ? (
+                      <View
+                        style={[
+                          styles.latestBeam,
+                          {
+                            backgroundColor: withChartAlpha(winnerColor, 0.2),
+                            borderColor: withChartAlpha(winnerColor, 0.38),
+                          },
+                        ]}
+                      />
+                    ) : null}
+                    <View
+                      style={[
+                        styles.upperLane,
+                        {
+                          backgroundColor: withChartAlpha(summary.playerAColor, 0.16),
+                          borderColor: withChartAlpha(summary.playerAColor, 0.32),
+                        },
+                      ]}
+                    >
+                      {point.winner === "a" ? (
+                        <View
+                          style={[
+                            styles.momentumBar,
+                            {
+                              height: `${heightPct}%`,
+                              backgroundColor: winnerColor,
+                            },
+                          ]}
+                        />
+                      ) : null}
+                    </View>
+                    <View style={styles.tieLane}>
+                      {point.winner === "tie" ? (
+                        <View
+                          style={[styles.tieDot, { backgroundColor: winnerColor }]}
+                        />
+                      ) : null}
+                    </View>
+                    <View
+                      style={[
+                        styles.lowerLane,
+                        {
+                          backgroundColor: withChartAlpha(summary.playerBColor, 0.16),
+                          borderColor: withChartAlpha(summary.playerBColor, 0.32),
+                        },
+                      ]}
+                    >
+                      {point.winner === "b" ? (
+                        <View
+                          style={[
+                            styles.momentumBar,
+                            {
+                              height: `${heightPct}%`,
+                              backgroundColor: winnerColor,
+                            },
+                          ]}
+                        />
+                      ) : null}
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      styles.timelineMarginChip,
+                      point.winner === "tie"
+                        ? {
+                            backgroundColor: withChartAlpha(COLORS.textStrong, 0.12),
+                            borderColor: withChartAlpha(COLORS.textStrong, 0.2),
+                          }
+                        : {
+                            backgroundColor: withChartAlpha(winnerColor, 0.2),
+                            borderColor: withChartAlpha(winnerColor, 0.38),
+                          },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.timelineMargin,
+                        { color: point.winner === "tie" ? COLORS.text : winnerColor },
+                      ]}
+                    >
+                      {point.winner === "tie" ? "T" : signed(point.prestigeMargin)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </ChartStage>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 6 },
-  sectionCompact: {
+  container: {
+    gap: 12,
+  },
+  heroCard: {
+    borderRadius: 18,
+    padding: 14,
     backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: 6,
+    gap: 14,
   },
-  sectionHeaderRow: {
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
     gap: 12,
-    marginBottom: 6,
   },
-  sectionTitle: {
+  headerText: {
+    flex: 1,
+    gap: 4,
+  },
+  title: {
     color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-    flexShrink: 1,
-  },
-  sectionSub: {
-    color: COLORS.sub,
-    fontSize: 10,
-    textAlign: "right",
-    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: "900",
   },
   subtitle: {
     color: COLORS.sub,
     fontSize: 11,
-    lineHeight: 15,
-    marginTop: 2,
+    lineHeight: 16,
   },
-  emptyTitle: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 4,
+  scoreboardRow: {
+    flexDirection: "row",
+    gap: 10,
   },
-  emptyText: {
-    color: COLORS.sub,
-    fontSize: 11,
+  scoreCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: COLORS.cardAlt,
+    padding: 12,
+    gap: 4,
   },
-  selectorBlock: {
-    gap: 6,
-    marginTop: 6,
+  centerCard: {
+    width: 96,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
   },
-  selectorLabel: {
+  playerDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+  },
+  scoreLabel: {
     color: COLORS.sub,
     fontSize: 10,
     fontWeight: "800",
   },
-  selectorList: {
+  scoreValue: {
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  scoreHelper: {
+    color: COLORS.sub,
+    fontSize: 10,
+  },
+  centerValue: {
+    color: COLORS.textStrong,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  centerLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  centerHelper: {
+    color: COLORS.sub,
+    fontSize: 10,
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  proofRow: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 10,
+  },
+  proofCard: {
+    minWidth: "30%",
+    flexGrow: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 3,
+  },
+  proofLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  proofValue: {
+    color: COLORS.textStrong,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  proofHelper: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  timelineStage: {
+    marginBottom: 6,
+  },
+  timelineStagePlot: {
+    paddingVertical: 12,
+    backgroundColor: "rgba(17, 29, 62, 0.98)",
+    borderColor: withChartAlpha(COLORS.blue, 0.22),
+  },
+  timelineHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  timelineTitle: {
+    color: COLORS.textStrong,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  timelineSub: {
+    color: withChartAlpha(COLORS.textStrong, 0.72),
+    fontSize: 10,
+    textAlign: "right",
+    flexShrink: 1,
+  },
+  timelineShell: {
+    position: "relative",
+    paddingTop: 8,
+  },
+  baseline: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 74,
+    height: 1,
+    backgroundColor: withChartAlpha(COLORS.textStrong, 0.18),
+  },
+  timelineRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 8,
   },
-  playerChip: {
+  timelineColumn: {
+    flex: 1,
+    minWidth: 36,
+    alignItems: "center",
+    gap: 6,
+  },
+  timelineGameLabel: {
+    color: withChartAlpha(COLORS.textStrong, 0.74),
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  barFrame: {
+    width: "100%",
+    height: 108,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  latestBeam: {
+    position: "absolute",
+    top: 0,
+    width: "100%",
+    height: 108,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  upperLane: {
+    width: "100%",
+    height: 44,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingBottom: 4,
+  },
+  tieLane: {
+    width: "100%",
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lowerLane: {
+    width: "100%",
+    height: 44,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingTop: 4,
+  },
+  momentumBar: {
+    width: MOMENTUM_BAR_WIDTH,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: withChartAlpha(COLORS.textStrong, 0.44),
+    minHeight: 10,
+  },
+  tieDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: withChartAlpha(COLORS.textStrong, 0.38),
+  },
+  timelineMarginChip: {
+    minWidth: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineMargin: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  legendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  legendItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: COLORS.whiteSoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
-  playerDot: {
-    width: 10,
-    height: 10,
+  legendDot: {
+    width: 8,
+    height: 8,
     borderRadius: 999,
   },
-  playerChipText: {
-    color: COLORS.text,
+  legendText: {
+    color: withChartAlpha(COLORS.textStrong, 0.82),
     fontSize: 11,
     fontWeight: "700",
   },
-  metricGridDense: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 6,
+  timelineFooter: {
+    gap: 6,
+    paddingHorizontal: 4,
   },
-  metricCardDense: {
-    minWidth: "30%",
-    flexGrow: 1,
-    borderRadius: 12,
-    backgroundColor: COLORS.whiteSoft,
+  emptyCard: {
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    gap: 4,
   },
-  metricLabelCompact: {
-    color: COLORS.sub,
-    fontSize: 10,
+  emptyTitle: {
+    color: COLORS.textStrong,
+    fontSize: 14,
     fontWeight: "800",
   },
-  metricValueCompact: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  barWrap: {
-    marginTop: 10,
-    gap: 6,
-  },
-  barTrack: {
-    height: 12,
-    borderRadius: 999,
-    backgroundColor: COLORS.whiteSoft,
-    overflow: "hidden",
-    position: "relative",
-    flexDirection: "row",
-  },
-  barLeft: {
-    height: "100%",
-  },
-  barRight: {
-    height: "100%",
-    marginLeft: "auto",
-  },
-  barCenter: {
-    position: "absolute",
-    left: "50%",
-    top: 0,
-    bottom: 0,
-    width: 2,
-    marginLeft: -1,
-    backgroundColor: COLORS.border,
-  },
-  barLabels: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  barLabel: {
+  emptyText: {
     color: COLORS.sub,
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  verdict: {
-    marginTop: 8,
-    color: COLORS.text,
     fontSize: 11,
     lineHeight: 16,
   },

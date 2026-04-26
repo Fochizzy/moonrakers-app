@@ -58,7 +58,6 @@ import {
   type StorePlayer,
 } from "@/utils/charts";
 
-type RelationshipGraphVariant = "relationship" | "assist_network";
 type AssistMetricMode =
   | "assistPrestige"
   | "assistCount"
@@ -97,20 +96,6 @@ function normalizeGraphMode(value?: string | string[]) {
   return String(getParam(value) ?? "flow").trim().toLowerCase() === "network"
     ? "network"
     : "flow";
-}
-
-function normalizeGraphVariant(
-  value?: string | string[],
-  chartKey?: string | string[]
-) {
-  const explicit = String(getParam(value) ?? "").trim().toLowerCase();
-  if (explicit === "assist_network") return "assist_network";
-  if (explicit === "relationship") return "relationship";
-
-  return String(getParam(chartKey) ?? "").trim().toLowerCase() ===
-    "assist_network_overview"
-    ? "assist_network"
-    : "relationship";
 }
 
 function normalizeAssistMode(value?: string | string[]) {
@@ -158,7 +143,6 @@ function buildRouteParams(args: {
   ids?: string[];
   metric?: string | null;
   mode?: string | null;
-  graphVariant?: RelationshipGraphVariant | null;
   assistMode?: AssistMetricMode | null;
   lineMode?: string | null;
 }) {
@@ -170,7 +154,6 @@ function buildRouteParams(args: {
     ids,
     metric,
     mode,
-    graphVariant,
     assistMode,
     lineMode,
   } = args;
@@ -182,7 +165,6 @@ function buildRouteParams(args: {
     ...(ids && ids.length ? { ids: ids.join(",") } : {}),
     ...(metric ? { metric } : {}),
     ...(mode ? { mode } : {}),
-    ...(graphVariant ? { graphVariant } : {}),
     ...(assistMode ? { assistMode } : {}),
     ...(lineMode ? { lineMode } : {}),
   };
@@ -222,7 +204,6 @@ export default function ChartKeyScreen() {
     ids?: string | string[];
     metric?: string | string[];
     mode?: string | string[];
-    graphVariant?: string | string[];
     assistMode?: string | string[];
     lineMode?: string | string[];
   }>();
@@ -230,10 +211,6 @@ export default function ChartKeyScreen() {
   const store = useStore() as unknown as FlexibleStore;
   const chartKey = normalizeChartKey(params.chartKey);
   const routeMode = normalizeGraphMode(params.mode);
-  const routeGraphVariant = normalizeGraphVariant(
-    params.graphVariant,
-    params.chartKey
-  );
   const routeAssistMode = normalizeAssistMode(params.assistMode);
   const routeLineMode = normalizeLineMode(params.lineMode);
   const routePlayerId = getParam(params.playerId);
@@ -492,8 +469,6 @@ export default function ChartKeyScreen() {
           ids: scopedPlayerIds.length ? scopedPlayerIds : routeIds,
           metric: setupMetric,
           mode: routeMode,
-          graphVariant:
-            chartKey === "relationship_graph" ? routeGraphVariant : null,
           assistMode:
             chartKey === "relationship_graph" ? routeAssistMode : null,
           lineMode: isLineModeDriven(chartKey) ? lineMode : null,
@@ -792,22 +767,27 @@ export default function ChartKeyScreen() {
           )}
 
           {setupChartKey ? (
-            <ChartInfoCard>
+            <ChartInfoCard variant="alt">
               <View style={styles.setupActionRow}>
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={openChartSetup}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.primaryButtonText}>Adjust</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => router.replace(APP_ROUTES.charts as any)}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.secondaryButtonText}>Charts Home</Text>
-                </TouchableOpacity>
+                <Text style={styles.setupHint}>
+                  Adjust this chart from the setup hub.
+                </Text>
+                <View style={styles.actionButtonRow}>
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={openChartSetup}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.primaryButtonText}>Back to Adjust</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => router.replace(APP_ROUTES.charts as any)}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.secondaryButtonText}>Charts Home</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </ChartInfoCard>
           ) : null}
@@ -844,6 +824,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   setupActionRow: {
+    gap: 6,
+  },
+  setupHint: {
+    color: CHART_COLORS.sub,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  actionButtonRow: {
     flexDirection: "row",
     gap: 8,
   },
@@ -854,7 +842,7 @@ const styles = StyleSheet.create({
     borderColor: `${CHART_COLORS.accent}55`,
     backgroundColor: CHART_COLORS.accentSoft,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
     alignItems: "center",
   },
   primaryButtonText: {
@@ -870,7 +858,7 @@ const styles = StyleSheet.create({
     borderColor: `${CHART_COLORS.blue}55`,
     backgroundColor: CHART_COLORS.blueSoft,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
     alignItems: "center",
   },
   secondaryButtonText: {

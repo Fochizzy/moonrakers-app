@@ -4,11 +4,10 @@ import { useLocalSearchParams } from 'expo-router';
 
 import { useStore } from '@/store/useStore';
 import { useThemeContext } from '@/theme';
-import StarryNight from '@/components/ui/StarryNight';
+import ScreenBackground from '@/components/ui/ScreenBackground';
 
 import Sparkline from '@/components/charts/Sparkline';
 import ReplayChart from '@/components/charts/ReplayChart';
-import RelationshipGraph from '@/components/charts/RelationshipGraph';
 import RadarChart from '@/components/charts/RadarChart';
 import PrestigeOverTimeChart from '@/components/charts/PrestigeOverTimeChart';
 import StackedBarChart from '@/components/charts/StackedBarChart';
@@ -74,8 +73,6 @@ type StoredGame = {
   eloSnapshot?: Record<string, number | { elo?: number }>;
   [key: string]: unknown;
 };
-
-type Relationships = Record<string, Record<string, number>>;
 
 type StackedRow = {
   id: string;
@@ -599,19 +596,16 @@ export default function ChartDetailScreen() {
 
   const rawPlayers = store.players;
   const rawGames = store.games;
-  const rawRelationships = store.relationships;
 
   const players: Player[] = Array.isArray(rawPlayers) ? rawPlayers : [];
   const games: StoredGame[] = useMemo(
     () => (Array.isArray(rawGames) ? rawGames.map((game) => normalizeGame(game as any) as StoredGame) : []),
     [rawGames]
   );
-  const relationships: Relationships =
-    rawRelationships && typeof rawRelationships === 'object'
-      ? rawRelationships
-      : {};
 
   const chartKey = getParam(params.chartKey);
+  const normalizedChartKey =
+    chartKey === 'assist-network-overview' ? 'relationship-graph' : chartKey;
   const playerId = getParam(params.playerId);
   const comparePlayerId = getParam(params.comparePlayerId);
   const gameId = getParam(params.gameId);
@@ -619,12 +613,11 @@ export default function ChartDetailScreen() {
   const useAllPlayers = getParam(params.allPlayers) === '1';
 
   const isGlobalChart = [
-    'assist-network-overview',
     'relationship-graph',
     'assist-graph',
     'elo-chart',
     'efficiency-failure-scatter',
-  ].includes(String(chartKey ?? ''));
+  ].includes(String(normalizedChartKey ?? ''));
 
   const latestGame = games.length ? games[games.length - 1] : null;
 
@@ -801,7 +794,7 @@ export default function ChartDetailScreen() {
   );
 
   const renderChart = () => {
-    switch (chartKey) {
+    switch (normalizedChartKey) {
       case 'sparkline':
         return selectedPlayer ? (
           <View style={styles.chartCard}>
@@ -838,17 +831,9 @@ export default function ChartDetailScreen() {
       case 'relationship-graph':
       case 'assist-graph':
         return (
-          <RelationshipGraph
-            players={selectedPlayers}
-            relationships={relationships}
-          />
-        );
-
-      case 'assist-network-overview':
-        return (
           <AssistNetworkOverview
-            players={selectedPlayers}
-            relationships={relationships}
+            games={games as any}
+            players={selectedPlayers as any}
           />
         );
 
@@ -975,7 +960,7 @@ export default function ChartDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <StarryNight />
+      <ScreenBackground preset="intel" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}

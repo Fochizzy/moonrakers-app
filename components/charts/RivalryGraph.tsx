@@ -1,12 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   LayoutChangeEvent,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
 
+import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import ChartStage from "@/components/charts/ChartStage";
+import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
 import Text from "@/components/ui/Text";
+import { getPlayerColor as normalizePlayerColor } from "@/utils/chartTheme";
 
 const COLORS = {
   card: "rgba(12,18,38,0.92)",
@@ -20,8 +25,6 @@ const COLORS = {
   blueSoft: "rgba(59,130,246,0.18)",
   green: "#22C55E",
   greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
   red: "#EF4444",
   border: "rgba(255,255,255,0.08)",
   whiteSoft: "rgba(255,255,255,0.06)",
@@ -140,7 +143,9 @@ function getAssistOut(totals?: GameTotals | null): number {
 }
 
 function getPlayerColor(color?: string, index = 0): string {
-  if (typeof color === "string" && color.trim()) return color.trim();
+  if (typeof color === "string" && color.trim()) {
+    return normalizePlayerColor(color.trim());
+  }
 
   const fallback = [
     COLORS.accent,
@@ -617,12 +622,18 @@ export default function RivalryGraph({
         label: getModeLabel(mode),
         value: formatModeValue(selected, mode),
       },
-      {
-        label: "Verdict",
-        value: getVerdict(selected, playerAName),
-      },
     ];
   }, [selected, mode, playerAName]);
+  const modeTabs = useMemo(
+    () =>
+      (["dominance", "winRate", "prestigeMargin", "synergy"] as ModeKey[]).map(
+        (entry) => ({
+          key: entry,
+          label: getModeLabel(entry),
+        })
+      ),
+    []
+  );
 
   const onChartLayout = (event: LayoutChangeEvent) => {
     const nextWidth = Math.max(0, Math.floor(event.nativeEvent.layout.width));
@@ -646,9 +657,9 @@ export default function RivalryGraph({
   }
 
   return (
-    <View style={styles.container}>
+      <View style={styles.container}>
       <View style={styles.sectionCompact}>
-        <SectionHeader title="Player A" sub="Focus player" />
+        <SectionHeader title="A" sub="Focus" />
         <View style={styles.underlineSelectorRow}>
           {players.map((player, index) => {
             const active = player.id === selectedPlayerAId;
@@ -674,7 +685,7 @@ export default function RivalryGraph({
       </View>
 
       <View style={styles.sectionCompact}>
-        <SectionHeader title="Player B" sub="Head-to-head target" />
+        <SectionHeader title="B" sub="Target" />
         <View style={styles.underlineSelectorRow}>
           {players
             .filter((player) => player.id !== selectedPlayerAId)
@@ -695,20 +706,18 @@ export default function RivalryGraph({
       </View>
 
       <View style={styles.sectionCompact}>
-        <SectionHeader title="Mode" sub={getModeDescription(mode)} />
-        <View style={styles.underlineSelectorRow}>
-          {(["dominance", "winRate", "prestigeMargin", "synergy"] as ModeKey[]).map(
-            (entry) => (
-              <UnderlineOption
-                key={entry}
-                label={getModeLabel(entry)}
-                active={entry === mode}
-                activeColor={playerAColor}
-                onPress={() => setMode(entry)}
-              />
-            )
-          )}
-        </View>
+        <SectionHeader title="Metric" sub={getModeDescription(mode)} />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.underlineScroll}
+        >
+          <ChartUnderlineTabs
+            items={modeTabs}
+            activeKey={mode}
+            onChange={(next) => setMode(next as ModeKey)}
+          />
+        </ScrollView>
       </View>
 
       {noDirectMatchup ? (
@@ -724,54 +733,46 @@ export default function RivalryGraph({
         <View style={styles.sectionCompact}>
           <SectionHeader title="Focus" sub={`${playerAName} vs ${selected.opponentName}`} />
 
+          <ChartFocusCard
+            title={selected.opponentName}
+            value={formatModeValue(selected, mode)}
+            helper={`${selected.gamesTogether} shared games | ${selected.wins}-${selected.losses}`}
+            story={`${getVerdict(selected, playerAName)} ${getMomentumSentence(
+              selected,
+              playerAName
+            )}`}
+            tone="comparison"
+            accentColor={
+              getModeValue(selected, mode) >= 0 ? playerAColor : selected.opponentColor
+            }
+            style={styles.focusCard}
+            compact
+          />
+
           <View style={styles.metricGridDense}>
             {summaryCards.map((card, index) => (
               <View
                 key={`${card.label}-${index}`}
                 style={[
                   styles.metricCardDense,
-                  card.label === "Verdict" && {
-                    backgroundColor: withAlpha(playerAColor, "14"),
-                    borderColor: withAlpha(playerAColor, "55"),
-                  },
                 ]}
               >
                 <Text style={styles.metricLabelCompact}>{card.label}</Text>
-                <Text
-                  style={[
-                    styles.metricValueCompact,
-                    card.label === "Verdict" && { color: playerAColor },
-                  ]}
-                  numberOfLines={1}
-                >
+                <Text style={styles.metricValueCompact} numberOfLines={1}>
                   {card.value}
                 </Text>
               </View>
             ))}
           </View>
-
-          <View
-            style={[
-              styles.insightCardCompact,
-              {
-                borderColor: withAlpha(playerAColor, "55"),
-                backgroundColor: withAlpha(playerAColor, "12"),
-              },
-            ]}
-          >
-            <Text style={styles.summarySentence}>{getOverallEdgeText(selected, playerAName)}</Text>
-            <Text style={styles.summarySentence}>
-              {getSimpleMetricSentence(selected, mode, playerAName)}
-            </Text>
-            <Text style={styles.summarySentence}>
-              {getMomentumSentence(selected, playerAName)}
-            </Text>
-          </View>
         </View>
       ) : null}
 
-      <View style={styles.sectionCompact}>
-        <SectionHeader title="Rivalries" sub={`${rows.length} opponents`} />
+      <ChartStage
+        tone="comparison"
+        style={styles.chartStage}
+        plotStyle={styles.chartStagePlot}
+        header={<SectionHeader title="Rivalries" sub={`${rows.length} opponents`} />}
+      >
 
         {!rows.length ? (
           <Text style={styles.emptyText}>No rivalry data yet for {playerAName}.</Text>
@@ -873,14 +874,14 @@ export default function RivalryGraph({
             })}
           </View>
         )}
-      </View>
+      </ChartStage>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: 6,
+    gap: 12,
   },
 
   sectionCompact: {
@@ -890,13 +891,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: 6,
-  },
-  insightCardCompact: {
-    backgroundColor: COLORS.cardAlt,
-    borderRadius: 14,
-    padding: 8,
-    borderWidth: 1,
-    marginTop: 8,
   },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -920,6 +914,9 @@ const styles = StyleSheet.create({
   emptyText: {
     color: COLORS.sub,
     fontSize: 11,
+  },
+  underlineScroll: {
+    paddingRight: 12,
   },
 
   underlineSelectorRow: {
@@ -949,6 +946,9 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 4,
   },
+  focusCard: {
+    marginBottom: 8,
+  },
   metricCardDense: {
     width: "49%",
     borderRadius: 10,
@@ -972,13 +972,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  summarySentence: {
-    color: COLORS.text,
-    fontSize: 11,
-    lineHeight: 16,
-    marginBottom: 6,
-  },
-
   noticeTitle: {
     color: COLORS.blue,
     fontSize: 12,
@@ -993,6 +986,12 @@ const styles = StyleSheet.create({
 
   chartWrap: {
     gap: 6,
+  },
+  chartStage: {
+    marginBottom: 6,
+  },
+  chartStagePlot: {
+    paddingVertical: 8,
   },
   rowCard: {
     minHeight: 46,
@@ -1059,5 +1058,10 @@ const styles = StyleSheet.create({
   rowValue: {
     fontSize: 11,
     fontWeight: "900",
+  },
+  stageFooter: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "700",
   },
 });

@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 
 import RelationshipGraph from "@/components/charts/RelationshipGraph";
 import { buildRelationshipInsightModel } from "@/components/charts/relationshipGraphModel";
+import Text from "@/components/ui/Text";
 import type { NormalizedGame } from "@/utils/charts";
 import AssistNetworkControls, {
   getAssistNetworkLabel,
@@ -95,6 +96,34 @@ export default function AssistNetworkOverview({
       ).toLowerCase()} connection.`
     : `${hubName} is the current hub in the visible network.`;
 
+  if (dataset.exactScopeApplied && dataset.gameCount === 0) {
+    return (
+      <View style={styles.wrap}>
+        <AssistNetworkControls
+          value={selectedAssistMode}
+          onChange={setSelectedAssistMode}
+        />
+        <Text style={styles.emptyText}>
+          No exact-match games found for this table.
+        </Text>
+      </View>
+    );
+  }
+
+  if (dataset.exactScopeApplied && dataset.gameCount > 0 && dataset.edges.length === 0) {
+    return (
+      <View style={styles.wrap}>
+        <AssistNetworkControls
+          value={selectedAssistMode}
+          onChange={setSelectedAssistMode}
+        />
+        <Text style={styles.emptyText}>
+          These exact-match games have no recorded assist links yet.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrap}>
       <AssistNetworkDetailsCard
@@ -130,5 +159,10 @@ export default function AssistNetworkOverview({
 const styles = StyleSheet.create({
   wrap: {
     gap: 12,
+  },
+  emptyText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

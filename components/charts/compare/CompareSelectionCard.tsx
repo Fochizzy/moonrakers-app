@@ -63,10 +63,8 @@ export default function CompareSelectionCard({
     <View style={styles.shell}>
       <View style={styles.heroRow}>
         <View style={styles.heroCopy}>
-          <Text style={styles.eyebrow}>{isPlayers ? 'Compare players' : 'Compare groups'}</Text>
-          <Text style={styles.title}>
-            {title ?? (isPlayers ? 'Build the matchup' : 'Build the group matchup')}
-          </Text>
+          <Text style={styles.eyebrow}>{isPlayers ? 'Players' : 'Groups'}</Text>
+          <Text style={styles.title}>{title ?? 'Choose lineup'}</Text>
         </View>
 
         <View style={styles.countCard}>
@@ -78,7 +76,7 @@ export default function CompareSelectionCard({
       <View style={styles.panel}>
         <View style={styles.panelHeader}>
           <Text style={styles.panelTitle}>{isPlayers ? 'Available players' : 'Available groups'}</Text>
-          <Text style={styles.panelMeta}>Tap a card to select</Text>
+          <Text style={styles.panelMeta}>Tap to add</Text>
         </View>
 
         <ScrollView style={styles.list} nestedScrollEnabled showsVerticalScrollIndicator={false}>
@@ -86,6 +84,7 @@ export default function CompareSelectionCard({
             {items.map((item) => {
               const selected = selectedLookup.has(item.id);
               const limitReached = isPlayers && !selected && selectedCount >= MAX_COMPARE_PLAYERS;
+              const rowStatus = limitReached ? 'Limit reached' : null;
 
               return (
                 <Pressable
@@ -110,9 +109,7 @@ export default function CompareSelectionCard({
                     />
                     <View style={styles.copyWrap}>
                       <Text style={styles.rowTitle}>{item.name}</Text>
-                      <Text style={styles.rowSub}>
-                        {selected ? 'Included in comparison' : limitReached ? 'Selection limit reached' : 'Ready to add'}
-                      </Text>
+                      {rowStatus ? <Text style={styles.rowSub}>{rowStatus}</Text> : null}
                     </View>
                   </View>
 
@@ -128,40 +125,42 @@ export default function CompareSelectionCard({
         </ScrollView>
       </View>
 
-      <View style={styles.panel}>
-        <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>Selected lineup</Text>
-          <Text style={styles.panelMeta}>{selectedCount} active slot{selectedCount === 1 ? '' : 's'}</Text>
-        </View>
+      {selectedCount > 0 ? (
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>Lineup</Text>
+            <Text style={styles.panelMeta}>{selectedCount} selected</Text>
+          </View>
 
-        <View style={styles.slotGrid}>
-          {Array.from({ length: MAX_COMPARE_PLAYERS }).map((_, index) => {
-            const id = selectedIds[index];
-            const item = items.find((entry) => entry.id === id);
+          <View style={styles.slotGrid}>
+            {Array.from({ length: MAX_COMPARE_PLAYERS }).map((_, index) => {
+              const id = selectedIds[index];
+              const item = items.find((entry) => entry.id === id);
 
-            return (
-              <Pressable
-                key={index}
-                onPress={() => {
-                  if (!id) return;
-                  isPlayers ? onTogglePlayer(id) : onToggleGroup(id);
-                }}
-                style={[styles.slotCard, item ? styles.slotCardFilled : styles.slotCardEmpty]}
-              >
-                <Text style={styles.slotIndex}>Slot {index + 1}</Text>
-                <Text style={styles.slotName} numberOfLines={1}>
-                  {item ? item.name : 'Empty'}
-                </Text>
-                <Text style={styles.slotHint}>{item ? 'Tap to remove' : 'Waiting for selection'}</Text>
-              </Pressable>
-            );
-          })}
+              return (
+                <Pressable
+                  key={index}
+                  onPress={() => {
+                    if (!id) return;
+                    isPlayers ? onTogglePlayer(id) : onToggleGroup(id);
+                  }}
+                  style={[styles.slotCard, item ? styles.slotCardFilled : styles.slotCardEmpty]}
+                >
+                  <Text style={styles.slotIndex}>Slot {index + 1}</Text>
+                  <Text style={styles.slotName} numberOfLines={1}>
+                    {item ? item.name : 'Empty'}
+                  </Text>
+                  {item ? <Text style={styles.slotHint}>Remove</Text> : null}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <View style={styles.actionRow}>
         <Pressable onPress={onClear} style={[styles.actionButton, styles.secondaryButton]}>
-          <Text style={[styles.actionText, styles.secondaryButtonText]}>Clear selection</Text>
+          <Text style={[styles.actionText, styles.secondaryButtonText]}>Clear</Text>
         </Pressable>
 
         <Pressable
@@ -170,7 +169,7 @@ export default function CompareSelectionCard({
           style={[styles.actionButton, styles.primaryButton, analyzeDisabled && styles.primaryButtonDisabled]}
         >
           <Text style={[styles.actionText, analyzeDisabled && styles.primaryButtonTextDisabled]}>
-            Analyze comparison
+            Analyze
           </Text>
         </Pressable>
       </View>
@@ -180,17 +179,17 @@ export default function CompareSelectionCard({
 
 const styles = StyleSheet.create({
   shell: {
-    gap: 8,
+    gap: 6,
   },
   heroRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     alignItems: 'stretch',
   },
   heroCopy: {
     flex: 1,
     borderRadius: 12,
-    padding: 10,
+    padding: 8,
     backgroundColor: PANEL,
     borderWidth: 1,
     borderColor: BORDER,
@@ -216,7 +215,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   countCard: {
-    width: 82,
+    width: 78,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: BORDER_STRONG,
@@ -238,11 +237,11 @@ const styles = StyleSheet.create({
   },
   panel: {
     backgroundColor: PANEL,
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER,
-    padding: 14,
-    gap: 8,
+    padding: 10,
+    gap: 6,
   },
   panelHeader: {
     flexDirection: 'row',
@@ -261,20 +260,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   list: {
-    maxHeight: 280,
+    maxHeight: 260,
   },
   listContent: {
-    gap: 6,
+    gap: 5,
     paddingBottom: 2,
   },
   selectRow: {
-    minHeight: 52,
+    minHeight: 44,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: BORDER,
     backgroundColor: PANEL_ALT,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -319,8 +318,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   rowAction: {
-    minWidth: 58,
-    minHeight: 28,
+    minWidth: 54,
+    minHeight: 26,
     borderRadius: 9,
     borderWidth: 1,
     borderColor: BORDER,
@@ -348,10 +347,10 @@ const styles = StyleSheet.create({
   },
   slotCard: {
     width: '48.4%',
-    minHeight: 72,
+    minHeight: 58,
     borderRadius: 12,
     borderWidth: 1,
-    padding: 10,
+    padding: 8,
     justifyContent: 'center',
   },
   slotCardFilled: {
@@ -373,20 +372,20 @@ const styles = StyleSheet.create({
     color: '#F8FBFF',
     fontSize: 13,
     fontWeight: '800',
-    marginTop: 6,
+    marginTop: 4,
   },
   slotHint: {
     color: SUBTEXT,
-    fontSize: 10,
+    fontSize: 9,
     marginTop: 2,
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
   },
   actionButton: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 36,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -406,7 +405,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(148, 163, 184, 0.14)',
   },
   actionText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: '#F3FCFF',
   },

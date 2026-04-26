@@ -801,8 +801,7 @@ export default function ChartsIndexScreen() {
 
   function buildChartHubParams(
     chart: ChartCatalogEntry,
-    setupOpen: boolean,
-    detailMode = false
+    setupOpen: boolean
   ) {
     const params: Record<string, string | undefined> = {
       chartKey: chart.key,
@@ -834,9 +833,6 @@ export default function ChartsIndexScreen() {
     }
 
     if (chart.key === "relationship_graph") {
-      if (detailMode) {
-        params.graphVariant = "assist_network";
-      }
       params.assistMode = selectedAssistMode;
     }
 
@@ -872,7 +868,6 @@ export default function ChartsIndexScreen() {
 
   function openChart(chart: ChartCatalogEntry) {
     const hubParams = buildChartHubParams(chart, true);
-    const detailParams = buildChartHubParams(chart, true, true);
 
     replaceChartHubRoute(chart, true);
 
@@ -891,7 +886,7 @@ export default function ChartsIndexScreen() {
         return;
       }
 
-      const { setup: _setup, ...detailRouteParams } = detailParams;
+      const { setup: _setup, ...detailRouteParams } = hubParams;
 
       router.push({
         pathname: "/charts/[chartKey]",

@@ -1,7 +1,11 @@
 import React, { memo, useMemo } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import Text from "@/components/ui/Text";
+import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import ChartStage from "@/components/charts/ChartStage";
 import { getMetricOrFallback } from "@/utils/metricMap";
+import { resolveStoredPlayerColor } from "@/utils/playerColor";
+import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 export type ChartDatum = {
   round?: number;
@@ -36,6 +40,7 @@ type Props = {
   emptyBehavior?: "empty-chart" | "hide";
   maxPlayers?: number;
   onPressRow?: (playerId: string) => void;
+  showHeader?: boolean;
 };
 
 type ResolvedPlayer = {
@@ -65,8 +70,6 @@ const COLORS = {
   blueSoft: "rgba(59,130,246,0.18)",
   green: "#22C55E",
   greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
   red: "#EF4444",
   redSoft: "rgba(239,68,68,0.16)",
   border: "rgba(255,255,255,0.08)",
@@ -107,7 +110,14 @@ function normalizePlayerName(player: Player, index: number): string {
 }
 
 function normalizeColor(color?: string, index = 0): string {
-  if (typeof color === "string" && color.trim()) return color.trim();
+  const raw = String(color ?? "").trim();
+  if (raw.startsWith("#") || raw.startsWith("rgb") || raw.startsWith("hsl")) {
+    return raw;
+  }
+
+  if (raw) {
+    return getPlayerAccentColor(resolveStoredPlayerColor(raw, index));
+  }
 
   const fallback = [
     "#A855F7",
@@ -438,23 +448,6 @@ function buildSub(metricKey: string, mode: ValueMode) {
   }`;
 }
 
-function toneStyles(category?: string) {
-  switch (category) {
-    case "Core":
-    case "Elo":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    case "Support":
-    case "Style":
-      return { bg: COLORS.greenSoft, value: COLORS.green };
-    case "Execution":
-    case "Pressure":
-    case "Conversion":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    default:
-      return { bg: COLORS.accentSoft, value: COLORS.accent };
-  }
-}
-
 function SectionHeader({
   title,
   sub,
@@ -483,6 +476,7 @@ function BarChart({
   emptyBehavior = "empty-chart",
   maxPlayers = 12,
   onPressRow,
+  showHeader = true,
 }: Props) {
   const safeData = useMemo(() => sanitizeArray(data), [data]);
   const safePlayers = useMemo(() => sanitizeArray(players), [players]);
@@ -517,13 +511,17 @@ function BarChart({
       .slice(0, Math.max(1, maxPlayers));
   }, [allRows, statKey, mode, maxPlayers]);
 
-  const tone = toneStyles(metric.category);
   const values = decoratedRows.map((row) => row.value);
   const minValue = values.length ? Math.min(...values, 0) : 0;
   const maxValue = values.length ? Math.max(...values, 0) : 0;
   const totalRange = Math.max(1, maxValue - minValue);
   const average = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
   const zeroLeftPercent = Math.abs(minValue) / totalRange;
+  const strongestRow = decoratedRows[0] ?? null;
+  const strongestTotal = strongestRow?.value ?? 0;
+  const grandTotal = values.reduce((sum, value) => sum + Math.max(0, value), 0);
+  const leaderShare = grandTotal > 0 ? (strongestTotal / grandTotal) * 100 : 0;
+  const runnerUp = decoratedRows[1] ?? null;
 
   const resolvedTitle = title ?? `${titleCase(statKey)} Comparison`;
   const resolvedSubtitle = subtitle ?? buildSub(statKey, mode);
@@ -552,36 +550,39 @@ function BarChart({
 
   return (
     <View style={styles.container}>
-      <View style={styles.sectionCompact}>
-        <SectionHeader title={resolvedTitle} sub={resolvedSubtitle} />
-
-        <View style={styles.metricGridDense}>
-          <View style={[styles.metricCardDense, { backgroundColor: tone.bg }]}>
-            <Text style={styles.metricLabelCompact}>Metric</Text>
-            <Text style={[styles.metricValueCompact, { color: tone.value }]}>
-              {metric.label}
-            </Text>
-          </View>
-
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Mode</Text>
-            <Text style={styles.metricValueCompact}>
-              {mode.charAt(0).toUpperCase() + mode.slice(1)}
-            </Text>
-          </View>
-
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Players</Text>
-            <Text style={styles.metricValueCompact}>{String(decoratedRows.length)}</Text>
-          </View>
+      {showHeader ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>{resolvedTitle}</Text>
+          <Text style={styles.subtitle}>{metric.description || resolvedSubtitle}</Text>
         </View>
+      ) : null}
 
-        <Text style={styles.subtitle}>
-          {metric.description || resolvedSubtitle}
-        </Text>
-      </View>
+      {strongestRow ? (
+        <ChartFocusCard
+          title={strongestRow.label}
+          value={formatMetricValue(statKey, strongestTotal, mode)}
+          helper={`${metric.label} leader · ${mode.charAt(0).toUpperCase() + mode.slice(1)}`}
+          story={
+            runnerUp
+              ? `Share ${leaderShare.toFixed(0)}% of visible total | Ahead of ${runnerUp.label} by ${formatMetricValue(
+                  statKey,
+                  strongestTotal - runnerUp.value,
+                  mode
+                )}`
+              : `Share ${leaderShare.toFixed(0)}% of visible total across ${decoratedRows.length} player${decoratedRows.length === 1 ? "" : "s"}`
+          }
+          tone="comparison"
+          accentColor={strongestRow.color}
+          compact
+        />
+      ) : null}
 
-      <View style={styles.sectionCompact}>
+      <ChartStage
+        tone="comparison"
+        style={styles.chartStage}
+        plotStyle={styles.chartStagePlot}
+        header={<SectionHeader title="Bars" sub={resolvedSubtitle} />}
+      >
         <View style={styles.leaderboardList}>
           {decoratedRows.map((row, index) => {
             const value = row.value;
@@ -593,7 +594,13 @@ function BarChart({
             return (
               <TouchableOpacity
                 key={row.id}
-                style={styles.leaderboardRow}
+                style={[
+                  styles.leaderboardRow,
+                  {
+                    borderColor: isLeader ? withAlpha(row.color, "66") : COLORS.border,
+                    backgroundColor: isLeader ? withAlpha(row.color, "1F") : COLORS.cardAlt,
+                  },
+                ]}
                 disabled={!onPressRow}
                 onPress={() => onPressRow?.(row.id)}
                 activeOpacity={0.9}
@@ -609,7 +616,6 @@ function BarChart({
                     <View style={styles.nameRow}>
                       <View style={[styles.legendColor, { backgroundColor: row.color }]} />
                       <Text style={styles.leaderboardName}>{row.label}</Text>
-                      {isLeader ? <Text style={styles.statusLeader}>Leader</Text> : null}
                     </View>
 
                     <Text style={styles.leaderboardMeta}>
@@ -671,7 +677,7 @@ function BarChart({
             );
           })}
         </View>
-      </View>
+      </ChartStage>
     </View>
   );
 }
@@ -680,7 +686,15 @@ export default memo(BarChart);
 
 const styles = StyleSheet.create({
   container: {
-    gap: 6,
+    gap: 10,
+  },
+  header: {
+    gap: 2,
+  },
+  title: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
   },
   sectionCompact: {
     backgroundColor: COLORS.card,
@@ -711,9 +725,8 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: COLORS.sub,
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 6,
+    fontSize: 10,
+    lineHeight: 14,
   },
   emptyTitle: {
     color: COLORS.text,
@@ -725,40 +738,18 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 11,
   },
-  metricGridDense: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
+  chartStage: {
+    marginBottom: 6,
   },
-  metricCardDense: {
-    width: "32%",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    minHeight: 52,
-    justifyContent: "center",
-    backgroundColor: COLORS.whiteSoft,
-  },
-  metricLabelCompact: {
-    color: COLORS.sub,
-    fontSize: 10,
-    lineHeight: 12,
-    marginBottom: 4,
-  },
-  metricValueCompact: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: "900",
-    lineHeight: 16,
+  chartStagePlot: {
+    gap: 8,
   },
   leaderboardList: {
     gap: 4,
   },
   leaderboardRow: {
-    backgroundColor: COLORS.cardAlt,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
     paddingHorizontal: 8,
     paddingVertical: 8,
   },

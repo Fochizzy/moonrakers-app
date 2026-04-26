@@ -9,6 +9,7 @@ import {
   SelectedCell,
   formatDisplayValue,
   getCellTextColor,
+  resolveHeatmapGridRow,
   truncateLabel,
 } from "./heatmapUtils";
 
@@ -57,7 +58,11 @@ function safeString(value: unknown, fallback = "") {
 }
 
 function safeMode(value: unknown, fallback: HeatmapMode): HeatmapMode {
-  return value === "raw" || value === "normalized" || value === "rank"
+  return value === "raw" ||
+    value === "relativeToLobby" ||
+    value === "relativeToPlayerAverage" ||
+    value === "rank" ||
+    value === "swing"
     ? value
     : fallback;
 }
@@ -158,7 +163,19 @@ export default function HeatmapGrid({
                   y={PAD}
                   width={CELL_W}
                   height={svgHeight - PAD * 2}
-                  fill="rgba(255,255,255,0.035)"
+                  fill={withAlpha(COLORS.accent, 0.09)}
+                />
+              ) : null}
+
+              {activeCol ? (
+                <Rect
+                  x={x + 3}
+                  y={PAD + 3}
+                  width={CELL_W - 6}
+                  height={HEADER_H - 10}
+                  rx={9}
+                  fill={withAlpha(COLORS.accent, 0.16)}
+                  stroke={withAlpha(COLORS.accent, 0.34)}
                 />
               ) : null}
 
@@ -177,17 +194,14 @@ export default function HeatmapGrid({
         })}
 
         {safeMatrix.map((rawRow, rowIndex) => {
-          const row = rawRow ?? ({} as MatrixRow);
-
-          const rowId = safeString((row as any).id, `row-${rowIndex}`);
-          const rowName = safeString((row as any).name, "Unknown");
-          const rowColor = safeString((row as any).colorValue, COLORS.accent);
-
-          const averageRaw = safeNumber((row as any).averageRaw, 0);
-          const peakRaw = safeNumber((row as any).peakRaw, 0);
-          const latestRaw = safeNumber((row as any).latestRaw, 0);
-
-          const rowCells = Array.isArray((row as any).cells) ? (row as any).cells : [];
+          const row = resolveHeatmapGridRow(rawRow, COLORS.accent, `row-${rowIndex}`);
+          const rowId = row.id;
+          const rowName = row.name;
+          const rowColor = row.colorValue;
+          const averageRaw = row.averageRaw;
+          const peakRaw = row.peakRaw;
+          const latestRaw = row.latestRaw;
+          const rowCells = row.cells;
           const y = PAD + HEADER_H + rowIndex * CELL_H;
           const activeRow = selectedPlayerId === rowId;
 
@@ -199,7 +213,7 @@ export default function HeatmapGrid({
                   y={y}
                   width={svgWidth - PAD * 2}
                   height={CELL_H}
-                  fill="rgba(255,255,255,0.035)"
+                  fill={withAlpha(rowColor, 0.12)}
                 />
               ) : null}
 
@@ -209,8 +223,8 @@ export default function HeatmapGrid({
                 width={NAME_W + SUMMARY_W - 4}
                 height={CELL_H - 4}
                 rx={10}
-                fill={withAlpha(rowColor, activeRow ? 0.14 : 0.07)}
-                stroke={activeRow ? withAlpha(rowColor, 0.72) : COLORS.border}
+                fill={withAlpha(rowColor, activeRow ? 0.18 : 0.08)}
+                stroke={activeRow ? withAlpha(rowColor, 0.78) : COLORS.border}
                 strokeWidth={activeRow ? 1.4 : 1}
               />
 
@@ -283,7 +297,7 @@ export default function HeatmapGrid({
                       rx={9}
                       fill={fill}
                       stroke={isSelected ? rowColor : COLORS.border}
-                      strokeWidth={isSelected ? 1.6 : 1}
+                      strokeWidth={isSelected ? 1.8 : 1}
                       onPress={() =>
                         onSelectCell({
                           playerId: rowId,
@@ -298,16 +312,28 @@ export default function HeatmapGrid({
                     />
 
                     {isSelected ? (
-                      <Rect
-                        x={x + 1.5}
-                        y={y + 1.5}
-                        width={CELL_W - 3}
-                        height={CELL_H - 3}
-                        rx={10}
-                        fill="none"
-                        stroke={withAlpha(rowColor, 0.34)}
-                        strokeWidth={1}
-                      />
+                      <>
+                        <Rect
+                          x={x + 1.5}
+                          y={y + 1.5}
+                          width={CELL_W - 3}
+                          height={CELL_H - 3}
+                          rx={10}
+                          fill={withAlpha(rowColor, 0.08)}
+                          stroke={withAlpha(rowColor, 0.4)}
+                          strokeWidth={1}
+                        />
+                        <Rect
+                          x={x}
+                          y={y}
+                          width={CELL_W}
+                          height={CELL_H}
+                          rx={11}
+                          fill="none"
+                          stroke={withAlpha(rowColor, 0.2)}
+                          strokeWidth={1}
+                        />
+                      </>
                     ) : null}
 
                     <SvgText

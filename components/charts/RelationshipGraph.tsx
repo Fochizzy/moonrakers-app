@@ -1,8 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
-import Svg, { Circle, G, Path, Text as SvgText } from "react-native-svg";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import Svg, {
+  Circle,
+  Defs,
+  G,
+  LinearGradient,
+  Path,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from "react-native-svg";
 
+import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import ChartStage from "@/components/charts/ChartStage";
+import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
 import Text from "@/components/ui/Text";
+import buildAssistNetworkLayout from "@/components/charts/AssistNetworkOverview/buildAssistNetworkLayout";
+import { CHART_COLORS, withChartAlpha } from "./chartVisualSystem";
 import {
   DEFAULT_MAX_ITEMS,
   EDGE_ARROW_SIZE,
@@ -10,18 +24,34 @@ import {
   GRAPH_WIDTH,
   NODE_LABEL_OFFSET,
 } from "./relationshipGraph.constants";
+import { buildRelationshipInsightModel } from "./relationshipGraphModel";
 import {
   buildArrowPath,
   buildQuadraticPath,
   buildRelationshipGraphLayout,
   getSelectedEdgeStrokeWidth,
 } from "./relationshipGraph.utils";
-import buildAssistNetworkLayout from "@/components/charts/AssistNetworkOverview/buildAssistNetworkLayout";
 
 type Player = { id: string; name?: string; color?: string };
 type Relationships = Record<string, Record<string, number>>;
-type RelationshipEdge = { source?: string; target?: string; fromId?: string; toId?: string; value?: number; weight?: number };
-type AssistMode = "assistPrestige" | "assistCount" | "assistEfficiency" | "supportBalance";
+type RelationshipEdge = {
+  source?: string;
+  target?: string;
+  fromId?: string;
+  toId?: string;
+  sourceId?: string;
+  targetId?: string;
+  value?: number;
+  weight?: number;
+  assistCount?: number;
+  assistPrestige?: number;
+  assistEfficiency?: number;
+};
+type AssistMode =
+  | "assistPrestige"
+  | "assistCount"
+  | "assistEfficiency"
+  | "supportBalance";
 type GraphVariant = "relationship" | "assist_network";
 type GraphMode = "flow" | "network";
 type EdgeFilterMode = 1 | 2 | 3 | 5 | 999;
@@ -38,6 +68,8 @@ type Props = {
   maxItems?: number;
   title?: string;
   subtitle?: string;
+  showAssistMetricControl?: boolean;
+  showHeader?: boolean;
 };
 
 type SuperNode = {
@@ -59,6 +91,7 @@ type SuperEdge = {
   fromName: string;
   toName: string;
   weight: number;
+  assistCount?: number;
   color: string;
   strokeWidth: number;
   opacity: number;
@@ -85,16 +118,11 @@ const ASSIST_MODE_OPTIONS: AssistMode[] = [
   "supportBalance",
 ];
 
-const COLORS = {
-  wrap: "#E2E8F0",
-  sub: "#94A3B8",
-  panel: "rgba(16,24,48,0.95)",
-  card: "rgba(12,18,38,0.92)",
-  border: "rgba(255,255,255,0.08)",
-  accent: "#A855F7",
-  green: "#22C55E",
-  red: "#EF4444",
-};
+const COLORS = CHART_COLORS;
+const NODE_PLATE_FILL = withChartAlpha(COLORS.bg, 0.82);
+const NODE_PLATE_STROKE = withChartAlpha("#F8FAFC", 0.14);
+const NODE_FILL_STROKE = withChartAlpha("#F8FAFC", 0.28);
+const NODE_LABEL_OUTLINE = withChartAlpha(COLORS.bg, 0.96);
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -108,7 +136,14 @@ function toNumber(value: unknown): number {
 
 function normalizeColor(color?: string, index = 0): string {
   if (typeof color === "string" && color.trim()) return color.trim();
-  const fallback = ["#A855F7", "#3B82F6", "#22C55E", "#3B82F6", "#EF4444", "#14B8A6"];
+  const fallback = [
+    "#A855F7",
+    "#3B82F6",
+    "#22C55E",
+    "#3B82F6",
+    "#EF4444",
+    "#14B8A6",
+  ];
   return fallback[index % fallback.length];
 }
 
@@ -152,8 +187,8 @@ function isEdgeActive(edge: SuperEdge, selectedNodeId: string | null) {
 }
 
 function safeNum(value: unknown, fallback = 0): number {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : fallback;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function isFiniteEdge(edge: SuperEdge) {
@@ -182,7 +217,9 @@ function UnderlineOption({
 }) {
   return (
     <TouchableOpacity style={styles.underlineButton} onPress={onPress} activeOpacity={0.9}>
-      <Text style={[styles.underlineText, active && styles.underlineTextActive]}>{label}</Text>
+      <Text style={[styles.underlineText, active && styles.underlineTextActive]}>
+        {label}
+      </Text>
       <View style={[styles.underlineLine, active && styles.underlineLineActive]} />
     </TouchableOpacity>
   );
@@ -234,8 +271,32 @@ function buildScopedRelationships(
   return next;
 }
 
+function buildScopedAssistRelationships(
+  relationshipsInput: Relationships | RelationshipEdge[],
+  scopedIds?: string[]
+): Relationships | RelationshipEdge[] {
+  if (!Array.isArray(relationshipsInput)) {
+    return buildScopedRelationships(relationshipsInput, scopedIds);
+  }
+  if (!scopedIds?.length) return relationshipsInput;
+  const allowed = new Set(scopedIds.map(String));
+
+  return relationshipsInput.filter((edge) => {
+    const fromId = String(edge.sourceId ?? edge.fromId ?? edge.source ?? "").trim();
+    const toId = String(edge.targetId ?? edge.toId ?? edge.target ?? "").trim();
+    return allowed.has(fromId) && allowed.has(toId);
+  });
+}
+
 function filterTopEdgesPerNode<
-  T extends { source?: string; fromId?: string; target?: string; toId?: string; value?: number; weight?: number }
+  T extends {
+    source?: string;
+    fromId?: string;
+    target?: string;
+    toId?: string;
+    value?: number;
+    weight?: number;
+  },
 >(edges: T[], topEdgesPerNode: EdgeFilterMode): T[] {
   if (topEdgesPerNode === 999) return edges;
 
@@ -261,9 +322,10 @@ function filterTopEdgesPerNode<
 
 function buildDeterministicAssistLayout(
   players: Player[],
-  relationships: Relationships,
+  relationships: Relationships | RelationshipEdge[],
   assistMode: AssistMode,
-  topEdgesPerNode: EdgeFilterMode
+  topEdgesPerNode: EdgeFilterMode,
+  graphMode: GraphMode
 ): { nodes: SuperNode[]; edges: SuperEdge[] } {
   const network = buildAssistNetworkLayout(relationships, players, assistMode as any);
   const filteredLinks = filterTopEdgesPerNode(network.links as any[], topEdgesPerNode);
@@ -272,23 +334,42 @@ function buildDeterministicAssistLayout(
   const cy = GRAPH_HEIGHT / 2;
   const orbitX = GRAPH_WIDTH * 0.34;
   const orbitY = GRAPH_HEIGHT * 0.29;
+  const topY = 54;
+  const usableHeight = GRAPH_HEIGHT - topY - 54;
 
   const nodesSorted = [...network.nodes].sort(
     (a, b) => b.value - a.value || a.label.localeCompare(b.label)
   );
   const byId = new Map(players.map((player) => [String(player.id), player]));
-  const valueMax = Math.max(1, ...nodesSorted.map((n) => safeNum(n.value)));
+  const valueMax = Math.max(1, ...nodesSorted.map((node) => safeNum(node.value)));
+  const maxAbsBalance = Math.max(
+    1,
+    ...nodesSorted.map((node) => Math.abs(safeNum(node.supportBalance)))
+  );
 
   const nodes: SuperNode[] = nodesSorted.map((node, index) => {
-    const angle = -Math.PI / 2 + (index / Math.max(1, nodesSorted.length)) * Math.PI * 2;
     const player = byId.get(node.id);
     const supportBalance = safeNum(node.supportBalance);
+    const angle = -Math.PI / 2 + (index / Math.max(1, nodesSorted.length)) * Math.PI * 2;
+    const flowX =
+      GRAPH_WIDTH * 0.18 +
+      ((clamp(supportBalance / maxAbsBalance, -1, 1) + 1) / 2) * (GRAPH_WIDTH * 0.64);
+    const flowY =
+      nodesSorted.length === 1
+        ? cy
+        : topY + (usableHeight * index) / Math.max(1, nodesSorted.length - 1);
 
     return {
       id: node.id,
       name: node.label,
-      x: safeNum(cx + Math.cos(angle) * orbitX, cx),
-      y: safeNum(cy + Math.sin(angle) * orbitY, cy),
+      x:
+        graphMode === "network"
+          ? safeNum(cx + Math.cos(angle) * orbitX, cx)
+          : safeNum(flowX, cx),
+      y:
+        graphMode === "network"
+          ? safeNum(cy + Math.sin(angle) * orbitY, cy)
+          : safeNum(flowY, cy),
       radius: 14 + (safeNum(node.value) / valueMax) * 18,
       colorValue: normalizeColor(player?.color, index),
       dominanceColor: getDominanceColor(supportBalance),
@@ -298,7 +379,7 @@ function buildDeterministicAssistLayout(
   });
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const edgeMax = Math.max(1, ...filteredLinks.map((l: any) => safeNum(l.value)));
+  const edgeMax = Math.max(1, ...filteredLinks.map((link: any) => safeNum(link.value)));
 
   const edges: SuperEdge[] = filteredLinks
     .map((link: any) => {
@@ -321,7 +402,10 @@ function buildDeterministicAssistLayout(
       const my = (startY + endY) / 2;
       const perpX = -uy;
       const perpY = ux;
-      const bend = clamp(distance * 0.12, 18, 54);
+      const bend =
+        graphMode === "network"
+          ? clamp(distance * 0.12, 18, 54)
+          : clamp(distance * 0.05, 10, 26);
       const controlX = safeNum(mx + perpX * bend, mx);
       const controlY = safeNum(my + perpY * bend, my);
 
@@ -332,6 +416,7 @@ function buildDeterministicAssistLayout(
         fromName: String(link.sourceLabel ?? ""),
         toName: String(link.targetLabel ?? ""),
         weight: safeNum(link.value),
+        assistCount: safeNum(link.assistCount),
         color: fromNode.colorValue,
         strokeWidth: 1.5 + (safeNum(link.value) / edgeMax) * 5,
         opacity: 0.66,
@@ -344,7 +429,7 @@ function buildDeterministicAssistLayout(
         angle: Math.atan2(endY - controlY, endX - controlX),
       };
     })
-    .filter((edge): edge is SuperEdge => Boolean(edge && isFiniteEdge(edge)));
+    .filter((edge) => Boolean(edge && isFiniteEdge(edge))) as SuperEdge[];
 
   return { nodes, edges };
 }
@@ -358,8 +443,11 @@ export default function RelationshipGraph({
   initialView,
   assistMode = "assistPrestige",
   topEdgesPerNode = 3,
+  maxItems = DEFAULT_MAX_ITEMS,
   title = "Relationship Graph",
   subtitle,
+  showAssistMetricControl = true,
+  showHeader = true,
 }: Props) {
   const resolvedMode = initialView ?? mode;
 
@@ -384,24 +472,44 @@ export default function RelationshipGraph({
     () => buildScopedRelationships(relationships ?? {}, scopedPlayerIds),
     [relationships, scopedPlayerIds]
   );
+  const scopedAssistRelationships = useMemo(
+    () => buildScopedAssistRelationships(relationships ?? {}, scopedPlayerIds),
+    [relationships, scopedPlayerIds]
+  );
 
   const layout = useMemo(() => {
     if (variant === "assist_network") {
       return buildDeterministicAssistLayout(
         visiblePlayers,
-        scopedRelationships,
+        scopedAssistRelationships,
         internalAssistMode,
-        internalTopEdgesPerNode
+        internalTopEdgesPerNode,
+        internalMode
       );
     }
 
     return buildRelationshipGraphLayout(
       visiblePlayers as any,
       scopedRelationships ?? {},
-      DEFAULT_MAX_ITEMS,
-      internalTopEdgesPerNode
-    ) as { nodes: SuperNode[]; edges: SuperEdge[] };
-  }, [variant, visiblePlayers, scopedRelationships, internalAssistMode, internalTopEdgesPerNode]);
+      maxItems,
+      internalTopEdgesPerNode,
+      internalMode
+    ) as unknown as { nodes: SuperNode[]; edges: SuperEdge[] };
+  }, [
+    internalAssistMode,
+    internalMode,
+    internalTopEdgesPerNode,
+    maxItems,
+    scopedAssistRelationships,
+    scopedRelationships,
+    variant,
+    visiblePlayers,
+  ]);
+
+  const insight = useMemo(
+    () => buildRelationshipInsightModel(visiblePlayers, scopedRelationships),
+    [visiblePlayers, scopedRelationships]
+  );
 
   const selectedNode = layout.nodes.find((node) => node.id === selectedNodeId) ?? null;
 
@@ -420,179 +528,371 @@ export default function RelationshipGraph({
 
     return [...base].sort((a, b) => b.weight - a.weight).slice(0, 6);
   }, [layout.edges, selectedNodeId]);
+  const topConnection = focusedEdges[0] ?? null;
 
   const resolvedSubtitle =
     subtitle ??
     (variant === "assist_network"
       ? `Metric-driven support network · ${getAssistModeLabel(internalAssistMode)}`
       : "Directed assist flow across unified games.");
+  const viewTabs = VIEW_OPTIONS.map((option) => ({
+    key: option,
+    label: option,
+  }));
+  const edgeTabs = FILTER_OPTIONS.map((option) => ({
+    key: String(option),
+    label: getFilterLabel(option),
+  }));
+  const assistTabs = ASSIST_MODE_OPTIONS.map((option) => ({
+    key: option,
+    label: getAssistModeLabel(option),
+  }));
+  const focusTitle = selectedNode?.name ?? insight.hub?.player.name ?? "Network Hub";
+  const focusValue = selectedNode
+    ? selectedNode.dominanceLabel
+    : insight.hub
+      ? safeNum(insight.hub.value).toFixed(1)
+      : "--";
+  const focusHelper = selectedNode
+    ? `Support balance ${formatSigned(selectedNode.supportBalance)}`
+    : insight.hub
+      ? `${safeNum(insight.hub.value).toFixed(1)} total involvement`
+      : "No network yet";
+  const focusStory = selectedNode
+    ? topConnection
+      ? `${topConnection.fromName} -> ${topConnection.toName} leads at ${safeNum(
+          topConnection.weight
+        ).toFixed(1)}.`
+      : "No visible connections in the current focus."
+    : "Tap a node to inspect the strongest visible lane in the current network.";
+  const focusAccent = selectedNode
+    ? selectedNode.colorValue
+    : normalizeColor(insight.hub?.player.color, 0);
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.subtitle}>{resolvedSubtitle}</Text>
+      {showHeader ? (
+        <>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{resolvedSubtitle}</Text>
+        </>
+      ) : null}
 
       <View style={styles.panel}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>View</Text>
-          <Text style={styles.sectionSub}>Flow vs network layout</Text>
-        </View>
-        <View style={styles.optionRow}>
-          {VIEW_OPTIONS.map((option) => (
-            <UnderlineOption
-              key={option}
-              label={option}
-              active={internalMode === option}
-              onPress={() => setInternalMode(option)}
-            />
-          ))}
-        </View>
-
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Edges</Text>
-          <Text style={styles.sectionSub}>Density filter</Text>
-        </View>
-        <View style={styles.optionRow}>
-          {FILTER_OPTIONS.map((option) => (
-            <UnderlineOption
-              key={String(option)}
-              label={getFilterLabel(option)}
-              active={internalTopEdgesPerNode === option}
-              onPress={() => setInternalTopEdgesPerNode(option)}
-            />
-          ))}
-        </View>
-
-        {variant === "assist_network" ? (
-          <>
+        <ChartStage
+          tone="comparison"
+          style={styles.chartStage}
+          plotStyle={styles.chartStagePlot}
+          header={
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Assist Metric</Text>
-              <Text style={styles.sectionSub}>Network weighting</Text>
+              <Text style={styles.sectionTitle}>Graph</Text>
+              <Text style={styles.sectionSub}>
+                {layout.nodes.length} nodes | {layout.edges.length} edges
+              </Text>
             </View>
-            <View style={styles.optionRow}>
-              {ASSIST_MODE_OPTIONS.map((option) => (
-                <UnderlineOption
-                  key={option}
-                  label={getAssistModeLabel(option)}
-                  active={internalAssistMode === option}
-                  onPress={() => setInternalAssistMode(option)}
-                />
-              ))}
-            </View>
-          </>
-        ) : null}
+          }
+        >
+          <View style={styles.chartCard}>
+            <Svg width={GRAPH_WIDTH} height={GRAPH_HEIGHT}>
+              <Defs>
+                <LinearGradient id="networkBg" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0%" stopColor={focusAccent} stopOpacity={0.24} />
+                  <Stop offset="48%" stopColor={COLORS.blue} stopOpacity={0.12} />
+                  <Stop offset="100%" stopColor={COLORS.bg} stopOpacity={0.04} />
+                </LinearGradient>
+              </Defs>
 
-        <View style={styles.chartCard}>
-          <Svg width={GRAPH_WIDTH} height={GRAPH_HEIGHT}>
-            {layout.edges
-              .filter((edge) => isFiniteEdge(edge))
-              .map((edge) => {
-                const edgeInput = {
-                  fromX: safeNum((edge as any).fromX ?? edge.startX),
-                  fromY: safeNum((edge as any).fromY ?? edge.startY),
-                  toX: safeNum((edge as any).toX ?? edge.endX),
-                  toY: safeNum((edge as any).toY ?? edge.endY),
-                  curveOffset:
-                    safeNum((edge as any).curveOffset) ||
-                    Math.max(
-                      12,
-                      Math.sqrt(
-                        Math.pow(safeNum((edge as any).toX ?? edge.endX) - safeNum((edge as any).fromX ?? edge.startX), 2) +
-                        Math.pow(safeNum((edge as any).toY ?? edge.endY) - safeNum((edge as any).fromY ?? edge.startY), 2)
-                      ) * 0.14
-                    ),
-                };
+              <Rect
+                x={0}
+                y={0}
+                width={GRAPH_WIDTH}
+                height={GRAPH_HEIGHT}
+                rx={18}
+                fill={COLORS.bg}
+              />
 
-                const path =
-                  variant === "assist_network"
-                    ? safePath(
-                        `M ${safeNum(edge.startX).toFixed(2)} ${safeNum(edge.startY).toFixed(2)} Q ${safeNum(edge.controlX, edge.startX).toFixed(2)} ${safeNum(edge.controlY, edge.startY).toFixed(2)} ${safeNum(edge.endX).toFixed(2)} ${safeNum(edge.endY).toFixed(2)}`
-                      )
-                    : safePath(buildQuadraticPath(edgeInput as any));
+              <Rect
+                x={0}
+                y={0}
+                width={GRAPH_WIDTH}
+                height={GRAPH_HEIGHT}
+                rx={18}
+                fill="url(#networkBg)"
+              />
 
-                const arrow =
-                  variant === "assist_network"
-                    ? safePath(
-                        `M ${safeNum(edge.endX).toFixed(2)} ${safeNum(edge.endY).toFixed(2)} L ${(safeNum(edge.endX) - EDGE_ARROW_SIZE).toFixed(2)} ${(safeNum(edge.endY) - EDGE_ARROW_SIZE / 2).toFixed(2)} L ${(safeNum(edge.endX) - EDGE_ARROW_SIZE).toFixed(2)} ${(safeNum(edge.endY) + EDGE_ARROW_SIZE / 2).toFixed(2)} Z`
-                      )
-                    : safePath(buildArrowPath(edgeInput as any, EDGE_ARROW_SIZE));
+              {layout.edges
+                .filter((edge) => isFiniteEdge(edge))
+                .map((edge) => {
+                  const edgeInput = {
+                    fromX: safeNum((edge as any).fromX ?? edge.startX),
+                    fromY: safeNum((edge as any).fromY ?? edge.startY),
+                    toX: safeNum((edge as any).toX ?? edge.endX),
+                    toY: safeNum((edge as any).toY ?? edge.endY),
+                    curveOffset:
+                      safeNum((edge as any).curveOffset) ||
+                      Math.max(
+                        12,
+                        Math.sqrt(
+                          Math.pow(
+                            safeNum((edge as any).toX ?? edge.endX) -
+                              safeNum((edge as any).fromX ?? edge.startX),
+                            2
+                          ) +
+                            Math.pow(
+                              safeNum((edge as any).toY ?? edge.endY) -
+                                safeNum((edge as any).fromY ?? edge.startY),
+                              2
+                            )
+                        ) * 0.14
+                      ),
+                  };
 
-                if (!path) return null;
-                const active = isEdgeActive(edge, selectedNodeId);
+                  const path =
+                    variant === "assist_network"
+                      ? safePath(
+                          `M ${safeNum(edge.startX).toFixed(2)} ${safeNum(edge.startY).toFixed(
+                            2
+                          )} Q ${safeNum(edge.controlX, edge.startX).toFixed(2)} ${safeNum(
+                            edge.controlY,
+                            edge.startY
+                          ).toFixed(2)} ${safeNum(edge.endX).toFixed(2)} ${safeNum(
+                            edge.endY
+                          ).toFixed(2)}`
+                        )
+                      : safePath(buildQuadraticPath(edgeInput as any));
+
+                  const arrow =
+                    variant === "assist_network"
+                      ? safePath(
+                          `M ${safeNum(edge.endX).toFixed(2)} ${safeNum(edge.endY).toFixed(
+                            2
+                          )} L ${(safeNum(edge.endX) - EDGE_ARROW_SIZE).toFixed(2)} ${(
+                            safeNum(edge.endY) -
+                            EDGE_ARROW_SIZE / 2
+                          ).toFixed(2)} L ${(safeNum(edge.endX) - EDGE_ARROW_SIZE).toFixed(
+                            2
+                          )} ${(safeNum(edge.endY) + EDGE_ARROW_SIZE / 2).toFixed(2)} Z`
+                        )
+                      : safePath(buildArrowPath(edgeInput as any, EDGE_ARROW_SIZE));
+
+                  if (!path) return null;
+                  const active = isEdgeActive(edge, selectedNodeId);
+                  const edgeLabelX =
+                    variant === "assist_network"
+                      ? safeNum(
+                          (safeNum(edge.startX) +
+                            safeNum(edge.endX) +
+                            safeNum(edge.controlX, edge.startX)) /
+                            3
+                        )
+                      : 0;
+                  const edgeLabelY =
+                    variant === "assist_network"
+                      ? safeNum(
+                          (safeNum(edge.startY) +
+                            safeNum(edge.endY) +
+                            safeNum(edge.controlY, edge.startY)) /
+                            3
+                        )
+                      : 0;
+
+                  return (
+                    <G key={edge.key}>
+                      <Path
+                        d={path}
+                        stroke={withChartAlpha(edge.color, active ? 0.78 : 0.14)}
+                        strokeWidth={getSelectedEdgeStrokeWidth(edge as any, active)}
+                        opacity={1}
+                        fill="none"
+                      />
+                      {arrow ? (
+                        <Path
+                          d={arrow}
+                          fill={withChartAlpha(edge.color, active ? 0.78 : 0.14)}
+                          opacity={1}
+                        />
+                      ) : null}
+                      {variant === "assist_network" && edge.assistCount ? (
+                        <>
+                          <Rect
+                            x={safeNum(edgeLabelX - 14)}
+                            y={safeNum(edgeLabelY - 8)}
+                            width={28}
+                            height={16}
+                            rx={8}
+                            fill={withChartAlpha("#F8FAFC", active ? 0.9 : 0.72)}
+                            stroke={withChartAlpha(edge.color, active ? 0.42 : 0.22)}
+                            strokeWidth={0.9}
+                          />
+                          <SvgText
+                            x={edgeLabelX}
+                            y={edgeLabelY + 3}
+                            fontSize="8"
+                            fill="#0F172A"
+                            opacity={edge.assistCount > 0 ? 1 : 0}
+                            fontWeight="800"
+                            textAnchor="middle"
+                          >
+                            {`x${edge.assistCount}`}
+                          </SvgText>
+                        </>
+                      ) : null}
+                    </G>
+                  );
+                })}
+
+              {layout.nodes.map((node) => {
+                const isSelected = selectedNodeId === node.id;
+                const isDimmed = Boolean(selectedNodeId && selectedNodeId !== node.id);
+                const isFocusDefault = !selectedNodeId && focusAccent === node.colorValue;
+                const glowAlpha = isSelected || isFocusDefault ? 0.16 : 0.08;
+                const plateStroke = isSelected
+                  ? withChartAlpha("#F8FAFC", 0.24)
+                  : NODE_PLATE_STROKE;
+                const fillStroke = isSelected
+                  ? withChartAlpha("#F8FAFC", 0.42)
+                  : NODE_FILL_STROKE;
 
                 return (
-                  <G key={edge.key}>
-                    <Path
-                      d={path}
-                      stroke={edge.color}
-                      strokeWidth={getSelectedEdgeStrokeWidth(edge as any, active)}
-                      opacity={active ? safeNum(edge.opacity, 0.75) : 0.16}
-                      fill="none"
+                  <G key={node.id}>
+                    <Circle
+                      cx={safeNum(node.x)}
+                      cy={safeNum(node.y)}
+                      r={safeNum(node.radius, 12) + 10}
+                      fill={withChartAlpha(node.colorValue, glowAlpha)}
                     />
-                    {arrow ? (
-                      <Path
-                        d={arrow}
-                        fill={edge.color}
-                        opacity={active ? safeNum(edge.opacity, 0.75) : 0.16}
-                      />
-                    ) : null}
+                    <Circle
+                      cx={safeNum(node.x)}
+                      cy={safeNum(node.y)}
+                      r={safeNum(node.radius, 12) + 4}
+                      fill={NODE_PLATE_FILL}
+                      stroke={plateStroke}
+                      strokeWidth={isSelected ? 1.4 : 1}
+                    />
+                    <Circle
+                      cx={safeNum(node.x)}
+                      cy={safeNum(node.y)}
+                      r={safeNum(node.radius, 12)}
+                      fill={withChartAlpha(node.colorValue, isDimmed ? 0.72 : 0.94)}
+                      stroke={fillStroke}
+                      strokeWidth={isSelected ? 1.8 : 1.1}
+                      onPress={() =>
+                        setSelectedNodeId((current) => (current === node.id ? null : node.id))
+                      }
+                    />
+                    <Circle
+                      cx={safeNum(node.x)}
+                      cy={safeNum(node.y)}
+                      r={safeNum(node.radius, 12) + 3}
+                      stroke={node.dominanceColor}
+                      strokeWidth={selectedNodeId === node.id ? 2.5 : 1.25}
+                      fill="transparent"
+                    />
+                    <SvgText
+                      x={safeNum(node.x)}
+                      y={safeNum(node.y + node.radius + NODE_LABEL_OFFSET)}
+                      fontSize="10"
+                      fill={NODE_LABEL_OUTLINE}
+                      stroke={NODE_LABEL_OUTLINE}
+                      strokeWidth={3}
+                      strokeLinejoin="round"
+                      textAnchor="middle"
+                    >
+                      {node.name}
+                    </SvgText>
+                    <SvgText
+                      x={safeNum(node.x)}
+                      y={safeNum(node.y + node.radius + NODE_LABEL_OFFSET)}
+                      fontSize="10"
+                      fill="#F8FAFC"
+                      fontWeight="700"
+                      textAnchor="middle"
+                    >
+                      {node.name}
+                    </SvgText>
                   </G>
                 );
               })}
+            </Svg>
+          </View>
+        </ChartStage>
 
-            {layout.nodes.map((node) => (
-              <G key={node.id}>
-                <Circle
-                  cx={safeNum(node.x)}
-                  cy={safeNum(node.y)}
-                  r={safeNum(node.radius, 12)}
-                  fill={node.colorValue}
-                  opacity={selectedNodeId && selectedNodeId !== node.id ? 0.35 : 0.95}
-                  onPress={() =>
-                    setSelectedNodeId((current) => (current === node.id ? null : node.id))
-                  }
-                />
-                <Circle
-                  cx={safeNum(node.x)}
-                  cy={safeNum(node.y)}
-                  r={safeNum(node.radius, 12) + 3}
-                  stroke={node.dominanceColor}
-                  strokeWidth={selectedNodeId === node.id ? 2.5 : 1.25}
-                  fill="transparent"
-                />
-                <SvgText
-                  x={safeNum(node.x)}
-                  y={safeNum(node.y + node.radius + NODE_LABEL_OFFSET)}
-                  fontSize="10"
-                  fill="#E2E8F0"
-                  textAnchor="middle"
-                >
-                  {node.name}
-                </SvgText>
-              </G>
-            ))}
-          </Svg>
-        </View>
-
-        {selectedNode ? (
-          <View style={styles.focusCard}>
-            <Text style={styles.focusTitle}>{selectedNode.name}</Text>
-            <Text style={styles.focusBody}>
-              {selectedNode.dominanceLabel} · {formatSigned(selectedNode.supportBalance)}
+        <View style={styles.insightStrip}>
+          <View style={[styles.insightPill, styles.insightPillAccent]}>
+            <Text style={styles.insightLabel}>Hub</Text>
+            <Text style={styles.insightValue} numberOfLines={1}>
+              {insight.hub?.player.name ?? "None"}
             </Text>
           </View>
-        ) : null}
 
-        {focusedEdges.length ? (
-          <View style={styles.focusCard}>
-            <Text style={styles.focusTitle}>Top Connections</Text>
-            {focusedEdges.map((edge) => (
-              <Text key={edge.key} style={styles.focusBody}>
-                {edge.fromName} → {edge.toName}: {safeNum(edge.weight).toFixed(1)}
-              </Text>
-            ))}
+          <View style={styles.insightPill}>
+            <Text style={styles.insightLabel}>Giver</Text>
+            <Text style={styles.insightValue} numberOfLines={1}>
+              {insight.netGiver?.player.name ?? "None"}
+            </Text>
           </View>
-        ) : null}
+
+          <View style={styles.insightPill}>
+            <Text style={styles.insightLabel}>Link</Text>
+            <Text style={styles.insightValue} numberOfLines={1}>
+              {insight.strongestLink
+                ? `${insight.strongestLink.from.name ?? "Unknown"} -> ${insight.strongestLink.to.name ?? "Unknown"}`
+                : "None"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.detailsPanel}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>View</Text>
+            <Text style={styles.sectionSub}>Flow vs network layout</Text>
+          </View>
+          <View style={styles.optionRow}>
+            <ChartUnderlineTabs
+              items={viewTabs}
+              activeKey={internalMode}
+              onChange={(next) => setInternalMode(next as GraphMode)}
+            />
+          </View>
+
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Edges</Text>
+            <Text style={styles.sectionSub}>Density filter</Text>
+          </View>
+          <View style={styles.optionRow}>
+            <ChartUnderlineTabs
+              items={edgeTabs}
+              activeKey={String(internalTopEdgesPerNode)}
+              onChange={(next) => setInternalTopEdgesPerNode(Number(next) as EdgeFilterMode)}
+            />
+          </View>
+
+          {variant === "assist_network" && showAssistMetricControl ? (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Assist Metric</Text>
+                <Text style={styles.sectionSub}>Network weighting</Text>
+              </View>
+              <View style={styles.optionRow}>
+                <ChartUnderlineTabs
+                  items={assistTabs}
+                  activeKey={internalAssistMode}
+                  onChange={(next) => setInternalAssistMode(next as AssistMode)}
+                />
+              </View>
+            </>
+          ) : null}
+
+          <ChartFocusCard
+            title={focusTitle}
+            value={focusValue}
+            helper={focusHelper}
+            story={focusStory}
+            tone="compact"
+            accentColor={focusAccent}
+            compact
+          />
+        </View>
       </View>
     </View>
   );
@@ -608,7 +908,43 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.panel,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 10,
+    gap: 12,
+  },
+  insightStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  insightPill: {
+    minWidth: "31%",
+    flexGrow: 1,
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  insightPillAccent: {
+    backgroundColor: COLORS.accentSoft,
+    borderColor: `${COLORS.accent}55`,
+  },
+  insightLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  insightValue: {
+    color: COLORS.wrap,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  insightHelper: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 14,
   },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -623,23 +959,17 @@ const styles = StyleSheet.create({
   underlineTextActive: { color: COLORS.wrap },
   underlineLine: { height: 2, width: "100%", backgroundColor: "transparent" },
   underlineLineActive: { backgroundColor: COLORS.accent },
-  chartCard: {
-    borderRadius: 16,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  chartStage: {
+    marginBottom: 4,
+  },
+  chartStagePlot: {
     paddingVertical: 10,
+  },
+  chartCard: {
     alignItems: "center",
   },
-  focusCard: {
-    borderRadius: 12,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 10,
-    gap: 4,
+  detailsPanel: {
+    gap: 10,
   },
-  focusTitle: { color: COLORS.wrap, fontSize: 12, fontWeight: "900" },
-  focusBody: { color: COLORS.sub, fontSize: 11, fontWeight: "600" },
+  focusHint: { color: COLORS.sub, fontSize: 11, lineHeight: 16 },
 });
-

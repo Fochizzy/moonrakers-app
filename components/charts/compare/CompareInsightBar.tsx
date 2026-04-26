@@ -268,10 +268,10 @@ export default function CompareInsightBar({
       const correlationKeys = ['turnOrderWinCorrelation'];
       const bestSeat = pickLowest(rows, seatKeys);
       const bestCorrelation = pickHighest(rows, correlationKeys);
-      const mostNeutral = [...rows].sort(
-        (a, b) =>
-          Math.abs(getMetric(a, correlationKeys)) - Math.abs(getMetric(b, correlationKeys))
-      )[0] ?? null;
+      const mostNeutral =
+        [...rows].sort(
+          (a, b) => Math.abs(getMetric(a, correlationKeys)) - Math.abs(getMetric(b, correlationKeys))
+        )[0] ?? null;
 
       return [
         bestSeat && hasMetricData(rows, seatKeys)
@@ -291,9 +291,7 @@ export default function CompareInsightBar({
     const synergyLeader = pickHighest(rows, ['synergyIndex']);
 
     return [
-      winLeader
-        ? `${winLeader.label} leads wins at ${formatPercent(toNumber(winLeader.winRate))}.`
-        : null,
+      winLeader ? `${winLeader.label} leads wins at ${formatPercent(toNumber(winLeader.winRate))}.` : null,
       prestigeLeader && hasMetricData(rows, ['avgPrestigePerGame', 'avgPrestige'])
         ? `${prestigeLeader.label} leads prestige pace at ${formatFixed(getMetric(prestigeLeader, ['avgPrestigePerGame', 'avgPrestige']), 1)} per game.`
         : null,
@@ -307,6 +305,17 @@ export default function CompareInsightBar({
     () => buildInterpretation(rows, activeFocusGroup),
     [rows, activeFocusGroup]
   );
+  const readLines = useMemo(() => {
+    const seen = new Set<string>();
+
+    return [...insights, ...interpretations]
+      .filter((line) => {
+        if (!line || seen.has(line)) return false;
+        seen.add(line);
+        return true;
+      })
+      .slice(0, 4);
+  }, [insights, interpretations]);
 
   if (!rows.length) return null;
 
@@ -320,47 +329,31 @@ export default function CompareInsightBar({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.cardEyebrow}>Focused Insights</Text>
+        <Text style={styles.cardEyebrow}>Insights</Text>
         <Text style={styles.cardMeta}>{focusLabel(activeFocusGroup)} view</Text>
       </View>
 
-      <Text style={styles.cardTitle}>What these insights are about</Text>
+      <Text style={styles.cardTitle}>Current read</Text>
       <Text style={styles.helper} numberOfLines={2}>
-        These insights are based on the current compare selection: {comparedLabel}. They are not
-        global stats for every saved game unless all players or groups are selected here.
+        Based on this selection: {comparedLabel}.
       </Text>
 
       <View style={styles.insightBadgeRow}>
         <View style={styles.insightBadge}>
-          <Text style={styles.insightBadgeText}>Selection: {comparedLabel}</Text>
+          <Text style={styles.insightBadgeText}>Compared: {comparedLabel}</Text>
         </View>
         <View style={styles.insightBadge}>
           <Text style={styles.insightBadgeText}>Focus: {focusLabel(activeFocusGroup)}</Text>
         </View>
-        <View style={styles.insightBadge}>
-          <Text style={styles.insightBadgeText}>Sample: {rows.length} compared</Text>
-        </View>
       </View>
 
       <View style={{ gap: 8 }}>
-        <Text style={styles.cardTitle}>Summary</Text>
-        {insights.map((insight) => (
-          <Text key={insight} style={styles.matrixWhyText} numberOfLines={2}>
-            • {insight}
-          </Text>
-        ))}
-      </View>
-
-      <View style={{ gap: 8, marginTop: 10 }}>
-        <Text style={styles.cardTitle}>Interpretation</Text>
-        {interpretations.map((line) => (
-          <Text key={line} style={styles.matrixWhyText} numberOfLines={2}>
-            • {line}
+        {readLines.map((line) => (
+          <Text key={line} style={styles.matrixWhyText} numberOfLines={3}>
+            {`\u2022 ${line}`}
           </Text>
         ))}
       </View>
     </View>
   );
 }
-
-

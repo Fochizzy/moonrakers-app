@@ -18,6 +18,7 @@ import type {
   GraphEdge,
   GraphLayout,
   GraphNode,
+  NetworkViewMode,
   NodeStats,
   Player,
   Relationships,
@@ -248,37 +249,12 @@ function buildNodeOrder(players: readonly Player[]) {
   return [...players];
 }
 
-function getNodeAnchorPoint(fromNode: GraphNode, toNode: GraphNode) {
-  const dx = safeFinite(toNode.x - fromNode.x);
-  const dy = safeFinite(toNode.y - fromNode.y);
-  const length = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-  const unitX = dx / length;
-  const unitY = dy / length;
-
-  return {
-    startX: safeFinite(fromNode.x + unitX * fromNode.radius),
-    startY: safeFinite(fromNode.y + unitY * fromNode.radius),
-    endX: safeFinite(toNode.x - unitX * toNode.radius),
-    endY: safeFinite(toNode.y - unitY * toNode.radius),
-    length,
-  };
-}
-
-export function buildRelationshipGraphLayout(
-  players: readonly Player[] = [],
-  relationships: Relationships = {},
-  maxItems = 40,
-  topEdgesPerNode: EdgeFilterMode = 3
-): GraphLayout {
-  const limitedPlayers = [...players].slice(0, Math.max(1, maxItems));
-  const stats = buildNodeStats(limitedPlayers, relationships);
-  const maxInvolvement = Math.max(
-    1,
-    ...limitedPlayers.map((player) => stats.get(String(player.id))?.involvement ?? 0)
-  );
-
-  const orderedPlayers = buildNodeOrder(limitedPlayers);
-  const nodes: GraphNode[] = orderedPlayers.map((player, index) => {
+function buildNetworkNodes(
+  orderedPlayers: readonly Player[],
+  stats: Map<string, NodeStats>,
+  maxInvolvement: number
+) {
+  return orderedPlayers.map((player, index) => {
     const angle = -Math.PI / 2 + (TAU * index) / Math.max(1, orderedPlayers.length);
     const stat = stats.get(String(player.id));
     const involvement = stat?.involvement ?? 0;
@@ -301,6 +277,102 @@ export function buildRelationshipGraphLayout(
       dominanceLabel: dominance.label,
     };
   });
+}
+
+function buildFlowNodes(
+  orderedPlayers: readonly Player[],
+  stats: Map<string, NodeStats>,
+  maxInvolvement: number
+) {
+  const maxAbsBalance = Math.max(
+    1,
+    ...orderedPlayers.map((player) =>
+      Math.abs(stats.get(String(player.id))?.supportBalance ?? 0)
+    )
+  );
+  const leftX = GRAPH_CENTER_X - GRAPH_RADIUS * 1.02;
+  const rightX = GRAPH_CENTER_X + GRAPH_RADIUS * 1.02;
+  const topY = 52;
+  const usableHeight = Math.max(1, GRAPH_CENTER_Y * 2 - topY - 52);
+  const flowOrder = [...orderedPlayers].sort((left, right) => {
+    const leftStats = stats.get(String(left.id));
+    const rightStats = stats.get(String(right.id));
+    return (
+      (leftStats?.supportBalance ?? 0) - (rightStats?.supportBalance ?? 0) ||
+      (rightStats?.involvement ?? 0) - (leftStats?.involvement ?? 0) ||
+      String(left.name ?? "").localeCompare(String(right.name ?? ""))
+    );
+  });
+
+  return flowOrder.map((player, index) => {
+    const stat = stats.get(String(player.id));
+    const involvement = stat?.involvement ?? 0;
+    const ratio = safeRatio(involvement, maxInvolvement);
+    const dominance = getDominanceMeta(stat?.supportBalance ?? 0);
+    const balanceRatio = clamp(
+      (stat?.supportBalance ?? 0) / maxAbsBalance,
+      -1,
+      1
+    );
+    const x = leftX + ((balanceRatio + 1) / 2) * (rightX - leftX);
+    const y =
+      flowOrder.length === 1
+        ? GRAPH_CENTER_Y
+        : topY + (usableHeight * index) / Math.max(1, flowOrder.length - 1);
+
+    return {
+      id: String(player.id),
+      name: player.name,
+      color: player.color,
+      sent: stat?.sent ?? 0,
+      received: stat?.received ?? 0,
+      involvement,
+      supportBalance: stat?.supportBalance ?? 0,
+      x: safeFinite(x, GRAPH_CENTER_X),
+      y: safeFinite(y, GRAPH_CENTER_Y),
+      radius: MIN_NODE_RADIUS + ratio * NODE_RADIUS_RANGE,
+      colorValue: getPlayerColor(player.color),
+      dominanceColor: dominance.color,
+      dominanceLabel: dominance.label,
+    };
+  });
+}
+
+function getNodeAnchorPoint(fromNode: GraphNode, toNode: GraphNode) {
+  const dx = safeFinite(toNode.x - fromNode.x);
+  const dy = safeFinite(toNode.y - fromNode.y);
+  const length = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+  const unitX = dx / length;
+  const unitY = dy / length;
+
+  return {
+    startX: safeFinite(fromNode.x + unitX * fromNode.radius),
+    startY: safeFinite(fromNode.y + unitY * fromNode.radius),
+    endX: safeFinite(toNode.x - unitX * toNode.radius),
+    endY: safeFinite(toNode.y - unitY * toNode.radius),
+    length,
+  };
+}
+
+export function buildRelationshipGraphLayout(
+  players: readonly Player[] = [],
+  relationships: Relationships = {},
+  maxItems = 40,
+  topEdgesPerNode: EdgeFilterMode = 3,
+  viewMode: NetworkViewMode = "flow"
+): GraphLayout {
+  const limitedPlayers = [...players].slice(0, Math.max(1, maxItems));
+  const stats = buildNodeStats(limitedPlayers, relationships);
+  const maxInvolvement = Math.max(
+    1,
+    ...limitedPlayers.map((player) => stats.get(String(player.id))?.involvement ?? 0)
+  );
+
+  const orderedPlayers = buildNodeOrder(limitedPlayers);
+  const nodes: GraphNode[] =
+    viewMode === "network"
+      ? buildNetworkNodes(orderedPlayers, stats, maxInvolvement)
+      : buildFlowNodes(orderedPlayers, stats, maxInvolvement);
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const rawEdges: RawEdge[] = [];
@@ -329,7 +401,10 @@ export function buildRelationshipGraphLayout(
         fromY: anchor.startY,
         toX: anchor.endX,
         toY: anchor.endY,
-        curveOffset: safeFinite(anchor.length * EDGE_CURVE_STRENGTH),
+        curveOffset:
+          viewMode === "network"
+            ? safeFinite(anchor.length * EDGE_CURVE_STRENGTH)
+            : safeFinite(Math.max(10, anchor.length * 0.05)),
       });
     }
   }

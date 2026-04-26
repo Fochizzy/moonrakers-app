@@ -1,4 +1,4 @@
-export { default as EloChart } from "./index.tsx";
+export { default as EloChart } from "./EloChart";
 export { default as EloChartPlot } from "./EloChartPlot";
 
 export {

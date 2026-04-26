@@ -169,7 +169,7 @@ function buildInsights(rows: CompareRow[]): string[] {
     );
   }
 
-  return lines.slice(0, 5);
+  return lines.slice(0, 3);
 }
 
 function buildBadges(rows: CompareRow[]): string[] {

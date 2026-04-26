@@ -107,6 +107,58 @@ function read(relPath) {
   return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
 }
 
+run("Relationship graph source renders compact assist count badges on visible edges", () => {
+  const relationshipGraphSource = read(
+    path.join("components", "charts", "RelationshipGraph.tsx")
+  );
+
+  assert.match(
+    relationshipGraphSource,
+    /<SvgText[\s\S]*edge\.assistCount[\s\S]*`x\$\{edge\.assistCount\}`/,
+    "expected the graph renderer to place compact count badges on visible assist edges"
+  );
+});
+
+run("Assist network overview source includes exact-scope empty-state copy", () => {
+  const overviewSource = read(
+    path.join(
+      "components",
+      "charts",
+      "AssistNetworkOverview",
+      "AssistNetworkOverview.tsx"
+    )
+  );
+
+  assert.match(
+    overviewSource,
+    /No exact-match games found for this table\./,
+    "expected the overview to show an explicit exact-scope empty state"
+  );
+
+  assert.match(
+    overviewSource,
+    /These exact-match games have no recorded assist links yet\./,
+    "expected the overview to explain when exact-match games exist but no assist links are recorded"
+  );
+});
+
+run("Assist network details card source keeps strongest-link helper copy tied to the filtered sample", () => {
+  const detailsCardSource = read(
+    path.join(
+      "components",
+      "charts",
+      "AssistNetworkOverview",
+      "AssistNetworkDetailsCard.tsx"
+    )
+  );
+
+  assert.match(
+    detailsCardSource,
+    /topLinkValue\} in the filtered sample/,
+    "expected the details card to keep strongest-link helper copy explicit about the filtered sample"
+  );
+});
+
 run("Assist network overview expects unified games instead of legacy data and relationship props", () => {
   const source = read(
     path.join(

@@ -138,6 +138,8 @@ export default function EloChartPlot({
 
   const focusedRow =
     rows.find((row) => row.id === focusedPlayerId) ?? rows[0] ?? null;
+  const effectiveGlowColor =
+    glowColor ?? focusedRow?.colorValue ?? chartColors.purple;
 
   const selectedValues = rows
     .map((row) => ({
@@ -147,6 +149,15 @@ export default function EloChartPlot({
       point: asArray(row.points)[safeSelectedIndex],
     }))
     .filter((entry) => entry.point);
+  const selectedFocusedPoint = focusedRow
+    ? asArray(focusedRow.points)[safeSelectedIndex]
+    : null;
+  const focusedPeakValue = focusedRow?.values?.length
+    ? Math.max(...asArray(focusedRow.values).map(toNumber))
+    : 0;
+  const focusedDeltaValue =
+    (selectedFocusedPoint?.value ?? 0) - toNumber(asArray(focusedRow?.values)[0]);
+  const deltaMode = selectedMode === "elo" ? "eloDelta" : selectedMode;
 
   return (
     <View style={styles.wrap}>
@@ -156,7 +167,7 @@ export default function EloChartPlot({
             <LinearGradient id="chartBg" x1="0" y1="0" x2="0" y2="1">
               <Stop
                 offset="0%"
-                stopColor={withAlpha(glowColor ?? chartColors.purple, 0.07)}
+                stopColor={withAlpha(effectiveGlowColor, 0.05)}
               />
               <Stop offset="100%" stopColor="rgba(255,255,255,0.00)" />
             </LinearGradient>
@@ -164,14 +175,23 @@ export default function EloChartPlot({
             <LinearGradient id="selectionBeam" x1="0" y1="0" x2="0" y2="1">
               <Stop
                 offset="0%"
-                stopColor={withAlpha(glowColor ?? chartColors.purple, 0.22)}
+                stopColor={withAlpha(effectiveGlowColor, 0.14)}
               />
               <Stop
                 offset="100%"
-                stopColor={withAlpha(glowColor ?? chartColors.purple, 0.03)}
+                stopColor={withAlpha(effectiveGlowColor, 0.01)}
               />
             </LinearGradient>
           </Defs>
+
+          <Rect
+            x={PAD_L}
+            y={PAD_T}
+            width={INNER_W}
+            height={INNER_H}
+            rx={14}
+            fill={chartColors.panelBgStrong}
+          />
 
           <Rect
             x={PAD_L}
@@ -191,14 +211,14 @@ export default function EloChartPlot({
                   y1={y}
                   x2={WIDTH - PAD_R}
                   y2={y}
-                  stroke={withAlpha("#FFFFFF", index === yTicks.length - 1 ? 0.12 : 0.08)}
+                  stroke={withAlpha("#FFFFFF", index === yTicks.length - 1 ? 0.1 : 0.05)}
                   strokeWidth={1}
                   strokeDasharray="4 6"
                 />
                 <SvgText
                   x={PAD_L - 8}
                   y={y + 4}
-                  fill={withAlpha("#FFFFFF", 0.55)}
+                  fill={withAlpha("#FFFFFF", 0.44)}
                   fontSize="10"
                   fontWeight="700"
                   textAnchor="end"
@@ -212,9 +232,9 @@ export default function EloChartPlot({
           {totalGames > 0 && safeSelectedIndex < totalGames ? (
             <>
               <Rect
-                x={getX(safeSelectedIndex, totalGames) - 18}
+                x={getX(safeSelectedIndex, totalGames) - 12}
                 y={PAD_T}
-                width={36}
+                width={24}
                 height={INNER_H}
                 fill="url(#selectionBeam)"
                 rx={12}
@@ -224,7 +244,7 @@ export default function EloChartPlot({
                 y1={PAD_T}
                 x2={getX(safeSelectedIndex, totalGames)}
                 y2={HEIGHT - PAD_B}
-                stroke={withAlpha(glowColor ?? chartColors.purple, 0.5)}
+                stroke={withAlpha(effectiveGlowColor, 0.28)}
                 strokeWidth={1.5}
               />
             </>
@@ -239,7 +259,7 @@ export default function EloChartPlot({
                 <SvgText
                   x={x}
                   y={HEIGHT - 10}
-                  fill={withAlpha("#FFFFFF", active ? 0.88 : 0.46)}
+                  fill={withAlpha("#FFFFFF", active ? 0.82 : 0.4)}
                   fontSize="10"
                   fontWeight={active ? "800" : "600"}
                   textAnchor="middle"
@@ -263,7 +283,7 @@ export default function EloChartPlot({
                   <Path
                     d={row.path}
                     fill="none"
-                    stroke={withAlpha(row.colorValue, Math.min(1, strokeOpacity * 0.35))}
+                    stroke={withAlpha(row.colorValue, Math.min(1, strokeOpacity * 0.24))}
                     strokeWidth={strokeWidth + 5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -289,17 +309,17 @@ export default function EloChartPlot({
                         <Circle
                           cx={point.x}
                           cy={point.y}
-                          r={10}
-                          fill={withAlpha(row.colorValue, 0.18)}
+                          r={8}
+                          fill={withAlpha(row.colorValue, 0.14)}
                         />
                       ) : null}
                       <Circle
                         cx={point.x}
                         cy={point.y}
-                        r={selected ? 5.5 : 3.5}
+                        r={selected ? 5.2 : 2.9}
                         fill={row.colorValue}
-                        stroke="#FFFFFF"
-                        strokeWidth={selected ? 1.6 : 1}
+                        stroke={withAlpha("#FFFFFF", selected ? 0.92 : 0.52)}
+                        strokeWidth={selected ? 1.5 : 0.9}
                       />
                     </G>
                   );
@@ -365,6 +385,10 @@ export default function EloChartPlot({
 
           <Text style={styles.inspectorSubtext}>
             Game {safeSelectedIndex + 1} of {Math.max(totalGames, 1)}
+          </Text>
+          <Text style={styles.inspectorStory}>
+            Peak {formatValue(focusedPeakValue, selectedMode)} | Delta{" "}
+            {formatValue(focusedDeltaValue, deltaMode)}
           </Text>
         </View>
       ) : null}
@@ -459,6 +483,12 @@ const styles = StyleSheet.create({
     color: withAlpha("#FFFFFF", 0.62),
     fontSize: 11,
     fontWeight: "700",
+  },
+
+  inspectorStory: {
+    color: withAlpha("#FFFFFF", 0.78),
+    fontSize: 11,
+    fontWeight: "800",
   },
 
   legendGrid: {
