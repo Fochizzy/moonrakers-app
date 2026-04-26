@@ -49,6 +49,7 @@ export type PlayerTotals = {
   objectivePrestige?: number;
   objectiveCount?: number;
   assists?: number;
+  assistCountBySource?: Record<string, number>;
   contracts?: number;
   failures?: number;
   turns?: number;
@@ -476,8 +477,10 @@ function normalizeTotalsEntry(
     entry?.assistPrestigeFromPlayers ??
     entry?.assistSources
   );
+  const assistCountMapRaw = normalizeAssistMap(entry?.assistCountBySource);
 
   const assistPrestigeBySource = mapAssistSourceKeys(assistMapRaw, idMap);
+  const assistCountBySource = mapAssistSourceKeys(assistCountMapRaw, idMap);
 
   return {
     ...entry,
@@ -506,6 +509,7 @@ function normalizeTotalsEntry(
     assistPrestigeByPlayer: assistPrestigeBySource,
     assistPrestigeFromPlayers: assistPrestigeBySource,
     assistSources: assistPrestigeBySource,
+    assistCountBySource,
     name: entry?.name,
     playerName: entry?.playerName,
     rawPlayerId,
@@ -570,6 +574,10 @@ function mergeTotalsEntry(existing: PlayerTotals | undefined, incoming: PlayerTo
       b.assistPrestigeFromPlayers
     ),
     assistSources: mergeAssistMaps(a.assistSources, b.assistSources),
+    assistCountBySource: mergeAssistMaps(
+      a.assistCountBySource,
+      b.assistCountBySource
+    ),
   };
 }
 

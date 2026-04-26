@@ -27,6 +27,7 @@ export type PlayerGameTotals = {
   assistPrestigeReceived: number;
   assistPrestigeSent: number;
   assistPrestigeBySource: Record<string, number>;
+  assistCountBySource?: Record<string, number>;
   objectivePrestige: number;
   score: number;
   assists: number;
@@ -315,6 +316,7 @@ function normalizeImportedGame(raw: any): Game {
       assistPrestigeReceived: assist,
       assistPrestigeSent: safeNumber(t?.assistPrestigeSent),
       assistPrestigeBySource: normalizeAssistMap(t?.assistPrestigeBySource),
+      assistCountBySource: normalizeAssistMap(t?.assistCountBySource),
       objectivePrestige: objective,
       score: safeNumber(t?.score),
       assists: safeNumber(t?.assists),
@@ -854,6 +856,10 @@ export const useStore = create<Store>((set, get) => ({
             Number((t as any).assistedEfficiency) ||
             Number(existingTotals.assistedEfficiency) ||
             0,
+          assistCountBySource: {
+            ...(existingTotals.assistCountBySource || {}),
+            ...(((t as any).assistCountBySource || {}) as Record<string, number>),
+          },
           assistPrestigeBySource: {
             ...(existingTotals.assistPrestigeBySource || {}),
             ...(((t as any).assistPrestigeBySource || {}) as Record<string, number>),

@@ -87,6 +87,13 @@ function getAssistSourceMap(entry?: Record<string, unknown>): Record<string, num
   return {};
 }
 
+function getAssistCountSourceMap(entry?: Record<string, unknown>): Record<string, number> {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return {};
+  return normalizeAssistMap(
+    entry.assistCountBySource as Record<string, unknown> | undefined
+  );
+}
+
 function matchesExactPlayerScope(game: NormalizedGame, scopedPlayerIds: string[]) {
   const gameIds = new Set(
     (game.players ?? [])
@@ -181,7 +188,61 @@ export function buildAssistNetworkDataset({
   };
 
   for (const game of includedGames) {
-    const gameRoundEdgeIds = new Set<string>();
+    const gameEdgeMap = new Map<
+      string,
+      {
+        sourceId: string;
+        targetId: string;
+        assistCount: number;
+        assistPrestige: number;
+      }
+    >();
+
+    const accumulateGameEdge = (
+      sourceId: string,
+      targetId: string,
+      assistCount: number,
+      assistPrestige: number
+    ) => {
+      const linkId = `${sourceId}__${targetId}`;
+      const existing = gameEdgeMap.get(linkId);
+
+      if (!existing) {
+        gameEdgeMap.set(linkId, {
+          sourceId,
+          targetId,
+          assistCount,
+          assistPrestige,
+        });
+        return;
+      }
+
+      existing.assistCount += assistCount;
+      existing.assistPrestige += assistPrestige;
+    };
+
+    const reconcileGameEdgeTotals = (
+      sourceId: string,
+      targetId: string,
+      assistCount: number,
+      assistPrestige: number
+    ) => {
+      const linkId = `${sourceId}__${targetId}`;
+      const existing = gameEdgeMap.get(linkId);
+
+      if (!existing) {
+        gameEdgeMap.set(linkId, {
+          sourceId,
+          targetId,
+          assistCount,
+          assistPrestige,
+        });
+        return;
+      }
+
+      existing.assistCount = Math.max(existing.assistCount, assistCount);
+      existing.assistPrestige = Math.max(existing.assistPrestige, assistPrestige);
+    };
 
     for (const player of game.players ?? []) {
       ensureNode(player?.id);
@@ -211,8 +272,7 @@ export function buildAssistNetworkDataset({
           0,
           toNumber(assistPrestigeRecipients[targetId])
         );
-        gameRoundEdgeIds.add(`${sourceId}__${targetId}`);
-        addAssistEdge(sourceId, targetId, assistPrestige, 1);
+        accumulateGameEdge(sourceId, targetId, 1, assistPrestige);
       }
     }
 
@@ -223,8 +283,15 @@ export function buildAssistNetworkDataset({
       const assistSourceMap = getAssistSourceMap(
         rawTotals as Record<string, unknown>
       );
+      const assistCountSourceMap = getAssistCountSourceMap(
+        rawTotals as Record<string, unknown>
+      );
+      const assistSourceIds = new Set([
+        ...Object.keys(assistSourceMap),
+        ...Object.keys(assistCountSourceMap),
+      ]);
 
-      for (const [sourceIdRaw, rawPrestige] of Object.entries(assistSourceMap)) {
+      for (const sourceIdRaw of assistSourceIds) {
         const sourceId = normalizePlayerId(sourceIdRaw);
         if (!sourceId || sourceId === recipientId) continue;
         if (
@@ -234,14 +301,34 @@ export function buildAssistNetworkDataset({
           continue;
         }
 
-        const assistPrestige = Math.max(0, toNumber(rawPrestige));
-        if (assistPrestige <= 0) continue;
+        const assistPrestige = Math.max(
+          0,
+          toNumber(assistSourceMap[sourceIdRaw])
+        );
+        const assistCount = Math.max(
+          0,
+          toNumber(assistCountSourceMap[sourceIdRaw])
+        );
+        const normalizedAssistCount =
+          assistCount > 0 ? assistCount : assistPrestige > 0 ? 1 : 0;
+        if (normalizedAssistCount <= 0 && assistPrestige <= 0) continue;
 
-        const linkId = `${sourceId}__${recipientId}`;
-        if (gameRoundEdgeIds.has(linkId)) continue;
-
-        addAssistEdge(sourceId, recipientId, assistPrestige, 1);
+        reconcileGameEdgeTotals(
+          sourceId,
+          recipientId,
+          normalizedAssistCount,
+          assistPrestige
+        );
       }
+    }
+
+    for (const edge of gameEdgeMap.values()) {
+      addAssistEdge(
+        edge.sourceId,
+        edge.targetId,
+        edge.assistPrestige,
+        edge.assistCount
+      );
     }
   }
 

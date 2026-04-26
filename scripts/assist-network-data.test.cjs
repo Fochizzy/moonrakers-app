@@ -37,6 +37,10 @@ const { buildAssistNetworkLayout } = require(path.join(
   "AssistNetworkOverview",
   "buildAssistNetworkLayout.ts"
 ));
+const {
+  collectUnifiedGames,
+  canonicalizeGames,
+} = require(path.join(__dirname, "..", "utils", "charts.ts"));
 
 function requireAssistNetworkImpact() {
   return require(path.join(
@@ -284,6 +288,41 @@ run("buildAssistNetworkDataset derives frequency-per-game from the exact-match s
   );
 });
 
+run("buildAssistNetworkDataset counts repeated same-direction assists within one exact-match game", () => {
+  const dataset = buildAssistNetworkDataset({
+    games: [
+      {
+        id: "repeat-link",
+        players: [{ id: "james" }, { id: "greg" }],
+        rounds: [
+          {
+            id: "r1",
+            playerId: "james",
+            assistRecipients: { greg: 1 },
+            assistPrestigeRecipients: { greg: 2 },
+          },
+          {
+            id: "r2",
+            playerId: "james",
+            assistRecipients: { greg: 1 },
+            assistPrestigeRecipients: { greg: 1 },
+          },
+        ],
+        timeline: [],
+        totals: {},
+      },
+    ],
+    scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(dataset.gameCount, 1);
+  assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].assistCount, 2);
+  assert.equal(dataset.edges[0].assistPrestige, 3);
+  assert.equal(dataset.edges[0].assistFrequencyPerGame, 2);
+});
+
 run("buildAssistNetworkDataset falls back to assist-source totals when round logs are empty", () => {
   const dataset = buildAssistNetworkDataset({
     games: [
@@ -324,6 +363,52 @@ run("buildAssistNetworkDataset falls back to assist-source totals when round log
   assert.equal(dataset.edges[0].assistCount, 2);
   assert.equal(dataset.edges[0].assistPrestige, 6);
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 1);
+});
+
+run("assistCountBySource survives the unified chart pipeline and creates exact-match edges", () => {
+  const rawStore = {
+    games: [
+      {
+        id: "counts-only",
+        players: [
+          { id: "james", name: "James" },
+          { id: "greg", name: "Greg" },
+        ],
+        rounds: [],
+        timeline: [],
+        totals: {
+          james: {
+            totalPrestige: 11,
+            turns: 4,
+          },
+          greg: {
+            totalPrestige: 9,
+            turns: 4,
+            assistCountBySource: { james: 2 },
+          },
+        },
+      },
+    ],
+  };
+
+  const rawGames = collectUnifiedGames(rawStore);
+  const unifiedGames = canonicalizeGames(rawGames, [
+    { id: "james", name: "James" },
+    { id: "greg", name: "Greg" },
+  ]);
+
+  const dataset = buildAssistNetworkDataset({
+    games: unifiedGames,
+    scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(dataset.gameCount, 1);
+  assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].assistCount, 2);
+  assert.equal(dataset.edges[0].assistPrestige, 0);
+  assert.equal(dataset.edges[0].assistFrequencyPerGame, 2);
 });
 
 run("buildAssistNetworkImpact compares exact-table results against overall baseline", () => {
