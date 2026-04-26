@@ -344,7 +344,9 @@ export function buildFeaturedChartTakeaway({
     case "efficiency_failure_scatter":
       return "See which players balance high efficiency with low failure pressure across the current sample.";
     case "relationship_graph":
-      return "See who assists whom across the current sample.";
+      return scopedCount >= 2
+        ? `See who assists whom when this exact ${scopeText} plays together.`
+        : "See who assists whom across the full sample, or narrow to an exact table.";
     case "stacked_bar_chart":
       return "Break each player's result into the pieces that built it.";
     case "replay_chart":
