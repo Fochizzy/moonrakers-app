@@ -119,7 +119,7 @@ run("Relationship graph source renders per-game assist labels on visible edges",
   );
 });
 
-run("Assist network overview source includes exact-scope empty-state copy", () => {
+run("Assist network overview source includes strict exact-scope empty-state copy", () => {
   const overviewSource = read(
     path.join(
       "components",
@@ -137,8 +137,8 @@ run("Assist network overview source includes exact-scope empty-state copy", () =
 
   assert.match(
     overviewSource,
-    /These exact-match games have no recorded assist links yet\./,
-    "expected the overview to explain when exact-match games exist but no assist links are recorded"
+    /These older exact-match games only saved aggregate assist totals, not which teammate gave each assist on the turn\./,
+    "expected the overview to explain when older exact-match games have assist activity but no saved assist direction"
   );
 });
 
@@ -326,7 +326,7 @@ run("Assist network overview composes controls, details, and the graph surface t
   );
 });
 
-run("Assist network overview keeps the graph surface visible when exact-match games have zero assist links", () => {
+run("Assist network overview replaces the graph with a strict warning when exact-match games have no saved assist direction", () => {
   React.useMemo = (fn) => fn();
   React.useState = (initial) => [
     typeof initial === "function" ? initial() : initial,
@@ -358,8 +358,8 @@ run("Assist network overview keeps the graph surface visible when exact-match ga
           { id: "james", name: "James" },
         ],
         totals: {
-          greg: { totalPrestige: 10, efficiency: 10 },
-          izzy: { totalPrestige: 12, efficiency: 12 },
+          greg: { totalPrestige: 10, efficiency: 10, assists: 1 },
+          izzy: { totalPrestige: 12, efficiency: 12, assistPrestigeReceived: 2 },
           james: { totalPrestige: 9, efficiency: 9 },
         },
         rounds: [],
@@ -380,21 +380,16 @@ run("Assist network overview keeps the graph surface visible when exact-match ga
       (entry) =>
         entry.type === "Text" &&
         String(entry.props?.children ?? "").includes(
-          "These exact-match games have no recorded assist links yet."
+          "These older exact-match games only saved aggregate assist totals, not which teammate gave each assist on the turn."
         )
     ),
-    "expected the overview to keep the zero-link exact-scope notice visible"
+    "expected the overview to show the strict legacy-data warning"
   );
 
-  assert.ok(
+  assert.equal(
     relationshipGraphEntry,
-    "expected the overview to keep rendering the RelationshipGraph surface for zero-link exact-match samples"
-  );
-
-  assert.deepEqual(
-    relationshipGraphEntry.props.relationships,
-    [],
-    "expected zero-link exact-match samples to pass an empty edge list into RelationshipGraph"
+    undefined,
+    "expected the overview to suppress the RelationshipGraph surface for zero-direction exact-match samples"
   );
 
   assert.equal(
@@ -405,5 +400,14 @@ run("Assist network overview keeps the graph surface visible when exact-match ga
     ),
     false,
     "expected the overview to suppress the details card when there are no recorded exact-match links"
+  );
+
+  assert.ok(
+    nodes.some(
+      (entry) =>
+        typeof entry.type === "function" &&
+        entry.type.name === "AssistNetworkImpactSection"
+    ),
+    "expected the impact section to remain visible under the strict warning"
   );
 });

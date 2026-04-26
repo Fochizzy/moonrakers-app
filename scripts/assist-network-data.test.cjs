@@ -41,6 +41,9 @@ const {
   collectUnifiedGames,
   canonicalizeGames,
 } = require(path.join(__dirname, "..", "utils", "charts.ts"));
+const {
+  normalizeCloudSnapshot,
+} = require(path.join(__dirname, "..", "lib", "cloud", "normalizeCloudSnapshot.ts"));
 
 function requireAssistNetworkImpact() {
   return require(path.join(
@@ -365,6 +368,30 @@ run("buildAssistNetworkDataset falls back to assist-source totals when round log
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 1);
 });
 
+run("buildAssistNetworkDataset flags aggregate-only exact-match samples when direction is missing", () => {
+  const dataset = buildAssistNetworkDataset({
+    games: [
+      {
+        id: "legacy-aggregate-only",
+        players: [{ id: "james" }, { id: "greg" }, { id: "izzy" }],
+        rounds: [],
+        timeline: [],
+        totals: {
+          james: { totalPrestige: 12, assists: 1 },
+          greg: { totalPrestige: 8, assistPrestigeReceived: 2 },
+          izzy: { totalPrestige: 7 },
+        },
+      },
+    ],
+    scopedPlayerIds: ["james", "greg", "izzy"],
+    exactScopePlayerIds: ["james", "greg", "izzy"],
+  });
+
+  assert.equal(dataset.gameCount, 1);
+  assert.equal(dataset.edges.length, 0);
+  assert.equal(dataset.hasAggregateAssistActivityWithoutDirection, true);
+});
+
 run("assistCountBySource survives the unified chart pipeline and creates exact-match edges", () => {
   const rawStore = {
     games: [
@@ -399,6 +426,87 @@ run("assistCountBySource survives the unified chart pipeline and creates exact-m
 
   const dataset = buildAssistNetworkDataset({
     games: unifiedGames,
+    scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(dataset.gameCount, 1);
+  assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].assistCount, 2);
+  assert.equal(dataset.edges[0].assistPrestige, 0);
+  assert.equal(dataset.edges[0].assistFrequencyPerGame, 2);
+});
+
+run("cloud snapshot rounds with assist counts but zero assist prestige still create exact-match edges", () => {
+  const snapshot = normalizeCloudSnapshot({
+    games: [
+      {
+        id: "cloud-counts-only",
+        created_at: "2026-04-26T00:00:00.000Z",
+        winner_profile_id: "james",
+        game_participants: [
+          {
+            id: "row-james",
+            profile_id: "james",
+            player_name_snapshot: "James",
+            start_order: 0,
+            total_prestige: 12,
+            direct_prestige: 12,
+            assist_prestige_received: 0,
+            objective_prestige: 0,
+            score: 12,
+            assists: 2,
+            failures: 0,
+            contracts: 2,
+          },
+          {
+            id: "row-greg",
+            profile_id: "greg",
+            player_name_snapshot: "Greg",
+            start_order: 1,
+            total_prestige: 8,
+            direct_prestige: 8,
+            assist_prestige_received: 0,
+            objective_prestige: 0,
+            score: 8,
+            assists: 0,
+            failures: 0,
+            contracts: 1,
+          },
+        ],
+        game_rounds: [
+          {
+            participant_id: "row-james",
+            round_index: 0,
+            prestige: 6,
+            contracts: 1,
+            failures: 0,
+            assist_recipients: { greg: 1 },
+            assist_prestige_recipients: {},
+            objective_count: 0,
+            objective_prestige: 0,
+            created_at: "2026-04-26T00:00:00.000Z",
+          },
+          {
+            participant_id: "row-james",
+            round_index: 1,
+            prestige: 6,
+            contracts: 1,
+            failures: 0,
+            assist_recipients: { greg: 1 },
+            assist_prestige_recipients: {},
+            objective_count: 0,
+            objective_prestige: 0,
+            created_at: "2026-04-26T00:05:00.000Z",
+          },
+        ],
+      },
+    ],
+  });
+
+  const dataset = buildAssistNetworkDataset({
+    games: snapshot.games,
     scopedPlayerIds: ["james", "greg"],
     exactScopePlayerIds: ["james", "greg"],
   });

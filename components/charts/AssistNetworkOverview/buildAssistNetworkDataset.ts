@@ -24,6 +24,7 @@ export type AssistNetworkDataset = {
   includedGameIds: string[];
   gameCount: number;
   exactScopeApplied: boolean;
+  hasAggregateAssistActivityWithoutDirection: boolean;
   edges: AssistNetworkDatasetEdge[];
   nodes: AssistNetworkDatasetNode[];
 };
@@ -104,6 +105,15 @@ function matchesExactPlayerScope(game: NormalizedGame, scopedPlayerIds: string[]
   return scopedPlayerIds.every((id) => gameIds.has(normalizePlayerId(id)));
 }
 
+function hasAggregateAssistActivity(entry: Record<string, unknown> | undefined): boolean {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+  return (
+    toNumber(entry.assists) > 0 ||
+    toNumber(entry.assistPrestigeReceived) > 0 ||
+    toNumber(entry.assistPrestigeSent) > 0
+  );
+}
+
 export function buildAssistNetworkDataset({
   games,
   scopedPlayerIds,
@@ -128,6 +138,7 @@ export function buildAssistNetworkDataset({
 
   const nodeMap = new Map<string, AssistNetworkNode>();
   const edgeMap = new Map<string, AssistNetworkDatasetEdge>();
+  let hasAggregateAssistActivityWithoutDirection = false;
 
   const ensureNode = (playerIdRaw: unknown) => {
     const playerId = normalizePlayerId(playerIdRaw);
@@ -197,6 +208,8 @@ export function buildAssistNetworkDataset({
         assistPrestige: number;
       }
     >();
+    let gameHasDirectionalAssistLinks = false;
+    let gameHasAggregateAssistActivity = false;
 
     const accumulateGameEdge = (
       sourceId: string,
@@ -251,6 +264,11 @@ export function buildAssistNetworkDataset({
     for (const round of game.rounds ?? []) {
       const sourceId = normalizePlayerId(round?.playerId);
       if (!sourceId) continue;
+      if (!visibleScopeSet || visibleScopeSet.has(sourceId)) {
+        gameHasAggregateAssistActivity =
+          hasAggregateAssistActivity(round as Record<string, unknown>) ||
+          gameHasAggregateAssistActivity;
+      }
 
       const assistRecipients = round?.assistRecipients ?? {};
       const assistPrestigeRecipients = normalizeAssistMap(
@@ -272,6 +290,7 @@ export function buildAssistNetworkDataset({
           0,
           toNumber(assistPrestigeRecipients[targetId])
         );
+        gameHasDirectionalAssistLinks = true;
         accumulateGameEdge(sourceId, targetId, 1, assistPrestige);
       }
     }
@@ -279,6 +298,11 @@ export function buildAssistNetworkDataset({
     for (const [recipientIdRaw, rawTotals] of Object.entries(game.totals ?? {})) {
       const recipientId = normalizePlayerId(recipientIdRaw);
       if (!recipientId) continue;
+      if (!visibleScopeSet || visibleScopeSet.has(recipientId)) {
+        gameHasAggregateAssistActivity =
+          hasAggregateAssistActivity(rawTotals as Record<string, unknown>) ||
+          gameHasAggregateAssistActivity;
+      }
 
       const assistSourceMap = getAssistSourceMap(
         rawTotals as Record<string, unknown>
@@ -313,6 +337,7 @@ export function buildAssistNetworkDataset({
           assistCount > 0 ? assistCount : assistPrestige > 0 ? 1 : 0;
         if (normalizedAssistCount <= 0 && assistPrestige <= 0) continue;
 
+        gameHasDirectionalAssistLinks = true;
         reconcileGameEdgeTotals(
           sourceId,
           recipientId,
@@ -329,6 +354,10 @@ export function buildAssistNetworkDataset({
         edge.assistPrestige,
         edge.assistCount
       );
+    }
+
+    if (!gameHasDirectionalAssistLinks && gameHasAggregateAssistActivity) {
+      hasAggregateAssistActivityWithoutDirection = true;
     }
   }
 
@@ -355,6 +384,7 @@ export function buildAssistNetworkDataset({
     includedGameIds: includedGames.map((game) => String(game.id)),
     gameCount: includedGames.length,
     exactScopeApplied,
+    hasAggregateAssistActivityWithoutDirection,
     edges,
     nodes,
   };

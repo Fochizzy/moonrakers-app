@@ -90,8 +90,14 @@ export default function AssistNetworkOverview({
   const netGiverName = insight.netGiver?.player.name ?? "None";
   const netReceiverName = insight.netReceiver?.player.name ?? "None";
   const hasRecordedLinks = dataset.edges.length > 0;
-  const showZeroLinkNotice =
+  const showZeroLinkState =
     dataset.exactScopeApplied && dataset.gameCount > 0 && !hasRecordedLinks;
+  const zeroLinkTitle = dataset.hasAggregateAssistActivityWithoutDirection
+    ? "Legacy Assist Data"
+    : "No Assist Links Yet";
+  const zeroLinkBody = dataset.hasAggregateAssistActivityWithoutDirection
+    ? "These older exact-match games only saved aggregate assist totals, not which teammate gave each assist on the turn. Because the directional source links are missing, arrows, labels, and size changes cannot be shown for this table."
+    : "These exact-match games do not have any saved directional assist links yet, so arrows, labels, and size changes cannot be shown for this table.";
   const topLinkLabel = topLink
     ? `${topLink.sourceLabel} -> ${topLink.targetLabel}`
     : "No visible link";
@@ -112,31 +118,34 @@ export default function AssistNetworkOverview({
 
   return (
     <View style={styles.wrap}>
-      {showZeroLinkNotice ? (
-        <Text style={styles.emptyText}>
-          These exact-match games have no recorded assist links yet.
-        </Text>
+      {showZeroLinkState ? (
+        <View style={styles.warningCard}>
+          <Text style={styles.warningTitle}>{zeroLinkTitle}</Text>
+          <Text style={styles.warningBody}>{zeroLinkBody}</Text>
+        </View>
       ) : (
-        <AssistNetworkDetailsCard
-          hubName={hubName}
-          netGiverName={netGiverName}
-          netReceiverName={netReceiverName}
-          topLinkLabel={topLinkLabel}
-          topLinkValue={topLinkValue}
-          story={story}
-        />
-      )}
+        <>
+          <AssistNetworkDetailsCard
+            hubName={hubName}
+            netGiverName={netGiverName}
+            netReceiverName={netReceiverName}
+            topLinkLabel={topLinkLabel}
+            topLinkValue={topLinkValue}
+            story={story}
+          />
 
-      <RelationshipGraph
-        players={visiblePlayers as any}
-        relationships={dataset.edges as any}
-        scopedPlayerIds={scopedPlayerIds}
-        variant="assist_network"
-        mode={mode}
-        title={title}
-        subtitle={subtitle}
-        showReadoutCards={false}
-      />
+          <RelationshipGraph
+            players={visiblePlayers as any}
+            relationships={dataset.edges as any}
+            scopedPlayerIds={scopedPlayerIds}
+            variant="assist_network"
+            mode={mode}
+            title={title}
+            subtitle={subtitle}
+            showReadoutCards={false}
+          />
+        </>
+      )}
 
       <AssistNetworkImpactSection
         cards={impact.cards}
@@ -152,6 +161,24 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#94A3B8",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  warningCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(249,115,22,0.34)",
+    backgroundColor: "rgba(127,29,29,0.18)",
+    padding: 12,
+    gap: 6,
+  },
+  warningTitle: {
+    color: "#FDBA74",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  warningBody: {
+    color: "#E2E8F0",
     fontSize: 12,
     lineHeight: 18,
   },
