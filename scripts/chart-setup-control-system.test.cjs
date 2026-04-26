@@ -10,14 +10,14 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /selectedChart\.key === "relationship_graph"[\s\S]*title="Assist metric"/,
-  "expected the chart setup to always expose Assist metric for the profile assist network"
+  /getPreferredScopeIdsForChart\(\{[\s\S]*chartKey:\s*selectedChartKey[\s\S]*routeIds[\s\S]*currentIds:\s*selectedGroupIds/,
+  "expected the chart setup route sync to preserve exact-scope ids through a chart-aware helper"
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
-  /function replaceChartHubRoute\(chart: ChartCatalogEntry, setupOpen: boolean\)\s*\{[\s\S]*router\.setParams\(\s*buildChartHubParams\(chart,\s*setupOpen\)\s+as any\s*\);[\s\S]*\}/,
-  "expected the charts hub route state to keep relationship_graph in sync without re-navigating the current screen"
+  /title="Assist metric"/,
+  "expected the chart setup to drop the Assist metric section for the Assist Network"
 );
 
 assert.doesNotMatch(
@@ -28,8 +28,20 @@ assert.doesNotMatch(
 
 assert.match(
   source,
-  /function buildChartHubParams\([\s\S]*if \(chart\.key === "relationship_graph"\) \{[\s\S]*params\.assistMode = selectedAssistMode;/,
-  "expected the Assist Network launch contract to keep serializing assistMode on relationship_graph"
+  /if \(chart\.supportsIds && selectedGroupIds.length\) \{[\s\S]*params\.ids = selectedGroupIds\.join\(","\);/,
+  "expected the charts hub launch contract to keep serializing the selected player ids"
+);
+
+assert.doesNotMatch(
+  source,
+  /params\.assistMode = selectedAssistMode|selectedAssistMode|normalizeAssistMode|ASSIST_MODE_OPTIONS/,
+  "expected the Assist Network setup to remove assist-mode state and launch plumbing"
+);
+
+assert.match(
+  source,
+  /function replaceChartHubRoute\(chart: ChartCatalogEntry, setupOpen: boolean\)\s*\{[\s\S]*router\.setParams\(\s*buildChartHubParams\(chart,\s*setupOpen\)\s+as any\s*\);[\s\S]*\}/,
+  "expected the charts hub route state to keep relationship_graph in sync without re-navigating the current screen"
 );
 
 assert.doesNotMatch(

@@ -107,15 +107,15 @@ function read(relPath) {
   return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
 }
 
-run("Relationship graph source renders compact assist count badges on visible edges", () => {
+run("Relationship graph source renders per-game assist labels on visible edges", () => {
   const relationshipGraphSource = read(
     path.join("components", "charts", "RelationshipGraph.tsx")
   );
 
   assert.match(
     relationshipGraphSource,
-    /<SvgText[\s\S]*edge\.assistCount[\s\S]*`x\$\{edge\.assistCount\}`/,
-    "expected the graph renderer to place compact count badges on visible assist edges"
+    /<SvgText[\s\S]*edge\.(labelText|assistFrequencyPerGame)/,
+    "expected the graph renderer to place per-game frequency labels on visible assist edges"
   );
 });
 
@@ -154,8 +154,8 @@ run("Assist network details card source keeps strongest-link helper copy tied to
 
   assert.match(
     detailsCardSource,
-    /topLinkValue\} in the filtered sample/,
-    "expected the details card to keep strongest-link helper copy explicit about the filtered sample"
+    /topLinkValue\} across the exact filtered table/,
+    "expected the details card to keep strongest-link helper copy explicit about the exact filtered table"
   );
 });
 
@@ -248,12 +248,13 @@ run("Assist network overview composes controls, details, and the graph surface t
       typeof entry.type === "function" && entry.type.name === "RelationshipGraph"
   );
 
-  assert.ok(
+  assert.equal(
     nodes.some(
       (entry) =>
         typeof entry.type === "function" && entry.type.name === "AssistNetworkControls"
     ),
-    "expected AssistNetworkOverview to render AssistNetworkControls"
+    false,
+    "expected AssistNetworkOverview to stop rendering AssistNetworkControls"
   );
 
   assert.ok(
@@ -263,6 +264,15 @@ run("Assist network overview composes controls, details, and the graph surface t
         entry.type.name === "AssistNetworkDetailsCard"
     ),
     "expected AssistNetworkOverview to render AssistNetworkDetailsCard"
+  );
+
+  assert.ok(
+    nodes.some(
+      (entry) =>
+        typeof entry.type === "function" &&
+        entry.type.name === "AssistNetworkImpactSection"
+    ),
+    "expected AssistNetworkOverview to render AssistNetworkImpactSection"
   );
 
   assert.ok(
@@ -277,31 +287,41 @@ run("Assist network overview composes controls, details, and the graph surface t
 
   assert.deepEqual(
     relationshipGraphEntry.props.relationships.map((edge) => ({
-      sourceId: edge.sourceId,
-      targetId: edge.targetId,
-      assistCount: edge.assistCount,
-      assistPrestige: edge.assistPrestige,
-    })),
+        sourceId: edge.sourceId,
+        targetId: edge.targetId,
+        assistCount: edge.assistCount,
+        assistPrestige: edge.assistPrestige,
+        assistFrequencyPerGame: edge.assistFrequencyPerGame,
+      })),
     [
       {
         sourceId: "izzy",
         targetId: "greg",
         assistCount: 1,
         assistPrestige: 3,
+        assistFrequencyPerGame: 1,
       },
       {
         sourceId: "greg",
         targetId: "izzy",
         assistCount: 1,
         assistPrestige: 2,
+        assistFrequencyPerGame: 1,
       },
       {
         sourceId: "greg",
         targetId: "james",
         assistCount: 1,
         assistPrestige: 1,
+        assistFrequencyPerGame: 1,
       },
     ],
     "expected AssistNetworkOverview to derive direct assist edges from unified games"
+  );
+
+  assert.equal(
+    relationshipGraphEntry.props.assistMode,
+    undefined,
+    "expected AssistNetworkOverview to stop passing assistMode into RelationshipGraph"
   );
 });

@@ -19,13 +19,19 @@ function run(name, fn) {
   }
 }
 
-run("Relationship graph detail route mounts AssistNetworkOverview from unified games and scoped ids", () => {
+run("Relationship graph detail route mounts AssistNetworkOverview from unified games and exact route ids", () => {
   const detailSource = read(path.join("app", "charts", "[chartKey].tsx"));
 
   assert.match(
     detailSource,
-    /case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*games=\{unifiedGames as any\}[\s\S]*players=\{resolvedPlayers as any\}[\s\S]*scopedPlayerIds=\{scopedPlayerIds\}[\s\S]*mode=\{routeMode\}[\s\S]*assistMode=\{routeAssistMode\}/,
-    "expected the relationship_graph route to mount AssistNetworkOverview from unified games and scoped ids"
+    /case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*games=\{unifiedGames as any\}[\s\S]*players=\{resolvedPlayers as any\}[\s\S]*scopedPlayerIds=\{routeIds.length \? routeIds : scopedPlayerIds\}[\s\S]*exactScopePlayerIds=\{routeIds.length >= 2 \? routeIds : undefined\}[\s\S]*mode=\{routeMode\}/,
+    "expected the relationship_graph route to mount AssistNetworkOverview from unified games and exact route ids"
+  );
+
+  assert.doesNotMatch(
+    detailSource,
+    /case "relationship_graph":[\s\S]*assistMode=\{routeAssistMode\}/,
+    "expected the relationship_graph route to stop passing assistMode into AssistNetworkOverview"
   );
 
   assert.doesNotMatch(

@@ -38,6 +38,17 @@ const { buildAssistNetworkLayout } = require(path.join(
   "buildAssistNetworkLayout.ts"
 ));
 
+function requireAssistNetworkImpact() {
+  return require(path.join(
+    __dirname,
+    "..",
+    "components",
+    "charts",
+    "AssistNetworkOverview",
+    "buildAssistNetworkImpact.ts"
+  ));
+}
+
 function run(name, fn) {
   try {
     fn();
@@ -48,6 +59,57 @@ function run(name, fn) {
     process.exitCode = 1;
   }
 }
+
+const exactAndOverallFixtureGames = [
+  {
+    id: "james-greg-a",
+    players: [{ id: "james" }, { id: "greg" }],
+    winnerId: "james",
+    rounds: [
+      {
+        id: "r1",
+        playerId: "james",
+        assistRecipients: { greg: 1 },
+        assistPrestigeRecipients: { greg: 2 },
+      },
+    ],
+    timeline: [],
+    totals: {
+      james: { totalPrestige: 12, turns: 4, efficiency: 3 },
+      greg: { totalPrestige: 8, turns: 4, efficiency: 2 },
+    },
+  },
+  {
+    id: "james-greg-b",
+    players: [{ id: "james" }, { id: "greg" }],
+    winnerId: "greg",
+    rounds: [],
+    timeline: [],
+    totals: {
+      james: { totalPrestige: 10, turns: 4, efficiency: 2.5 },
+      greg: { totalPrestige: 11, turns: 4, efficiency: 2.75 },
+    },
+  },
+  {
+    id: "james-greg-izzy",
+    players: [{ id: "james" }, { id: "greg" }, { id: "izzy" }],
+    winnerId: "izzy",
+    rounds: [
+      {
+        id: "r2",
+        playerId: "james",
+        assistRecipients: { greg: 1 },
+        assistPrestigeRecipients: { greg: 5 },
+      },
+    ],
+    timeline: [],
+    totals: {
+      james: { totalPrestige: 6, turns: 4, efficiency: 1.5 },
+      greg: { totalPrestige: 7, turns: 4, efficiency: 1.75 },
+      izzy: { totalPrestige: 13, turns: 4, efficiency: 3.25 },
+    },
+  },
+];
 
 run("buildAssistNetworkDataset applies exact composition filtering and preserves real counts", () => {
   const dataset = buildAssistNetworkDataset({
@@ -82,6 +144,7 @@ run("buildAssistNetworkDataset applies exact composition filtering and preserves
       },
     ],
     scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
   });
 
   assert.deepEqual(dataset.includedGameIds, ["jg-only"]);
@@ -90,6 +153,7 @@ run("buildAssistNetworkDataset applies exact composition filtering and preserves
   assert.equal(dataset.edges[0].assistCount, 1);
   assert.equal(dataset.edges[0].assistPrestige, 2);
   assert.equal(dataset.edges[0].assistEfficiency, 2);
+  assert.equal(dataset.edges[0].assistFrequencyPerGame, 1);
 });
 
 run("buildAssistNetworkDataset matches exact scope with normalized game player ids", () => {
@@ -118,6 +182,7 @@ run("buildAssistNetworkDataset matches exact scope with normalized game player i
       },
     ],
     scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
   });
 
   assert.deepEqual(dataset.includedGameIds, ["trimmed-match"]);
@@ -126,6 +191,7 @@ run("buildAssistNetworkDataset matches exact scope with normalized game player i
   assert.equal(dataset.edges[0].id, "james__greg");
   assert.equal(dataset.edges[0].assistCount, 1);
   assert.equal(dataset.edges[0].assistPrestige, 3);
+  assert.equal(dataset.edges[0].assistFrequencyPerGame, 1);
 });
 
 run("buildAssistNetworkDataset does not create counted edges from prestige-only recipient data", () => {
@@ -147,6 +213,7 @@ run("buildAssistNetworkDataset does not create counted edges from prestige-only 
       },
     ],
     scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
   });
 
   assert.deepEqual(dataset.includedGameIds, ["prestige-only"]);
@@ -160,6 +227,7 @@ run("buildAssistNetworkDataset does not create counted edges from prestige-only 
       incomingPrestige: 0,
       outgoingPrestige: 0,
       supportBalance: 0,
+      involvementFrequencyPerGame: 0,
     },
     {
       id: "greg",
@@ -168,6 +236,7 @@ run("buildAssistNetworkDataset does not create counted edges from prestige-only 
       incomingPrestige: 0,
       outgoingPrestige: 0,
       supportBalance: 0,
+      involvementFrequencyPerGame: 0,
     },
   ]);
 });
@@ -184,6 +253,7 @@ run("buildAssistNetworkDataset reports an empty exact-match sample when no game 
       },
     ],
     scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
   });
 
   assert.equal(dataset.exactScopeApplied, true);
@@ -193,7 +263,41 @@ run("buildAssistNetworkDataset reports an empty exact-match sample when no game 
   assert.deepEqual(dataset.nodes, []);
 });
 
-run("buildAssistNetworkLayout preserves explicit array-supplied assistEfficiency", () => {
+run("buildAssistNetworkDataset derives frequency-per-game from the exact-match sample", () => {
+  const dataset = buildAssistNetworkDataset({
+    games: exactAndOverallFixtureGames,
+    scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(dataset.gameCount, 2);
+  assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].assistCount, 1);
+  assert.equal(dataset.edges[0].assistFrequencyPerGame, 0.5);
+  assert.equal(
+    dataset.nodes.find((node) => node.id === "james").involvementFrequencyPerGame,
+    0.5
+  );
+  assert.equal(
+    dataset.nodes.find((node) => node.id === "greg").involvementFrequencyPerGame,
+    0.5
+  );
+});
+
+run("buildAssistNetworkImpact compares exact-table results against overall baseline", () => {
+  const { buildAssistNetworkImpact } = requireAssistNetworkImpact();
+  const impact = buildAssistNetworkImpact({
+    games: exactAndOverallFixtureGames,
+    exactScopePlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(impact.sampleGameCount, 2);
+  assert.equal(impact.cards.totalPrestige.delta > 0, true);
+  assert.equal(impact.cards.winning.delta < 0, false);
+  assert.equal(Number.isFinite(impact.cards.efficiency.delta), true);
+});
+
+run("buildAssistNetworkLayout uses assist frequency for link weights and per-game labels", () => {
   const layout = buildAssistNetworkLayout(
     [
       {
@@ -202,67 +306,42 @@ run("buildAssistNetworkLayout preserves explicit array-supplied assistEfficiency
         assistCount: 2,
         assistPrestige: 10,
         assistEfficiency: 99,
+        assistFrequencyPerGame: 0.8,
       },
     ],
-    [
-      { id: "james", name: "James" },
-      { id: "greg", name: "Greg" },
-    ],
-    "assistEfficiency"
+    [{ id: "james", name: "James" }, { id: "greg", name: "Greg" }]
   );
 
   assert.equal(layout.links.length, 1);
   assert.equal(layout.links[0].assistCount, 2);
   assert.equal(layout.links[0].assistPrestige, 10);
   assert.equal(layout.links[0].assistEfficiency, 99);
-  assert.equal(layout.links[0].value, 99);
-  assert.equal(layout.maxValue, 99);
+  assert.equal(layout.links[0].assistFrequencyPerGame, 0.8);
+  assert.equal(layout.links[0].labelText, "0.8/game");
+  assert.equal(layout.links[0].value, 0.8);
+  assert.equal(layout.maxValue, 0.8);
 });
 
-run("buildAssistNetworkLayout merges duplicate explicit-efficiency edges deterministically", () => {
+run("buildAssistNetworkLayout sizes nodes from involvement frequency", () => {
   const forward = [
     {
       sourceId: "james",
       targetId: "greg",
       assistCount: 2,
       assistPrestige: 10,
-      assistEfficiency: 99,
-    },
-    {
-      sourceId: "james",
-      targetId: "greg",
-      assistCount: 1,
-      assistPrestige: 4,
-      assistEfficiency: 6,
+      assistEfficiency: 5,
+      assistFrequencyPerGame: 0.8,
     },
   ];
-
-  const reversed = [...forward].reverse();
   const players = [
     { id: "james", name: "James" },
     { id: "greg", name: "Greg" },
   ];
+  const layout = buildAssistNetworkLayout(forward, players);
 
-  const forwardLayout = buildAssistNetworkLayout(
-    forward,
-    players,
-    "assistEfficiency"
-  );
-  const reversedLayout = buildAssistNetworkLayout(
-    reversed,
-    players,
-    "assistEfficiency"
-  );
-
-  assert.equal(forwardLayout.links.length, 1);
-  assert.equal(reversedLayout.links.length, 1);
-  assert.equal(forwardLayout.links[0].assistCount, 3);
-  assert.equal(forwardLayout.links[0].assistPrestige, 14);
-  assert.equal(reversedLayout.links[0].assistCount, 3);
-  assert.equal(reversedLayout.links[0].assistPrestige, 14);
-  assert.equal(forwardLayout.links[0].assistEfficiency, 68);
-  assert.equal(reversedLayout.links[0].assistEfficiency, 68);
-  assert.equal(forwardLayout.links[0].value, 68);
-  assert.equal(reversedLayout.links[0].value, 68);
-  assert.deepEqual(forwardLayout.links, reversedLayout.links);
+  assert.equal(layout.nodes.length, 2);
+  assert.equal(layout.nodes[0].value, 0.8);
+  assert.equal(layout.nodes[0].involvementFrequencyPerGame, 0.8);
+  assert.equal(layout.nodes[1].value, 0.8);
+  assert.equal(layout.nodes[1].involvementFrequencyPerGame, 0.8);
 });
