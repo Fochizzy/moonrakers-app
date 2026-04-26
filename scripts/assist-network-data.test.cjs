@@ -195,7 +195,7 @@ run("buildAssistNetworkDataset matches exact scope with normalized game player i
   assert.deepEqual(dataset.includedGameIds, ["trimmed-match"]);
   assert.equal(dataset.gameCount, 1);
   assert.equal(dataset.edges.length, 1);
-  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].id, "greg__james");
   assert.equal(dataset.edges[0].assistCount, 1);
   assert.equal(dataset.edges[0].assistPrestige, 3);
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 1);
@@ -279,6 +279,7 @@ run("buildAssistNetworkDataset derives frequency-per-game from the exact-match s
 
   assert.equal(dataset.gameCount, 2);
   assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].id, "greg__james");
   assert.equal(dataset.edges[0].assistCount, 1);
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 0.5);
   assert.equal(
@@ -321,6 +322,7 @@ run("buildAssistNetworkDataset counts repeated same-direction assists within one
 
   assert.equal(dataset.gameCount, 1);
   assert.equal(dataset.edges.length, 1);
+  assert.equal(dataset.edges[0].id, "greg__james");
   assert.equal(dataset.edges[0].assistCount, 2);
   assert.equal(dataset.edges[0].assistPrestige, 3);
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 2);
@@ -362,10 +364,62 @@ run("buildAssistNetworkDataset falls back to assist-source totals when round log
 
   assert.equal(dataset.gameCount, 2);
   assert.equal(dataset.edges.length, 1);
-  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].id, "greg__james");
   assert.equal(dataset.edges[0].assistCount, 2);
   assert.equal(dataset.edges[0].assistPrestige, 6);
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 1);
+});
+
+run("buildAssistNetworkDataset infers separate exact-match directions from two-player legacy aggregate totals", () => {
+  const dataset = buildAssistNetworkDataset({
+    games: [
+      {
+        id: "two-player-legacy-both-ways",
+        players: [{ id: "james" }, { id: "greg" }],
+        rounds: [],
+        timeline: [],
+        totals: {
+          james: {
+            totalPrestige: 12,
+            assists: 1,
+            assistPrestigeReceived: 2,
+          },
+          greg: {
+            totalPrestige: 9,
+            assists: 2,
+            assistPrestigeReceived: 1,
+          },
+        },
+      },
+    ],
+    scopedPlayerIds: ["james", "greg"],
+    exactScopePlayerIds: ["james", "greg"],
+  });
+
+  assert.equal(dataset.gameCount, 1);
+  assert.equal(dataset.edges.length, 2);
+  assert.deepEqual(
+    dataset.edges.map((edge) => ({
+      id: edge.id,
+      assistCount: edge.assistCount,
+      assistPrestige: edge.assistPrestige,
+      assistFrequencyPerGame: edge.assistFrequencyPerGame,
+    })),
+    [
+      {
+        id: "james__greg",
+        assistCount: 2,
+        assistPrestige: 2,
+        assistFrequencyPerGame: 2,
+      },
+      {
+        id: "greg__james",
+        assistCount: 1,
+        assistPrestige: 1,
+        assistFrequencyPerGame: 1,
+      },
+    ]
+  );
 });
 
 run("buildAssistNetworkDataset flags aggregate-only exact-match samples when direction is missing", () => {
@@ -432,7 +486,7 @@ run("assistCountBySource survives the unified chart pipeline and creates exact-m
 
   assert.equal(dataset.gameCount, 1);
   assert.equal(dataset.edges.length, 1);
-  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].id, "greg__james");
   assert.equal(dataset.edges[0].assistCount, 2);
   assert.equal(dataset.edges[0].assistPrestige, 0);
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 2);
@@ -513,7 +567,7 @@ run("cloud snapshot rounds with assist counts but zero assist prestige still cre
 
   assert.equal(dataset.gameCount, 1);
   assert.equal(dataset.edges.length, 1);
-  assert.equal(dataset.edges[0].id, "james__greg");
+  assert.equal(dataset.edges[0].id, "greg__james");
   assert.equal(dataset.edges[0].assistCount, 2);
   assert.equal(dataset.edges[0].assistPrestige, 0);
   assert.equal(dataset.edges[0].assistFrequencyPerGame, 2);

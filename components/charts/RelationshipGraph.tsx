@@ -700,14 +700,10 @@ export default function RelationshipGraph({
                   const arrow =
                     variant === "assist_network"
                       ? safePath(
-                          `M ${safeNum(edge.endX).toFixed(2)} ${safeNum(edge.endY).toFixed(
-                            2
-                          )} L ${(safeNum(edge.endX) - safeNum(edge.arrowSize, EDGE_ARROW_SIZE)).toFixed(2)} ${(
-                            safeNum(edge.endY) -
-                            safeNum(edge.arrowSize, EDGE_ARROW_SIZE) / 2
-                          ).toFixed(2)} L ${(safeNum(edge.endX) - safeNum(edge.arrowSize, EDGE_ARROW_SIZE)).toFixed(
-                            2
-                          )} ${(safeNum(edge.endY) + safeNum(edge.arrowSize, EDGE_ARROW_SIZE) / 2).toFixed(2)} Z`
+                          buildArrowPath(
+                            edgeInput as any,
+                            safeNum(edge.arrowSize, EDGE_ARROW_SIZE)
+                          )
                         )
                       : safePath(buildArrowPath(edgeInput as any, EDGE_ARROW_SIZE));
 

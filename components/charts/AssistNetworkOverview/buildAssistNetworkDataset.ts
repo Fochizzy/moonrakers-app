@@ -114,6 +114,65 @@ function hasAggregateAssistActivity(entry: Record<string, unknown> | undefined):
   );
 }
 
+function inferTwoPlayerLegacyAssistEdges(
+  game: NormalizedGame,
+  visibleScopeSet: Set<string> | null,
+  reconcileGameEdgeTotals: (
+    sourceId: string,
+    targetId: string,
+    assistCount: number,
+    assistPrestige: number
+  ) => void
+) {
+  const relevantPlayerIds = (game.players ?? [])
+    .map((player) => normalizePlayerId(player?.id))
+    .filter((playerId) => playerId && (!visibleScopeSet || visibleScopeSet.has(playerId)));
+
+  const uniqueRelevantPlayerIds = Array.from(new Set(relevantPlayerIds));
+  if (uniqueRelevantPlayerIds.length !== 2) return false;
+
+  const [firstId, secondId] = uniqueRelevantPlayerIds;
+  const firstTotals = (game.totals?.[firstId] ?? {}) as Record<string, unknown>;
+  const secondTotals = (game.totals?.[secondId] ?? {}) as Record<string, unknown>;
+
+  const inferredEdges = [
+    {
+      sourceId: firstId,
+      targetId: secondId,
+      assistCount: Math.max(0, toNumber(secondTotals.assists)),
+      assistPrestige: Math.max(0, toNumber(firstTotals.assistPrestigeReceived)),
+    },
+    {
+      sourceId: secondId,
+      targetId: firstId,
+      assistCount: Math.max(0, toNumber(firstTotals.assists)),
+      assistPrestige: Math.max(0, toNumber(secondTotals.assistPrestigeReceived)),
+    },
+  ];
+
+  let inferredAny = false;
+
+  for (const inferred of inferredEdges) {
+    const normalizedAssistCount =
+      inferred.assistCount > 0
+        ? inferred.assistCount
+        : inferred.assistPrestige > 0
+          ? 1
+          : 0;
+    if (normalizedAssistCount <= 0 && inferred.assistPrestige <= 0) continue;
+
+    reconcileGameEdgeTotals(
+      inferred.sourceId,
+      inferred.targetId,
+      normalizedAssistCount,
+      inferred.assistPrestige
+    );
+    inferredAny = true;
+  }
+
+  return inferredAny;
+}
+
 export function buildAssistNetworkDataset({
   games,
   scopedPlayerIds,
@@ -262,9 +321,9 @@ export function buildAssistNetworkDataset({
     }
 
     for (const round of game.rounds ?? []) {
-      const sourceId = normalizePlayerId(round?.playerId);
-      if (!sourceId) continue;
-      if (!visibleScopeSet || visibleScopeSet.has(sourceId)) {
+      const targetId = normalizePlayerId(round?.playerId);
+      if (!targetId) continue;
+      if (!visibleScopeSet || visibleScopeSet.has(targetId)) {
         gameHasAggregateAssistActivity =
           hasAggregateAssistActivity(round as Record<string, unknown>) ||
           gameHasAggregateAssistActivity;
@@ -276,8 +335,8 @@ export function buildAssistNetworkDataset({
       );
 
       for (const [targetIdRaw, rawAssist] of Object.entries(assistRecipients)) {
-        const targetId = normalizePlayerId(targetIdRaw);
-        if (!targetId || targetId === sourceId) continue;
+        const sourceId = normalizePlayerId(targetIdRaw);
+        if (!sourceId || targetId === sourceId) continue;
         if (toNumber(rawAssist) <= 0) continue;
         if (
           visibleScopeSet &&
@@ -288,17 +347,17 @@ export function buildAssistNetworkDataset({
 
         const assistPrestige = Math.max(
           0,
-          toNumber(assistPrestigeRecipients[targetId])
+          toNumber(assistPrestigeRecipients[sourceId])
         );
         gameHasDirectionalAssistLinks = true;
         accumulateGameEdge(sourceId, targetId, 1, assistPrestige);
       }
     }
 
-    for (const [recipientIdRaw, rawTotals] of Object.entries(game.totals ?? {})) {
-      const recipientId = normalizePlayerId(recipientIdRaw);
-      if (!recipientId) continue;
-      if (!visibleScopeSet || visibleScopeSet.has(recipientId)) {
+    for (const [sourceIdRaw, rawTotals] of Object.entries(game.totals ?? {})) {
+      const sourceId = normalizePlayerId(sourceIdRaw);
+      if (!sourceId) continue;
+      if (!visibleScopeSet || visibleScopeSet.has(sourceId)) {
         gameHasAggregateAssistActivity =
           hasAggregateAssistActivity(rawTotals as Record<string, unknown>) ||
           gameHasAggregateAssistActivity;
@@ -315,23 +374,23 @@ export function buildAssistNetworkDataset({
         ...Object.keys(assistCountSourceMap),
       ]);
 
-      for (const sourceIdRaw of assistSourceIds) {
-        const sourceId = normalizePlayerId(sourceIdRaw);
-        if (!sourceId || sourceId === recipientId) continue;
+      for (const targetIdRaw of assistSourceIds) {
+        const targetId = normalizePlayerId(targetIdRaw);
+        if (!targetId || sourceId === targetId) continue;
         if (
           visibleScopeSet &&
-          (!visibleScopeSet.has(sourceId) || !visibleScopeSet.has(recipientId))
+          (!visibleScopeSet.has(sourceId) || !visibleScopeSet.has(targetId))
         ) {
           continue;
         }
 
         const assistPrestige = Math.max(
           0,
-          toNumber(assistSourceMap[sourceIdRaw])
+          toNumber(assistSourceMap[targetIdRaw])
         );
         const assistCount = Math.max(
           0,
-          toNumber(assistCountSourceMap[sourceIdRaw])
+          toNumber(assistCountSourceMap[targetIdRaw])
         );
         const normalizedAssistCount =
           assistCount > 0 ? assistCount : assistPrestige > 0 ? 1 : 0;
@@ -340,11 +399,20 @@ export function buildAssistNetworkDataset({
         gameHasDirectionalAssistLinks = true;
         reconcileGameEdgeTotals(
           sourceId,
-          recipientId,
+          targetId,
           normalizedAssistCount,
           assistPrestige
         );
       }
+    }
+
+    const inferredTwoPlayerLegacyEdges = inferTwoPlayerLegacyAssistEdges(
+      game,
+      visibleScopeSet,
+      reconcileGameEdgeTotals
+    );
+    if (inferredTwoPlayerLegacyEdges) {
+      gameHasDirectionalAssistLinks = true;
     }
 
     for (const edge of gameEdgeMap.values()) {

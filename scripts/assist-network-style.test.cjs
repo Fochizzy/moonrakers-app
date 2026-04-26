@@ -295,22 +295,22 @@ run("Assist network overview composes controls, details, and the graph surface t
       })),
     [
       {
-        sourceId: "izzy",
-        targetId: "greg",
+        sourceId: "greg",
+        targetId: "izzy",
         assistCount: 1,
         assistPrestige: 3,
         assistFrequencyPerGame: 1,
       },
       {
-        sourceId: "greg",
-        targetId: "izzy",
+        sourceId: "izzy",
+        targetId: "greg",
         assistCount: 1,
         assistPrestige: 2,
         assistFrequencyPerGame: 1,
       },
       {
-        sourceId: "greg",
-        targetId: "james",
+        sourceId: "james",
+        targetId: "greg",
         assistCount: 1,
         assistPrestige: 1,
         assistFrequencyPerGame: 1,
@@ -323,6 +323,18 @@ run("Assist network overview composes controls, details, and the graph surface t
     relationshipGraphEntry.props.assistMode,
     undefined,
     "expected AssistNetworkOverview to stop passing assistMode into RelationshipGraph"
+  );
+});
+
+run("Relationship graph source uses geometric assist arrowheads instead of a fixed horizontal triangle", () => {
+  const relationshipGraphSource = read(
+    path.join("components", "charts", "RelationshipGraph.tsx")
+  );
+
+  assert.match(
+    relationshipGraphSource,
+    /buildArrowPath\(\s*edgeInput as any,\s*safeNum\(edge\.arrowSize,\s*EDGE_ARROW_SIZE\)\s*\)/,
+    "expected assist-network arrows to be drawn from the path geometry so reciprocal arrows can point in separate directions"
   );
 });
 
