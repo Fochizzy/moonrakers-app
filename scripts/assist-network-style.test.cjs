@@ -43,13 +43,38 @@ Module._load = function patchedLoad(request, parent, isMain) {
     return { __esModule: true, default: "Text" };
   }
 
+  if (
+    request === "@/components/charts/ChartFocusCard" ||
+    request.endsWith(path.join("components", "charts", "ChartFocusCard.tsx"))
+  ) {
+    return { __esModule: true, default: "ChartFocusCard" };
+  }
+
+  if (
+    request === "@/components/charts/ChartStage" ||
+    request.endsWith(path.join("components", "charts", "ChartStage.tsx"))
+  ) {
+    return { __esModule: true, default: "ChartStage" };
+  }
+
+  if (
+    request === "@/components/charts/ChartUnderlineTabs" ||
+    request.endsWith(path.join("components", "charts", "ChartUnderlineTabs.tsx"))
+  ) {
+    return { __esModule: true, default: "ChartUnderlineTabs" };
+  }
+
   if (request === "react-native-svg") {
     return {
       __esModule: true,
       default: "Svg",
       Circle: "Circle",
+      Defs: "Defs",
       G: "G",
+      LinearGradient: "LinearGradient",
       Path: "Path",
+      Rect: "Rect",
+      Stop: "Stop",
       Text: "SvgText",
     };
   }
@@ -335,6 +360,74 @@ run("Relationship graph source uses geometric assist arrowheads instead of a fix
     relationshipGraphSource,
     /buildArrowPath\(\s*edgeInput as any,\s*safeNum\(edge\.arrowSize,\s*EDGE_ARROW_SIZE\)\s*\)/,
     "expected assist-network arrows to be drawn from the path geometry so reciprocal arrows can point in separate directions"
+  );
+});
+
+run("Relationship graph offsets reciprocal assist labels so both directions stay readable", () => {
+  React.useMemo = (fn) => fn();
+  React.useState = (initial) => [
+    typeof initial === "function" ? initial() : initial,
+    () => {},
+  ];
+  React.useEffect = () => {};
+
+  const relationshipGraphModule = require(path.join(
+    projectRoot,
+    "components",
+    "charts",
+    "RelationshipGraph.tsx"
+  ));
+  const RelationshipGraph = relationshipGraphModule.default;
+
+  const tree = RelationshipGraph({
+    players: [
+      { id: "greg", name: "Greg", color: "#3B82F6" },
+      { id: "james", name: "James", color: "#22C55E" },
+    ],
+    relationships: [
+      {
+        sourceId: "james",
+        targetId: "greg",
+        assistCount: 6,
+        assistPrestige: 4,
+        assistFrequencyPerGame: 1.2,
+      },
+      {
+        sourceId: "greg",
+        targetId: "james",
+        assistCount: 5,
+        assistPrestige: 5,
+        assistFrequencyPerGame: 1.0,
+      },
+    ],
+    scopedPlayerIds: ["greg", "james"],
+    variant: "assist_network",
+    mode: "flow",
+    showHeader: false,
+    showReadoutCards: false,
+  });
+
+  const nodes = flatten(tree);
+  const label120 = nodes.find(
+    (entry) =>
+      entry.type === "SvgText" &&
+      String(entry.props?.children ?? "") === "1.2/game"
+  );
+  const label100 = nodes.find(
+    (entry) =>
+      entry.type === "SvgText" &&
+      String(entry.props?.children ?? "") === "1.0/game"
+  );
+
+  assert.ok(label120, "expected the graph to render the 1.2/game label");
+  assert.ok(label100, "expected the graph to render the 1.0/game label");
+
+  const xDelta = Math.abs(Number(label120.props.x) - Number(label100.props.x));
+  const yDelta = Math.abs(Number(label120.props.y) - Number(label100.props.y));
+
+  assert.ok(
+    xDelta > 8 || yDelta > 8,
+    "expected reciprocal assist labels to render with visibly different positions"
   );
 });
 

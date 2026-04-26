@@ -186,6 +186,86 @@ function safePath(path: string) {
   return path && !/NaN|Infinity|undefined|null/.test(path) ? path : "";
 }
 
+function getQuadraticPoint(
+  startX: number,
+  startY: number,
+  controlX: number,
+  controlY: number,
+  endX: number,
+  endY: number,
+  t: number
+) {
+  const inverse = 1 - t;
+  return {
+    x:
+      inverse * inverse * startX +
+      2 * inverse * t * controlX +
+      t * t * endX,
+    y:
+      inverse * inverse * startY +
+      2 * inverse * t * controlY +
+      t * t * endY,
+  };
+}
+
+function getQuadraticTangent(
+  startX: number,
+  startY: number,
+  controlX: number,
+  controlY: number,
+  endX: number,
+  endY: number,
+  t: number
+) {
+  return {
+    x: 2 * (1 - t) * (controlX - startX) + 2 * t * (endX - controlX),
+    y: 2 * (1 - t) * (controlY - startY) + 2 * t * (endY - controlY),
+  };
+}
+
+function getAssistLabelPlacement(edge: SuperEdge) {
+  const startX = safeNum(edge.startX);
+  const startY = safeNum(edge.startY);
+  const endX = safeNum(edge.endX);
+  const endY = safeNum(edge.endY);
+  const controlX = safeNum(edge.controlX, (startX + endX) / 2);
+  const controlY = safeNum(edge.controlY, (startY + endY) / 2);
+  const curvePoint = getQuadraticPoint(
+    startX,
+    startY,
+    controlX,
+    controlY,
+    endX,
+    endY,
+    0.5
+  );
+  const tangent = getQuadraticTangent(
+    startX,
+    startY,
+    controlX,
+    controlY,
+    endX,
+    endY,
+    0.5
+  );
+  const tangentLength = Math.max(
+    1,
+    Math.sqrt(tangent.x * tangent.x + tangent.y * tangent.y)
+  );
+  const normalX = -tangent.y / tangentLength;
+  const normalY = tangent.x / tangentLength;
+  const offset = 14;
+
+  return {
+    x: safeNum(curvePoint.x + normalX * offset, curvePoint.x),
+    y: safeNum(curvePoint.y + normalY * offset, curvePoint.y),
+  };
+}
+
+function getAssistLabelWidth(text: string) {
+  return Math.max(48, Math.ceil(text.length * 7.2));
+}
+
 function UnderlineOption({
   label,
   active,
@@ -709,23 +789,15 @@ export default function RelationshipGraph({
 
                   if (!path) return null;
                   const active = isEdgeActive(edge, selectedNodeId);
-                  const edgeLabelX =
+                  const assistLabelPlacement =
                     variant === "assist_network"
-                      ? safeNum(
-                          (safeNum(edge.startX) +
-                            safeNum(edge.endX) +
-                            safeNum(edge.controlX, edge.startX)) /
-                            3
-                        )
-                      : 0;
-                  const edgeLabelY =
+                      ? getAssistLabelPlacement(edge)
+                      : { x: 0, y: 0 };
+                  const edgeLabelX = assistLabelPlacement.x;
+                  const edgeLabelY = assistLabelPlacement.y;
+                  const edgeLabelWidth =
                     variant === "assist_network"
-                      ? safeNum(
-                          (safeNum(edge.startY) +
-                            safeNum(edge.endY) +
-                            safeNum(edge.controlY, edge.startY)) /
-                            3
-                        )
+                      ? getAssistLabelWidth(String(edge.labelText ?? ""))
                       : 0;
 
                   return (
@@ -753,11 +825,11 @@ export default function RelationshipGraph({
                       {variant === "assist_network" && edge.labelText ? (
                         <>
                           <Rect
-                            x={safeNum(edgeLabelX - 21)}
-                            y={safeNum(edgeLabelY - 8)}
-                            width={42}
-                            height={16}
-                            rx={8}
+                            x={safeNum(edgeLabelX - edgeLabelWidth / 2)}
+                            y={safeNum(edgeLabelY - 9)}
+                            width={edgeLabelWidth}
+                            height={18}
+                            rx={9}
                             fill={withChartAlpha("#F8FAFC", active ? 0.9 : 0.74)}
                             stroke={withChartAlpha(edge.color, active ? 0.5 : 0.24)}
                             strokeWidth={0.9}
@@ -765,7 +837,7 @@ export default function RelationshipGraph({
                           <SvgText
                             x={edgeLabelX}
                             y={edgeLabelY + 3}
-                            fontSize="8"
+                            fontSize="8.5"
                             fill="#0F172A"
                             fontWeight="800"
                             textAnchor="middle"
