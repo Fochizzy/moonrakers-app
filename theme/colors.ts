@@ -42,17 +42,26 @@ export const colors = {
   text: {
     primary: palette.gray[50],
     secondary: palette.gray[400],
+    muted: palette.gray[400],
     brand: palette.indigo[500],
   },
 
   border: {
     subtle: 'rgba(255,255,255,0.06)',
     strong: 'rgba(255,255,255,0.12)',
+    tile: 'rgba(255,255,255,0.08)',
+    brand: 'rgba(99,102,241,0.28)',
+    emphasis: 'rgba(255,255,255,0.18)',
   },
 
   surface: {
     card: palette.gray[800],
     elevated: '#243047',
+    hero: '#162033',
+    glass: 'rgba(30,41,59,0.86)',
+    tile: 'rgba(255,255,255,0.05)',
+    overlay: 'rgba(11,16,32,0.28)',
+    alloy: 'rgba(255,255,255,0.04)',
   },
 
   accent: {
@@ -60,11 +69,13 @@ export const colors = {
     success: palette.green[500],
     warning: palette.yellow[400],
     error: palette.red[500],
+    info: '#60A5FA',
   },
 
   interaction: {
     pressed: 'rgba(255,255,255,0.05)',
     hover: 'rgba(255,255,255,0.08)',
+    selected: 'rgba(99,102,241,0.18)',
   },
 
   rank: palette.rank,

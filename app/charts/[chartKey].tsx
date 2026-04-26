@@ -1,23 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  SafeAreaView,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import AssistNetworkOverview from "@/components/charts/AssistNetworkOverview";
-import ChartInfoCard from "@/components/charts/ChartInfoCard";
-import ChartShell from "@/components/charts/ChartShell";
-import ScreenBackground from "@/components/ui/ScreenBackground";
 import {
   CHART_COLORS,
   CHART_LAYOUT,
 } from "@/components/charts/chartVisualSystem";
-import { buildChartDetailModel } from "@/components/charts/chartPageModel";
 import { EloChart } from "@/components/charts/ELO/exports";
 import RadarChart from "@/components/charts/RadarChart";
 import BarChart from "@/components/charts/BarChart";
@@ -31,7 +28,10 @@ import RivalryGraph from "@/components/charts/RivalryGraph";
 import HeadToHeadChart from "@/components/charts/HeadToHeadChart";
 import StackedBarChart from "@/components/charts/StackedBarChart";
 import Sparkline from "@/components/charts/Sparkline";
-import { resolveChartCatalogEntry as resolveChartMetadata } from "@/components/charts/chartCatalog";
+import {
+  canAdjustChartFromHub,
+  resolveChartCatalogEntry as resolveChartMetadata,
+} from "@/components/charts/chartCatalog";
 
 import { useStore } from "@/store/useStore";
 import { resolveAllGamesToPlayers } from "@/utils/importedGameResolver";
@@ -129,10 +129,8 @@ function titleCase(value: string) {
 
 function buildSubheading(chartKey: string) {
   if (chartKey === "compare") return "Direct comparison workflow.";
-  if (chartKey === "prestige_over_time") {
-    return "Prestige trend view through the shared route pipeline.";
-  }
-  return resolveChartMetadata(chartKey).detailSubtitle;
+  if (chartKey === "prestige_over_time") return "Prestige trend view.";
+  return resolveChartMetadata(chartKey).hook;
 }
 
 function buildRouteParams(args: {
@@ -188,6 +186,7 @@ function resolveChartTitle(chartKey: string) {
 }
 
 function resolveSetupChartKey(chartKey: string) {
+  if (!canAdjustChartFromHub(chartKey)) return null;
   if (chartKey === "compare") return null;
   if (chartKey === "prestige_over_time") return "line_chart";
   return resolveChartMetadata(chartKey).key;
@@ -408,46 +407,6 @@ export default function ChartKeyScreen() {
   }, [scopedPlayerIds, stackedDefaultMetric, stackedMetricDataMap, stackedMetricKey]);
 
   const hasData = unifiedGames.length > 0 && resolvedPlayers.length > 0;
-  const detailModel = useMemo(
-    () =>
-      buildChartDetailModel({
-        chartKey,
-        hasData,
-        gamesCount: detailGamesCount,
-        playersCount: resolvedPlayers.length,
-        scopedPlayers: detailScopedPlayers,
-        selectedPlayer,
-        comparePlayer,
-        metricKey:
-          chartKey === "stacked_bar_chart"
-            ? stackedMetricKey
-            : chartKey === "replay_chart"
-              ? replayMetric
-              : selectedMetric,
-        snapshots: detailSnapshots,
-        radarPrimary,
-        relationships,
-        graphMode: routeMode,
-        stackedRows: chartKey === "stacked_bar_chart" ? stackedScopedRows : undefined,
-      }),
-    [
-      chartKey,
-      comparePlayer,
-      detailGamesCount,
-      detailScopedPlayers,
-      detailSnapshots,
-      hasData,
-      radarPrimary,
-      relationships,
-      resolvedPlayers.length,
-      routeMode,
-      selectedMetric,
-      selectedPlayer,
-      stackedMetricKey,
-      stackedScopedRows,
-    ]
-  );
-
   function openChartSetup() {
     if (!setupChartKey) return;
 
@@ -508,6 +467,7 @@ export default function ChartKeyScreen() {
             games={unifiedGames as any}
             players={resolvedPlayers as any}
             scopedPlayerIds={scopedPlayerIds}
+            exactScopePlayerIds={routeIds.length >= 2 ? scopedPlayerIds : undefined}
             mode={routeMode}
             assistMode={routeAssistMode}
             title="Assist Network"
@@ -741,77 +701,67 @@ export default function ChartKeyScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScreenBackground preset="intel" />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
+    <PageShell preset="analytics" contentContainerStyle={styles.pageContent}>
+      <HeroCard
+        eyebrow="Charts"
+        title={resolveChartTitle(chartKey)}
+        size="compact"
+        style={styles.heroCard}
       >
-        <ChartShell
-          eyebrow="Charts"
-          title={resolveChartTitle(chartKey)}
-          subtitle={buildSubheading(chartKey)}
-          takeaway={detailModel.takeaway}
-          proofCards={detailModel.proofCards}
-          summaryVariant="compact"
-        >
-          {hasData ? (
-            renderChart()
-          ) : (
-            <ChartInfoCard variant="alt">
-              <Text style={styles.emptyText}>
-                Add or import games to populate the unified chart route.
-              </Text>
-            </ChartInfoCard>
-          )}
+        <Text style={styles.heroSubtitle} numberOfLines={2}>
+          {buildSubheading(chartKey)}
+        </Text>
+        {setupChartKey ? (
+          <View style={styles.heroActionRow}>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={openChartSetup}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.primaryButtonText}>Back to Adjust</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </HeroCard>
 
-          {setupChartKey ? (
-            <ChartInfoCard variant="alt">
-              <View style={styles.setupActionRow}>
-                <Text style={styles.setupHint}>
-                  Adjust this chart from the setup hub.
-                </Text>
-                <View style={styles.actionButtonRow}>
-                  <TouchableOpacity
-                    style={styles.primaryButton}
-                    onPress={openChartSetup}
-                    activeOpacity={0.9}
-                  >
-                    <Text style={styles.primaryButtonText}>Back to Adjust</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.secondaryButton}
-                    onPress={() => router.replace(APP_ROUTES.charts as any)}
-                    activeOpacity={0.9}
-                  >
-                    <Text style={styles.secondaryButtonText}>Charts Home</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ChartInfoCard>
-          ) : null}
-        </ChartShell>
-      </ScrollView>
-    </SafeAreaView>
+      <SectionCard style={styles.chartSection}>
+        {hasData ? (
+          renderChart()
+        ) : (
+          <Text style={styles.emptyText}>
+            Add or import games to populate the unified chart route.
+          </Text>
+        )}
+      </SectionCard>
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: CHART_COLORS.bg,
+  pageContent: {
+    gap: 8,
+    paddingBottom: 18,
   },
-  scroll: {
-    flex: 1,
+  heroCard: {
+    borderRadius: 20,
   },
-  contentContainer: {
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 24,
+  heroSubtitle: {
+    color: CHART_COLORS.sub,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "700",
+  },
+  heroActionRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  chartSection: {
+    padding: 10,
+    gap: 4,
+    borderRadius: 18,
   },
   compareBlock: {
-    gap: 8,
+    gap: 6,
   },
   compareTitle: {
     color: CHART_COLORS.textStrong,
@@ -820,49 +770,21 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: CHART_COLORS.sub,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  setupActionRow: {
-    gap: 6,
-  },
-  setupHint: {
-    color: CHART_COLORS.sub,
-    fontSize: 10,
-    lineHeight: 14,
-  },
-  actionButtonRow: {
-    flexDirection: "row",
-    gap: 8,
+    fontSize: 11,
+    lineHeight: 16,
   },
   primaryButton: {
-    flex: 1,
+    alignSelf: "flex-start",
     borderRadius: CHART_LAYOUT.chipRadius,
     borderWidth: 1,
     borderColor: `${CHART_COLORS.accent}55`,
     backgroundColor: CHART_COLORS.accentSoft,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     alignItems: "center",
   },
   primaryButtonText: {
     color: CHART_COLORS.accent,
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  secondaryButton: {
-    flex: 1,
-    borderRadius: CHART_LAYOUT.chipRadius,
-    borderWidth: 1,
-    borderColor: `${CHART_COLORS.blue}55`,
-    backgroundColor: CHART_COLORS.blueSoft,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    alignItems: "center",
-  },
-  secondaryButtonText: {
-    color: CHART_COLORS.blue,
     fontSize: 12,
     fontWeight: "800",
     textAlign: "center",

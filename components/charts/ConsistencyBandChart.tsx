@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
+import ChartFocusCard from "./ChartFocusCard";
 import ChartStage from "./ChartStage";
 import Text from "@/components/ui/Text";
 import { CHART_COLORS } from "./chartVisualSystem";
@@ -101,6 +102,23 @@ export default function ConsistencyBandChart({
           </Text>
         </View>
       ) : null}
+
+      <ChartFocusCard
+        title={medianLeader?.name ?? "Consistency Focus"}
+        value={`${round(medianLeader?.median ?? 0, 1)}`}
+        helper={
+          mostStable && mostSwingy
+            ? `${mostStable.name} is steadiest | ${mostSwingy.name} swings widest`
+            : `Median-first view of ${metric.label.toLowerCase()}`
+        }
+        story={
+          medianLeader
+            ? `${medianLeader.name} sets the median pace right now.`
+            : "Use the range rails to compare stability across scoped players."
+        }
+        tone="comparison"
+        accentColor={medianLeader?.color ?? CHART_COLORS.accent}
+      />
 
       <ChartStage
         tone="comparison"

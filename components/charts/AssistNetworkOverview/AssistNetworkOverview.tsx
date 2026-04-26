@@ -19,6 +19,7 @@ type Props = {
   games?: NormalizedGame[];
   players?: Player[];
   scopedPlayerIds?: string[];
+  exactScopePlayerIds?: string[];
   mode?: "flow" | "network";
   assistMode?: AssistNetworkMode;
   title?: string;
@@ -45,6 +46,7 @@ export default function AssistNetworkOverview({
   games = [],
   players = [],
   scopedPlayerIds,
+  exactScopePlayerIds,
   mode = "network",
   assistMode = "assistPrestige",
   title = "Assist Network",
@@ -66,8 +68,13 @@ export default function AssistNetworkOverview({
   }, [safePlayers, scopedPlayerIds]);
 
   const dataset = useMemo(
-    () => buildAssistNetworkDataset({ games: safeGames, scopedPlayerIds }),
-    [safeGames, scopedPlayerIds]
+    () =>
+      buildAssistNetworkDataset({
+        games: safeGames,
+        scopedPlayerIds,
+        exactScopePlayerIds,
+      }),
+    [exactScopePlayerIds, safeGames, scopedPlayerIds]
   );
   const layout = useMemo(
     () => buildAssistNetworkLayout(dataset.edges, visiblePlayers, selectedAssistMode),

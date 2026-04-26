@@ -11,8 +11,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
-import StarryNight from "@/components/ui/StarryNight";
 import { useStore } from "@/store/useStore";
 
 import CompareSelectionCard from "@/components/charts/compare/CompareSelectionCard";
@@ -213,6 +213,8 @@ export default function IndexScreen() {
   });
   const [selectedMetricInfo, setSelectedMetricInfo] = useState<MetricDescriptor | null>(null);
   const [activeFocusGroup, setActiveFocusGroup] = useState<FocusGroup>("outcomes");
+  const [compareSetupCollapsed, setCompareSetupCollapsed] = useState(false);
+  const [hasRunCohesionAnalyze, setHasRunCohesionAnalyze] = useState(false);
 
   const [conditionalState, dispatchConditional] = useReducer(conditionalReducer, {
     ...initialConditionalState,
@@ -281,9 +283,20 @@ export default function IndexScreen() {
 
   const globalTurnOrderInsight = useMemo(() => buildGlobalTurnOrderInsight(games), [games]);
 
+  const conditionalSelectionIds = useMemo(
+    () => Array.from(new Set([...conditionalState.mustIncludeIds, ...conditionalState.mayIncludeIds])),
+    [conditionalState.mayIncludeIds, conditionalState.mustIncludeIds]
+  );
+  const hasConditionalSelection =
+    Boolean(conditionalState.anchorId) && conditionalSelectionIds.length > 0;
+
   const conditionalAnalysis = useMemo(
-    () =>
-      buildConditionalAnalysis({
+    () => {
+      if (!conditionalState.hasRunCompare || !hasConditionalSelection) {
+        return null;
+      }
+
+      return buildConditionalAnalysis({
         subjectMode: conditionalState.subjectMode,
         anchorId: conditionalState.anchorId,
         mustIncludeIds: conditionalState.mustIncludeIds,
@@ -292,13 +305,16 @@ export default function IndexScreen() {
         playerMap,
         groupMap,
         games,
-      }),
+      });
+    },
     [
+      conditionalState.hasRunCompare,
       conditionalState.subjectMode,
       conditionalState.anchorId,
       conditionalState.mustIncludeIds,
       conditionalState.mayIncludeIds,
       conditionalState.viewMode,
+      hasConditionalSelection,
       playerMap,
       groupMap,
       games,
@@ -331,8 +347,16 @@ export default function IndexScreen() {
   const layout = useMemo(() => createMatrixLayout(density), [density]);
 
   const currentSelectionIds = mode === "players" ? selectedPlayerIds : selectedGroupIds;
+  const currentSelectionNames = useMemo(() => {
+    return currentSelectionIds
+      .map((id) =>
+        mode === "players" ? playerMap.get(id)?.name ?? null : groupMap.get(id)?.name ?? null
+      )
+      .filter((value): value is string => Boolean(value));
+  }, [currentSelectionIds, groupMap, mode, playerMap]);
   const hasSelection = currentSelectionIds.length > 0;
-  const hasAnalyzed = hasSelection && rows.length > 0;
+  const hasAnalyzed = hasRunCohesionAnalyze && hasSelection && rows.length > 0;
+  const showCompareSetupSummary = compareSetupCollapsed && hasAnalyzed;
 
   useEffect(() => {
     LayoutAnimation.configureNext({
@@ -355,6 +379,8 @@ export default function IndexScreen() {
   ]);
 
   function setModeAndSync(nextMode: CompareMode) {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     setMode(nextMode);
     dispatchConditional({ type: "set-subject-mode", mode: nextMode === "groups" ? "groups" : "players" });
 
@@ -366,6 +392,8 @@ export default function IndexScreen() {
   }
 
   function togglePlayer(id: string): void {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     setSelectedPlayerIds((prev) => {
       if (prev.includes(id)) return prev.filter((value) => value !== id);
       if (prev.length >= MAX_COMPARE_PLAYERS) return prev;
@@ -374,6 +402,8 @@ export default function IndexScreen() {
   }
 
   function toggleGroup(id: string): void {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     setSelectedGroupIds((prev) => {
       if (prev.includes(id)) return prev.filter((value) => value !== id);
       if (prev.length >= MAX_COMPARE_PLAYERS) return prev;
@@ -382,6 +412,8 @@ export default function IndexScreen() {
   }
 
   function clearSelection(): void {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     if (mode === "players") {
       setSelectedPlayerIds([]);
       return;
@@ -411,12 +443,26 @@ export default function IndexScreen() {
       return;
     }
 
-    const ids = mode === "players" ? selectedPlayerIds.slice(0, 5) : [];
+    const ids =
+      mode === "players" ? selectedPlayerIds.slice(0, MAX_COMPARE_PLAYERS) : selectedGroupIds.slice(0, MAX_COMPARE_PLAYERS);
     dispatchConditional({ type: "apply-preset", ids, anchorId: ids[0] ?? null });
+  }
+
+  function handleRunConditionalCompare() {
+    if (!hasConditionalSelection) return;
+    dispatchConditional({ type: "run-compare" });
+  }
+
+  function handleAnalyzeSelection() {
+    if (!hasSelection || rows.length === 0) return;
+    setHasRunCohesionAnalyze(true);
+    setCompareSetupCollapsed(true);
   }
 
   const selectionLabel =
     rows.length === 1 ? rows[0]?.label ?? "Selection" : `${rows.length} ${mode}`;
+  const selectionSummaryLabel =
+    currentSelectionNames.length > 0 ? currentSelectionNames.join(" • ") : selectionLabel;
 
   const liveSentenceSubtitle =
     mode === "players"
@@ -426,7 +472,7 @@ export default function IndexScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.backgroundLayer}>
-        <StarryNight />
+        <ScreenBackground preset="analytics" />
         <View style={styles.backgroundDim} />
       </View>
 
@@ -516,16 +562,14 @@ export default function IndexScreen() {
               players={players}
               groups={groups}
               subjectMode={mode === "groups" ? "groups" : "players"}
-              conditionalState={conditionalState as any}
-              conditionalAnalysis={conditionalAnalysis as any}
-              sortedConditionalPlayers={sortedConditionalPlayers as any}
+              conditionalState={conditionalState}
+              conditionalAnalysis={conditionalAnalysis}
+              sortedConditionalPlayers={sortedConditionalPlayers}
               onToggleEntity={(id) => dispatchConditional({ type: "toggle-entity", id })}
               onRemoveEntity={(id) => dispatchConditional({ type: "remove-entity", id })}
               onSetAnchor={(id) => dispatchConditional({ type: "set-anchor", id })}
               onClear={() => dispatchConditional({ type: "clear" })}
-              onApplyCurrentCompare={() => applyPreset("current_compare")}
-              onApplyTopSynergy={() => {}}
-              onApplyTopWins={() => {}}
+              onRunCompare={handleRunConditionalCompare}
               onSetSelectionMode={(nextMode) =>
                 dispatchConditional({ type: "set-selection-mode", mode: nextMode })
               }
@@ -538,40 +582,63 @@ export default function IndexScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.sectionCompact}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Cohesion Selection</Text>
-                <Text style={styles.sectionSub}>Pick the players or groups to compare</Text>
-              </View>
+            {showCompareSetupSummary ? (
+              <View style={styles.insightCardCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <View style={styles.summaryHeaderCopy}>
+                    <Text style={styles.sectionTitle}>Analyzed lineup</Text>
+                    <Text style={styles.summarySubtext}>{selectionSummaryLabel}</Text>
+                  </View>
 
-              <CompareSelectionCard
-                title="Cohesion Affect"
-                subtitle=""
-                mode={mode}
-                density={density}
-                players={players}
-                groups={groups}
-                games={games}
-                playerMap={playerMap}
-                selectedPlayerIds={selectedPlayerIds}
-                selectedGroupIds={selectedGroupIds}
-                onTogglePlayer={togglePlayer}
-                onToggleGroup={toggleGroup}
-                onSetDensity={setDensity}
-                onClear={clearSelection}
-                onAnalyze={() => {}}
-              />
-            </View>
+                  <TouchableOpacity
+                    style={styles.summaryActionButton}
+                    onPress={() => setCompareSetupCollapsed(false)}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.summaryActionText}>Edit lineup</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <CompareSummaryStrip rows={rows} />
+              </View>
+            ) : (
+              <View style={styles.sectionCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Cohesion Selection</Text>
+                  <Text style={styles.sectionSub}>Pick the players or groups to compare</Text>
+                </View>
+
+                <CompareSelectionCard
+                  title="Cohesion Affect"
+                  subtitle=""
+                  mode={mode}
+                  density={density}
+                  players={players}
+                  groups={groups}
+                  games={games}
+                  playerMap={playerMap}
+                  selectedPlayerIds={selectedPlayerIds}
+                  selectedGroupIds={selectedGroupIds}
+                  onTogglePlayer={togglePlayer}
+                  onToggleGroup={toggleGroup}
+                  onSetDensity={setDensity}
+                  onClear={clearSelection}
+                  onAnalyze={handleAnalyzeSelection}
+                />
+              </View>
+            )}
 
             {hasAnalyzed ? (
               <>
-                <View style={styles.sectionCompact}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitle}>Cohesion Summary</Text>
-                    <Text style={styles.sectionSub}>{selectionLabel}</Text>
+                {!showCompareSetupSummary ? (
+                  <View style={styles.sectionCompact}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionTitle}>Cohesion Summary</Text>
+                      <Text style={styles.sectionSub}>{selectionLabel}</Text>
+                    </View>
+                    <CompareSummaryStrip rows={rows} />
                   </View>
-                  <CompareSummaryStrip rows={rows} />
-                </View>
+                ) : null}
 
                 <View style={styles.insightCardCompact}>
                   <View style={styles.sectionHeaderRow}>
@@ -638,7 +705,9 @@ export default function IndexScreen() {
             ) : (
               <View style={styles.sectionCompact}>
                 <Text style={styles.emptyText}>
-                  Select at least one {mode === "players" ? "player" : "group"} to populate cohesion affect.
+                  {hasSelection
+                    ? `Tap Analyze to view cohesion affect for this ${mode === "players" ? "lineup" : "group set"}.`
+                    : `Select at least one ${mode === "players" ? "player" : "group"} to populate cohesion affect.`}
                 </Text>
               </View>
             )}
@@ -766,6 +835,10 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 4,
   },
+  summaryHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
   sectionTitle: {
     color: COLORS.text,
     fontSize: 13,
@@ -778,6 +851,10 @@ const styles = StyleSheet.create({
     textAlign: "right",
     flexShrink: 1,
   },
+  summarySubtext: {
+    color: COLORS.sub,
+    fontSize: 10,
+  },
   emptyText: {
     color: COLORS.sub,
     fontSize: 11,
@@ -786,6 +863,19 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 10,
     marginTop: 4,
+  },
+  summaryActionButton: {
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  summaryActionText: {
+    color: COLORS.accent,
+    fontSize: 10,
+    fontWeight: "800",
   },
 
   underlineSelectorRow: {

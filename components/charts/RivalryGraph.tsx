@@ -622,6 +622,10 @@ export default function RivalryGraph({
         label: getModeLabel(mode),
         value: formatModeValue(selected, mode),
       },
+      {
+        label: "Verdict",
+        value: getVerdict(selected, playerAName),
+      },
     ];
   }, [selected, mode, playerAName]);
   const modeTabs = useMemo(
@@ -657,9 +661,9 @@ export default function RivalryGraph({
   }
 
   return (
-      <View style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.sectionCompact}>
-        <SectionHeader title="A" sub="Focus" />
+        <SectionHeader title="Player A" sub="Focus player" />
         <View style={styles.underlineSelectorRow}>
           {players.map((player, index) => {
             const active = player.id === selectedPlayerAId;
@@ -685,7 +689,7 @@ export default function RivalryGraph({
       </View>
 
       <View style={styles.sectionCompact}>
-        <SectionHeader title="B" sub="Target" />
+        <SectionHeader title="Player B" sub="Head-to-head target" />
         <View style={styles.underlineSelectorRow}>
           {players
             .filter((player) => player.id !== selectedPlayerAId)
@@ -706,7 +710,7 @@ export default function RivalryGraph({
       </View>
 
       <View style={styles.sectionCompact}>
-        <SectionHeader title="Metric" sub={getModeDescription(mode)} />
+        <SectionHeader title="Mode" sub={getModeDescription(mode)} />
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -736,17 +740,13 @@ export default function RivalryGraph({
           <ChartFocusCard
             title={selected.opponentName}
             value={formatModeValue(selected, mode)}
-            helper={`${selected.gamesTogether} shared games | ${selected.wins}-${selected.losses}`}
-            story={`${getVerdict(selected, playerAName)} ${getMomentumSentence(
-              selected,
-              playerAName
-            )}`}
+            helper={`${selected.gamesTogether} shared games | ${getModeLabel(mode)}`}
+            story={getOverallEdgeText(selected, playerAName)}
             tone="comparison"
             accentColor={
               getModeValue(selected, mode) >= 0 ? playerAColor : selected.opponentColor
             }
             style={styles.focusCard}
-            compact
           />
 
           <View style={styles.metricGridDense}>
@@ -755,14 +755,42 @@ export default function RivalryGraph({
                 key={`${card.label}-${index}`}
                 style={[
                   styles.metricCardDense,
+                  card.label === "Verdict" && {
+                    backgroundColor: withAlpha(playerAColor, "14"),
+                    borderColor: withAlpha(playerAColor, "55"),
+                  },
                 ]}
               >
                 <Text style={styles.metricLabelCompact}>{card.label}</Text>
-                <Text style={styles.metricValueCompact} numberOfLines={1}>
+                <Text
+                  style={[
+                    styles.metricValueCompact,
+                    card.label === "Verdict" && { color: playerAColor },
+                  ]}
+                  numberOfLines={1}
+                >
                   {card.value}
                 </Text>
               </View>
             ))}
+          </View>
+
+          <View
+            style={[
+              styles.insightCardCompact,
+              {
+                borderColor: withAlpha(playerAColor, "55"),
+                backgroundColor: withAlpha(playerAColor, "12"),
+              },
+            ]}
+          >
+            <Text style={styles.summarySentence}>{getOverallEdgeText(selected, playerAName)}</Text>
+            <Text style={styles.summarySentence}>
+              {getSimpleMetricSentence(selected, mode, playerAName)}
+            </Text>
+            <Text style={styles.summarySentence}>
+              {getMomentumSentence(selected, playerAName)}
+            </Text>
           </View>
         </View>
       ) : null}
@@ -892,6 +920,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     marginBottom: 6,
   },
+  insightCardCompact: {
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    marginTop: 8,
+  },
   sectionHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -970,6 +1005,12 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 14,
     fontWeight: "900",
+  },
+  summarySentence: {
+    color: COLORS.text,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 6,
   },
 
   noticeTitle: {

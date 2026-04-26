@@ -4,6 +4,7 @@ import { getMetricOrFallback } from "@/utils/metricMap";
 export type ChartPreviewKind =
   | "radar"
   | "trend"
+  | "scatter"
   | "matchup"
   | "ranking"
   | "bar"
@@ -56,8 +57,8 @@ export const CHART_SECTIONS: Array<{
 }> = [
   {
     key: "profile",
-    title: "Your Profile",
-    subtitle: "Personal identity, scoring shape, and rating context.",
+    title: "Your Game",
+    subtitle: "Personal reads and player-focused views.",
   },
   {
     key: "matchup",
@@ -66,8 +67,8 @@ export const CHART_SECTIONS: Array<{
   },
   {
     key: "trends",
-    title: "Trends",
-    subtitle: "Table-wide momentum, rankings, and intensity swings.",
+    title: "Table",
+    subtitle: "Shared movement, rankings, and table-wide shifts.",
   },
 ];
 
@@ -181,7 +182,7 @@ export const CHART_CATALOG: ChartCatalogEntry[] = [
     title: "Prestige Over Time",
     hook: "See how prestige builds across your tracked games without changing the metric.",
     detailSubtitle: "Prestige progression across tracked games.",
-    section: "trends",
+    section: "profile",
     tone: "green",
     bestFor: ["prestige", "trend"],
     preview: "trend",
@@ -232,7 +233,7 @@ export const CHART_CATALOG: ChartCatalogEntry[] = [
     section: "trends",
     tone: "accent",
     bestFor: ["efficiency", "risk"],
-    preview: "trend",
+    preview: "scatter",
     supportsIds: true,
     aliases: ["efficiency-failure-scatter"],
   },
@@ -279,8 +280,18 @@ export function resolveChartCatalogEntry(chartKey?: string | null) {
   );
 }
 
+export function canAdjustChartFromHub(chartKey?: string | null) {
+  return resolveChartCatalogEntry(chartKey).hubVisible !== false;
+}
+
 export function getVisibleChartCatalog() {
   return CHART_CATALOG.filter((entry) => entry.hubVisible !== false);
+}
+
+export function normalizeChartHubSelection(chartKey?: string | null) {
+  const entry = resolveChartCatalogEntry(chartKey);
+  if (entry.hubVisible !== false) return entry;
+  return getVisibleChartCatalog()[0] ?? entry;
 }
 
 export function getChartsForSection(section: ChartSectionKey) {

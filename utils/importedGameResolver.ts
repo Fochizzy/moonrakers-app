@@ -415,6 +415,9 @@ export function canonicalizeImportedGamesForCharts(
 
       const canonicalId = String(matched?.id ?? rawId).trim() || rawId;
       idMap[rawId] = canonicalId;
+      const rawPlayerWithArt = rawPlayer as typeof rawPlayer & {
+        artIndex?: number | null;
+      };
 
       canonicalPlayersForGame.push({
         ...rawPlayer,
@@ -431,7 +434,7 @@ export function canonicalizeImportedGamesForCharts(
         artIndex:
           typeof matched?.artIndex === "number"
             ? matched.artIndex
-            : rawPlayer?.artIndex ?? null,
+            : rawPlayerWithArt.artIndex ?? null,
       });
     }
 

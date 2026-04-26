@@ -28,7 +28,6 @@ type Props = {
   onRemoveEntity: (id: string) => void;
   onSetAnchor: (id: string) => void;
   onClear: () => void;
-  onApplyCurrentCompare: () => void;
   onRunCompare: () => void;
   onSetSelectionMode: (nextMode: 'must' | 'may') => void;
   onSetViewMode: (nextMode: 'present' | 'absent') => void;
@@ -155,7 +154,6 @@ export default function ConditionalComparisonCard({
   onToggleEntity,
   onSetAnchor,
   onClear,
-  onApplyCurrentCompare,
   onRunCompare,
   onSetSelectionMode,
   onSetViewMode,
@@ -310,22 +308,26 @@ export default function ConditionalComparisonCard({
                   <Pressable
                     key={entity.id}
                     onPress={() => onToggleEntity(entity.id)}
-                    style={[styles.partnerCard, active && styles.partnerCardActive]}
+                    style={[
+                      styles.selectorCard,
+                      styles.partnerSelectorCard,
+                      active && styles.partnerSelectorCardActive,
+                    ]}
                   >
                     <View style={styles.selectorIdentity}>
-                      <View style={[styles.selectorDot, entity.color ? { backgroundColor: entity.color } : null]} />
+                      <View
+                        style={[
+                          styles.selectorDot,
+                          entity.color ? { backgroundColor: entity.color } : null,
+                          active && styles.selectorDotActive,
+                        ]}
+                      />
                       <Text style={[styles.selectorTitle, active && styles.selectorTitleActive]}>{entity.name}</Text>
                     </View>
                   </Pressable>
                 );
               })}
             </View>
-          </View>
-
-          <View style={styles.quickActions}>
-            <Pressable onPress={onApplyCurrentCompare} style={styles.quickActionCard}>
-              <Text style={styles.quickActionTitle}>Use Compare</Text>
-            </Pressable>
           </View>
 
           <Pressable
@@ -720,43 +722,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 6,
   },
-  partnerCard: {
+  partnerSelectorCard: {
     width: '48.4%',
-    minHeight: 38,
-    borderRadius: 12,
-    paddingVertical: 7,
-    paddingHorizontal: 9,
-    backgroundColor: 'rgba(15, 23, 42, 0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.16)',
-    justifyContent: 'center',
+    minHeight: 60,
   },
-  partnerCardActive: {
+  partnerSelectorCardActive: {
     backgroundColor: 'rgba(34, 197, 94, 0.16)',
     borderColor: 'rgba(74, 222, 128, 0.42)',
-  },
-  quickActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  quickActionCard: {
-    flex: 1,
-    minWidth: 150,
-    minHeight: 38,
-    borderRadius: 12,
-    paddingVertical: 7,
-    paddingHorizontal: 9,
-    backgroundColor: 'rgba(15, 23, 42, 0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.16)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quickActionTitle: {
-    color: '#F8FBFF',
-    fontSize: 12,
-    fontWeight: '800',
   },
   compareButton: {
     minHeight: 42,
@@ -777,12 +749,6 @@ const styles = StyleSheet.create({
     color: '#F8FBFF',
     fontSize: 12,
     fontWeight: '900',
-  },
-  quickActionSub: {
-    color: '#8FA6C4',
-    fontSize: 12,
-    marginTop: 5,
-    lineHeight: 18,
   },
   summaryGrid: {
     flexDirection: 'row',

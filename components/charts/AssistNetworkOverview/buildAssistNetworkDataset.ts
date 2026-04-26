@@ -76,15 +76,23 @@ function matchesExactPlayerScope(game: NormalizedGame, scopedPlayerIds: string[]
 export function buildAssistNetworkDataset({
   games,
   scopedPlayerIds,
+  exactScopePlayerIds,
 }: {
   games: NormalizedGame[];
   scopedPlayerIds?: string[];
+  exactScopePlayerIds?: string[];
 }): AssistNetworkDataset {
   const normalizedGames = Array.isArray(games) ? games : [];
-  const normalizedScopeIds = normalizeScopedPlayerIds(scopedPlayerIds);
-  const exactScopeApplied = normalizedScopeIds.length >= 2;
+  const normalizedVisibleScopeIds = normalizeScopedPlayerIds(scopedPlayerIds);
+  const visibleScopeSet = normalizedVisibleScopeIds.length
+    ? new Set(normalizedVisibleScopeIds)
+    : null;
+  const normalizedExactScopeIds = normalizeScopedPlayerIds(exactScopePlayerIds);
+  const exactScopeApplied = normalizedExactScopeIds.length >= 2;
   const includedGames = exactScopeApplied
-    ? normalizedGames.filter((game) => matchesExactPlayerScope(game, normalizedScopeIds))
+    ? normalizedGames.filter((game) =>
+        matchesExactPlayerScope(game, normalizedExactScopeIds)
+      )
     : normalizedGames;
 
   const nodeMap = new Map<string, AssistNetworkNode>();
@@ -126,6 +134,12 @@ export function buildAssistNetworkDataset({
         const targetId = normalizePlayerId(targetIdRaw);
         if (!targetId || targetId === sourceId) continue;
         if (toNumber(rawAssist) <= 0) continue;
+        if (
+          visibleScopeSet &&
+          (!visibleScopeSet.has(sourceId) || !visibleScopeSet.has(targetId))
+        ) {
+          continue;
+        }
 
         const assistPrestige = Math.max(
           0,

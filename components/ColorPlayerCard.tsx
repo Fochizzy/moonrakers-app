@@ -490,7 +490,7 @@ function PlayerCard({
       base: safeString(raw?.base, "#8B5CF6"),
       text: safeString(raw?.text, "#F8FAFC"),
       border: safeString(raw?.border, "rgba(148,163,184,0.16)"),
-      muted: safeString(raw?.muted, "#94A3B8"),
+      muted: safeString(raw?.subtext, "#94A3B8"),
     };
   }, [safePlayer?.color]);
 

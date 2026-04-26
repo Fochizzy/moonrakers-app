@@ -649,38 +649,40 @@ function LineChart({
             </ChartFocusCard>
           ) : null}
 
-          <View style={styles.legendGrid}>
-            {renderedSeries.map((row) => {
-              const entry = buildSelectedLegendValue(row, safeSelectedIndex);
-              const active = focusedSeries ? focusedSeries.id === row.id : false;
-              return (
-                <TouchableOpacity
-                  key={row.id}
-                  activeOpacity={0.92}
-                  onPress={() =>
-                    setFocusedPlayerIdState((current) =>
-                      current === row.id ? null : row.id
-                    )
-                  }
-                  style={[
-                    styles.legendCard,
-                    {
-                      borderColor: withChartAlpha(row.color, active ? 0.44 : 0.18),
-                      backgroundColor: withChartAlpha(row.color, active ? 0.12 : 0.06),
-                    },
-                  ]}
-                >
-                  <View style={[styles.legendDot, { backgroundColor: row.color }]} />
-                  <Text style={styles.legendName} numberOfLines={1}>
-                    {row.name}
-                  </Text>
-                  <Text style={[styles.legendValue, { color: row.color }]}>
-                    {formatMetricValue(entry?.value ?? 0, metric)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {renderedSeries.length > 1 ? (
+            <View style={styles.legendGrid}>
+              {renderedSeries.map((row) => {
+                const entry = buildSelectedLegendValue(row, safeSelectedIndex);
+                const active = focusedSeries ? focusedSeries.id === row.id : false;
+                return (
+                  <TouchableOpacity
+                    key={row.id}
+                    activeOpacity={0.92}
+                    onPress={() =>
+                      setFocusedPlayerIdState((current) =>
+                        current === row.id ? null : row.id
+                      )
+                    }
+                    style={[
+                      styles.legendCard,
+                      {
+                        borderColor: withChartAlpha(row.color, active ? 0.44 : 0.18),
+                        backgroundColor: withChartAlpha(row.color, active ? 0.12 : 0.06),
+                      },
+                    ]}
+                  >
+                    <View style={[styles.legendDot, { backgroundColor: row.color }]} />
+                    <Text style={styles.legendName} numberOfLines={1}>
+                      {row.name}
+                    </Text>
+                    <Text style={[styles.legendValue, { color: row.color }]}>
+                      {formatMetricValue(entry?.value ?? 0, metric)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
         </>
       )}
     </View>
@@ -759,7 +761,7 @@ const styles = StyleSheet.create({
   legendGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 6,
   },
 
   legendCard: {
@@ -770,8 +772,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
 
   legendDot: {

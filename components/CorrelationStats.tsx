@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, type ViewStyle } from 'react-native';
 
 import { useStore } from '@/store/useStore';
 import Text from '@/components/ui/Text';
@@ -195,8 +195,8 @@ function getDirectionMeta(value: number) {
   return { label: 'Neutral', color: '#cbd5e1' };
 }
 
-function getBarFillStyle(value: number, color: string) {
-  const width = `${Math.max(8, Math.abs(value) * 100)}%`;
+function getBarFillStyle(value: number, color: string): ViewStyle {
+  const width = `${Math.max(8, Math.abs(value) * 100)}%` as `${number}%`;
 
   if (value > 0.08) {
     return {
@@ -216,7 +216,7 @@ function getBarFillStyle(value: number, color: string) {
 
   return {
     alignSelf: 'center' as const,
-    width: '12%',
+    width: '12%' as `${number}%`,
     backgroundColor: withAlpha('#cbd5e1', 0.55),
   };
 }

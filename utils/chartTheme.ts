@@ -41,6 +41,8 @@ export const chartColors = {
   red: '#ef4444',
   yellow: '#f59e0b',
   blue: '#3b82f6',
+  orange: '#f97316',
+  pink: '#ec4899',
 } as const;
 
 function clamp(value: number, min: number, max: number): number {

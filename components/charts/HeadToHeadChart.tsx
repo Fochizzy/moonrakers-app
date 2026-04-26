@@ -140,7 +140,7 @@ export default function HeadToHeadChart({
         helper={`Prestige gap | ${summary.games} shared games`}
         story={
           summary.currentRunWinnerName
-            ? `${summary.currentRunWinnerName} on a ${summary.currentRunLength}-game run`
+            ? `${summary.currentRunWinnerName} is on a ${summary.currentRunLength}-game run. ${summary.verdict}`
             : summary.verdict
         }
         tone="comparison"
@@ -151,7 +151,6 @@ export default function HeadToHeadChart({
               ? summary.playerBColor
               : COLORS.accent
         }
-        compact
       />
 
       <View style={styles.heroCard}>
@@ -164,6 +163,30 @@ export default function HeadToHeadChart({
           ) : (
             <View />
           )}
+          <View
+            style={[
+              styles.leaderBadge,
+              summary.leaderTone === "a"
+                ? {
+                    backgroundColor: withChartAlpha(summary.playerAColor, 0.12),
+                    borderColor: withChartAlpha(summary.playerAColor, 0.34),
+                  }
+                : summary.leaderTone === "b"
+                  ? {
+                      backgroundColor: withChartAlpha(summary.playerBColor, 0.12),
+                      borderColor: withChartAlpha(summary.playerBColor, 0.34),
+                    }
+                  : {
+                      backgroundColor: COLORS.whiteSoft,
+                      borderColor: COLORS.border,
+                    },
+            ]}
+          >
+            <Text style={styles.leaderBadgeLabel}>
+              {summary.leaderTone === "tie" ? "Even" : "Leader"}
+            </Text>
+            <Text style={styles.leaderBadgeValue}>{summary.leaderName}</Text>
+          </View>
         </View>
 
         <View style={styles.scoreboardRow}>
@@ -187,7 +210,9 @@ export default function HeadToHeadChart({
             <Text style={styles.centerValue}>{summary.games}</Text>
             <Text style={styles.centerLabel}>Games</Text>
             <Text style={styles.centerHelper}>
-              {summary.leaderTone === "tie" ? "Even so far" : `Leader ${summary.leaderName}`}
+              {summary.currentRunWinnerName
+                ? `${summary.currentRunWinnerName} on a ${summary.currentRunLength}-game run`
+                : "No active streak"}
             </Text>
           </View>
 
@@ -265,7 +290,7 @@ export default function HeadToHeadChart({
                 <Text style={styles.legendText}>Tie</Text>
               </View>
             </View>
-
+            <Text style={styles.verdict}>{summary.verdict}</Text>
           </View>
         }
       >
@@ -412,6 +437,26 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 11,
     lineHeight: 16,
+  },
+  leaderBadge: {
+    minWidth: 112,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+    justifyContent: "center",
+  },
+  leaderBadgeLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  leaderBadgeValue: {
+    color: COLORS.textStrong,
+    fontSize: 13,
+    fontWeight: "900",
   },
   scoreboardRow: {
     flexDirection: "row",
@@ -643,8 +688,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   timelineFooter: {
-    gap: 6,
+    gap: 10,
     paddingHorizontal: 4,
+  },
+  verdict: {
+    color: withChartAlpha(COLORS.textStrong, 0.9),
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 17,
   },
   emptyCard: {
     borderRadius: 16,

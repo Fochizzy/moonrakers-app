@@ -213,6 +213,7 @@ export default function HistoryScreen() {
   const [lastBackup, setLastBackup] = useState<number | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [fileNameFocused, setFileNameFocused] = useState(false);
+  const [utilitiesDrawerOpen, setUtilitiesDrawerOpen] = useState(false);
 
   const backupPulse = useRef(new Animated.Value(0)).current;
   const successFlash = useRef(new Animated.Value(0)).current;
@@ -547,47 +548,74 @@ export default function HistoryScreen() {
       >
         <View style={styles.sectionCompact}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>History</Text>
-            <Text style={styles.sectionSub}>Mission archive and game timeline</Text>
+            <View style={styles.sectionHeaderCopy}>
+              <Text style={styles.sectionTitle}>History</Text>
+              <Text style={styles.sectionSub}>Mission archive and game timeline</Text>
+            </View>
+            <Pressable
+              onPress={() => setUtilitiesDrawerOpen((current) => !current)}
+              style={[
+                styles.utilityDrawerToggle,
+                utilitiesDrawerOpen && styles.utilityDrawerToggleActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.utilityDrawerToggleText,
+                  utilitiesDrawerOpen && styles.utilityDrawerToggleTextActive,
+                ]}
+              >
+                {utilitiesDrawerOpen ? 'Hide Utilities' : 'Utilities'}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
-        <Animated.View style={[styles.sectionCompact, styles.backupCompactSection, { borderColor: backupGlowBorderColor }]}> 
-          <View style={styles.backupCompactTopRow}>
-            <View style={styles.backupCompactTitleWrap}>
-              <Text style={styles.sectionTitle}>Backup + Sync</Text>
-              <Text style={styles.backupCompactMeta}>
-                {lastBackup ? `Last ${new Date(lastBackup).toLocaleString()}` : 'No backup yet'}
-              </Text>
+        {utilitiesDrawerOpen ? (
+          <Animated.View
+            style={[
+              styles.utilityDrawerCard,
+              styles.sectionCompact,
+              styles.backupCompactSection,
+              { borderColor: backupGlowBorderColor },
+            ]}
+          >
+            <View style={styles.backupCompactTopRow}>
+              <View style={styles.backupCompactTitleWrap}>
+                <Text style={styles.sectionTitle}>Backup + Sync</Text>
+                <Text style={styles.backupCompactMeta}>
+                  {lastBackup ? `Last ${new Date(lastBackup).toLocaleString()}` : 'No backup yet'}
+                </Text>
+              </View>
+
+              <View style={styles.backupSegmentedControl}>
+                <ScalePressable style={styles.backupSegmentWrap} onPress={handleExportBackup}>
+                  <View style={[styles.backupSegment, styles.backupSegmentLeft, styles.backupSegmentAccent]}>
+                    <Text style={[styles.backupSegmentText, { color: COLORS.accent }]}>Export</Text>
+                  </View>
+                </ScalePressable>
+
+                <ScalePressable style={styles.backupSegmentWrap} onPress={handleImportBackup}>
+                  <View style={[styles.backupSegment, styles.backupSegmentRight, styles.backupSegmentBlue]}>
+                    <Text style={[styles.backupSegmentText, { color: COLORS.blue }]}>Import</Text>
+                  </View>
+                </ScalePressable>
+              </View>
             </View>
 
-            <View style={styles.backupSegmentedControl}>
-              <ScalePressable style={styles.backupSegmentWrap} onPress={handleExportBackup}>
-                <View style={[styles.backupSegment, styles.backupSegmentLeft, styles.backupSegmentAccent]}> 
-                  <Text style={[styles.backupSegmentText, { color: COLORS.accent }]}>Export</Text>
-                </View>
-              </ScalePressable>
-
-              <ScalePressable style={styles.backupSegmentWrap} onPress={handleImportBackup}>
-                <View style={[styles.backupSegment, styles.backupSegmentRight, styles.backupSegmentBlue]}> 
-                  <Text style={[styles.backupSegmentText, { color: COLORS.blue }]}>Import</Text>
-                </View>
-              </ScalePressable>
-            </View>
-          </View>
-
-          <TextInput
-            value={exportFileName}
-            onChangeText={setExportFileName}
-            onFocus={() => setFileNameFocused(true)}
-            onBlur={() => setFileNameFocused(false)}
-            placeholder="MoonrakersBackup.json"
-            placeholderTextColor={COLORS.sub}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, styles.backupCompactInput, fileNameFocused && styles.inputFocused]}
-          />
-        </Animated.View>
+            <TextInput
+              value={exportFileName}
+              onChangeText={setExportFileName}
+              onFocus={() => setFileNameFocused(true)}
+              onBlur={() => setFileNameFocused(false)}
+              placeholder="MoonrakersBackup.json"
+              placeholderTextColor={COLORS.sub}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.input, styles.backupCompactInput, fileNameFocused && styles.inputFocused]}
+            />
+          </Animated.View>
+        ) : null}
 
         <View style={styles.sectionCompact}>
           <View style={styles.sectionHeaderRow}>
@@ -605,21 +633,24 @@ export default function HistoryScreen() {
             style={[styles.input, searchFocused && styles.inputFocused]}
           />
 
-          <View style={styles.underlineSelectorRow}>
+          <View style={styles.primaryFilterRow}>
             {(['all', 'group'] as HistoryFilter[]).map((filter) => {
               const active = historyFilter === filter;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={filter}
-                  style={styles.underlineTabButton}
+                  style={[styles.primaryFilterPill, active && styles.primaryFilterPillActive]}
                   onPress={() => setHistoryFilter(filter)}
-                  activeOpacity={0.9}
                 >
-                  <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
+                  <Text
+                    style={[
+                      styles.primaryFilterPillText,
+                      active && styles.primaryFilterPillTextActive,
+                    ]}
+                  >
                     {filter === 'all' ? 'All' : 'Groups'}
                   </Text>
-                  <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -674,14 +705,37 @@ export default function HistoryScreen() {
           ) : null}
         </View>
 
-        <View style={styles.tabGrid}>
-          <View style={styles.tabGridRowTwo}>
-            <SortTab label="Newest" active={historySort === 'newest'} onPress={() => setHistorySort('newest')} />
-            <SortTab label="Oldest" active={historySort === 'oldest'} onPress={() => setHistorySort('oldest')} />
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Sort By</Text>
+            <Text style={styles.sectionSub}>Reorder the archive without leaving the main lane</Text>
           </View>
-          <View style={styles.tabGridRowTwo}>
-            <SortTab label="Winner" active={historySort === 'winner'} onPress={() => setHistorySort('winner')} />
-            <SortTab label="Most Rounds" active={historySort === 'rounds'} onPress={() => setHistorySort('rounds')} />
+
+          <View style={styles.primaryFilterRow}>
+            {([
+              ['newest', 'Newest'],
+              ['oldest', 'Oldest'],
+              ['winner', 'Winner'],
+              ['rounds', 'Most Rounds'],
+            ] as [HistorySort, string][]).map(([sortKey, label]) => {
+              const active = historySort === sortKey;
+              return (
+                <Pressable
+                  key={sortKey}
+                  onPress={() => setHistorySort(sortKey)}
+                  style={[styles.primaryFilterPill, active && styles.primaryFilterPillActive]}
+                >
+                  <Text
+                    style={[
+                      styles.primaryFilterPillText,
+                      active && styles.primaryFilterPillTextActive,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
@@ -827,6 +881,10 @@ const styles = StyleSheet.create({
     padding: 8,
     paddingBottom: 12,
   },
+  sectionHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
   sectionCompact: {
     backgroundColor: COLORS.card,
     borderRadius: 14,
@@ -841,6 +899,29 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 12,
     marginBottom: 6,
+  },
+  utilityDrawerToggle: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  utilityDrawerToggleActive: {
+    borderColor: 'rgba(96,165,250,0.38)',
+    backgroundColor: COLORS.blueSoft,
+  },
+  utilityDrawerToggleText: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  utilityDrawerToggleTextActive: {
+    color: '#EAF2FF',
   },
   sectionTitle: {
     color: COLORS.text,
@@ -868,6 +949,9 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: COLORS.blue,
+  },
+  utilityDrawerCard: {
+    marginTop: 6,
   },
   backupCompactSection: {
     paddingTop: 7,
@@ -931,6 +1015,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 11,
+  },
+  primaryFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  primaryFilterPill: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryFilterPillActive: {
+    backgroundColor: COLORS.blueSoft,
+    borderColor: 'rgba(96,165,250,0.36)',
+  },
+  primaryFilterPillText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  primaryFilterPillTextActive: {
+    color: '#EAF2FF',
   },
   underlineSelectorRow: {
     flexDirection: 'row',

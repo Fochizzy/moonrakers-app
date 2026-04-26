@@ -356,7 +356,7 @@ export default function AddPlayersScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <View style={StyleSheet.absoluteFillObject}>
-        <StarryNight count={100} />
+        <StarryNight />
         <View style={styles.overlay} />
       </View>
 
@@ -401,6 +401,36 @@ export default function AddPlayersScreen() {
           >
             <View style={styles.panel}>
               <Text style={styles.sectionTitle}>Create player</Text>
+              <View style={styles.creationStepList}>
+                {["Identity", "Color", "Card"].map((step, index) => (
+                  <View key={step} style={styles.creationStepPill}>
+                    <Text style={styles.creationStepIndex}>{index + 1}</Text>
+                    <Text style={styles.creationStepText}>{step}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.previewHeroCard}>
+                <PlayerCardIcon
+                  player={{
+                    id: "preview",
+                    name: newName || "New Player",
+                    color: newColor,
+                    assignedCardArtIndex: newCardArtIndex,
+                  } as any}
+                  size={124}
+                  borderRadius={18}
+                  showInitial={false}
+                />
+                <View style={styles.previewHeroCopy}>
+                  <Text style={styles.previewHeroTitle}>{newName.trim() || "New Player"}</Text>
+                  <Text style={styles.previewHeroSubtitle}>
+                    {newCardArtIndex == null
+                      ? "Choose identity, color, and card to lock in this player."
+                      : `${newColor} identity ready with card ${newCardArtIndex + 1}.`}
+                  </Text>
+                </View>
+              </View>
 
               <TextInput
                 value={newName}
@@ -478,6 +508,22 @@ export default function AddPlayersScreen() {
                 placeholderTextColor="#6E87AE"
                 style={styles.input}
               />
+
+              <View style={styles.groupSelectionSummary}>
+                <Text style={styles.groupSelectionSummaryTitle}>
+                  {selectedGroupPlayerIds.length === 0
+                    ? "No players selected yet"
+                    : `${selectedGroupPlayerIds.length} players ready`}
+                </Text>
+                <Text style={styles.groupSelectionSummaryText}>
+                  {selectedGroupPlayerIds.length === 0
+                    ? "Pick a table first, then save the group when the five seats feel right."
+                    : sortedPlayers
+                        .filter((player) => selectedGroupPlayerIds.includes(player.id))
+                        .map((player) => player.name)
+                        .join(" / ")}
+                </Text>
+              </View>
 
               <Text style={styles.smallLabel}>
                 Select players ({selectedGroupPlayerIds.length}/5)
@@ -769,6 +815,66 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900",
   },
+  creationStepList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  creationStepPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  creationStepIndex: {
+    width: 18,
+    height: 18,
+    borderRadius: 999,
+    textAlign: "center",
+    textAlignVertical: "center",
+    overflow: "hidden",
+    color: "#081426",
+    backgroundColor: "#93C5FD",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  creationStepText: {
+    color: "#DCE8FF",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  previewHeroCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderRadius: 20,
+    padding: 14,
+    backgroundColor: "rgba(59,130,246,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.24)",
+  },
+  previewHeroCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  previewHeroTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  previewHeroSubtitle: {
+    color: "#C6D8F6",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
   helperText: {
     color: "#7D9BC4",
     fontSize: 11,
@@ -858,6 +964,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
+  },
+  groupSelectionSummary: {
+    borderRadius: 18,
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 6,
+  },
+  groupSelectionSummaryTitle: {
+    color: "#F8FBFF",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  groupSelectionSummaryText: {
+    color: "#C6D8F6",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
   },
   groupPlayerTile: {
     width: "22.8%",

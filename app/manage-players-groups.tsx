@@ -37,8 +37,6 @@ const COLORS = {
   blueSoft: "rgba(59,130,246,0.18)",
   green: "#22C55E",
   greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
   red: "#EF4444",
   redSoft: "rgba(239,68,68,0.16)",
   border: "rgba(255,255,255,0.08)",

@@ -12,9 +12,8 @@ import StarryNight from '@/components/ui/StarryNight';
 import { useStore } from '@/store/useStore';
 import CorrelationStats from '@/components/CorrelationStats';
 import InsightList from '@/components/InsightList';
-import PrestigeOverTimeChart from '@/components/charts/PrestigeOverTimeChart';
-import EfficiencyFailureScatter from '@/components/charts/EfficiencyFailureScatter';
 import AssistNetworkOverview from '@/components/charts/AssistNetworkOverview';
+import { canonicalizeGames, collectUnifiedGames } from '@/utils/charts';
 
 type PlayerLike = {
   id: string;
@@ -157,8 +156,19 @@ export default function InsightsScreen() {
   const games = useStore((s: any) =>
     Array.isArray(s.games) ? s.games : [],
   ) as StoredGame[];
+  const importedGames = useStore((s: any) =>
+    Array.isArray(s.importedGames) ? s.importedGames : [],
+  ) as StoredGame[];
 
   const relationships = useStore((s: any) => s.relationships ?? {});
+  const unifiedGames = useMemo(
+    () =>
+      canonicalizeGames(
+        collectUnifiedGames({ games, importedGames } as any),
+        players as any,
+      ),
+    [games, importedGames, players],
+  );
 
   const globalStats = useMemo(() => {
     let totalPrestige = 0;
@@ -221,17 +231,25 @@ export default function InsightsScreen() {
           <Text style={styles.eyebrow}>Moonrakers</Text>
           <Text style={styles.title}>Insights Hub</Text>
           <Text style={styles.subtitle}>
-            Global meta, trend charts, scatter analysis, assist network, and ranked signals.
+            Global meta, ranked signals, and synergy clues.
           </Text>
 
           <View style={styles.linkRow}>
-            <Pressable style={styles.linkButton} onPress={() => router.push('/compare')}>
+            <Pressable style={styles.linkButton} onPress={() => router.push('/charts/compare')}>
               <Text style={styles.linkButtonText}>Compare</Text>
             </Pressable>
             <Pressable style={styles.linkButton} onPress={() => router.push('/stats')}>
               <Text style={styles.linkButtonText}>Stats</Text>
             </Pressable>
-            <Pressable style={styles.linkButton} onPress={() => router.push('/elo')}>
+            <Pressable
+              style={styles.linkButton}
+              onPress={() =>
+                router.push({
+                  pathname: '/charts/[chartKey]',
+                  params: { chartKey: 'elo' },
+                } as any)
+              }
+            >
               <Text style={styles.linkButtonText}>Elo</Text>
             </Pressable>
           </View>
@@ -253,18 +271,8 @@ export default function InsightsScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Prestige Over Time</Text>
-          <PrestigeOverTimeChart games={games} players={players} />
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Efficiency vs Failure</Text>
-          <EfficiencyFailureScatter games={games} players={players} />
-        </View>
-
-        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Assist Network</Text>
-          <AssistNetworkOverview players={players} relationships={relationships} />
+          <AssistNetworkOverview players={players} games={unifiedGames as any} />
         </View>
 
         <View style={styles.sectionCard}>

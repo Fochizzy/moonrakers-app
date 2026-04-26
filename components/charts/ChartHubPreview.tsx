@@ -324,34 +324,110 @@ function PreviewComposition({
   width: number;
   height: number;
 }) {
-  const stacks = [
-    [0.24, 0.18, 0.12],
-    [0.15, 0.21, 0.26],
-    [0.12, 0.16, 0.3],
+  const segments = [
+    { width: width * 0.28, fill: withChartAlpha(stroke, 0.84) },
+    { width: width * 0.18, fill: withChartAlpha(CHART_COLORS.blue, 0.84) },
+    { width: width * 0.22, fill: withChartAlpha(CHART_COLORS.green, 0.84) },
+    { width: width * 0.14, fill: withChartAlpha(CHART_COLORS.warning, 0.84) },
   ];
-  const colors = [stroke, CHART_COLORS.blue, CHART_COLORS.green];
+  let offset = 10;
 
   return (
     <>
-      {stacks.map((stack, index) => {
-        const x = 16 + index * 22;
-        let currentY = height - 8;
-        return stack.map((segment, segmentIndex) => {
-          const segmentHeight = segment * (height - 18);
-          currentY -= segmentHeight;
-          return (
-            <Rect
-              key={`stack-${index}-${segmentIndex}`}
-              x={x}
-              y={currentY}
-              width={14}
-              height={segmentHeight}
-              rx={segmentIndex === 0 ? 0 : 3}
-              fill={withChartAlpha(colors[segmentIndex], 0.75)}
-            />
-          );
-        });
+      {segments.map((segment, index) => {
+        const rect = (
+          <Rect
+            key={`composition-${index}`}
+            x={offset}
+            y={height * 0.34}
+            width={segment.width}
+            height={height * 0.34}
+            rx={6}
+            fill={segment.fill}
+          />
+        );
+        offset += segment.width + 6;
+        return rect;
       })}
+    </>
+  );
+}
+
+function PreviewConsistency({
+  stroke,
+  width,
+  height,
+}: {
+  stroke: string;
+  width: number;
+  height: number;
+}) {
+  const ranges = [
+    { x: 18, top: 18, bottom: height - 18, median: height * 0.46 },
+    { x: width * 0.38, top: 24, bottom: height - 24, median: height * 0.54 },
+    { x: width * 0.7, top: 16, bottom: height - 14, median: height * 0.42 },
+  ];
+
+  return (
+    <>
+      {ranges.map((range, index) => (
+        <React.Fragment key={`consistency-${index}`}>
+          <Line
+            x1={range.x}
+            y1={range.top}
+            x2={range.x}
+            y2={range.bottom}
+            stroke={withChartAlpha(stroke, 0.72)}
+            strokeWidth={4}
+            strokeLinecap="round"
+          />
+          <Line
+            x1={range.x - 10}
+            y1={range.median}
+            x2={range.x + 10}
+            y2={range.median}
+            stroke={CHART_COLORS.textStrong}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+        </React.Fragment>
+      ))}
+    </>
+  );
+}
+
+function PreviewScatter({
+  stroke,
+  width,
+  height,
+}: {
+  stroke: string;
+  width: number;
+  height: number;
+}) {
+  const dots = [
+    { x: width * 0.24, y: height * 0.66, r: 4 },
+    { x: width * 0.38, y: height * 0.5, r: 4 },
+    { x: width * 0.56, y: height * 0.42, r: 5 },
+    { x: width * 0.68, y: height * 0.28, r: 4 },
+    { x: width * 0.78, y: height * 0.58, r: 3.6 },
+  ];
+
+  return (
+    <>
+      <Line x1={10} y1={height - 14} x2={width - 8} y2={height - 14} stroke={CHART_COLORS.grid} strokeWidth={1} />
+      <Line x1={10} y1={height - 14} x2={10} y2={12} stroke={CHART_COLORS.grid} strokeWidth={1} />
+      {dots.map((dot, index) => (
+        <Circle
+          key={`scatter-${index}`}
+          cx={dot.x}
+          cy={dot.y}
+          r={dot.r}
+          fill={withChartAlpha(stroke, 0.32 + index * 0.1)}
+          stroke={withChartAlpha(stroke, 0.88)}
+          strokeWidth={1}
+        />
+      ))}
     </>
   );
 }
@@ -365,108 +441,101 @@ function PreviewReplay({
   width: number;
   height: number;
 }) {
-  const points = [
-    { x: 12, y: height * 0.6 },
-    { x: width * 0.35, y: height * 0.35 },
-    { x: width * 0.58, y: height * 0.52 },
+  const first = buildPath([
+    { x: 10, y: height * 0.7 },
+    { x: width * 0.36, y: height * 0.56 },
+    { x: width * 0.62, y: height * 0.4 },
     { x: width - 12, y: height * 0.24 },
-  ];
+  ]);
+  const second = buildPath([
+    { x: 10, y: height * 0.34 },
+    { x: width * 0.36, y: height * 0.46 },
+    { x: width * 0.62, y: height * 0.58 },
+    { x: width - 12, y: height * 0.72 },
+  ]);
 
   return (
     <>
-      <Line
-        x1={10}
-        y1={height - 12}
-        x2={width - 10}
-        y2={height - 12}
-        stroke={CHART_COLORS.grid}
-        strokeWidth={1}
-      />
-      <Path d={buildPath(points)} stroke={stroke} strokeWidth={2.2} fill="none" />
-      {points.map((point, index) => (
-        <Rect
-          key={`replay-${index}`}
-          x={point.x - 4}
-          y={point.y - 4}
-          width={8}
-          height={8}
-          rx={2}
-          fill={withChartAlpha(stroke, 0.8)}
-        />
-      ))}
+      <Path d={first} stroke={stroke} strokeWidth={2.2} fill="none" />
+      <Path d={second} stroke={withChartAlpha(CHART_COLORS.blue, 0.9)} strokeWidth={2.2} fill="none" />
     </>
   );
 }
 
-function PreviewBand({
-  stroke,
-  width,
-  height,
-}: {
-  stroke: string;
-  width: number;
-  height: number;
-}) {
-  const centers = [20, width * 0.5, width - 20];
-  const spans = [
-    { low: height * 0.36, high: height * 0.8, median: height * 0.56 },
-    { low: height * 0.18, high: height * 0.84, median: height * 0.52 },
-    { low: height * 0.26, high: height * 0.7, median: height * 0.48 },
-  ];
-
-  return (
-    <>
-      {centers.map((center, index) => (
-        <React.Fragment key={`band-${index}`}>
-          <Line
-            x1={center}
-            y1={spans[index].low}
-            x2={center}
-            y2={spans[index].high}
-            stroke={withChartAlpha(stroke, 0.72)}
-            strokeWidth={4}
-            strokeLinecap="round"
-          />
-          <Circle cx={center} cy={spans[index].median} r={4} fill={CHART_COLORS.textStrong} />
-          <Circle cx={center} cy={spans[index].median} r={2.5} fill={stroke} />
-        </React.Fragment>
-      ))}
-    </>
-  );
-}
+const CHART_PREVIEW_RENDERERS: Record<
+  ChartPreviewKind,
+  (props: { stroke: string; fill: string; width: number; height: number }) => React.ReactNode
+> = {
+  trend: PreviewTrend,
+  scatter: ({ stroke, width, height }) => (
+    <PreviewScatter stroke={stroke} width={width} height={height} />
+  ),
+  ranking: ({ stroke, width, height }) => (
+    <PreviewRanking stroke={stroke} width={width} height={height} />
+  ),
+  matchup: ({ stroke, width, height }) => (
+    <PreviewMatchup stroke={stroke} width={width} height={height} />
+  ),
+  radar: ({ stroke, width, height }) => (
+    <PreviewRadar stroke={stroke} width={width} height={height} />
+  ),
+  bar: ({ stroke, width, height }) => (
+    <PreviewBar stroke={stroke} width={width} height={height} />
+  ),
+  heatmap: ({ stroke, width, height }) => (
+    <PreviewHeatmap stroke={stroke} width={width} height={height} />
+  ),
+  network: ({ stroke, width, height }) => (
+    <PreviewNetwork stroke={stroke} width={width} height={height} />
+  ),
+  composition: ({ stroke, width, height }) => (
+    <PreviewComposition stroke={stroke} width={width} height={height} />
+  ),
+  band: ({ stroke, width, height }) => (
+    <PreviewConsistency stroke={stroke} width={width} height={height} />
+  ),
+  replay: ({ stroke, width, height }) => (
+    <PreviewReplay stroke={stroke} width={width} height={height} />
+  ),
+};
 
 export default function ChartHubPreview({
   kind,
-  tone = "accent",
-  width = 112,
-  height = 72,
+  tone = "neutral",
+  width = 108,
+  height = 66,
 }: Props) {
-  const toneStyle = getChartToneStyles(tone);
-  const stroke = toneStyle.value;
-  const fill = withChartAlpha(stroke, 0.18);
+  const toneStyles = getChartToneStyles(tone);
+  const fill = withChartAlpha(toneStyles.value, 0.16);
+  const render =
+    CHART_PREVIEW_RENDERERS[kind] ?? CHART_PREVIEW_RENDERERS.trend;
 
   return (
-    <Svg width={width} height={height}>
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <Rect
-        x={0.75}
-        y={0.75}
-        width={width - 1.5}
-        height={height - 1.5}
-        rx={16}
-        fill={withChartAlpha(stroke, 0.08)}
-        stroke={withChartAlpha(stroke, 0.22)}
+        x={0.5}
+        y={0.5}
+        width={width - 1}
+        height={height - 1}
+        rx={12}
+        fill={withChartAlpha(CHART_COLORS.cardAlt, 0.94)}
+        stroke={CHART_COLORS.border}
       />
-
-      {kind === "radar" ? <PreviewRadar stroke={stroke} width={width} height={height} /> : null}
-      {kind === "trend" ? <PreviewTrend stroke={stroke} fill={fill} width={width} height={height} /> : null}
-      {kind === "matchup" ? <PreviewMatchup stroke={stroke} width={width} height={height} /> : null}
-      {kind === "ranking" ? <PreviewRanking stroke={stroke} width={width} height={height} /> : null}
-      {kind === "bar" ? <PreviewBar stroke={stroke} width={width} height={height} /> : null}
-      {kind === "heatmap" ? <PreviewHeatmap stroke={stroke} width={width} height={height} /> : null}
-      {kind === "network" ? <PreviewNetwork stroke={stroke} width={width} height={height} /> : null}
-      {kind === "composition" ? <PreviewComposition stroke={stroke} width={width} height={height} /> : null}
-      {kind === "replay" ? <PreviewReplay stroke={stroke} width={width} height={height} /> : null}
-      {kind === "band" ? <PreviewBand stroke={stroke} width={width} height={height} /> : null}
+      <Rect
+        x={7}
+        y={7}
+        width={width - 14}
+        height={height - 14}
+        rx={10}
+        fill={withChartAlpha(CHART_COLORS.bg, 0.74)}
+        stroke={withChartAlpha(toneStyles.value, 0.14)}
+      />
+      {render({
+        stroke: toneStyles.value,
+        fill,
+        width,
+        height,
+      })}
     </Svg>
   );
 }

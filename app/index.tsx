@@ -4,23 +4,34 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Image,
   Animated,
   Easing,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
+import ActionButton from "@/components/ui/ActionButton";
+import AppHeader from "@/components/ui/AppHeader";
+import HubTileCard from "@/components/ui/HubTileCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import { resolveHomeRedirect } from "@/lib/auth/launchRoute";
+import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
+import { supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
-import StarryNight from "@/components/ui/StarryNight";
 import Text from "@/components/ui/Text";
-import { APP_ICONS } from "@/utils/iconAccess";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import RankBadge from "@/components/RankBadge";
+import { getBridgeDestinations } from "@/utils/appHubs";
+import {
+  APP_ROUTES,
+  buildPlayerProfileRoute,
+  normalizeHomeTab,
+} from "@/utils/appRoutes";
 import { calculateElo } from "@/utils/elo";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 
-type Tab = "game" | "leaderboard" | "nav";
+type Tab = "game" | "leaderboard" | "hubs";
 
 type PlayerLike = {
   id: string;
@@ -299,8 +310,8 @@ function tabLabel(tab: Tab) {
       return "Command";
     case "leaderboard":
       return "Data Center";
-    case "nav":
-      return "Bridge";
+    case "hubs":
+      return "Hubs";
     default:
       return tab;
   }
@@ -358,15 +369,6 @@ function SelectionShimmer({
   );
 }
 
-function Footer({ text }: { text: string }) {
-  return (
-    <View style={styles.footerWrap}>
-      <View style={styles.footerLine} />
-      <Text style={styles.footerText}>{text}</Text>
-    </View>
-  );
-}
-
 function PlayerSelectionCard({
   player,
   selected,
@@ -419,22 +421,25 @@ function PlayerSelectionCard({
       <SelectionShimmer visible={selected} borderRadius={10} />
 
       <View style={styles.playerCompactInner}>
+        <View style={styles.playerCompactCopy}>
+          <Text
+            style={[
+              styles.playerCompactName,
+              selected && { color: accent },
+              locked && styles.lockedText,
+            ]}
+            numberOfLines={1}
+          >
+            {player.name ?? "Unknown"}
+          </Text>
+        </View>
+
         <PlayerCardIcon
           player={player as any}
-          size={36}
-          borderRadius={8}
-          dimAmount={selected ? 0.02 : 0.06}
+          size={58}
+          borderRadius={12}
+          showInitial={false}
         />
-        <Text
-          style={[
-            styles.playerCompactName,
-            selected && { color: accent },
-            locked && styles.lockedText,
-          ]}
-          numberOfLines={1}
-        >
-          {player.name ?? "Unknown"}
-        </Text>
       </View>
 
       {locked ? (
@@ -783,7 +788,6 @@ function HomeLeaderboardTab({
                   player={p as any}
                   size={34}
                   borderRadius={8}
-                  dimAmount={0.08}
                 />
 
                 <View style={styles.lbPlayerInfo}>
@@ -814,7 +818,16 @@ function HomeLeaderboardTab({
 
 export default function HomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ initialTab?: string }>();
 
+  const authBootstrapStatus = useStore((s: any) => s.authBootstrapStatus);
+  const authSession = useStore((s: any) => s.authSession);
+  const authProfile = useStore((s: any) => s.authProfile);
+  const passwordRecoveryPending = useStore((s: any) => s.passwordRecoveryPending);
+  const clearAuthState = useStore((s: any) => s.clearAuthState);
+  const setPasswordRecoveryPending = useStore(
+    (s: any) => s.setPasswordRecoveryPending
+  );
   const rawPlayers = useStore((s: any) =>
     Array.isArray(s.players) ? s.players : []
   );
@@ -827,7 +840,14 @@ export default function HomeScreen() {
   const activeGame = useStore((s: any) => s.activeGame);
   const clearActiveGame = useStore((s: any) => s.clearActiveGame);
 
-  const [tab, setTab] = useState<Tab>("game");
+  const bridgeDestinations = useMemo(() => getBridgeDestinations(), []);
+  const homeRedirect = resolveHomeRedirect({
+    authBootstrapStatus,
+    session: authSession,
+    profile: authProfile,
+    passwordRecoveryPending,
+  });
+  const [tab, setTab] = useState<Tab>(normalizeHomeTab(params.initialTab));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<GroupLike | null>(null);
 
@@ -837,6 +857,10 @@ export default function HomeScreen() {
   const removePulse = useRef(new Animated.Value(1)).current;
   const dockPulse = useRef(new Animated.Value(1)).current;
   const dockGlowOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    setTab(normalizeHomeTab(params.initialTab));
+  }, [params.initialTab]);
   const prevCanStart = useRef(false);
 
   const players = useMemo(
@@ -864,7 +888,7 @@ export default function HomeScreen() {
   );
 
   const playersById = useMemo(() => {
-    return players.reduce<Record<string, PlayerLike>>((acc, player) => {
+    return players.reduce((acc: Record<string, PlayerLike>, player) => {
       acc[player.id] = player;
       return acc;
     }, {});
@@ -1091,6 +1115,10 @@ export default function HomeScreen() {
     ]).start();
   }, [dockGlowOpacity, dockPulse, selectedIds]);
 
+  if (homeRedirect) {
+    return <Redirect href={homeRedirect as any} />;
+  }
+
   const triggerRemovePulse = () => {
     removePulse.setValue(1);
     Animated.sequence([
@@ -1133,19 +1161,24 @@ export default function HomeScreen() {
 
   const openPlayerProfile = (player: PlayerLike) => {
     if (!player?.id) return;
-    router.push({
-      pathname: "/player-profile",
-      params: { playerId: player.id },
-    });
+    router.push(buildPlayerProfileRoute(player.id));
   };
 
-  const openFullProfileFromNav = () => {
+  const openFullProfileFromHubs = () => {
     const selectedPlayer = selectedPlayers[0] || rankedPlayers[0];
     if (!selectedPlayer?.id) return;
-    router.push({
-      pathname: "/player-profile",
-      params: { playerId: selectedPlayer.id },
-    });
+    router.push(buildPlayerProfileRoute(selectedPlayer.id));
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      await clearPendingAuthIntent();
+      setPasswordRecoveryPending(false);
+      clearAuthState();
+      router.replace(APP_ROUTES.login);
+    }
   };
 
   const startGame = () => {
@@ -1200,33 +1233,48 @@ export default function HomeScreen() {
     });
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
-      <View style={StyleSheet.absoluteFillObject}>
-        <StarryNight count={100} />
-        <View style={styles.homeBackgroundDim} />
-      </View>
+  const headerTitle =
+    tab === "leaderboard"
+      ? "Data Center"
+      : tab === "hubs"
+        ? "Navigation Hubs"
+        : "Command Deck";
 
-      <View style={styles.tabs}>
-        {(["game", "leaderboard", "nav"] as Tab[]).map((t) => {
-          const active = tab === t;
-          return (
-            <Pressable
-              key={t}
-              onPress={() => setTab(t)}
-              style={({ pressed }) => [
-                styles.tab,
-                pressed && styles.pressScaleSm,
-              ]}
-            >
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                {tabLabel(t)}
-              </Text>
-              <View style={[styles.tabLine, active && styles.tabLineActive]} />
-            </Pressable>
-          );
-        })}
-      </View>
+  return (
+    <PageShell
+      preset="command"
+      scroll={false}
+      edges={["top", "left", "right", "bottom"]}
+      contentContainerStyle={styles.homeShellContent}
+    >
+      <AppHeader
+        eyebrow="Moonrakers Command"
+        title={headerTitle}
+        subtitle={tab === "game" ? "Pick your crew and start." : undefined}
+        identity="emblem"
+        size="compact"
+        actions={
+          <ActionButton
+            title="Sign Out"
+            variant="ghost"
+            onPress={handleSignOut}
+            style={styles.headerAction}
+          />
+        }
+      />
+
+      <SegmentedControl
+        value={tab}
+        onChange={(next) => setTab(normalizeHomeTab(next))}
+        style={styles.homeTabControl}
+        items={[
+          { key: "game", label: tabLabel("game") },
+          { key: "leaderboard", label: tabLabel("leaderboard") },
+          { key: "hubs", label: tabLabel("hubs") },
+        ]}
+      />
+
+      <View style={styles.homeTabContent}>
 
       {tab === "game" && (
         <View style={styles.gameTabWrap}>
@@ -1235,64 +1283,41 @@ export default function HomeScreen() {
             showsVerticalScrollIndicator={false}
           >
             {activeGame ? (
-              <View style={styles.activeCard}>
-                <Text style={styles.sectionTitle}>Active Game</Text>
-                <Text style={styles.activeSub}>
-                  Continue your current match or delete it to start fresh.
-                </Text>
-
-                <View style={styles.row}>
-                  <Pressable
-                    style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressScaleSm]}
-                    onPress={() => router.push("/game")}
-                  >
-                    <Text style={styles.primaryText}>Continue</Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={({ pressed }) => [styles.dangerBtn, pressed && styles.pressScaleSm]}
+              <SectionCard
+                eyebrow="Active Game"
+                title="Current Match"
+                subtitle="Continue or clear the live table."
+              >
+                <View style={styles.commandActionRow}>
+                  <ActionButton
+                    title="Continue"
+                    onPress={() => router.push(APP_ROUTES.game)}
+                    style={styles.commandHalfButton}
+                  />
+                  <ActionButton
+                    title="Delete"
+                    variant="danger"
                     onPress={() => {
                       clearActiveGame();
                     }}
-                  >
-                    <Text style={styles.dangerText}>Delete</Text>
-                  </Pressable>
+                    style={styles.commandHalfButton}
+                  />
                 </View>
-              </View>
+              </SectionCard>
             ) : null}
 
-            <Animated.View style={[styles.startBtnWrap, { transform: [{ scale: startPulse }] }]}>
-              {canStart ? (
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.startGlowLoop,
-                    {
-                      opacity: startGlowOpacity,
-                      transform: [{ scale: startGlowScale }],
-                    },
-                  ]}
-                />
-              ) : null}
-
-              <Pressable
+            <Animated.View
+              style={[styles.primaryActions, { transform: [{ scale: startPulse }] }]}
+            >
+              <ActionButton
+                title="Start Game"
                 onPress={startGame}
                 disabled={!canStart}
-                style={({ pressed }) => [
-                  styles.startBtnTop,
-                  canStart && styles.startActive,
-                  pressed && canStart && styles.pressScaleStart,
-                ]}
-              >
-                <Text
-                  style={[styles.startText, canStart && styles.startTextActive]}
-                >
-                  Start Game
-                </Text>
-              </Pressable>
+                style={styles.startGameButton}
+              />
             </Animated.View>
 
-            {detectedGroup?.name ? (
+            {false && detectedGroup?.name ? (
               <Text style={styles.detectedGroupText}>
                 {selectedGroup?.name
                   ? `Selected group: ${selectedGroup.name}`
@@ -1302,173 +1327,140 @@ export default function HomeScreen() {
               </Text>
             ) : null}
 
-            <View style={styles.setupColumnsCompact}>
-              <View style={styles.setupColumn}>
-                <View style={styles.columnHeaderCompact}>
-                  <Text style={styles.sectionTitleSmall}>Players</Text>
+            <SectionCard title="Players" subtitle="Tap to select. Hold to open a profile.">
+              {rankedPlayers.length === 0 ? (
+                <View style={styles.emptyPanel}>
+                  <Text style={styles.emptyPanelText}>No player profiles found.</Text>
                 </View>
-
-                {rankedPlayers.length === 0 ? (
-                  <View style={styles.emptyPanel}>
-                    <Text style={styles.emptyPanelText}>
-                      No player profiles found.
-                    </Text>
-                  </View>
-                ) : (
-                  <Animated.View
-                    style={[
-                      styles.playerGridCompact,
-                      { transform: [{ scale: removePulse }] },
-                    ]}
-                  >
-                    {rankedPlayers.map((player) => {
-                      const selected =
-                        !selectedGroup && selectedIds.includes(player.id);
-                      const locked =
-                        !selected &&
-                        !selectedGroup &&
-                        selectedIds.length >= 5;
-                      const dimmed = Boolean(selectedGroup) && !selected;
-
-                      return (
-                        <PlayerSelectionCard
-                          key={player.id}
-                          player={player}
-                          selected={selected}
-                          dimmed={dimmed}
-                          locked={locked}
-                          onPress={() => togglePlayer(player.id)}
-                          onLongPress={() => openPlayerProfile(player)}
-                        />
-                      );
-                    })}
-                  </Animated.View>
-                )}
-              </View>
-
-              <View style={styles.setupColumn}>
-                <View style={styles.columnHeaderCompact}>
-                  <Text style={styles.sectionTitleSmall}>Groups</Text>
-                </View>
-
-                {rankedGroups.length === 0 ? (
-                  <View style={styles.emptyPanel}>
-                    <Text style={styles.emptyPanelText}>
-                      No saved groups found.
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.groupListCompact}>
-                    {rankedGroups.map((group) => {
-                      const isActive = selectedGroup?.id === group.id;
-
-                      return (
-                        <GroupSelectionCard
-                          key={group.id}
-                          group={group}
-                          selected={isActive}
-                          onPress={() => loadGroup(group)}
-                          playersById={playersById}
-                        />
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            </View>
-          </ScrollView>
-
-          <View style={styles.dockDividerGlow} />
-
-          <Animated.View
-            style={[
-              styles.bottomSetupDock,
-              { transform: [{ scale: dockPulse }] },
-            ]}
-          >
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.bottomSetupDockGlow,
-                { opacity: dockGlowOpacity },
-              ]}
-            />
-            <View style={styles.bottomSetupLeft}>
-              {selectedPlayers.length === 0 ? (
-                <Text style={styles.previewEmptyCompact}>No players selected</Text>
               ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.selectedNamesRow}
-                >
+                <View style={styles.commandPlayerViewport}>
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.commandPlayerViewportContent}
+                  >
+                    <Animated.View
+                      style={[
+                        styles.playerGridCompact,
+                        { transform: [{ scale: removePulse }] },
+                      ]}
+                    >
+                      {rankedPlayers.map((player) => {
+                        const selected =
+                          !selectedGroup && selectedIds.includes(player.id);
+                        const locked =
+                          !selected &&
+                          !selectedGroup &&
+                          selectedIds.length >= 5;
+                        const dimmed = Boolean(selectedGroup) && !selected;
+
+                        return (
+                          <PlayerSelectionCard
+                            key={player.id}
+                            player={player}
+                            selected={selected}
+                            dimmed={dimmed}
+                            locked={locked}
+                            onPress={() => togglePlayer(player.id)}
+                            onLongPress={() => openPlayerProfile(player)}
+                          />
+                        );
+                      })}
+                    </Animated.View>
+                  </ScrollView>
+                </View>
+              )}
+            </SectionCard>
+
+            <SectionCard eyebrow="Saved Tables" title="Groups">
+              {rankedGroups.length === 0 ? (
+                <View style={styles.emptyPanel}>
+                  <Text style={styles.emptyPanelText}>No saved groups found.</Text>
+                </View>
+              ) : (
+                <View style={styles.groupListCompact}>
+                  {rankedGroups.map((group) => {
+                    const isActive = selectedGroup?.id === group.id;
+
+                    return (
+                      <GroupSelectionCard
+                        key={group.id}
+                        group={group}
+                        selected={isActive}
+                        onPress={() => loadGroup(group)}
+                        playersById={playersById}
+                      />
+                    );
+                  })}
+                </View>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              eyebrow="Selected Crew"
+              title={`${selectedPlayers.length}/5 Selected`}
+              actions={
+                <ActionButton
+                  title="Clear Selection"
+                  variant="ghost"
+                  onPress={clearSelection}
+                  disabled={selectedPlayers.length === 0}
+                  style={styles.clearSelectionButton}
+                />
+              }
+            >
+              {selectedPlayers.length === 0 ? (
+                <Text style={styles.selectedCrewEmpty}>No players selected.</Text>
+              ) : (
+                <View style={styles.selectedCrewWrap}>
                   {selectedPlayers.map((player) => (
-                    <AnimatedSelectedNamePill
+                    <SelectedNamePill
                       key={player.id}
                       name={player.name ?? "Unknown"}
                       color={player.color}
                     />
                   ))}
-                </ScrollView>
+                </View>
               )}
-            </View>
-
-            <View style={styles.bottomSetupRight}>
-              <View style={styles.countBadge}>
-                <Text style={styles.countBadgeText}>{selectedPlayers.length}/5</Text>
-              </View>
-              <Pressable onPress={clearSelection} style={({ pressed }) => [styles.clearBtnTop, pressed && styles.pressScaleSm]}>
-                <Text style={styles.clearBtnText}>Clear</Text>
-              </Pressable>
-            </View>
-          </Animated.View>
+            </SectionCard>
+          </ScrollView>
         </View>
       )}
 
-      {tab === "leaderboard" && <HomeLeaderboardTab players={players} games={games} />}
+      {tab === "leaderboard" && (
+        <View style={styles.leaderboardPanel}>
+          <HomeLeaderboardTab players={players} games={games} />
+        </View>
+      )}
 
-      {tab === "nav" && (
-        <View style={styles.navScreen}>
-          <View style={styles.navGridFull}>
-            {[
-              ["compare", "/charts/compare"],
-              ["history", "/history"],
-              ["charts", "/charts"],
-              ["statistics", "/stats"],
-              ["elo", "/elo"],
-              ["definitions", "/definitions"],
-              ["addRemoves", "/add-players"],
-              ["fullProfile", "PROFILE"],
-            ].map(([key, route], index) => (
-              <Pressable
-                key={key}
+      {tab === "hubs" && (
+        <View style={styles.hubsPanel}>
+          <View style={styles.hubGrid}>
+            {bridgeDestinations.map((card, index) => (
+              <HubTileCard
+                key={card.key}
+                title={card.title}
+                description={card.description}
+                iconKey={card.iconKey}
+                tint={
+                  index % 2 === 0
+                    ? "rgba(96,165,250,0.16)"
+                    : "rgba(168,85,247,0.14)"
+                }
+                style={styles.hubTile}
                 onPress={() => {
-                  if (route === "PROFILE") {
-                    openFullProfileFromNav();
+                  if (card.key === "players" && selectedPlayers.length > 0) {
+                    openFullProfileFromHubs();
                   } else {
-                    router.push(route as any);
+                    router.push(card.route as any);
                   }
                 }}
-                style={({ pressed }) => [styles.navCardFull, pressed && styles.pressScaleNav]}
-              >
-                <View
-                  style={[
-                    styles.navTileTint,
-                    index % 2 === 0 ? styles.navTileBlue : styles.navTilePurple,
-                  ]}
-                />
-                <Image
-                  source={APP_ICONS[key as keyof typeof APP_ICONS]}
-                  style={styles.navIconLarge}
-                />
-              </Pressable>
+              />
             ))}
           </View>
-
-          <Footer text="Moonrakers" />
         </View>
       )}
-    </SafeAreaView>
+      </View>
+    </PageShell>
   );
 }
 
@@ -1477,44 +1469,60 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#02040F",
   },
+  homeShellContent: {
+    flex: 1,
+    paddingBottom: 10,
+  },
+  headerAction: {
+    alignSelf: "center",
+    minWidth: 108,
+  },
+  homeTabControl: {
+    marginTop: 2,
+    alignSelf: "center",
+  },
+  homeTabContent: {
+    flex: 1,
+  },
 
   homeBackgroundDim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(3,6,18,0.16)",
   },
 
-  tabs: {
+  homePrimaryRail: {
     flexDirection: "row",
     paddingHorizontal: 14,
     paddingTop: 6,
     paddingBottom: 8,
     gap: 10,
   },
-  tab: {
+  homePrimaryPill: {
     flex: 1,
-    paddingBottom: 4,
+    minHeight: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "center",
   },
-  tabText: {
+  homePrimaryPillActive: {
+    backgroundColor: "rgba(96,165,250,0.16)",
+    borderColor: "rgba(96,165,250,0.32)",
+  },
+  homePrimaryPillPressed: {
+    transform: [{ scale: 0.985 }],
+  },
+  homePrimaryPillText: {
     color: "#9CCBFF",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.35,
     textTransform: "uppercase",
   },
-  tabTextActive: {
-    color: "#C084FC",
-  },
-  tabLine: {
-    marginTop: 5,
-    height: 3,
-    width: "100%",
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-  tabLineActive: {
-    backgroundColor: "#A855F7",
+  homePrimaryPillTextActive: {
+    color: "#F8FBFF",
   },
 
   gameTabWrap: {
@@ -1665,11 +1673,11 @@ const styles = StyleSheet.create({
   width: "48.5%",
   borderRadius: 10,
   paddingVertical: 8,
-  paddingHorizontal: 6,
+  paddingHorizontal: 8,
   backgroundColor: "rgba(9,14,28,0.96)",
   borderWidth: 1,
   overflow: "hidden",
-  minHeight: 78,
+  minHeight: 96,
 },
   playerListItemCompactSelected: {
     shadowOpacity: 0.34,
@@ -1685,16 +1693,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.03)",
   },
   playerCompactInner: {
-  flexDirection: "column",
+  flexDirection: "row",
   alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+},
+  playerCompactCopy: {
+  flex: 1,
+  alignItems: "flex-start",
   justifyContent: "center",
-  gap: 6,
 },
   playerCompactName: {
   color: "#EAF2FF",
-  fontSize: 10,
-  fontWeight: "700",
-  textAlign: "center",
+  fontSize: 14,
+  fontWeight: "800",
+  textAlign: "left",
   width: "100%",
 },
   lockedText: {
@@ -1722,6 +1735,59 @@ const styles = StyleSheet.create({
     gap: 4,
     justifyContent: "flex-start",
     alignSelf: "stretch",
+  },
+  commandActionRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  commandHalfButton: {
+    flex: 1,
+  },
+  primaryActions: {
+    marginBottom: 2,
+  },
+  startGameButton: {
+    width: "100%",
+  },
+  commandPlayerViewport: {
+    maxHeight: 238,
+    minHeight: 196,
+  },
+  commandPlayerViewportContent: {
+    paddingBottom: 4,
+  },
+  clearSelectionButton: {
+    minWidth: 120,
+  },
+  selectedCrewWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  selectedCrewEmpty: {
+    color: "#C9D8F4",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  leaderboardPanel: {
+    flex: 1,
+    minHeight: 0,
+  },
+  hubsPanel: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  hubGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignItems: "stretch",
+    alignContent: "center",
+    gap: 12,
+  },
+  hubTile: {
+    minHeight: 196,
   },
   groupCardCompact: {
     borderRadius: 10,
@@ -1987,6 +2053,7 @@ const styles = StyleSheet.create({
     height: "25%",
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
     backgroundColor: "transparent",
     borderWidth: 0,
     borderRadius: 0,
@@ -2010,6 +2077,18 @@ const styles = StyleSheet.create({
     width: 132,
     height: 132,
     resizeMode: "contain",
+  },
+  navCardTitle: {
+    color: "#F8FBFF",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  navCardMeta: {
+    color: "#9CCBFF",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 
   startBtnWrap: {

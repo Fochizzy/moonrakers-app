@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { useStore } from "@/store/useStore";
+import ScreenBackground from "@/components/ui/ScreenBackground";
 import { calculateElo } from "@/utils/elo";
 
 const COLORS = {
@@ -179,7 +180,7 @@ function buildGameRowsByPlayer(
   }
 
   for (const game of getChronologicalGames(games)) {
-    const participantIds = Array.from(
+    const participantIds: string[] = Array.from(
       new Set(
         (Array.isArray(game?.players) ? game.players : [])
           .map((player: any) => normalizeId(player?.id ?? player?.playerId))
@@ -757,6 +758,10 @@ export default function EloScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.backgroundLayer}>
+        <ScreenBackground preset="analytics" />
+      </View>
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
@@ -1113,6 +1118,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.bg,
+  },
+  backgroundLayer: {
+    ...StyleSheet.absoluteFillObject,
   },
   scroll: {
     flex: 1,

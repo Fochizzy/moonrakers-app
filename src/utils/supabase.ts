@@ -1,3 +1,6 @@
-export const supabase = {
-  enabled: false,
-};
+export {
+  buildSupabaseRedirectUrl,
+  formatSupabaseConfigError,
+  readSupabaseEnv,
+  supabase,
+} from "../../lib/supabase";

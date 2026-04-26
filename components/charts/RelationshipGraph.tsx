@@ -528,8 +528,6 @@ export default function RelationshipGraph({
 
     return [...base].sort((a, b) => b.weight - a.weight).slice(0, 6);
   }, [layout.edges, selectedNodeId]);
-  const topConnection = focusedEdges[0] ?? null;
-
   const resolvedSubtitle =
     subtitle ??
     (variant === "assist_network"
@@ -559,12 +557,8 @@ export default function RelationshipGraph({
       ? `${safeNum(insight.hub.value).toFixed(1)} total involvement`
       : "No network yet";
   const focusStory = selectedNode
-    ? topConnection
-      ? `${topConnection.fromName} -> ${topConnection.toName} leads at ${safeNum(
-          topConnection.weight
-        ).toFixed(1)}.`
-      : "No visible connections in the current focus."
-    : "Tap a node to inspect the strongest visible lane in the current network.";
+    ? `Top ${focusedEdges.length} visible connections are shown below.`
+    : "Tap a node to inspect how much it gives, receives, and dominates the current network.";
   const focusAccent = selectedNode
     ? selectedNode.colorValue
     : normalizeColor(insight.hub?.player.color, 0);
@@ -579,6 +573,60 @@ export default function RelationshipGraph({
       ) : null}
 
       <View style={styles.panel}>
+        <Text style={styles.readoutTitle}>Readout</Text>
+
+        <View style={styles.insightGrid}>
+          <View style={[styles.insightCard, styles.insightCardAccent]}>
+            <Text style={styles.insightLabel}>Hub</Text>
+            <Text style={styles.insightValue}>
+              {insight.hub?.player.name ?? "None"}
+            </Text>
+            <Text style={styles.insightHelper}>
+              {insight.hub
+                ? `${safeNum(insight.hub.value).toFixed(1)} total involvement`
+                : "No network yet"}
+            </Text>
+          </View>
+
+          <View style={styles.insightCard}>
+            <Text style={styles.insightLabel}>Net Giver</Text>
+            <Text style={styles.insightValue}>
+              {insight.netGiver?.player.name ?? "None"}
+            </Text>
+            <Text style={styles.insightHelper}>
+              {insight.netGiver
+                ? formatSigned(safeNum(insight.netGiver.value))
+                : "No imbalance yet"}
+            </Text>
+          </View>
+
+          <View style={styles.insightCard}>
+            <Text style={styles.insightLabel}>Net Receiver</Text>
+            <Text style={styles.insightValue}>
+              {insight.netReceiver?.player.name ?? "None"}
+            </Text>
+            <Text style={styles.insightHelper}>
+              {insight.netReceiver
+                ? formatSigned(safeNum(insight.netReceiver.value))
+                : "No imbalance yet"}
+            </Text>
+          </View>
+
+          <View style={styles.insightCard}>
+            <Text style={styles.insightLabel}>Strongest Link</Text>
+            <Text style={styles.insightValue}>
+              {insight.strongestLink
+                ? `${insight.strongestLink.from.name ?? "Unknown"} -> ${insight.strongestLink.to.name ?? "Unknown"}`
+                : "None"}
+            </Text>
+            <Text style={styles.insightHelper}>
+              {insight.strongestLink
+                ? `${safeNum(insight.strongestLink.value).toFixed(1)} weighted`
+                : "No edge data"}
+            </Text>
+          </View>
+        </View>
+
         <ChartStage
           tone="comparison"
           style={styles.chartStage}
@@ -817,31 +865,6 @@ export default function RelationshipGraph({
           </View>
         </ChartStage>
 
-        <View style={styles.insightStrip}>
-          <View style={[styles.insightPill, styles.insightPillAccent]}>
-            <Text style={styles.insightLabel}>Hub</Text>
-            <Text style={styles.insightValue} numberOfLines={1}>
-              {insight.hub?.player.name ?? "None"}
-            </Text>
-          </View>
-
-          <View style={styles.insightPill}>
-            <Text style={styles.insightLabel}>Giver</Text>
-            <Text style={styles.insightValue} numberOfLines={1}>
-              {insight.netGiver?.player.name ?? "None"}
-            </Text>
-          </View>
-
-          <View style={styles.insightPill}>
-            <Text style={styles.insightLabel}>Link</Text>
-            <Text style={styles.insightValue} numberOfLines={1}>
-              {insight.strongestLink
-                ? `${insight.strongestLink.from.name ?? "Unknown"} -> ${insight.strongestLink.to.name ?? "Unknown"}`
-                : "None"}
-            </Text>
-          </View>
-        </View>
-
         <View style={styles.detailsPanel}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>View</Text>
@@ -890,8 +913,20 @@ export default function RelationshipGraph({
             story={focusStory}
             tone="compact"
             accentColor={focusAccent}
-            compact
           />
+
+          {focusedEdges.length ? (
+            <View style={styles.focusCard}>
+              <Text style={styles.focusTitle}>Top Connections</Text>
+              {focusedEdges.map((edge) => (
+                <Text key={edge.key} style={styles.focusBody}>
+                  {edge.fromName}
+                  {" -> "}
+                  {edge.toName}: {safeNum(edge.weight).toFixed(1)}
+                </Text>
+              ))}
+            </View>
+          ) : null}
         </View>
       </View>
     </View>
@@ -910,23 +945,27 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     gap: 12,
   },
-  insightStrip: {
+  readoutTitle: {
+    color: COLORS.wrap,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  insightGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 8,
   },
-  insightPill: {
+  insightCard: {
     minWidth: "31%",
     flexGrow: 1,
     borderRadius: 12,
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-    gap: 2,
+    padding: 10,
+    gap: 4,
   },
-  insightPillAccent: {
+  insightCardAccent: {
     backgroundColor: COLORS.accentSoft,
     borderColor: `${COLORS.accent}55`,
   },
@@ -971,5 +1010,15 @@ const styles = StyleSheet.create({
   detailsPanel: {
     gap: 10,
   },
+  focusCard: {
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 10,
+    gap: 4,
+  },
+  focusTitle: { color: COLORS.wrap, fontSize: 12, fontWeight: "900" },
+  focusBody: { color: COLORS.sub, fontSize: 11, fontWeight: "600" },
   focusHint: { color: COLORS.sub, fontSize: 11, lineHeight: 16 },
 });

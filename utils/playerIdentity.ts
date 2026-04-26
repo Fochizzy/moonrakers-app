@@ -1,1381 +1,222 @@
-import { StyleSheet } from 'react-native';
-import { chartColors, withAlpha } from '@/utils/chartTheme';
+export type PlayerIdentityInput = {
+  id?: string | number;
+  name?: string;
+  displayName?: string;
+  title?: string;
+  subtitle?: string;
+  color?: string;
+  wins?: number;
+  gamesPlayed?: number;
+  totalPrestige?: number;
+  prestige?: number;
+  directPrestige?: number;
+  assistPrestigeReceived?: number;
+  assists?: number;
+  contractsSucceeded?: number;
+  contractsFailed?: number;
+  objectivesCompleted?: number;
+  score?: number;
+};
 
-export const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#050814',
-  },
-  backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.34)',
-  },
-  overlayGlowTopRight: {
-    position: 'absolute',
-    top: -80,
-    right: -40,
-    width: 260,
-    height: 260,
-    borderRadius: 999,
-    backgroundColor: withAlpha(chartColors?.primary ?? '#8b5cf6', 0.12),
-  },
-  overlayGlowTopLeft: {
-    position: 'absolute',
-    top: 120,
-    left: -80,
-    width: 220,
-    height: 220,
-    borderRadius: 999,
-    backgroundColor: 'rgba(34,211,238,0.08)',
-  },
-  overlayGlowBottom: {
-    position: 'absolute',
-    bottom: -120,
-    alignSelf: 'center',
-    width: 320,
-    height: 320,
-    borderRadius: 999,
-    backgroundColor: 'rgba(96,165,250,0.10)',
-  },
-  sheet: {
-    flex: 1,
-    marginTop: 20,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(7, 12, 27, 0.94)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  sheetGlowPrimary: {
-    position: 'absolute',
-    top: -110,
-    right: -110,
-    width: 240,
-    height: 240,
-    borderRadius: 999,
-    backgroundColor: 'rgba(139,92,246,0.08)',
-  },
-  sheetGlowSecondary: {
-    position: 'absolute',
-    bottom: -90,
-    left: -90,
-    width: 220,
-    height: 220,
-    borderRadius: 999,
-    backgroundColor: 'rgba(34,211,238,0.06)',
-  },
-  sheetHeader: {
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 12,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 42,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    alignItems: 'center',
-  },
-  headerTitleWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  brandTitle: {
-    color: '#a5b4fc',
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  sheetTitle: {
-    color: '#f8fafc',
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  sheetSubtitle: {
-    color: '#9fb2d0',
-    fontSize: 12,
-    lineHeight: 18,
-    maxWidth: 560,
-  },
-  headerNavRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  headerPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  headerPillText: {
-    color: '#f8fafc',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  segmentShell: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 16,
-    padding: 4,
-    alignSelf: 'flex-start',
-  },
-  segment: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  segmentActive: {
-    backgroundColor: 'rgba(139,92,246,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.34)',
-  },
-  segmentText: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  segmentTextActive: {
-    color: '#f8fafc',
-  },
-  content: {
-    padding: 16,
-    gap: 16,
-  },
+export type IdentityAxisKey =
+  | "pressure"
+  | "conversion"
+  | "support"
+  | "efficiency"
+  | "resilience"
+  | "winning";
 
-  card: {
-    padding: 16,
-    borderRadius: 22,
-    backgroundColor: 'rgba(10,16,35,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    gap: 12,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    alignItems: 'center',
-  },
-  cardEyebrow: {
-    color: '#8ea3c6',
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  cardMeta: {
-    color: '#8ea3c6',
-    fontSize: 11,
-  },
-  cardTitle: {
-    color: '#f8fafc',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  helper: {
-    color: '#a8bad6',
-    fontSize: 12,
-    lineHeight: 18,
-  },
+export type IdentityAxis = {
+  key: IdentityAxisKey;
+  label: string;
+  adjective: string;
+  description: string;
+  gameplayMeaning: string;
+  value: number;
+};
 
-  focusBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-    marginBottom: 6,
-  },
-  focusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(120, 145, 210, 0.24)',
-    backgroundColor: 'rgba(16, 22, 38, 0.86)',
-  },
-  focusPillActive: {
-    borderColor: 'rgba(125, 235, 255, 0.9)',
-    backgroundColor: 'rgba(62, 96, 255, 0.22)',
-  },
-  focusPillText: {
-    color: 'rgba(224, 233, 255, 0.82)',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  focusPillTextActive: {
-    color: '#F4FFFF',
-  },
+export type PlayerIdentity = {
+  displayName: string;
+  subtitle: string;
+  archetype: string;
+  summaryText: string;
+  axes: IdentityAxis[];
+};
 
-  presetBar: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  presetPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(120, 145, 210, 0.24)',
-    backgroundColor: 'rgba(16, 22, 38, 0.86)',
-  },
-  presetPillActive: {
-    borderColor: 'rgba(125, 235, 255, 0.9)',
-    backgroundColor: 'rgba(88, 120, 255, 0.28)',
-  },
-  presetPillText: {
-    color: 'rgba(224, 233, 255, 0.82)',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  presetPillTextActive: {
-    color: '#F8FFFF',
-  },
+function toNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-  summaryStripContent: {
-    gap: 10,
-    paddingRight: 8,
-    paddingTop: 6,
-    paddingBottom: 2,
-  },
-  summaryCard: {
-    width: 210,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 12,
-    overflow: 'hidden',
-  },
-  summaryCardAccent: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-  },
-  summaryCardTitle: {
-    color: '#F4F8FF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  summaryCardSubTitle: {
-    color: 'rgba(215, 228, 255, 0.68)',
-    fontSize: 11,
-    marginTop: 2,
-    marginBottom: 10,
-  },
-  summaryStatsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  summaryStatBlock: {
-    minWidth: 80,
-  },
-  summaryStatValue: {
-    color: '#F5FBFF',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  summaryStatLabel: {
-    color: 'rgba(205, 220, 255, 0.62)',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 2,
-  },
+function clamp(value: number, min = 0, max = 100) {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
 
-  insightBadgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  insightBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(100, 180, 255, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(125, 235, 255, 0.24)',
-  },
-  insightBadgeText: {
-    color: '#DDF7FF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+function getInitials(name?: string) {
+  const parts = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
 
-  matrixWhyText: {
-    marginTop: 8,
-    color: 'rgba(210, 223, 255, 0.74)',
-    fontSize: 12,
-    lineHeight: 18,
-  },
+  if (parts.length === 0) return "MR";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
+}
 
-  selectionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  tile: {
-    position: 'relative',
-    width: '48%',
-    minWidth: 150,
-    padding: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    gap: 8,
-  },
-  tileAccent: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 4,
-    height: '100%',
-  },
-  tileGlow: {
-    position: 'absolute',
-    top: -40,
-    right: -20,
-    width: 120,
-    height: 120,
-    borderRadius: 999,
-  },
-  tileTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-  groupDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 4,
-  },
-  selectedBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  selectedBadgeText: {
-    color: '#f8fafc',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  tileTitle: {
-    color: '#f8fafc',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  tileSubtitle: {
-    color: '#94a3b8',
-    fontSize: 12,
-  },
+function adjectiveFor(value: number) {
+  if (value >= 85) return "Elite";
+  if (value >= 70) return "Strong";
+  if (value >= 55) return "Reliable";
+  if (value >= 40) return "Balanced";
+  if (value >= 25) return "Developing";
+  return "Emerging";
+}
 
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    minWidth: 96,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  actionButtonDisabled: {
-    opacity: 0.45,
-  },
-  clearButton: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  analyzeButton: {
-    backgroundColor: 'rgba(139,92,246,0.18)',
-    borderColor: 'rgba(139,92,246,0.36)',
-  },
-  actionButtonText: {
-    color: '#f8fafc',
-    fontSize: 13,
-    fontWeight: '800',
-  },
+function buildAxis(
+  key: IdentityAxisKey,
+  label: string,
+  value: number,
+  description: string,
+  gameplayMeaning: string
+): IdentityAxis {
+  return {
+    key,
+    label,
+    adjective: adjectiveFor(value),
+    description,
+    gameplayMeaning,
+    value: clamp(value),
+  };
+}
 
-  inlineSegmentShell: {
-    flexDirection: 'row',
-    borderRadius: 14,
-    padding: 4,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    gap: 4,
-  },
-  inlineSegment: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  inlineSegmentActive: {
-    backgroundColor: 'rgba(96,165,250,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(96,165,250,0.34)',
-  },
-  inlineSegmentText: {
-    color: '#8ea3c6',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  inlineSegmentTextActive: {
-    color: '#f8fafc',
-  },
+function buildSubtitle(input: PlayerIdentityInput, displayName: string) {
+  if (String(input.subtitle ?? "").trim()) {
+    return String(input.subtitle).trim();
+  }
 
-  telemetryRow: {
-    gap: 12,
-  },
-  insightCard: {
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: 'rgba(10,16,35,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    gap: 4,
-  },
-  insightCardTight: {},
-  insightCardWide: {},
-  insightLabel: {
-    color: '#8ea3c6',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
-  },
-  insightValue: {
-    color: '#f8fafc',
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  insightMeta: {
-    color: '#8ea3c6',
-    fontSize: 12,
-  },
-  insightSeatText: {
-    color: '#d7e3f4',
-    fontSize: 13,
-    lineHeight: 20,
-  },
+  const title = String(input.title ?? "").trim();
+  if (title) {
+    return `${title} · Callsign ${getInitials(displayName)}`;
+  }
 
-  legendCard: {
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    gap: 12,
-  },
-  legendTitle: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  legendRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  legendChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-  legendChipText: {
-    color: '#e2e8f0',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  return `Callsign ${getInitials(displayName)}`;
+}
 
-  matrixControlRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  smallPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  smallPillActive: {
-    backgroundColor: 'rgba(34,197,94,0.14)',
-    borderColor: 'rgba(34,197,94,0.34)',
-  },
-  deltaPill: {
-    backgroundColor: 'rgba(96,165,250,0.16)',
-    borderColor: 'rgba(96,165,250,0.30)',
-  },
-  smallPillText: {
-    color: '#f8fafc',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+function buildArchetype(topAxis: IdentityAxis) {
+  switch (topAxis.key) {
+    case "pressure":
+      return "Tempo Captain";
+    case "conversion":
+      return "Closer";
+    case "support":
+      return "Wing Commander";
+    case "efficiency":
+      return "Systems Pilot";
+    case "resilience":
+      return "Stabilizer";
+    case "winning":
+      return "Finisher";
+    default:
+      return "Balanced Operator";
+  }
+}
 
-  analysisPlaceholder: {
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    gap: 6,
-  },
-  analysisPlaceholderTitle: {
-    color: '#f8fafc',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  analysisPlaceholderText: {
-    color: '#9fb2d0',
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  empty: {
-    color: '#9fb2d0',
-    fontSize: 13,
-  },
+export function buildPlayerIdentity(input: PlayerIdentityInput): PlayerIdentity {
+  const displayName =
+    String(input.displayName ?? "").trim() ||
+    String(input.name ?? "").trim() ||
+    "Unknown Player";
 
-  matrixShell: {
-    gap: 10,
-  },
-  matrixHeaderShell: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  matrixBodyRow: {
-    flexDirection: 'row',
-  },
-  matrixPinnedColumn: {
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(255,255,255,0.08)',
-    paddingRight: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  cornerCell: {
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-  },
-  cornerTitle: {
-    color: '#f8fafc',
-    fontWeight: '800',
-  },
-  cornerSubTitle: {
-    color: '#8ea3c6',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  matrixColumnsRow: {
-    flexDirection: 'row',
-  },
-  valueColumnHeader: {
-    borderWidth: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  columnColorBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    height: 3,
-    width: '100%',
-  },
-  columnHeaderTitle: {
-    color: '#f8fafc',
-    fontWeight: '800',
-  },
-  columnHeaderSubtitle: {
-    color: '#9fb2d0',
-    marginTop: 3,
-  },
-  groupHeaderCell: {
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    overflow: 'hidden',
-  },
-  groupHeaderBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 3,
-    height: '100%',
-  },
-  groupHeaderText: {
-    color: '#f8fafc',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  metricNameCell: {
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
-    justifyContent: 'center',
-  },
-  metricNameCellPriority: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-  },
-  metricNameCellSorted: {
-    borderColor: 'rgba(96,165,250,0.40)',
-  },
-  metricNameCellHighlighted: {
-    borderColor: 'rgba(125, 235, 255, 0.95)',
-    backgroundColor: 'rgba(85, 130, 255, 0.18)',
-  },
-  metricLabelTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    alignItems: 'flex-start',
-  },
-  metricName: {
-    color: '#dbe7f7',
-    fontWeight: '700',
-    flex: 1,
-  },
-  metricNamePriority: {
-    color: '#ffffff',
-  },
-  metricInfoBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  metricInfoBadgeText: {
-    color: '#f8fafc',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  metricSortHint: {
-    color: '#7f94b1',
-    fontSize: 10,
-    marginTop: 4,
-  },
-  groupSpacerCell: {
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  dataColumn: {},
-  metricValueCell: {
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  metricValueCellPriority: {
-    borderWidth: 1,
-  },
-  metricValueCellBest: {
-    shadowColor: '#22c55e',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-  },
-  metricValueCellWorst: {
-    shadowColor: '#ef4444',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-  },
-  metricValueCellHighlighted: {
-    borderColor: 'rgba(125, 235, 255, 0.95)',
-    shadowColor: '#7DEBFF',
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
-  },
-  metricValueBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 14,
-  },
-  metricValue: {
-    fontWeight: '800',
-  },
-  metricValuePriority: {
-    fontSize: 12,
-  },
-  deltaText: {
-    marginTop: 3,
-    fontWeight: '700',
-  },
+  const gamesPlayed = Math.max(0, toNumber(input.gamesPlayed));
+  const wins = Math.max(0, toNumber(input.wins));
+  const totalPrestige = Math.max(
+    0,
+    toNumber(input.totalPrestige ?? input.prestige)
+  );
+  const directPrestige = Math.max(0, toNumber(input.directPrestige));
+  const assistPrestigeReceived = Math.max(0, toNumber(input.assistPrestigeReceived));
+  const assists = Math.max(0, toNumber(input.assists));
+  const contractsSucceeded = Math.max(0, toNumber(input.contractsSucceeded));
+  const contractsFailed = Math.max(0, toNumber(input.contractsFailed));
+  const objectivesCompleted = Math.max(0, toNumber(input.objectivesCompleted));
+  const totalContracts = contractsSucceeded + contractsFailed;
+  const safeGames = Math.max(1, gamesPlayed);
+  const safeContracts = Math.max(1, totalContracts);
+  const winRate = gamesPlayed > 0 ? wins / safeGames : 0;
+  const successRate = totalContracts > 0 ? contractsSucceeded / safeContracts : 0;
+  const failureRate = totalContracts > 0 ? contractsFailed / safeContracts : 0;
+  const prestigePerGame = totalPrestige / safeGames;
+  const directPerGame = directPrestige / safeGames;
+  const supportPerGame = assistPrestigeReceived / safeGames;
+  const assistsPerGame = assists / safeGames;
+  const objectivePerGame = objectivesCompleted / safeGames;
+  const actionsPerGame = (contractsSucceeded + assists + objectivesCompleted) / safeGames;
 
-  conditionalTopControls: {
-    gap: 10,
-  },
-  quickPresetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  conditionChipBlock: {
-    gap: 8,
-  },
-  conditionChipTitle: {
-    color: '#f8fafc',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  conditionChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  conditionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  anchorConditionChip: {
-    shadowColor: '#8b5cf6',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-  },
-  conditionChipText: {
-    color: '#f8fafc',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  selectorHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    alignItems: 'center',
-  },
-  selectorTitle: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  selectorToggleText: {
-    color: '#8ea3c6',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  compactPlayerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  compactPlayerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  compactPlayerChipText: {
-    color: '#e5eefb',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  anchorGlow: {
-    transform: [{ scale: 1.06 }],
-  },
+  const pressure = clamp(directPerGame * 2.2 + objectivePerGame * 9 + successRate * 20);
+  const conversion = clamp(winRate * 55 + successRate * 35 + objectivePerGame * 5);
+  const support = clamp(supportPerGame * 4.5 + assistsPerGame * 12 + winRate * 15);
+  const efficiency = clamp(prestigePerGame * 2.1 + (actionsPerGame > 0 ? (prestigePerGame / actionsPerGame) * 28 : 0));
+  const resilience = clamp((1 - failureRate) * 55 + Math.min(gamesPlayed, 12) * 3 + winRate * 18);
+  const winning = clamp(winRate * 65 + Math.min(wins, 10) * 3 + prestigePerGame * 1.1);
 
-  conditionalSummaryRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  conditionalSummaryCard: {
-    flex: 1,
-    minWidth: 120,
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    gap: 4,
-  },
-  conditionalSummaryLabel: {
-    color: '#8ea3c6',
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
-  conditionalSummaryValue: {
-    color: '#f8fafc',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  conditionalSummarySub: {
-    color: '#9fb2d0',
-    fontSize: 12,
-  },
-  conditionalTableScroll: {
-    maxHeight: 440,
-  },
-  conditionalTable: {
-    gap: 8,
-  },
-  conditionalTableHeader: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  conditionalHeaderCell: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  conditionalHeaderText: {
-    color: '#f8fafc',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  conditionalRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'stretch',
-  },
-  conditionalNameCell: {
-    flex: 1.2,
-    minWidth: 120,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    justifyContent: 'center',
-  },
-  conditionalName: {
-    color: '#f8fafc',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  conditionalInlineSub: {
-    color: '#9fb2d0',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  conditionalValueCell: {
-    flex: 1,
-    minWidth: 108,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    justifyContent: 'center',
-  },
-  strongPositiveCell: {
-    backgroundColor: 'rgba(34,197,94,0.14)',
-    borderColor: 'rgba(34,197,94,0.32)',
-  },
-  strongNegativeCell: {
-    backgroundColor: 'rgba(239,68,68,0.12)',
-    borderColor: 'rgba(239,68,68,0.28)',
-  },
-  conditionalValue: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  deltaPositive: {
-    color: '#22c55e',
-  },
-  deltaNegative: {
-    color: '#ef4444',
-  },
-  neutralText: {
-    color: '#f8fafc',
-  },
+  const axes: IdentityAxis[] = [
+    buildAxis(
+      "pressure",
+      "Pressure",
+      pressure,
+      "How strongly this player creates forward momentum through direct prestige and objective pressure.",
+      "Higher pressure players tend to set the pace early and force the table to react to them."
+    ),
+    buildAxis(
+      "conversion",
+      "Conversion",
+      conversion,
+      "How consistently good positions turn into completed contracts, secure leads, and real wins.",
+      "Higher conversion suggests this player closes the loop instead of leaving value on the table."
+    ),
+    buildAxis(
+      "support",
+      "Support",
+      support,
+      "How often this player gains or creates value through assists and cooperative table play.",
+      "Higher support indicates someone who benefits from and contributes to shared-value lines."
+    ),
+    buildAxis(
+      "efficiency",
+      "Efficiency",
+      efficiency,
+      "How much prestige this player tends to produce per game and per meaningful action.",
+      "Higher efficiency points to clean value generation with less wasted motion."
+    ),
+    buildAxis(
+      "resilience",
+      "Resilience",
+      resilience,
+      "How well this player avoids collapses, absorbs failed turns, and keeps an even floor.",
+      "Higher resilience players usually stay live deeper into the game and recover better from misses."
+    ),
+    buildAxis(
+      "winning",
+      "Winning",
+      winning,
+      "A blended signal of actual wins, rate-based success, and repeated finishing strength.",
+      "Higher winning scores show someone whose whole profile is translating into top-end results."
+    ),
+  ];
 
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.54)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 440,
-    borderRadius: 22,
-    padding: 18,
-    backgroundColor: 'rgba(10,16,35,0.98)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    gap: 12,
-  },
-  modalEyebrow: {
-    color: '#a5b4fc',
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  modalTitle: {
-    color: '#f8fafc',
-    fontSize: 22,
-    fontWeight: '800',
-  },
-  modalBody: {
-    color: '#d7e3f4',
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  modalMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  modalMetaChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  modalMetaText: {
-    color: '#f8fafc',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  const sorted = [...axes].sort((a, b) => b.value - a.value);
+  const topAxis = sorted[0];
+  const secondaryAxis = sorted[1];
+  const lowAxis = [...axes].sort((a, b) => a.value - b.value)[0];
+  const archetype = buildArchetype(topAxis);
+  const subtitle = buildSubtitle(input, displayName);
+  const summaryText = `${displayName} reads as a ${archetype.toLowerCase()} with strongest signals in ${topAxis.label.toLowerCase()} and ${secondaryAxis.label.toLowerCase()}. The clearest next growth area is ${lowAxis.label.toLowerCase()}, which is the lightest part of the current profile.`;
 
-  compareSelectionShell: {
-    marginTop: 14,
-    borderRadius: 24,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 150, 255, 0.20)',
-    backgroundColor: 'rgba(10, 16, 30, 0.86)',
-    overflow: 'hidden',
-  },
-  compareSelectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  compareSelectionHeaderTextWrap: {
-    flex: 1,
-  },
-  compareSelectionHeaderRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  compareSelectionTitle: {
-    color: '#F3F8FF',
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  compareSelectionSubtitle: {
-    marginTop: 4,
-    color: 'rgba(217, 230, 255, 0.78)',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  compareSelectionCount: {
-    color: '#BFEFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  compareSelectionToolbar: {
-    marginTop: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  compareSelectionSearchWrap: {
-    flex: 1,
-    minWidth: 180,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 150, 255, 0.20)',
-    backgroundColor: 'rgba(7, 13, 24, 0.92)',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  compareSelectionSearchInput: {
-    color: '#F3F8FF',
-    fontSize: 14,
-    padding: 0,
-  },
-  compareSelectionDensityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  compareSelectionModePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(117, 152, 222, 0.24)',
-    backgroundColor: 'rgba(17, 24, 38, 0.86)',
-  },
-  compareSelectionModePillActive: {
-    borderColor: 'rgba(126, 238, 255, 0.90)',
-    backgroundColor: 'rgba(61, 98, 255, 0.24)',
-    shadowColor: '#7DEBFF',
-    shadowOpacity: 0.24,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 5,
-  },
-  compareSelectionModePillText: {
-    color: 'rgba(221, 234, 255, 0.82)',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  compareSelectionModePillTextActive: {
-    color: '#EFFFFF',
-  },
-  compareSelectionSortRow: {
-    marginTop: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  compareSelectionSortLabel: {
-    color: 'rgba(214, 229, 255, 0.76)',
-    fontSize: 12,
-    fontWeight: '700',
-    marginRight: 4,
-  },
-  compareSelectionSortPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(117, 152, 222, 0.22)',
-    backgroundColor: 'rgba(17, 24, 38, 0.86)',
-  },
-  compareSelectionSortPillActive: {
-    borderColor: 'rgba(126, 238, 255, 0.95)',
-    backgroundColor: 'rgba(61, 98, 255, 0.28)',
-    shadowColor: '#7DEBFF',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
-  },
-  compareSelectionSortPillText: {
-    color: 'rgba(221, 234, 255, 0.82)',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  compareSelectionSortPillTextActive: {
-    color: '#F4FFFF',
-  },
-  compareSelectionScrollContent: {
-    gap: 12,
-    paddingTop: 14,
-    paddingRight: 6,
-  },
-  compareSelectionActionRow: {
-    marginTop: 14,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 10,
-  },
-  compareSelectionSecondaryButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(117, 152, 222, 0.24)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  compareSelectionSecondaryButtonText: {
-    color: 'rgba(228, 238, 255, 0.86)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  compareSelectionPrimaryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(126, 238, 255, 0.85)',
-    backgroundColor: 'rgba(86, 120, 255, 0.30)',
-    shadowColor: '#7DEBFF',
-    shadowOpacity: 0.34,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
-  },
-  compareSelectionPrimaryButtonDisabled: {
-    borderColor: 'rgba(117, 152, 222, 0.18)',
-    backgroundColor: 'rgba(75, 84, 104, 0.22)',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  compareSelectionPrimaryButtonText: {
-    color: '#F3FCFF',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  compareSelectionPrimaryButtonTextDisabled: {
-    color: 'rgba(219, 227, 240, 0.45)',
-  },
-  compareSelectionSuggestionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  compareSelectionSuggestionPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(117, 152, 222, 0.24)',
-    backgroundColor: 'rgba(16, 26, 44, 0.9)',
-  },
-  compareSelectionSuggestionPillActive: {
-    borderColor: 'rgba(126, 238, 255, 0.95)',
-    backgroundColor: 'rgba(61, 98, 255, 0.28)',
-  },
-  compareSelectionSuggestionText: {
-    color: 'rgba(227, 236, 255, 0.86)',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  compareSelectionSuggestionTextActive: {
-    color: '#F5FFFF',
-  },
-
-  comparePlayerCard: {
-    width: 320,
-    borderRadius: 22,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(102, 136, 210, 0.20)',
-    backgroundColor: 'rgba(11, 18, 32, 0.96)',
-    overflow: 'hidden',
-  },
-  comparePlayerCardSelected: {
-    borderColor: 'rgba(126, 238, 255, 1)',
-    backgroundColor: 'rgba(28, 40, 74, 0.96)',
-    shadowColor: '#7DEBFF',
-    shadowOpacity: 0.40,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-  },
-  comparePlayerCardDisabled: {
-    opacity: 0.45,
-  },
-  comparePlayerCardGlow: {
-    position: 'absolute',
-    top: -24,
-    right: -24,
-    width: 120,
-    height: 120,
-    borderRadius: 999,
-    backgroundColor: 'rgba(92, 169, 255, 0.08)',
-  },
-  comparePlayerCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  comparePlayerIdentityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
-  },
-  comparePlayerColorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    marginRight: 8,
-  },
-  comparePlayerColorDotSelected: {
-    shadowColor: '#7DEBFF',
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  comparePlayerName: {
-    color: '#F3F8FF',
-    fontSize: 15,
-    fontWeight: '800',
-    flexShrink: 1,
-  },
-  comparePlayerSelectedBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(126, 238, 255, 0.45)',
-    backgroundColor: 'rgba(126, 238, 255, 0.14)',
-  },
-  comparePlayerSelectedBadgeText: {
-    color: '#CFFCFF',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-  comparePlayerHeroStats: {
-    marginTop: 12,
-    marginBottom: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(117, 152, 222, 0.18)',
-    backgroundColor: 'rgba(15, 23, 43, 0.88)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  comparePlayerHeroStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  comparePlayerHeroDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(130, 155, 210, 0.16)',
-  },
-  comparePlayerHeroValue: {
-    color: '#F7FBFF',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  comparePlayerHeroLabel: {
-    marginTop: 3,
-    color: 'rgba(207, 223, 255, 0.72)',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  comparePlayerMetricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  comparePlayerMetricCell: {
-    width: '47%',
-    minHeight: 58,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(109, 140, 204, 0.16)',
-    backgroundColor: 'rgba(13, 20, 36, 0.84)',
-  },
-  comparePlayerMetricCellWide: {
-    width: '100%',
-    minHeight: 58,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(109, 140, 204, 0.16)',
-    backgroundColor: 'rgba(13, 20, 36, 0.84)',
-  },
-  comparePlayerMetricLabel: {
-    color: 'rgba(196, 215, 255, 0.68)',
-    fontSize: 10,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  comparePlayerMetricValue: {
-    color: '#F1F7FF',
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 16,
-  },
-
-  compareGroupCard: {
-    width: 220,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(102, 136, 210, 0.20)',
-    backgroundColor: 'rgba(11, 18, 32, 0.96)',
-  },
-  compareGroupCardSelected: {
-    borderColor: 'rgba(126, 238, 255, 1)',
-    backgroundColor: 'rgba(28, 40, 74, 0.96)',
-    shadowColor: '#7DEBFF',
-    shadowOpacity: 0.34,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
-  },
-  compareGroupName: {
-    color: '#F3F8FF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  compareGroupMeta: {
-    marginTop: 6,
-    color: 'rgba(215, 230, 255, 0.72)',
-    fontSize: 12,
-  },
-});
+  return {
+    displayName,
+    subtitle,
+    archetype,
+    summaryText,
+    axes,
+  };
+}

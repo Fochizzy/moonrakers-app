@@ -5,10 +5,6 @@ import Svg, { Circle, Line, Rect, Text as SvgText } from "react-native-svg";
 import Text from "@/components/ui/Text";
 import { getChartMetricValue } from "@/utils/chartMetricValue";
 import { resolveStoredPlayerColor } from "@/utils/playerColor";
-import {
-  buildAvailableSnapshotPlayers,
-  filterSnapshotPlayers,
-} from "@/utils/snapshotPlayers";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 type Player = { id: string; name?: string; color?: string };
@@ -55,6 +51,47 @@ function compact(value: number) {
   return value.toFixed(1).replace(/\.0$/, "");
 }
 
+function buildVisiblePlayers(
+  data: readonly SnapshotPoint[],
+  players: readonly Player[],
+  scopedPlayerIds?: readonly string[]
+) {
+  const playerMap = new Map<string, Player>();
+
+  players.forEach((player, index) => {
+    const id = String(player?.id ?? "").trim();
+    if (!id) return;
+    playerMap.set(id, {
+      id,
+      name: player.name || `Player ${index + 1}`,
+      color: player.color,
+    });
+  });
+
+  data.forEach((snap, snapIndex) => {
+    const snapshot =
+      snap?.snapshot && typeof snap.snapshot === "object"
+        ? (snap.snapshot as Record<string, unknown>)
+        : {};
+
+    Object.keys(snapshot).forEach((rawId, index) => {
+      const id = String(rawId ?? "").trim();
+      if (!id || playerMap.has(id)) return;
+      playerMap.set(id, {
+        id,
+        name: `Player ${snapIndex + index + 1}`,
+      });
+    });
+  });
+
+  const mergedPlayers = Array.from(playerMap.values());
+  if (!scopedPlayerIds?.length) return mergedPlayers;
+
+  const allowed = new Set(scopedPlayerIds.map((id) => String(id)));
+  const filtered = mergedPlayers.filter((player) => allowed.has(String(player.id)));
+  return filtered.length ? filtered : mergedPlayers;
+}
+
 export default function EfficiencyFailureScatter({
   data = [],
   players = [],
@@ -64,15 +101,9 @@ export default function EfficiencyFailureScatter({
   title = "Efficiency vs Failure",
   subtitle = "Average per-player positioning across unified snapshots.",
 }: Props) {
-  const availablePlayers = useMemo(
-    () => buildAvailableSnapshotPlayers(data as any, players as any) as Player[],
-    [data, players]
-  );
-
   const visiblePlayers = useMemo(
-    () =>
-      filterSnapshotPlayers(availablePlayers as any, undefined, scopedPlayerIds) as Player[],
-    [availablePlayers, scopedPlayerIds]
+    () => buildVisiblePlayers(data, players, scopedPlayerIds),
+    [data, players, scopedPlayerIds]
   );
 
   const points = useMemo(

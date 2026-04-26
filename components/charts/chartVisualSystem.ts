@@ -55,12 +55,12 @@ export const CHART_COLORS = {
 } as const;
 
 export const CHART_LAYOUT = {
-  screenPadding: 14,
-  sectionGap: 10,
-  cardGap: 8,
+  screenPadding: 12,
+  sectionGap: 8,
+  cardGap: 6,
   sectionRadius: 18,
   cardRadius: 16,
-  chipRadius: 999,
+  chipRadius: 14,
 } as const;
 
 export const CHART_STAGE_PRESETS: Record<ChartStageTone, ChartStagePreset> = {

@@ -1,4 +1,4 @@
-import { buildPlayerMetrics, SourcePlayerLike } from '@/components/charts/core/metricSchema';
+import { buildPlayerMetrics, SourcePlayerLike } from '@/utils/playerMetrics';
 
 export type GameLike = {
   id?: string;

@@ -251,7 +251,7 @@ export default function InsightsScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.backgroundLayer}>
-        <ScreenBackground preset="intel" />
+        <ScreenBackground preset="analytics" />
       </View>
 
       <ScrollView
@@ -279,12 +279,17 @@ export default function InsightsScreen() {
               <Text style={styles.linkButtonText}>Stats</Text>
             </Pressable>
 
-            <Pressable
-              style={styles.linkButton}
-              onPress={() => router.push(APP_ROUTES.elo)}
-            >
-              <Text style={styles.linkButtonText}>Elo</Text>
-            </Pressable>
+              <Pressable
+                style={styles.linkButton}
+                onPress={() =>
+                  router.push({
+                    pathname: '/charts/[chartKey]',
+                    params: { chartKey: 'elo' },
+                  } as any)
+                }
+              >
+                <Text style={styles.linkButtonText}>Elo</Text>
+              </Pressable>
           </View>
         </View>
 

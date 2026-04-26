@@ -1,11 +1,14 @@
 
 import { create } from 'zustand';
+import { mergeRegisteredProfileIntoPlayer } from '../utils/registeredProfilePlayer';
 
 export type Player = {
   id: string;
   name: string;
   initials?: string;
   color?: string;
+  displayName?: string;
+  hasSavedGames?: boolean;
   assignedCardArtIndex?: number | null;
 };
 
@@ -69,6 +72,7 @@ export type ActiveGameCurrent = {
 
 export type Game = {
   id: string;
+  hostProfileId?: string;
   players: GamePlayer[];
   totals: GameTotals;
   winnerId?: string;
@@ -81,6 +85,37 @@ export type Game = {
   timeline?: StoredRound[];
   roundCount?: number;
   objectiveStatsEligible?: boolean;
+};
+
+export type AuthSession = {
+  user: {
+    id: string;
+    email?: string | null;
+  };
+} | null;
+
+export type AuthProfile = {
+  id: string;
+  player_name?: string | null;
+  display_name?: string | null;
+  favorite_color?: string | null;
+  assigned_card_art_index?: number | null;
+} | null;
+
+export type AuthBootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export type StatsGroupSnapshot = {
+  groupId: string;
+  name?: string;
+  updatedAt?: string | null;
+  [key: string]: unknown;
+};
+
+export type StatsSnapshot = {
+  personal: Record<string, unknown>;
+  global: Record<string, unknown>;
+  groups: StatsGroupSnapshot[];
+  loadedAt: number;
 };
 
 export type ActiveGame = {
@@ -113,6 +148,23 @@ function normalizeName(v: any): string {
 function normalizeStringOrUndefined(v: any): string | undefined {
   const normalized = normalizeName(v);
   return normalized || undefined;
+}
+
+function getInitialsFromName(name: string): string {
+  const parts = String(name ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return '?';
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
 }
 
 function normalizeAssistMap(input: any): Record<string, number> {
@@ -289,6 +341,7 @@ function normalizeImportedGame(raw: any): Game {
 
   return {
     id: normalizeId(raw?.id) || `${Date.now()}-${Math.random()}`,
+    hostProfileId: normalizeStringOrUndefined(raw?.hostProfileId),
     players: Array.from(playerMap.values()),
     totals,
     winnerId: sanitizeWinner(getResolvedWinner(raw)),
@@ -346,20 +399,60 @@ type StartActiveGameInput = {
   groupName?: string;
 };
 
+type CloudSnapshotInput = {
+  profile: AuthProfile;
+  players: Player[];
+  groups: Group[];
+  games: Game[];
+};
+
+type RegisteredProfileInput = {
+  id: string;
+  name: string;
+  displayName?: string;
+  color?: string;
+  assignedCardArtIndex?: number | null;
+  hasSavedGames?: boolean;
+};
+
 type Store = {
   players: Player[];
   groups: Group[];
   games: Game[];
   activeGame: ActiveGame | null;
   selectedGroupId: string | null;
+  authSession: AuthSession;
+  authProfile: AuthProfile;
+  authBootstrapStatus: AuthBootstrapStatus;
+  authError: string | null;
+  passwordRecoveryPending: boolean;
+  statsSnapshot: StatsSnapshot | null;
 
   selectedPlayerId: string | null;
   selectedGameId: string | null;
   selectedComparePlayerIds: string[];
 
+  setAuthSession: (session: AuthSession) => void;
+  setAuthProfile: (profile: AuthProfile) => void;
+  setAuthBootstrapStatus: (status: AuthBootstrapStatus) => void;
+  setAuthError: (message: string | null) => void;
+  setPasswordRecoveryPending: (pending: boolean) => void;
+  setStatsSnapshot: (snapshot: StatsSnapshot | null) => void;
+  hydrateAuthBootstrap: (input: {
+    session: AuthSession;
+    profile: AuthProfile;
+  }) => void;
+  hydrateCloudSnapshot: (input: {
+    session: AuthSession;
+    snapshot: CloudSnapshotInput;
+    statsSnapshot?: StatsSnapshot | null;
+  }) => void;
+  clearAuthState: () => void;
+
   setPlayers: (players: Player[]) => void;
   addPlayer: (player: Player) => void;
   updatePlayer: (playerId: string, updates: Partial<Player>) => void;
+  upsertRegisteredProfile: (profile: RegisteredProfileInput) => void;
   removePlayer: (playerId: string) => void;
   deletePlayer: (playerId: string) => void;
 
@@ -394,10 +487,76 @@ export const useStore = create<Store>((set, get) => ({
   games: [],
   activeGame: null,
   selectedGroupId: null,
+  authSession: null,
+  authProfile: null,
+  authBootstrapStatus: 'idle',
+  authError: null,
+  passwordRecoveryPending: false,
+  statsSnapshot: null,
 
   selectedPlayerId: null,
   selectedGameId: null,
   selectedComparePlayerIds: [],
+
+  setAuthSession: (session) =>
+    set({
+      authSession: session,
+    }),
+
+  setAuthProfile: (profile) =>
+    set({
+      authProfile: profile,
+    }),
+
+  setAuthBootstrapStatus: (status) =>
+    set({
+      authBootstrapStatus: status,
+    }),
+
+  setAuthError: (message) =>
+    set({
+      authError: message,
+    }),
+
+  setPasswordRecoveryPending: (pending) =>
+    set({
+      passwordRecoveryPending: Boolean(pending),
+    }),
+
+  setStatsSnapshot: (snapshot) =>
+    set({
+      statsSnapshot: snapshot,
+    }),
+
+  hydrateAuthBootstrap: ({ session, profile }) =>
+    set({
+      authSession: session,
+      authProfile: profile,
+      authBootstrapStatus: 'ready',
+      authError: null,
+    }),
+
+  hydrateCloudSnapshot: ({ session, snapshot, statsSnapshot = null }) =>
+    set({
+      authSession: session,
+      authProfile: snapshot.profile,
+      players: Array.isArray(snapshot.players) ? snapshot.players : [],
+      groups: Array.isArray(snapshot.groups) ? snapshot.groups : [],
+      games: Array.isArray(snapshot.games) ? snapshot.games : [],
+      statsSnapshot,
+      authBootstrapStatus: 'ready',
+      authError: null,
+    }),
+
+  clearAuthState: () =>
+    set({
+      authSession: null,
+      authProfile: null,
+      authBootstrapStatus: 'idle',
+      authError: null,
+      passwordRecoveryPending: false,
+      statsSnapshot: null,
+    }),
 
   setPlayers: (players) =>
     set({
@@ -408,6 +567,26 @@ export const useStore = create<Store>((set, get) => ({
     set((state) => ({
       players: [...state.players, player],
     })),
+
+  upsertRegisteredProfile: (profile) =>
+    set((state) => {
+      const existingPlayer =
+        state.players.find((player) => player.id === normalizeId(profile?.id)) ?? null;
+      const nextPlayer = mergeRegisteredProfileIntoPlayer(existingPlayer, profile);
+
+      if (!nextPlayer) {
+        return {};
+      }
+
+      const exists = state.players.some((player) => player.id === nextPlayer.id);
+      return {
+        players: exists
+          ? state.players.map((player) =>
+              player.id === nextPlayer.id ? { ...player, ...nextPlayer } : player
+            )
+          : [...state.players, nextPlayer],
+      };
+    }),
 
   updatePlayer: (playerId, updates) =>
     set((state) => {
@@ -688,6 +867,7 @@ export const useStore = create<Store>((set, get) => ({
     const mergeGame = (a: Game, b: Game): Game => ({
       ...a,
       ...b,
+      hostProfileId: b.hostProfileId ?? a.hostProfileId,
       totals: mergeTotals(a.totals, b.totals),
       rounds: b.rounds && b.rounds.length > 0 ? b.rounds : a.rounds,
       timeline:
@@ -874,6 +1054,12 @@ export const useStore = create<Store>((set, get) => ({
       games: [],
       activeGame: null,
       selectedGroupId: null,
+      authSession: null,
+      authProfile: null,
+      authBootstrapStatus: 'idle',
+      authError: null,
+      passwordRecoveryPending: false,
+      statsSnapshot: null,
       selectedPlayerId: null,
       selectedGameId: null,
       selectedComparePlayerIds: [],

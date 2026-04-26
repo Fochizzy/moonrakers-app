@@ -9,7 +9,7 @@ import {
 import { useRouter } from "expo-router";
 
 import { useStore } from "@/store/useStore";
-import StarryNight from "@/components/ui/StarryNight";
+import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
 
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
@@ -1149,9 +1149,7 @@ export default function StatsScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.backgroundLayer}>
-        <StarryNight />
-        <View style={styles.backgroundNebulaPurple} />
-        <View style={styles.backgroundNebulaBlue} />
+        <ScreenBackground preset="analytics" />
         <View style={styles.backgroundDim} />
       </View>
 
@@ -1225,24 +1223,6 @@ const styles = StyleSheet.create({
   },
   backgroundLayer: {
     ...StyleSheet.absoluteFillObject,
-  },
-  backgroundNebulaPurple: {
-    position: "absolute",
-    top: -80,
-    left: -30,
-    width: 220,
-    height: 220,
-    borderRadius: 999,
-    backgroundColor: "rgba(168,85,247,0.14)",
-  },
-  backgroundNebulaBlue: {
-    position: "absolute",
-    bottom: -120,
-    right: -20,
-    width: 260,
-    height: 260,
-    borderRadius: 999,
-    backgroundColor: "rgba(59,130,246,0.10)",
   },
   backgroundDim: {
     ...StyleSheet.absoluteFillObject,

@@ -22,6 +22,7 @@ import {
   CHART_SECTIONS,
   buildFeaturedChartTakeaway,
   getChartsForSection,
+  normalizeChartHubSelection,
   resolveChartCatalogEntry,
   type ChartCatalogEntry,
   type ChartCatalogKey,
@@ -42,7 +43,6 @@ import {
 } from "@/utils/charts";
 import { getRouteSyncedGroupIds } from "@/utils/chartHubRouteState";
 import { getMetricOrFallback } from "@/utils/metricMap";
-import { APP_ROUTES } from "@/utils/appRoutes";
 
 function getParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -336,6 +336,18 @@ function UtilityButton({
   );
 }
 
+function SetupBackButton({ onPress }: { onPress: () => void; }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={styles.setupBackButton}
+      activeOpacity={0.9}
+    >
+      <Text style={styles.setupBackButtonText}>Close setup</Text>
+    </TouchableOpacity>
+  );
+}
+
 function StarButton({
   active,
   onPress,
@@ -479,7 +491,9 @@ export default function ChartsIndexScreen() {
     Array.isArray(state?.players) ? state.players : []
   ) as StorePlayer[];
 
-  const routeChartKey = resolveChartCatalogEntry(getParam(params.chartKey)).key;
+  const routeChartKey = normalizeChartHubSelection(
+    getParam(params.chartKey)
+  ).key;
   const routePlayerId = getParam(params.playerId);
   const routeCompareId = getParam(params.compareId);
   const routeIdsParam = getParam(params.ids);
@@ -717,9 +731,7 @@ export default function ChartsIndexScreen() {
     () =>
       CHART_SECTIONS.map((section) => ({
         ...section,
-        charts: getChartsForSection(section.key).filter(
-          (chart) => chart.key !== selectedChart.key
-        ),
+        charts: getChartsForSection(section.key).filter((chart) => chart.key !== selectedChart.key),
       })),
     [selectedChart.key]
   );
@@ -788,6 +800,30 @@ export default function ChartsIndexScreen() {
     scopedCount: selectedGroupIds.length,
     metricKey: activeMetric,
   });
+  const selectedSection = CHART_SECTIONS.find(
+    (section) => section.key === selectedChart.section
+  );
+  const heroContextChips = useMemo(() => {
+    const chips: string[] = [];
+
+    if (selectedPlayer?.name) {
+      chips.push(`Focus: ${selectedPlayer.name}`);
+    }
+
+    if (selectedChart.supportsCompare && comparePlayer?.name) {
+      chips.push(`Matchup: ${comparePlayer.name}`);
+    } else if (!selectedChart.supportsCompare && selectedChart.supportsMetric) {
+      chips.push(metricLabel);
+    }
+
+    return chips.slice(0, 2);
+  }, [
+    comparePlayer?.name,
+    metricLabel,
+    selectedChart.supportsCompare,
+    selectedChart.supportsMetric,
+    selectedPlayer?.name,
+  ]);
 
   function toggleGroupPlayer(playerId: string) {
     setSelectedGroupIds((current) => {
@@ -844,10 +880,7 @@ export default function ChartsIndexScreen() {
   }
 
   function replaceChartHubRoute(chart: ChartCatalogEntry, setupOpen: boolean) {
-    router.replace({
-      pathname: APP_ROUTES.charts,
-      params: buildChartHubParams(chart, setupOpen),
-    } as any);
+    router.setParams(buildChartHubParams(chart, setupOpen) as any);
   }
 
   function setChartSetupOpen(nextSetupOpen: boolean, chart: ChartCatalogEntry = selectedChart) {
@@ -872,20 +905,6 @@ export default function ChartsIndexScreen() {
     replaceChartHubRoute(chart, true);
 
     requestAnimationFrame(() => {
-      if (chart.key === "elo") {
-        const {
-          chartKey: _chartKey,
-          setup: _setup,
-          ...eloParams
-        } = hubParams;
-
-        router.push({
-          pathname: APP_ROUTES.elo,
-          params: eloParams,
-        } as any);
-        return;
-      }
-
       const { setup: _setup, ...detailRouteParams } = hubParams;
 
       router.push({
@@ -896,7 +915,7 @@ export default function ChartsIndexScreen() {
   }
 
   return (
-    <PageShell preset="intel" scroll={false}>
+    <PageShell preset="analytics" scroll={false}>
       <ScrollView
         ref={scrollViewRef}
         stickyHeaderIndices={[0]}
@@ -906,7 +925,7 @@ export default function ChartsIndexScreen() {
       >
         <View style={styles.stickyHeroShell}>
           <HeroCard
-            eyebrow="Current Chart"
+            eyebrow="Charts"
             title={selectedChart.title}
             size="compact"
             style={styles.heroCardCompact}
@@ -917,28 +936,46 @@ export default function ChartsIndexScreen() {
                   <ChartHubPreview
                     kind={selectedChart.preview}
                     tone={selectedChart.tone}
-                    width={84}
-                    height={50}
+                    width={70}
+                    height={42}
                   />
                 </View>
 
                 <View style={styles.heroCopy}>
-                  <Text style={styles.heroHook} numberOfLines={2}>
+                  {selectedSection ? (
+                    <Text style={styles.heroSectionLabel}>{selectedSection.title}</Text>
+                  ) : null}
+                  <Text style={styles.heroHook} numberOfLines={1}>
                     {heroTakeaway}
                   </Text>
                 </View>
               </View>
-
             </View>
 
-            <UtilityButton
-              label={setupOpen ? "Done" : "Adjust"}
-              onPress={() =>
-                setupOpen ? setChartSetupOpen(false) : openSetup()
-              }
-              tone="blue"
-              size="compact"
-            />
+            {heroContextChips.length ? (
+              <View style={styles.heroChipRow}>
+                {heroContextChips.map((chip) => (
+                  <View key={chip} style={styles.displayChip}>
+                    <Text style={styles.displayChipText}>{chip}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.heroActionRow}>
+              <UtilityButton
+                label={setupOpen ? "Close" : "Adjust"}
+                onPress={() =>
+                  setupOpen ? setChartSetupOpen(false) : openSetup()
+                }
+                tone={setupOpen ? "neutral" : "blue"}
+                size="compact"
+              />
+              <StarButton
+                active={false}
+                onPress={() => undefined}
+              />
+            </View>
           </HeroCard>
         </View>
 
@@ -1044,11 +1081,12 @@ export default function ChartsIndexScreen() {
 
               <View style={styles.setupFooterActions}>
                 <UtilityButton
-                  label="Launch"
+                  label="Open Chart"
                   onPress={() => openChart(selectedChart)}
                   tone="green"
                   size="compact"
                 />
+                <SetupBackButton onPress={() => setChartSetupOpen(false)} />
               </View>
             </View>
           </SectionCard>
@@ -1088,12 +1126,12 @@ export default function ChartsIndexScreen() {
 
 const styles = StyleSheet.create({
   pageScrollContent: {
-    gap: 10,
-    paddingBottom: 16,
+    gap: 6,
+    paddingBottom: 14,
   },
   stickyHeroShell: {
     backgroundColor: "rgba(8,17,32,0.98)",
-    paddingBottom: 6,
+    paddingBottom: 2,
   },
   heroCardCompact: {
     borderRadius: 20,
@@ -1102,20 +1140,27 @@ const styles = StyleSheet.create({
   heroTopRow: {
     flexDirection: "row",
     gap: 6,
-    alignItems: "flex-start",
+    alignItems: "center",
   },
   heroLead: {
     flex: 1,
     minWidth: 0,
-    minHeight: 56,
+    minHeight: 46,
     flexDirection: "row",
-    gap: 5,
+    gap: 6,
     alignItems: "center",
   },
   heroCopy: {
     flex: 1,
     minWidth: 0,
     gap: 2,
+  },
+  heroSectionLabel: {
+    color: CHART_COLORS.sub,
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
   },
   heroTitle: {
     color: CHART_COLORS.textStrong,
@@ -1124,8 +1169,8 @@ const styles = StyleSheet.create({
   },
   heroHook: {
     color: CHART_COLORS.textStrong,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: "700",
   },
   heroPreviewFrame: {
@@ -1137,7 +1182,13 @@ const styles = StyleSheet.create({
   heroChipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 5,
+    gap: 4,
+  },
+  heroActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 6,
   },
   displayChip: {
     borderRadius: CHART_LAYOUT.chipRadius,
@@ -1150,11 +1201,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   utilityButton: {
-    minHeight: 36,
+    minHeight: 34,
     borderRadius: CHART_LAYOUT.chipRadius,
     borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1187,25 +1238,25 @@ const styles = StyleSheet.create({
   },
   railContent: {
     gap: 6,
-    paddingRight: 4,
+    paddingRight: 24,
   },
   sectionCardCompact: {
-    padding: 8,
-    gap: 5,
+    padding: 7,
+    gap: 4,
   },
   chartCard: {
-    width: 188,
-    minHeight: 156,
+    width: 170,
+    minHeight: 138,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: CHART_COLORS.border,
     backgroundColor: CHART_COLORS.cardAlt,
-    gap: 6,
+    gap: 5,
   },
   chartCardPressable: {
     flex: 1,
-    padding: 8,
-    gap: 6,
+    padding: 7,
+    gap: 5,
   },
   chartCardHeader: {
     flexDirection: "row",
@@ -1248,17 +1299,17 @@ const styles = StyleSheet.create({
   },
   chartCardHook: {
     color: CHART_COLORS.sub,
-    fontSize: 11,
-    lineHeight: 15,
-    minHeight: 30,
+    fontSize: 10,
+    lineHeight: 14,
+    minHeight: 28,
   },
   previewWrap: {
     marginTop: "auto",
   },
   starButton: {
-    width: 30,
-    height: 30,
-    borderRadius: CHART_LAYOUT.chipRadius,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: CHART_COLORS.border,
     backgroundColor: CHART_COLORS.whiteSoft,
@@ -1280,15 +1331,30 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   setupStack: {
-    gap: 5,
+    gap: 4,
   },
   setupFooterActions: {
-    alignItems: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingTop: 1,
   },
+  setupBackButton: {
+    borderRadius: CHART_LAYOUT.chipRadius,
+    borderWidth: 1,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: CHART_COLORS.whiteSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  setupBackButtonText: {
+    color: CHART_COLORS.sub,
+    fontSize: 11,
+    fontWeight: "800",
+  },
   setupSection: {
-    gap: 4,
-    padding: 6,
+    gap: 3,
+    padding: 5,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: CHART_COLORS.border,
@@ -1321,9 +1387,9 @@ const styles = StyleSheet.create({
   actionChip: {
     borderRadius: 14,
     borderWidth: 1,
-    minHeight: 28,
+    minHeight: 24,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1340,11 +1406,11 @@ const styles = StyleSheet.create({
   metricButton: {
     flexBasis: "48%",
     flexGrow: 1,
-    minHeight: 36,
+    minHeight: 32,
     borderRadius: 14,
     borderWidth: 1,
     paddingHorizontal: 7,
-    paddingVertical: 5,
+    paddingVertical: 4,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 5,

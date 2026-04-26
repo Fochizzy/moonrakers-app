@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { saveCompletedGame } from '@/lib/game-save/saveCompletedGame';
 import { useStore } from '@/store/useStore';
 import StarryNight from '@/components/ui/StarryNight';
 import Text from '@/components/ui/Text';
@@ -989,6 +990,7 @@ export default function Game() {
   const patchActiveGame = useStore((s: any) => s.patchActiveGame);
   const clearActiveGame = useStore((s: any) => s.clearActiveGame);
   const addGame = useStore((s: any) => s.addGame);
+  const authSession = useStore((s: any) => s.authSession);
 
   const [contractChoice, setContractChoice] = useState<BinaryChoice>(0);
   const [failureChoice, setFailureChoice] = useState<BinaryChoice>(0);
@@ -1472,7 +1474,7 @@ export default function Game() {
     setShowPreviousRounds((prev) => !prev);
   }
 
-  function commitFinishGame() {
+  async function commitFinishGame() {
     try {
       const finalTotals = buildTotals(rounds as any, players as any);
       const leaderboard = getLeaderboard(finalTotals, players as any);
@@ -1481,9 +1483,25 @@ export default function Game() {
         return;
       }
 
+      if (!authSession?.user?.id) {
+        Alert.alert('Login required', 'Log in before saving a cloud game.');
+        return;
+      }
+
       const winnerId = leaderboard[0]?.id;
+      await saveCompletedGame({
+        hostProfileId: authSession.user.id,
+        activeGame: {
+          ...activeGame,
+          totals: finalTotals,
+          rounds,
+        },
+        winnerId,
+      });
+
       addGame({
         id: activeGame.id,
+        hostProfileId: authSession.user.id,
         players: players.map((player) => ({
           ...player,
           totalPrestige: getTotalPrestigeFromTotals(finalTotals[player.id] as PlayerTotals),
@@ -1514,7 +1532,13 @@ export default function Game() {
   function confirmFinishGame() {
     Alert.alert('Finish Game?', 'Are you sure you want to end the game?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Finish Game', style: 'destructive', onPress: commitFinishGame },
+      {
+        text: 'Finish Game',
+        style: 'destructive',
+        onPress: () => {
+          void commitFinishGame();
+        },
+      },
     ]);
   }
 
@@ -1859,6 +1883,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 6,
   },
+  sectionTitle: {
+    color: UI.text,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
   headerTapZone: {
     flex: 1,
     borderRadius: 8,
@@ -1867,6 +1897,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  chevron: {
+    color: UI.textMuted,
+    fontSize: 14,
+    fontWeight: '700',
   },
   assistHeaderTitleRow: {
     flexDirection: 'row',
