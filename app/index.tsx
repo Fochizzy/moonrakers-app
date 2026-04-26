@@ -1237,20 +1237,20 @@ export default function HomeScreen() {
     tab === "leaderboard"
       ? "Data Center"
       : tab === "hubs"
-        ? "Navigation Hubs"
-        : "Command Deck";
+        ? "Hubs"
+        : "Command";
 
   return (
     <PageShell
       preset="command"
-      scroll={false}
+      density="compact"
+      viewport="fit"
       edges={["top", "left", "right", "bottom"]}
       contentContainerStyle={styles.homeShellContent}
     >
       <AppHeader
         eyebrow="Moonrakers Command"
         title={headerTitle}
-        subtitle={tab === "game" ? "Pick your crew and start." : undefined}
         identity="emblem"
         size="compact"
         actions={
@@ -1286,7 +1286,6 @@ export default function HomeScreen() {
               <SectionCard
                 eyebrow="Active Game"
                 title="Current Match"
-                subtitle="Continue or clear the live table."
               >
                 <View style={styles.commandActionRow}>
                   <ActionButton
@@ -1327,7 +1326,7 @@ export default function HomeScreen() {
               </Text>
             ) : null}
 
-            <SectionCard title="Players" subtitle="Tap to select. Hold to open a profile.">
+            <SectionCard title="Players">
               {rankedPlayers.length === 0 ? (
                 <View style={styles.emptyPanel}>
                   <Text style={styles.emptyPanelText}>No player profiles found.</Text>
@@ -1440,7 +1439,16 @@ export default function HomeScreen() {
                 key={card.key}
                 title={card.title}
                 description={card.description}
-                iconKey={card.iconKey}
+                iconKey={
+                  card.key === "history" || card.key === "definitions"
+                    ? null
+                    : card.iconKey
+                }
+                layout={
+                  card.key === "history" || card.key === "definitions"
+                    ? "text"
+                    : "graphic"
+                }
                 tint={
                   index % 2 === 0
                     ? "rgba(96,165,250,0.16)"
@@ -1471,7 +1479,7 @@ const styles = StyleSheet.create({
   },
   homeShellContent: {
     flex: 1,
-    paddingBottom: 10,
+    paddingBottom: 4,
   },
   headerAction: {
     alignSelf: "center",
@@ -1532,8 +1540,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 12,
     paddingTop: 0,
-    paddingBottom: 58,
-    gap: 8,
+    paddingBottom: 48,
+    gap: 6,
   },
 
   activeCard: {
@@ -1787,7 +1795,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   hubTile: {
-    minHeight: 196,
+    minHeight: 172,
   },
   groupCardCompact: {
     borderRadius: 10,

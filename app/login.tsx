@@ -269,7 +269,8 @@ export default function LoginScreen() {
   return (
     <PageShell
       preset="auth"
-      scroll={false}
+      density="compact"
+      viewport="fit"
       edges={["top", "left", "right", "bottom"]}
       contentContainerStyle={styles.pageContent}
     >
@@ -289,10 +290,7 @@ export default function LoginScreen() {
           >
             <View style={styles.copy}>
               <Text style={styles.title}>Log in</Text>
-              <Text style={styles.subtitle}>
-                One registered host can launch a table and add other registered
-                players by player name.
-              </Text>
+              <Text style={styles.subtitle}>Use your account.</Text>
             </View>
 
             <TextInput
@@ -358,8 +356,8 @@ export default function LoginScreen() {
                 onPress: handleResetPassword,
                 title:
                   activeAction === "reset"
-                    ? "Sending reset..."
-                    : "Reset password email",
+                    ? "Sending..."
+                    : "Reset Password",
                 tone: "secondary",
                 busyIndicator: activeAction === "reset",
               })}
@@ -367,7 +365,7 @@ export default function LoginScreen() {
               {renderButton({
                 disabled: busy,
                 onPress: () => router.push(APP_ROUTES.register as any),
-                title: "Create account",
+                title: "Create Account",
                 tone: "accent",
               })}
 
@@ -376,8 +374,8 @@ export default function LoginScreen() {
                 onPress: handleResendConfirmation,
                 title:
                   activeAction === "resend"
-                    ? "Resending..."
-                    : "Resend confirmation email",
+                    ? "Sending..."
+                    : "Resend Email",
                 tone: "utility",
                 busyIndicator: activeAction === "resend",
               })}
@@ -399,14 +397,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stack: {
-    gap: 18,
+    gap: 14,
   },
   panel: {
     borderRadius: 30,
     borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 20,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    gap: 12,
     shadowColor: "#020617",
     shadowOpacity: 0.32,
     shadowRadius: 18,
@@ -414,38 +412,38 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   copy: {
-    gap: 12,
+    gap: 8,
     paddingRight: 8,
   },
   title: {
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: "900",
     color: "#F8FBFF",
   },
   subtitle: {
-    fontSize: 17,
-    lineHeight: 28,
+    fontSize: 14,
+    lineHeight: 20,
     color: "#D7E1F4",
   },
   input: {
-    minHeight: 76,
-    borderRadius: 22,
-    paddingHorizontal: 18,
+    minHeight: 58,
+    borderRadius: 18,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    fontSize: 18,
+    fontSize: 16,
   },
   message: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   actions: {
-    gap: 14,
+    gap: 10,
     marginTop: 2,
   },
   button: {
-    minHeight: 64,
-    borderRadius: 22,
+    minHeight: 54,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -459,8 +457,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   buttonText: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 18,
     fontWeight: "800",
     textAlign: "center",
   },

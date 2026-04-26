@@ -150,7 +150,8 @@ export default function ResetPasswordScreen() {
   return (
     <PageShell
       preset="auth"
-      scroll={false}
+      density="compact"
+      viewport="fit"
       edges={["top", "left", "right", "bottom"]}
       contentContainerStyle={styles.pageContent}
     >
@@ -162,14 +163,14 @@ export default function ResetPasswordScreen() {
           <AppHeader
             eyebrow="Moonrakers Command"
             title="Reset Password"
-            subtitle="Set a new password."
             identity="emblem"
+            size="compact"
+            variant="compact"
           />
 
           <SectionCard
             eyebrow="Recovery Access"
-            title="Choose a new password"
-            subtitle="Use the recovery link from your email."
+            title="New password"
           >
             <TextInput
               autoCapitalize="none"
@@ -227,7 +228,7 @@ export default function ResetPasswordScreen() {
                 title={
                   checkingSession || submitting
                     ? "Saving..."
-                    : "Save New Password"
+                    : "Save Password"
                 }
                 icon={
                   checkingSession || submitting ? (
@@ -240,7 +241,7 @@ export default function ResetPasswordScreen() {
                 variant="ghost"
                 disabled={submitting}
                 onPress={handleCancel}
-                title={hasRecoverySession ? "Cancel And Sign Out" : "Back To Login"}
+                title={hasRecoverySession ? "Cancel" : "Back to Login"}
               />
             </View>
           </SectionCard>
@@ -260,10 +261,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stack: {
-    gap: 16,
+    gap: 12,
   },
   input: {
-    minHeight: 50,
+    minHeight: 48,
     borderRadius: 14,
     paddingHorizontal: 14,
     borderWidth: 1,
@@ -274,6 +275,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 10,
-    marginTop: 4,
+    marginTop: 2,
   },
 });

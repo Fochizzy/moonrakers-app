@@ -48,7 +48,7 @@ export default function PlayersScreen() {
       return {
         eyebrow: "Most-used group",
         title: mostUsedGroup.group.name ?? "Saved group",
-        body: `${mostUsedGroup.score} logged missions. Jump back into your roster tools with this table in mind.`,
+        body: `${mostUsedGroup.score} logged missions.`,
         route: APP_ROUTES.roster,
       };
     }
@@ -71,7 +71,7 @@ export default function PlayersScreen() {
       return {
         eyebrow: "Recent player",
         title: recentPlayer.name ?? "Recent player",
-        body: "Open the latest player context directly instead of starting from the full directory.",
+        body: "Jump back into this profile.",
         route: buildPlayerProfileRoute(String(recentPlayer.id)),
       };
     }
@@ -84,7 +84,7 @@ export default function PlayersScreen() {
       return {
         eyebrow: "Newest saved group",
         title: newestGroup.name ?? "Saved group",
-        body: "Your most recently saved table is ready if you want to keep building out the roster.",
+        body: "Your latest saved table.",
         route: APP_ROUTES.roster,
       };
     }
@@ -93,11 +93,12 @@ export default function PlayersScreen() {
   }, [games, groups, players]);
 
   return (
-    <PageShell preset="quiet">
+    <PageShell preset="quiet" density="compact">
       <HeroCard
         eyebrow="Players"
-        title="Roster Hub"
-        subtitle="Manage identities, browse profiles, and reopen the people surface you were using most recently."
+        title="Roster"
+        size="compact"
+        variant="stat"
       >
         <View style={styles.heroMetaRow}>
           <MetricPill label="Players" value={players.length} />
@@ -107,10 +108,7 @@ export default function PlayersScreen() {
       </HeroCard>
 
       {resumeRecommendation ? (
-        <SectionCard
-          title="Continue Where You Left Off"
-          subtitle="A small working-memory card so this hub feels active instead of purely navigational."
-        >
+        <SectionCard title="Resume">
           <Pressable
             onPress={() => router.push(resumeRecommendation.route)}
             style={({ pressed }) => [
@@ -126,10 +124,7 @@ export default function PlayersScreen() {
       ) : null}
 
       {players.length === 0 ? (
-        <SectionCard
-          title="No roster yet"
-          subtitle="Add your first player or create a saved group to bring this hub to life."
-        >
+        <SectionCard title="No roster yet">
           <Pressable
             onPress={() => router.push(APP_ROUTES.roster)}
             style={({ pressed }) => [styles.primaryAction, pressed && styles.primaryActionPressed]}
@@ -139,18 +134,21 @@ export default function PlayersScreen() {
         </SectionCard>
       ) : null}
 
-      <SectionCard
-        title="Choose A Surface"
-        subtitle="Roster work, profile browsing, and card scanning now live under one consistent players hub."
-      >
+      <SectionCard title="Surfaces">
         <View style={styles.grid}>
           {cards.map((card) => (
             <HubTileCard
               key={card.key}
               description={card.description}
-              iconKey={card.iconKey}
+              iconKey={card.key === "cards" ? card.iconKey : null}
+              layout={card.key === "cards" ? "graphic" : "text"}
               title={card.title}
               badge={card.bestFor}
+              style={
+                card.key === "cards"
+                  ? styles.surfaceTileGraphic
+                  : styles.surfaceTileText
+              }
               onPress={() => router.push(card.route as any)}
             />
           ))}
@@ -243,6 +241,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 10,
+  },
+  surfaceTileGraphic: {
+    minHeight: 172,
+  },
+  surfaceTileText: {
+    minHeight: 144,
   },
 });

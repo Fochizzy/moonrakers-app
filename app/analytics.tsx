@@ -139,8 +139,18 @@ export default function AnalyticsScreen() {
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
 
   return (
-    <PageShell preset="analytics" contentContainerStyle={styles.pageContent}>
-      <HeroCard eyebrow="Analytics" title="Mission Analytics" size="compact" style={styles.heroCard}>
+    <PageShell
+      preset="analytics"
+      density="compact"
+      contentContainerStyle={styles.pageContent}
+    >
+      <HeroCard
+        eyebrow="Data Center"
+        title="Analytics"
+        size="compact"
+        variant="stat"
+        style={styles.heroCard}
+      >
         <View style={styles.statsRow}>
           <StatBlock label="Players" value={players.length} />
           <StatBlock label="Games" value={games.length} />
@@ -230,11 +240,11 @@ const styles = StyleSheet.create({
   },
   cardStandard: {
     width: "48.5%",
-    minHeight: 188,
+    minHeight: 172,
   },
   cardWide: {
     width: "100%",
-    minHeight: 132,
+    minHeight: 120,
   },
   cardPressed: {
     transform: [{ scale: 0.985 }],
@@ -246,8 +256,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconShell: {
-    width: 72,
-    height: 58,
+    width: 64,
+    height: 52,
     borderRadius: 18,
     borderWidth: 1,
     padding: 5,
@@ -256,8 +266,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconPreviewFrame: {
-    width: 52,
-    height: 52,
+    width: 46,
+    height: 46,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -265,8 +275,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.03)",
   },
   iconImage: {
-    width: 46,
-    height: 46,
+    width: 40,
+    height: 40,
   },
   cardEyebrow: {
     flex: 1,
@@ -282,21 +292,21 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: "#FFFFFF",
-    fontSize: 21,
+    fontSize: 20,
     fontWeight: "900",
   },
   cardBodyPanel: {
     marginTop: "auto",
-    minHeight: 72,
+    minHeight: 58,
     borderRadius: 14,
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
     justifyContent: "flex-start",
   },
   cardDescription: {
     color: "#E8EEF8",
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 16,
     fontWeight: "600",
   },
 });

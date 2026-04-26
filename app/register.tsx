@@ -219,7 +219,8 @@ export default function RegisterScreen() {
   return (
     <PageShell
       preset="auth"
-      scroll={false}
+      density="compact"
+      viewport="fit"
       edges={["top", "left", "right", "bottom"]}
       contentContainerStyle={styles.pageContent}
     >
@@ -231,22 +232,14 @@ export default function RegisterScreen() {
           <AppHeader
             eyebrow="Moonrakers Command"
             title={needsProfileOnly ? "Finish Profile" : "Create Account"}
-            subtitle={
-              needsProfileOnly
-                ? "Save the rest of your account."
-                : "Create your account."
-            }
             identity="emblem"
+            size="compact"
+            variant="compact"
           />
 
           <SectionCard
             eyebrow={needsProfileOnly ? "Commander Profile" : "Account Setup"}
-            title={needsProfileOnly ? "Save your profile" : "Register a new crew record"}
-            subtitle={
-              needsProfileOnly
-                ? "Finish your player details."
-                : "Claim your public player name."
-            }
+            title={needsProfileOnly ? "Finish profile" : "Create account"}
           >
             {!needsProfileOnly ? (
               <>
@@ -323,13 +316,13 @@ export default function RegisterScreen() {
             />
 
             <ProfileAppearancePicker
-              title="Preferred Color"
-              subtitle="Choose your command color. Moonrakers will assign the matching default card at signup."
+              title="Color"
+              subtitle="Card matches color."
               favoriteColor={favoriteColor}
               assignedCardArtIndex={assignedCardArtIndex}
               onSelectFavoriteColor={setFavoriteColor}
               allowCardSelection={false}
-              autoAssignHint="You can change the exact card later from Manage My Roster."
+              autoAssignHint="Card matches color."
             />
 
             {message ? (
@@ -369,7 +362,7 @@ export default function RegisterScreen() {
                 <ActionButton
                   variant="ghost"
                   onPress={() => router.push(APP_ROUTES.login as any)}
-                  title="Back To Login"
+                  title="Back to Login"
                 />
               ) : null}
             </View>
@@ -390,10 +383,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stack: {
-    gap: 16,
+    gap: 12,
   },
   input: {
-    minHeight: 50,
+    minHeight: 48,
     borderRadius: 14,
     paddingHorizontal: 14,
     borderWidth: 1,
@@ -404,6 +397,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 10,
-    marginTop: 4,
+    marginTop: 2,
   },
 });
