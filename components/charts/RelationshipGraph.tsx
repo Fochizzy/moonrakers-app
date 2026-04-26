@@ -46,12 +46,9 @@ type RelationshipEdge = {
   assistCount?: number;
   assistPrestige?: number;
   assistEfficiency?: number;
+  assistFrequencyPerGame?: number;
+  labelText?: string;
 };
-type AssistMode =
-  | "assistPrestige"
-  | "assistCount"
-  | "assistEfficiency"
-  | "supportBalance";
 type GraphVariant = "relationship" | "assist_network";
 type GraphMode = "flow" | "network";
 type EdgeFilterMode = 1 | 2 | 3 | 5 | 999;
@@ -63,13 +60,12 @@ type Props = {
   variant?: GraphVariant;
   mode?: GraphMode;
   initialView?: GraphMode;
-  assistMode?: AssistMode;
   topEdgesPerNode?: EdgeFilterMode;
   maxItems?: number;
   title?: string;
   subtitle?: string;
-  showAssistMetricControl?: boolean;
   showHeader?: boolean;
+  showReadoutCards?: boolean;
 };
 
 type SuperNode = {
@@ -92,9 +88,12 @@ type SuperEdge = {
   toName: string;
   weight: number;
   assistCount?: number;
+  assistFrequencyPerGame?: number;
+  labelText?: string;
   color: string;
   strokeWidth: number;
   opacity: number;
+  arrowSize: number;
   startX: number;
   startY: number;
   endX: number;
@@ -111,12 +110,6 @@ type SuperEdge = {
 
 const FILTER_OPTIONS: EdgeFilterMode[] = [1, 2, 3, 5, 999];
 const VIEW_OPTIONS: GraphMode[] = ["flow", "network"];
-const ASSIST_MODE_OPTIONS: AssistMode[] = [
-  "assistPrestige",
-  "assistCount",
-  "assistEfficiency",
-  "supportBalance",
-];
 
 const COLORS = CHART_COLORS;
 const NODE_PLATE_FILL = withChartAlpha(COLORS.bg, 0.82);
@@ -154,19 +147,6 @@ function formatSigned(value: number) {
 
 function getFilterLabel(value: EdgeFilterMode) {
   return value === 999 ? "All" : `Top ${value}`;
-}
-
-function getAssistModeLabel(value: AssistMode) {
-  switch (value) {
-    case "assistPrestige":
-      return "Prestige";
-    case "assistCount":
-      return "Count";
-    case "assistEfficiency":
-      return "Efficiency";
-    case "supportBalance":
-      return "Balance";
-  }
 }
 
 function getDominanceColor(balance: number) {
@@ -323,11 +303,10 @@ function filterTopEdgesPerNode<
 function buildDeterministicAssistLayout(
   players: Player[],
   relationships: Relationships | RelationshipEdge[],
-  assistMode: AssistMode,
   topEdgesPerNode: EdgeFilterMode,
   graphMode: GraphMode
 ): { nodes: SuperNode[]; edges: SuperEdge[] } {
-  const network = buildAssistNetworkLayout(relationships, players, assistMode as any);
+  const network = buildAssistNetworkLayout(relationships, players);
   const filteredLinks = filterTopEdgesPerNode(network.links as any[], topEdgesPerNode);
 
   const cx = GRAPH_WIDTH / 2;
@@ -379,7 +358,12 @@ function buildDeterministicAssistLayout(
   });
 
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const edgeMax = Math.max(1, ...filteredLinks.map((link: any) => safeNum(link.value)));
+  const edgeMax = Math.max(
+    1,
+    ...filteredLinks.map((link: any) =>
+      safeNum(link.assistFrequencyPerGame ?? link.value)
+    )
+  );
 
   const edges: SuperEdge[] = filteredLinks
     .map((link: any) => {
@@ -408,6 +392,10 @@ function buildDeterministicAssistLayout(
           : clamp(distance * 0.05, 10, 26);
       const controlX = safeNum(mx + perpX * bend, mx);
       const controlY = safeNum(my + perpY * bend, my);
+      const assistFrequencyPerGame = safeNum(
+        link.assistFrequencyPerGame ?? link.value
+      );
+      const edgeStrength = assistFrequencyPerGame / edgeMax;
 
       return {
         key: String(link.id ?? `${link.source}->${link.target}`),
@@ -415,11 +403,17 @@ function buildDeterministicAssistLayout(
         toId: String(link.target ?? ""),
         fromName: String(link.sourceLabel ?? ""),
         toName: String(link.targetLabel ?? ""),
-        weight: safeNum(link.value),
+        weight: assistFrequencyPerGame,
         assistCount: safeNum(link.assistCount),
+        assistFrequencyPerGame,
+        labelText: String(
+          link.labelText ??
+            `${assistFrequencyPerGame.toFixed(1)}/game`
+        ),
         color: fromNode.colorValue,
-        strokeWidth: 1.5 + (safeNum(link.value) / edgeMax) * 5,
-        opacity: 0.66,
+        strokeWidth: 2 + edgeStrength * 6,
+        opacity: 0.24 + edgeStrength * 0.7,
+        arrowSize: 7 + edgeStrength * 5,
         startX,
         startY,
         endX,
@@ -441,13 +435,12 @@ export default function RelationshipGraph({
   variant = "relationship",
   mode = "flow",
   initialView,
-  assistMode = "assistPrestige",
   topEdgesPerNode = 3,
   maxItems = DEFAULT_MAX_ITEMS,
   title = "Relationship Graph",
   subtitle,
-  showAssistMetricControl = true,
   showHeader = true,
+  showReadoutCards = true,
 }: Props) {
   const resolvedMode = initialView ?? mode;
 
@@ -455,12 +448,9 @@ export default function RelationshipGraph({
   const [internalMode, setInternalMode] = useState<GraphMode>(resolvedMode);
   const [internalTopEdgesPerNode, setInternalTopEdgesPerNode] =
     useState<EdgeFilterMode>(topEdgesPerNode);
-  const [internalAssistMode, setInternalAssistMode] =
-    useState<AssistMode>(assistMode);
 
   useEffect(() => setInternalMode(resolvedMode), [resolvedMode]);
   useEffect(() => setInternalTopEdgesPerNode(topEdgesPerNode), [topEdgesPerNode]);
-  useEffect(() => setInternalAssistMode(assistMode), [assistMode]);
 
   const visiblePlayers = useMemo(() => {
     if (!scopedPlayerIds?.length) return players;
@@ -482,7 +472,6 @@ export default function RelationshipGraph({
       return buildDeterministicAssistLayout(
         visiblePlayers,
         scopedAssistRelationships,
-        internalAssistMode,
         internalTopEdgesPerNode,
         internalMode
       );
@@ -496,7 +485,6 @@ export default function RelationshipGraph({
       internalMode
     ) as unknown as { nodes: SuperNode[]; edges: SuperEdge[] };
   }, [
-    internalAssistMode,
     internalMode,
     internalTopEdgesPerNode,
     maxItems,
@@ -531,7 +519,7 @@ export default function RelationshipGraph({
   const resolvedSubtitle =
     subtitle ??
     (variant === "assist_network"
-      ? `Metric-driven support network · ${getAssistModeLabel(internalAssistMode)}`
+      ? "Frequency-sized assist flow for the exact filtered table."
       : "Directed assist flow across unified games.");
   const viewTabs = VIEW_OPTIONS.map((option) => ({
     key: option,
@@ -540,10 +528,6 @@ export default function RelationshipGraph({
   const edgeTabs = FILTER_OPTIONS.map((option) => ({
     key: String(option),
     label: getFilterLabel(option),
-  }));
-  const assistTabs = ASSIST_MODE_OPTIONS.map((option) => ({
-    key: option,
-    label: getAssistModeLabel(option),
   }));
   const focusTitle = selectedNode?.name ?? insight.hub?.player.name ?? "Network Hub";
   const focusValue = selectedNode
@@ -573,59 +557,63 @@ export default function RelationshipGraph({
       ) : null}
 
       <View style={styles.panel}>
-        <Text style={styles.readoutTitle}>Readout</Text>
+        {showReadoutCards ? (
+          <>
+            <Text style={styles.readoutTitle}>Readout</Text>
 
-        <View style={styles.insightGrid}>
-          <View style={[styles.insightCard, styles.insightCardAccent]}>
-            <Text style={styles.insightLabel}>Hub</Text>
-            <Text style={styles.insightValue}>
-              {insight.hub?.player.name ?? "None"}
-            </Text>
-            <Text style={styles.insightHelper}>
-              {insight.hub
-                ? `${safeNum(insight.hub.value).toFixed(1)} total involvement`
-                : "No network yet"}
-            </Text>
-          </View>
+            <View style={styles.insightGrid}>
+              <View style={[styles.insightCard, styles.insightCardAccent]}>
+                <Text style={styles.insightLabel}>Hub</Text>
+                <Text style={styles.insightValue}>
+                  {insight.hub?.player.name ?? "None"}
+                </Text>
+                <Text style={styles.insightHelper}>
+                  {insight.hub
+                    ? `${safeNum(insight.hub.value).toFixed(1)} total involvement`
+                    : "No network yet"}
+                </Text>
+              </View>
 
-          <View style={styles.insightCard}>
-            <Text style={styles.insightLabel}>Net Giver</Text>
-            <Text style={styles.insightValue}>
-              {insight.netGiver?.player.name ?? "None"}
-            </Text>
-            <Text style={styles.insightHelper}>
-              {insight.netGiver
-                ? formatSigned(safeNum(insight.netGiver.value))
-                : "No imbalance yet"}
-            </Text>
-          </View>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Net Giver</Text>
+                <Text style={styles.insightValue}>
+                  {insight.netGiver?.player.name ?? "None"}
+                </Text>
+                <Text style={styles.insightHelper}>
+                  {insight.netGiver
+                    ? formatSigned(safeNum(insight.netGiver.value))
+                    : "No imbalance yet"}
+                </Text>
+              </View>
 
-          <View style={styles.insightCard}>
-            <Text style={styles.insightLabel}>Net Receiver</Text>
-            <Text style={styles.insightValue}>
-              {insight.netReceiver?.player.name ?? "None"}
-            </Text>
-            <Text style={styles.insightHelper}>
-              {insight.netReceiver
-                ? formatSigned(safeNum(insight.netReceiver.value))
-                : "No imbalance yet"}
-            </Text>
-          </View>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Net Receiver</Text>
+                <Text style={styles.insightValue}>
+                  {insight.netReceiver?.player.name ?? "None"}
+                </Text>
+                <Text style={styles.insightHelper}>
+                  {insight.netReceiver
+                    ? formatSigned(safeNum(insight.netReceiver.value))
+                    : "No imbalance yet"}
+                </Text>
+              </View>
 
-          <View style={styles.insightCard}>
-            <Text style={styles.insightLabel}>Strongest Link</Text>
-            <Text style={styles.insightValue}>
-              {insight.strongestLink
-                ? `${insight.strongestLink.from.name ?? "Unknown"} -> ${insight.strongestLink.to.name ?? "Unknown"}`
-                : "None"}
-            </Text>
-            <Text style={styles.insightHelper}>
-              {insight.strongestLink
-                ? `${safeNum(insight.strongestLink.value).toFixed(1)} weighted`
-                : "No edge data"}
-            </Text>
-          </View>
-        </View>
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Strongest Link</Text>
+                <Text style={styles.insightValue}>
+                  {insight.strongestLink
+                    ? `${insight.strongestLink.from.name ?? "Unknown"} -> ${insight.strongestLink.to.name ?? "Unknown"}`
+                    : "None"}
+                </Text>
+                <Text style={styles.insightHelper}>
+                  {insight.strongestLink
+                    ? `${safeNum(insight.strongestLink.value).toFixed(1)} weighted`
+                    : "No edge data"}
+                </Text>
+              </View>
+            </View>
+          </>
+        ) : null}
 
         <ChartStage
           tone="comparison"
@@ -714,12 +702,12 @@ export default function RelationshipGraph({
                       ? safePath(
                           `M ${safeNum(edge.endX).toFixed(2)} ${safeNum(edge.endY).toFixed(
                             2
-                          )} L ${(safeNum(edge.endX) - EDGE_ARROW_SIZE).toFixed(2)} ${(
+                          )} L ${(safeNum(edge.endX) - safeNum(edge.arrowSize, EDGE_ARROW_SIZE)).toFixed(2)} ${(
                             safeNum(edge.endY) -
-                            EDGE_ARROW_SIZE / 2
-                          ).toFixed(2)} L ${(safeNum(edge.endX) - EDGE_ARROW_SIZE).toFixed(
+                            safeNum(edge.arrowSize, EDGE_ARROW_SIZE) / 2
+                          ).toFixed(2)} L ${(safeNum(edge.endX) - safeNum(edge.arrowSize, EDGE_ARROW_SIZE)).toFixed(
                             2
-                          )} ${(safeNum(edge.endY) + EDGE_ARROW_SIZE / 2).toFixed(2)} Z`
+                          )} ${(safeNum(edge.endY) + safeNum(edge.arrowSize, EDGE_ARROW_SIZE) / 2).toFixed(2)} Z`
                         )
                       : safePath(buildArrowPath(edgeInput as any, EDGE_ARROW_SIZE));
 
@@ -748,7 +736,10 @@ export default function RelationshipGraph({
                     <G key={edge.key}>
                       <Path
                         d={path}
-                        stroke={withChartAlpha(edge.color, active ? 0.78 : 0.14)}
+                        stroke={withChartAlpha(
+                          edge.color,
+                          active ? Math.min(1, safeNum(edge.opacity, 0.7) + 0.12) : safeNum(edge.opacity, 0.7)
+                        )}
                         strokeWidth={getSelectedEdgeStrokeWidth(edge as any, active)}
                         opacity={1}
                         fill="none"
@@ -756,20 +747,23 @@ export default function RelationshipGraph({
                       {arrow ? (
                         <Path
                           d={arrow}
-                          fill={withChartAlpha(edge.color, active ? 0.78 : 0.14)}
+                          fill={withChartAlpha(
+                            edge.color,
+                            active ? Math.min(1, safeNum(edge.opacity, 0.7) + 0.12) : safeNum(edge.opacity, 0.7)
+                          )}
                           opacity={1}
                         />
                       ) : null}
-                      {variant === "assist_network" && edge.assistCount ? (
+                      {variant === "assist_network" && edge.labelText ? (
                         <>
                           <Rect
-                            x={safeNum(edgeLabelX - 14)}
+                            x={safeNum(edgeLabelX - 21)}
                             y={safeNum(edgeLabelY - 8)}
-                            width={28}
+                            width={42}
                             height={16}
                             rx={8}
-                            fill={withChartAlpha("#F8FAFC", active ? 0.9 : 0.72)}
-                            stroke={withChartAlpha(edge.color, active ? 0.42 : 0.22)}
+                            fill={withChartAlpha("#F8FAFC", active ? 0.9 : 0.74)}
+                            stroke={withChartAlpha(edge.color, active ? 0.5 : 0.24)}
                             strokeWidth={0.9}
                           />
                           <SvgText
@@ -777,11 +771,10 @@ export default function RelationshipGraph({
                             y={edgeLabelY + 3}
                             fontSize="8"
                             fill="#0F172A"
-                            opacity={edge.assistCount > 0 ? 1 : 0}
                             fontWeight="800"
                             textAnchor="middle"
                           >
-                            {`x${edge.assistCount}`}
+                            {edge.labelText}
                           </SvgText>
                         </>
                       ) : null}
@@ -889,22 +882,6 @@ export default function RelationshipGraph({
               onChange={(next) => setInternalTopEdgesPerNode(Number(next) as EdgeFilterMode)}
             />
           </View>
-
-          {variant === "assist_network" && showAssistMetricControl ? (
-            <>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Assist Metric</Text>
-                <Text style={styles.sectionSub}>Network weighting</Text>
-              </View>
-              <View style={styles.optionRow}>
-                <ChartUnderlineTabs
-                  items={assistTabs}
-                  activeKey={internalAssistMode}
-                  onChange={(next) => setInternalAssistMode(next as AssistMode)}
-                />
-              </View>
-            </>
-          ) : null}
 
           <ChartFocusCard
             title={focusTitle}

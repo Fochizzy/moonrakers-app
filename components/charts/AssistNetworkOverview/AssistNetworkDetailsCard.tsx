@@ -12,7 +12,6 @@ const COLORS = {
 };
 
 type Props = {
-  metricLabel: string;
   hubName: string;
   netGiverName: string;
   netReceiverName: string;
@@ -22,7 +21,6 @@ type Props = {
 };
 
 export default function AssistNetworkDetailsCard({
-  metricLabel,
   hubName,
   netGiverName,
   netReceiverName,
@@ -34,8 +32,8 @@ export default function AssistNetworkDetailsCard({
     <View style={styles.wrap}>
       <ChartFocusCard
         title={hubName}
-        value={metricLabel}
-        helper="Current assist-network hub"
+        value="Assist Hub"
+        helper="Current exact-table hub"
         story={story}
         tone="comparison"
       />
@@ -55,7 +53,7 @@ export default function AssistNetworkDetailsCard({
           <Text style={styles.label}>Strongest Link</Text>
           <Text style={styles.value}>{topLinkLabel}</Text>
           <Text style={styles.helper}>
-            {`${topLinkValue} in the filtered sample`}
+            {`${topLinkValue} across the exact filtered table`}
           </Text>
         </View>
       </View>

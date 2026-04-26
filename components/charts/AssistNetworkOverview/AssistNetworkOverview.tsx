@@ -1,18 +1,15 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
 import RelationshipGraph from "@/components/charts/RelationshipGraph";
 import { buildRelationshipInsightModel } from "@/components/charts/relationshipGraphModel";
 import Text from "@/components/ui/Text";
 import type { NormalizedGame } from "@/utils/charts";
-import AssistNetworkControls, {
-  getAssistNetworkLabel,
-} from "./AssistNetworkControls";
 import AssistNetworkDetailsCard from "./AssistNetworkDetailsCard";
+import AssistNetworkImpactSection from "./AssistNetworkImpactSection";
 import buildAssistNetworkDataset from "./buildAssistNetworkDataset";
-import buildAssistNetworkLayout, {
-  type AssistNetworkMode,
-} from "./buildAssistNetworkLayout";
+import buildAssistNetworkImpact from "./buildAssistNetworkImpact";
+import buildAssistNetworkLayout from "./buildAssistNetworkLayout";
 
 type Player = { id: string; name?: string; color?: string };
 type Props = {
@@ -21,7 +18,6 @@ type Props = {
   scopedPlayerIds?: string[];
   exactScopePlayerIds?: string[];
   mode?: "flow" | "network";
-  assistMode?: AssistNetworkMode;
   title?: string;
   subtitle?: string;
 };
@@ -48,17 +44,9 @@ export default function AssistNetworkOverview({
   scopedPlayerIds,
   exactScopePlayerIds,
   mode = "network",
-  assistMode = "assistPrestige",
   title = "Assist Network",
   subtitle = "Directed assist flow across the filtered sample.",
 }: Props) {
-  const [selectedAssistMode, setSelectedAssistMode] =
-    useState<AssistNetworkMode>(assistMode);
-
-  useEffect(() => {
-    setSelectedAssistMode(assistMode);
-  }, [assistMode]);
-
   const safeGames = Array.isArray(games) ? games : [];
   const safePlayers = Array.isArray(players) ? players : [];
   const visiblePlayers = useMemo(() => {
@@ -77,8 +65,8 @@ export default function AssistNetworkOverview({
     [exactScopePlayerIds, safeGames, scopedPlayerIds]
   );
   const layout = useMemo(
-    () => buildAssistNetworkLayout(dataset.edges, visiblePlayers, selectedAssistMode),
-    [dataset.edges, selectedAssistMode, visiblePlayers]
+    () => buildAssistNetworkLayout(dataset.edges, visiblePlayers),
+    [dataset.edges, visiblePlayers]
   );
   const weightedRelationships = useMemo(
     () => buildWeightedRelationships(layout.links),
@@ -88,6 +76,14 @@ export default function AssistNetworkOverview({
     () => buildRelationshipInsightModel(visiblePlayers, weightedRelationships),
     [visiblePlayers, weightedRelationships]
   );
+  const impact = useMemo(
+    () =>
+      buildAssistNetworkImpact({
+        games: safeGames,
+        exactScopePlayerIds,
+      }),
+    [exactScopePlayerIds, safeGames]
+  );
 
   const topLink = layout.links[0] ?? null;
   const hubName = layout.nodes[0]?.label ?? insight.hub?.player.name ?? "No hub yet";
@@ -96,20 +92,14 @@ export default function AssistNetworkOverview({
   const topLinkLabel = topLink
     ? `${topLink.sourceLabel} -> ${topLink.targetLabel}`
     : "No visible link";
-  const topLinkValue = topLink ? topLink.value.toFixed(1) : "0.0";
+  const topLinkValue = topLink ? topLink.labelText : "0.0/game";
   const story = topLink
-    ? `${hubName} is the current hub, and ${topLinkLabel} is the strongest ${getAssistNetworkLabel(
-        selectedAssistMode
-      ).toLowerCase()} connection.`
-    : `${hubName} is the current hub in the visible network.`;
+    ? `${hubName} is the current hub, and ${topLinkLabel} leads at ${topLinkValue}.`
+    : `${hubName} is the current hub in the exact filtered table.`;
 
   if (dataset.exactScopeApplied && dataset.gameCount === 0) {
     return (
       <View style={styles.wrap}>
-        <AssistNetworkControls
-          value={selectedAssistMode}
-          onChange={setSelectedAssistMode}
-        />
         <Text style={styles.emptyText}>
           No exact-match games found for this table.
         </Text>
@@ -120,13 +110,13 @@ export default function AssistNetworkOverview({
   if (dataset.exactScopeApplied && dataset.gameCount > 0 && dataset.edges.length === 0) {
     return (
       <View style={styles.wrap}>
-        <AssistNetworkControls
-          value={selectedAssistMode}
-          onChange={setSelectedAssistMode}
-        />
         <Text style={styles.emptyText}>
           These exact-match games have no recorded assist links yet.
         </Text>
+        <AssistNetworkImpactSection
+          cards={impact.cards}
+          sampleGameCount={impact.sampleGameCount}
+        />
       </View>
     );
   }
@@ -134,7 +124,6 @@ export default function AssistNetworkOverview({
   return (
     <View style={styles.wrap}>
       <AssistNetworkDetailsCard
-        metricLabel={getAssistNetworkLabel(selectedAssistMode)}
         hubName={hubName}
         netGiverName={netGiverName}
         netReceiverName={netReceiverName}
@@ -143,21 +132,20 @@ export default function AssistNetworkOverview({
         story={story}
       />
 
-      <AssistNetworkControls
-        value={selectedAssistMode}
-        onChange={setSelectedAssistMode}
-      />
-
       <RelationshipGraph
         players={visiblePlayers as any}
         relationships={dataset.edges as any}
         scopedPlayerIds={scopedPlayerIds}
         variant="assist_network"
         mode={mode}
-        assistMode={selectedAssistMode}
         title={title}
         subtitle={subtitle}
-        showAssistMetricControl={false}
+        showReadoutCards={false}
+      />
+
+      <AssistNetworkImpactSection
+        cards={impact.cards}
+        sampleGameCount={impact.sampleGameCount}
       />
     </View>
   );

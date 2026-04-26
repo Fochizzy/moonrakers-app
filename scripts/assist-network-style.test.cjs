@@ -189,8 +189,8 @@ run("Assist network overview expects unified games instead of legacy data and re
 
   assert.match(
     source,
-    /buildAssistNetworkDataset\(\{\s*games:\s*safeGames,\s*scopedPlayerIds\s*\}\)/,
-    "expected AssistNetworkOverview to derive its graph dataset from unified games and scoped ids"
+    /buildAssistNetworkDataset\(\{[\s\S]*games:\s*safeGames,[\s\S]*scopedPlayerIds,[\s\S]*exactScopePlayerIds[\s\S]*\}\)/,
+    "expected AssistNetworkOverview to derive its graph dataset from unified games, scoped ids, and exact-scope ids"
   );
 });
 
