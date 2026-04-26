@@ -89,6 +89,9 @@ export default function AssistNetworkOverview({
   const hubName = layout.nodes[0]?.label ?? insight.hub?.player.name ?? "No hub yet";
   const netGiverName = insight.netGiver?.player.name ?? "None";
   const netReceiverName = insight.netReceiver?.player.name ?? "None";
+  const hasRecordedLinks = dataset.edges.length > 0;
+  const showZeroLinkNotice =
+    dataset.exactScopeApplied && dataset.gameCount > 0 && !hasRecordedLinks;
   const topLinkLabel = topLink
     ? `${topLink.sourceLabel} -> ${topLink.targetLabel}`
     : "No visible link";
@@ -107,30 +110,22 @@ export default function AssistNetworkOverview({
     );
   }
 
-  if (dataset.exactScopeApplied && dataset.gameCount > 0 && dataset.edges.length === 0) {
-    return (
-      <View style={styles.wrap}>
+  return (
+    <View style={styles.wrap}>
+      {showZeroLinkNotice ? (
         <Text style={styles.emptyText}>
           These exact-match games have no recorded assist links yet.
         </Text>
-        <AssistNetworkImpactSection
-          cards={impact.cards}
-          sampleGameCount={impact.sampleGameCount}
+      ) : (
+        <AssistNetworkDetailsCard
+          hubName={hubName}
+          netGiverName={netGiverName}
+          netReceiverName={netReceiverName}
+          topLinkLabel={topLinkLabel}
+          topLinkValue={topLinkValue}
+          story={story}
         />
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.wrap}>
-      <AssistNetworkDetailsCard
-        hubName={hubName}
-        netGiverName={netGiverName}
-        netReceiverName={netReceiverName}
-        topLinkLabel={topLinkLabel}
-        topLinkValue={topLinkValue}
-        story={story}
-      />
+      )}
 
       <RelationshipGraph
         players={visiblePlayers as any}

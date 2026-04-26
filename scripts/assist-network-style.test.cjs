@@ -325,3 +325,85 @@ run("Assist network overview composes controls, details, and the graph surface t
     "expected AssistNetworkOverview to stop passing assistMode into RelationshipGraph"
   );
 });
+
+run("Assist network overview keeps the graph surface visible when exact-match games have zero assist links", () => {
+  React.useMemo = (fn) => fn();
+  React.useState = (initial) => [
+    typeof initial === "function" ? initial() : initial,
+    () => {},
+  ];
+  React.useEffect = () => {};
+
+  const overviewModule = require(path.join(
+    projectRoot,
+    "components",
+    "charts",
+    "AssistNetworkOverview",
+    "AssistNetworkOverview.tsx"
+  ));
+  const AssistNetworkOverview = overviewModule.default;
+
+  const tree = AssistNetworkOverview({
+    players: [
+      { id: "greg", name: "Greg", color: "sky" },
+      { id: "izzy", name: "Izzy", color: "purple" },
+      { id: "james", name: "James", color: "green" },
+    ],
+    games: [
+      {
+        id: "game-1",
+        players: [
+          { id: "greg", name: "Greg" },
+          { id: "izzy", name: "Izzy" },
+          { id: "james", name: "James" },
+        ],
+        totals: {
+          greg: { totalPrestige: 10, efficiency: 10 },
+          izzy: { totalPrestige: 12, efficiency: 12 },
+          james: { totalPrestige: 9, efficiency: 9 },
+        },
+        rounds: [],
+      },
+    ],
+    scopedPlayerIds: ["greg", "izzy", "james"],
+    exactScopePlayerIds: ["greg", "izzy", "james"],
+  });
+
+  const nodes = flatten(tree);
+  const relationshipGraphEntry = nodes.find(
+    (entry) =>
+      typeof entry.type === "function" && entry.type.name === "RelationshipGraph"
+  );
+
+  assert.ok(
+    nodes.some(
+      (entry) =>
+        entry.type === "Text" &&
+        String(entry.props?.children ?? "").includes(
+          "These exact-match games have no recorded assist links yet."
+        )
+    ),
+    "expected the overview to keep the zero-link exact-scope notice visible"
+  );
+
+  assert.ok(
+    relationshipGraphEntry,
+    "expected the overview to keep rendering the RelationshipGraph surface for zero-link exact-match samples"
+  );
+
+  assert.deepEqual(
+    relationshipGraphEntry.props.relationships,
+    [],
+    "expected zero-link exact-match samples to pass an empty edge list into RelationshipGraph"
+  );
+
+  assert.equal(
+    nodes.some(
+      (entry) =>
+        typeof entry.type === "function" &&
+        entry.type.name === "AssistNetworkDetailsCard"
+    ),
+    false,
+    "expected the overview to suppress the details card when there are no recorded exact-match links"
+  );
+});
