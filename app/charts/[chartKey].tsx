@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -9,25 +9,36 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Text from "@/components/ui/Text";
+import AssistNetworkOverview from "@/components/charts/AssistNetworkOverview";
+import ChartInfoCard from "@/components/charts/ChartInfoCard";
+import ChartShell from "@/components/charts/ChartShell";
+import ScreenBackground from "@/components/ui/ScreenBackground";
+import {
+  CHART_COLORS,
+  CHART_LAYOUT,
+} from "@/components/charts/chartVisualSystem";
+import { buildChartDetailModel } from "@/components/charts/chartPageModel";
 import { EloChart } from "@/components/charts/ELO/exports";
 import RadarChart from "@/components/charts/RadarChart";
-import RelationshipGraph from "@/components/charts/RelationshipGraph";
-import MultiLineChart from "@/components/charts/MultiLineChart";
 import BarChart from "@/components/charts/BarChart";
 import Heatmap from "@/components/charts/Heatmap";
-import LineChart from "@/components/charts/LineChart";
+import LineChart, { type LineMode } from "@/components/charts/LineChart";
+import BumpChart from "@/components/charts/BumpChart";
+import ConsistencyBandChart from "@/components/charts/ConsistencyBandChart";
+import EfficiencyFailureScatter from "@/components/charts/EfficiencyFailureScatter";
 import ReplayChart from "@/components/charts/ReplayChart";
 import RivalryGraph from "@/components/charts/RivalryGraph";
 import HeadToHeadChart from "@/components/charts/HeadToHeadChart";
 import StackedBarChart from "@/components/charts/StackedBarChart";
 import Sparkline from "@/components/charts/Sparkline";
-import AssistNetworkOverview from "@/components/charts/AssistNetworkOverview";
+import { resolveChartCatalogEntry as resolveChartMetadata } from "@/components/charts/chartCatalog";
 
 import { useStore } from "@/store/useStore";
 import { resolveAllGamesToPlayers } from "@/utils/importedGameResolver";
 import { getMetricOrFallback } from "@/utils/metricMap";
+import { APP_ROUTES } from "@/utils/appRoutes";
 import {
-  METRIC_OPTIONS,
+  buildReplaySnapshotsFromGame,
   buildMetricDataMap,
   buildRadarStatsForPlayer,
   buildRelationships,
@@ -37,6 +48,7 @@ import {
   canonicalizeGames,
   collectUnifiedGames,
   getPlayerById,
+  normalizeMetricForChart,
   normalizeReplayMetric,
   type FlexibleStore,
   type RadarStats,
@@ -46,25 +58,12 @@ import {
   type StorePlayer,
 } from "@/utils/charts";
 
-const COLORS = {
-  bg: "#081120",
-  card: "rgba(12,18,38,0.92)",
-  cardAlt: "rgba(16,24,48,0.95)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  accent: "#A855F7",
-  accentSoft: "rgba(168,85,247,0.18)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-};
-
-type ViewTab = "Overview" | "Focus" | "Launch";
+type RelationshipGraphVariant = "relationship" | "assist_network";
+type AssistMetricMode =
+  | "assistPrestige"
+  | "assistCount"
+  | "assistEfficiency"
+  | "supportBalance";
 
 function getParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -75,24 +74,63 @@ function getParamList(value?: string | string[]) {
   if (!raw) return [];
   return raw
     .split(",")
-    .map((x) => x.trim())
+    .map((entry) => entry.trim())
     .filter(Boolean);
 }
 
 function normalizeChartKey(value?: string | string[]) {
-  return String(getParam(value) ?? "radar").trim().toLowerCase();
-}
-
-function normalizeMetricKey(value?: string | string[]): SimpleMetricKey {
-  const raw = String(getParam(value) ?? "totalPrestige").trim();
-  return METRIC_OPTIONS.includes(raw as SimpleMetricKey)
-    ? (raw as SimpleMetricKey)
-    : "totalPrestige";
+  const normalized = String(getParam(value) ?? "radar").trim().toLowerCase();
+  if (normalized === "replay") return "replay_chart";
+  if (normalized === "efficiency-failure-scatter") {
+    return "efficiency_failure_scatter";
+  }
+  if (
+    normalized === "relationship-graph" ||
+    normalized === "assist_network_overview"
+  ) {
+    return "relationship_graph";
+  }
+  return normalized;
 }
 
 function normalizeGraphMode(value?: string | string[]) {
-  const raw = String(getParam(value) ?? "").trim().toLowerCase();
-  return raw === "network" ? "network" : "flow";
+  return String(getParam(value) ?? "flow").trim().toLowerCase() === "network"
+    ? "network"
+    : "flow";
+}
+
+function normalizeGraphVariant(
+  value?: string | string[],
+  chartKey?: string | string[]
+) {
+  const explicit = String(getParam(value) ?? "").trim().toLowerCase();
+  if (explicit === "assist_network") return "assist_network";
+  if (explicit === "relationship") return "relationship";
+
+  return String(getParam(chartKey) ?? "").trim().toLowerCase() ===
+    "assist_network_overview"
+    ? "assist_network"
+    : "relationship";
+}
+
+function normalizeAssistMode(value?: string | string[]) {
+  switch (String(getParam(value) ?? "assistPrestige").trim().toLowerCase()) {
+    case "assistcount":
+      return "assistCount";
+    case "assistefficiency":
+      return "assistEfficiency";
+    case "supportbalance":
+      return "supportBalance";
+    default:
+      return "assistPrestige";
+  }
+}
+
+function normalizeLineMode(value?: string | string[]) {
+  const normalized = String(getParam(value) ?? "raw").trim().toLowerCase();
+  if (normalized === "cumulative") return "cumulative";
+  if (normalized === "average") return "average";
+  return "raw";
 }
 
 function titleCase(value: string) {
@@ -105,91 +143,72 @@ function titleCase(value: string) {
 }
 
 function buildSubheading(chartKey: string) {
-  switch (chartKey) {
-    case "radar":
-      return "Trait-style player profile using unified live and imported history.";
-    case "relationship_graph":
-    case "relationship-graph":
-    case "assist_network_overview":
-      return "Support flow and relationship network across unified games.";
-    case "multi_line_chart":
-    case "multi-line-chart":
-    case "multi-line":
-      return "Trend comparison across unified live and imported history.";
-    case "bar_chart":
-    case "bar":
-      return "Compact comparison bars across many different player metrics.";
-    case "heatmap":
-      return "Round and game intensity view for the selected metric.";
-    case "line_chart":
-    case "line":
-      return "Metric trend line across unified game history.";
-    case "replay_chart":
-      return "Replay progression from unified snapshot history.";
-    case "prestige_over_time":
-      return "Prestige trend view through the shared route pipeline.";
-    case "rivalry_graph":
-      return "Head-to-head rivalry centered on the selected player.";
-    case "head_to_head":
-      return "Direct two-player matchup across shared games.";
-    case "stacked_bar_chart":
-      return "Metric composition view across scoped players.";
-    case "sparkline":
-      return "Selected-player micro-trend for the active metric.";
-    case "compare":
-      return "Direct comparison workflow.";
-    default:
-      return "Unified chart route.";
+  if (chartKey === "compare") return "Direct comparison workflow.";
+  if (chartKey === "prestige_over_time") {
+    return "Prestige trend view through the shared route pipeline.";
   }
-}
-
-function toneStyles(tone?: "accent" | "blue" | "green" | "blue") {
-  switch (tone) {
-    case "accent":
-      return { bg: COLORS.accentSoft, value: COLORS.accent };
-    case "blue":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    case "green":
-      return { bg: COLORS.greenSoft, value: COLORS.green };
-    case "blue":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    default:
-      return { bg: COLORS.whiteSoft, value: COLORS.text };
-  }
+  return resolveChartMetadata(chartKey).detailSubtitle;
 }
 
 function buildRouteParams(args: {
   chartKey: string;
   playerId?: string | null;
   compareId?: string | null;
+  selectedGameId?: string | null;
   ids?: string[];
   metric?: string | null;
   mode?: string | null;
+  graphVariant?: RelationshipGraphVariant | null;
+  assistMode?: AssistMetricMode | null;
+  lineMode?: string | null;
 }) {
-  const { chartKey, playerId, compareId, ids, metric, mode } = args;
+  const {
+    chartKey,
+    playerId,
+    compareId,
+    selectedGameId,
+    ids,
+    metric,
+    mode,
+    graphVariant,
+    assistMode,
+    lineMode,
+  } = args;
   return {
     chartKey,
     ...(playerId ? { playerId } : {}),
     ...(compareId ? { compareId } : {}),
+    ...(selectedGameId ? { selectedGameId, gameId: selectedGameId } : {}),
     ...(ids && ids.length ? { ids: ids.join(",") } : {}),
     ...(metric ? { metric } : {}),
     ...(mode ? { mode } : {}),
+    ...(graphVariant ? { graphVariant } : {}),
+    ...(assistMode ? { assistMode } : {}),
+    ...(lineMode ? { lineMode } : {}),
   };
 }
 
-function isMetricDriven(chartKey: string) {
+function isLineModeDriven(chartKey: string) {
   return (
-    chartKey === "bar_chart" ||
-    chartKey === "bar" ||
-    chartKey === "heatmap" ||
     chartKey === "line_chart" ||
     chartKey === "line" ||
-    chartKey === "replay_chart" ||
-    chartKey === "sparkline" ||
     chartKey === "multi_line_chart" ||
     chartKey === "multi-line-chart" ||
-    chartKey === "multi-line"
+    chartKey === "multi-line" ||
+    chartKey === "prestige_over_time"
   );
+}
+
+function resolveChartTitle(chartKey: string) {
+  if (chartKey === "compare") return "Compare";
+  if (chartKey === "prestige_over_time") return "Prestige Over Time";
+  return resolveChartMetadata(chartKey).title || titleCase(chartKey);
+}
+
+function resolveSetupChartKey(chartKey: string) {
+  if (chartKey === "compare") return null;
+  if (chartKey === "prestige_over_time") return "line_chart";
+  return resolveChartMetadata(chartKey).key;
 }
 
 export default function ChartKeyScreen() {
@@ -198,26 +217,52 @@ export default function ChartKeyScreen() {
     chartKey?: string | string[];
     playerId?: string | string[];
     compareId?: string | string[];
+    selectedGameId?: string | string[];
+    gameId?: string | string[];
     ids?: string | string[];
     metric?: string | string[];
     mode?: string | string[];
+    graphVariant?: string | string[];
+    assistMode?: string | string[];
+    lineMode?: string | string[];
   }>();
 
   const store = useStore() as unknown as FlexibleStore;
   const chartKey = normalizeChartKey(params.chartKey);
-  const routeMetric = normalizeMetricKey(params.metric);
   const routeMode = normalizeGraphMode(params.mode);
+  const routeGraphVariant = normalizeGraphVariant(
+    params.graphVariant,
+    params.chartKey
+  );
+  const routeAssistMode = normalizeAssistMode(params.assistMode);
+  const routeLineMode = normalizeLineMode(params.lineMode);
   const routePlayerId = getParam(params.playerId);
   const routeCompareId = getParam(params.compareId);
+  const routeSelectedGameId =
+    getParam(params.selectedGameId) ?? getParam(params.gameId);
   const routeIds = getParamList(params.ids);
+  const routeMetric = useMemo(
+    () =>
+      (normalizeMetricForChart(chartKey, getParam(params.metric)) ??
+        "totalPrestige") as SimpleMetricKey,
+    [chartKey, params.metric]
+  );
+  const stackedRouteMetric = useMemo(
+    () =>
+      String(
+        normalizeMetricForChart("stacked_bar_chart", getParam(params.metric)) ??
+          "totalPrestige"
+      ),
+    [params.metric]
+  );
 
   const rawGames = useMemo(() => collectUnifiedGames(store), [store]);
 
   const resolvedPlayers = useMemo<StorePlayer[]>(() => {
     if (!rawGames?.length) return [];
     const resolved = resolveAllGamesToPlayers(rawGames as any) as StorePlayer[];
-    return [...resolved].sort((a, b) =>
-      String(a?.name || "").localeCompare(String(b?.name || ""))
+    return [...resolved].sort((left, right) =>
+      String(left?.name || "").localeCompare(String(right?.name || ""))
     );
   }, [rawGames]);
 
@@ -226,18 +271,34 @@ export default function ChartKeyScreen() {
     [rawGames, resolvedPlayers]
   );
 
-  const [activeTab, setActiveTab] = useState<ViewTab>("Overview");
-  const [selectedMetric, setSelectedMetric] =
-    useState<SimpleMetricKey>(routeMetric);
-  const [stackedMetricKey, setStackedMetricKey] = useState<string>(
-    String(getParam(params.metric) ?? "totalPrestige")
+  const selectedReplayGame = useMemo(
+    () =>
+      routeSelectedGameId
+        ? unifiedGames.find((game) => String(game.id) === String(routeSelectedGameId)) ??
+          null
+        : null,
+    [routeSelectedGameId, unifiedGames]
   );
 
+  const [selectedMetric, setSelectedMetric] = useState<SimpleMetricKey>(() => routeMetric);
+  const [lineMode, setLineMode] = useState<LineMode>(routeLineMode);
+  const [stackedMetricKey, setStackedMetricKey] = useState<string>(stackedRouteMetric);
+  const setupChartKey = useMemo(() => resolveSetupChartKey(chartKey), [chartKey]);
+
+  useEffect(() => {
+    setSelectedMetric(routeMetric);
+  }, [routeMetric]);
+
+  useEffect(() => {
+    setStackedMetricKey(stackedRouteMetric);
+  }, [stackedRouteMetric]);
+
+  useEffect(() => {
+    setLineMode(routeLineMode);
+  }, [routeLineMode]);
+
   const selectedPlayer = useMemo(
-    () =>
-      getPlayerById(resolvedPlayers, routePlayerId) ??
-      resolvedPlayers[0] ??
-      null,
+    () => getPlayerById(resolvedPlayers, routePlayerId) ?? resolvedPlayers[0] ?? null,
     [resolvedPlayers, routePlayerId]
   );
 
@@ -269,17 +330,15 @@ export default function ChartKeyScreen() {
     }
 
     if (selectedPlayer) {
-      const base = [
+      const ordered = [
         selectedPlayer,
-        ...resolvedPlayers.filter(
-          (player) => String(player.id) !== String(selectedPlayer.id)
-        ),
+        ...resolvedPlayers.filter((player) => String(player.id) !== String(selectedPlayer.id)),
       ];
-      return base.slice(0, Math.min(4, base.length));
+      return ordered.slice(0, Math.min(4, ordered.length));
     }
 
     return resolvedPlayers.slice(0, Math.min(4, resolvedPlayers.length));
-  }, [chartKey, resolvedPlayers, routeIds, selectedPlayer, comparePlayer]);
+  }, [chartKey, comparePlayer, resolvedPlayers, routeIds, selectedPlayer]);
 
   const radarPrimary = useMemo<RadarStats | undefined>(
     () =>
@@ -307,17 +366,42 @@ export default function ChartKeyScreen() {
     [unifiedGames, resolvedPlayers]
   );
 
-  const selectedPlayerIds = scopedPlayers.map((player) => String(player.id));
+  const replaySnapshots = useMemo<SnapshotPoint[]>(
+    () =>
+      chartKey === "replay_chart" && selectedReplayGame
+        ? buildReplaySnapshotsFromGame(selectedReplayGame)
+        : unifiedSnapshots,
+    [chartKey, selectedReplayGame, unifiedSnapshots]
+  );
+
+  const replayPlayers = useMemo(
+    () =>
+      chartKey === "replay_chart" && selectedReplayGame?.players?.length
+        ? (selectedReplayGame.players as StorePlayer[])
+        : scopedPlayers,
+    [chartKey, scopedPlayers, selectedReplayGame]
+  );
+
+  const detailScopedPlayers =
+    chartKey === "replay_chart" ? replayPlayers : scopedPlayers;
+  const detailSnapshots =
+    chartKey === "replay_chart" ? replaySnapshots : unifiedSnapshots;
+  const detailGamesCount =
+    chartKey === "replay_chart" && replaySnapshots.length
+      ? replaySnapshots.length
+      : unifiedGames.length;
+
+  const scopedPlayerIds = scopedPlayers.map((player) => String(player.id));
   const replayMetric = normalizeReplayMetric(selectedMetric);
 
   const sparkPrimarySeries = useMemo(
     () => buildSparkSeries(unifiedSnapshots, selectedPlayer?.id, selectedMetric),
-    [unifiedSnapshots, selectedPlayer?.id, selectedMetric]
+    [selectedMetric, selectedPlayer?.id, unifiedSnapshots]
   );
 
   const sparkComparisonSeries = useMemo(
     () => buildSparkSeries(unifiedSnapshots, comparePlayer?.id, selectedMetric),
-    [unifiedSnapshots, comparePlayer?.id, selectedMetric]
+    [comparePlayer?.id, selectedMetric, unifiedSnapshots]
   );
 
   const stackedMetricOptions = useMemo(() => buildStackedMetricOptions(), []);
@@ -328,81 +412,95 @@ export default function ChartKeyScreen() {
 
   const stackedDefaultMetric = useMemo(() => {
     const candidate = String(getParam(params.metric) ?? "");
-    if (
-      candidate &&
-      stackedMetricOptions.some((metric) => metric.key === candidate)
-    ) {
+    if (candidate && stackedMetricOptions.some((metric) => metric.key === candidate)) {
       return candidate;
     }
     return "totalPrestige";
   }, [params.metric, stackedMetricOptions]);
 
+  const stackedScopedRows = useMemo(() => {
+    const metricRows =
+      stackedMetricDataMap[stackedMetricKey] ??
+      stackedMetricDataMap[stackedDefaultMetric] ??
+      [];
+
+    if (!scopedPlayerIds.length) return metricRows;
+
+    const allowedIds = new Set(scopedPlayerIds.map(String));
+    return metricRows.filter((row) => allowedIds.has(String(row.id)));
+  }, [scopedPlayerIds, stackedDefaultMetric, stackedMetricDataMap, stackedMetricKey]);
+
   const hasData = unifiedGames.length > 0 && resolvedPlayers.length > 0;
-
-  const headerStats = useMemo(() => {
-    const focusGames = selectedPlayer
-      ? unifiedGames.filter((game) => game?.totals?.[selectedPlayer.id])
-      : [];
-
-    return [
-      { label: "Games", value: String(unifiedGames.length), tone: "blue" as const },
-      {
-        label: "Players",
-        value: String(resolvedPlayers.length),
-        tone: "accent" as const,
-      },
-      {
-        label: "Scope",
-        value: String(scopedPlayers.length),
-        tone: "green" as const,
-      },
-      {
-        label: "Metric",
-        value: titleCase(selectedMetric),
-        tone: "blue" as const,
-      },
-      ...(focusGames.length || selectedPlayer
-        ? [
-            {
-              label: "Focus Games",
-              value: String(focusGames.length),
-              tone: "green" as const,
-            },
-          ]
-        : []),
-    ];
-  }, [
-    resolvedPlayers.length,
-    scopedPlayers.length,
-    selectedMetric,
-    selectedPlayer,
-    unifiedGames,
-  ]);
-
-  function replaceRoute(next: {
-    playerId?: string | null;
-    compareId?: string | null;
-    ids?: string[];
-    metric?: string | null;
-    mode?: string | null;
-  }) {
-    router.replace({
-      pathname: "/charts/[chartKey]",
-      params: buildRouteParams({
+  const detailModel = useMemo(
+    () =>
+      buildChartDetailModel({
         chartKey,
-        playerId: next.playerId ?? routePlayerId ?? null,
-        compareId:
-          next.compareId !== undefined ? next.compareId : routeCompareId ?? null,
-        ids: next.ids ?? routeIds,
-        metric: next.metric ?? selectedMetric,
-        mode:
-          chartKey === "relationship_graph" ||
-          chartKey === "relationship-graph" ||
-          chartKey === "assist_network_overview"
-            ? next.mode ?? routeMode
-            : null,
+        hasData,
+        gamesCount: detailGamesCount,
+        playersCount: resolvedPlayers.length,
+        scopedPlayers: detailScopedPlayers,
+        selectedPlayer,
+        comparePlayer,
+        metricKey:
+          chartKey === "stacked_bar_chart"
+            ? stackedMetricKey
+            : chartKey === "replay_chart"
+              ? replayMetric
+              : selectedMetric,
+        snapshots: detailSnapshots,
+        radarPrimary,
+        relationships,
+        graphMode: routeMode,
+        stackedRows: chartKey === "stacked_bar_chart" ? stackedScopedRows : undefined,
       }),
-    });
+    [
+      chartKey,
+      comparePlayer,
+      detailGamesCount,
+      detailScopedPlayers,
+      detailSnapshots,
+      hasData,
+      radarPrimary,
+      relationships,
+      resolvedPlayers.length,
+      routeMode,
+      selectedMetric,
+      selectedPlayer,
+      stackedMetricKey,
+      stackedScopedRows,
+    ]
+  );
+
+  function openChartSetup() {
+    if (!setupChartKey) return;
+
+    const setupMetric =
+      chartKey === "prestige_over_time"
+        ? "totalPrestige"
+        : chartKey === "stacked_bar_chart"
+          ? stackedMetricKey
+          : selectedMetric;
+
+    router.replace({
+      pathname: APP_ROUTES.charts,
+      params: {
+        ...buildRouteParams({
+          chartKey: setupChartKey,
+          playerId: selectedPlayer?.id ?? routePlayerId ?? null,
+          compareId: comparePlayer?.id ?? routeCompareId ?? null,
+          selectedGameId: routeSelectedGameId ?? null,
+          ids: scopedPlayerIds.length ? scopedPlayerIds : routeIds,
+          metric: setupMetric,
+          mode: routeMode,
+          graphVariant:
+            chartKey === "relationship_graph" ? routeGraphVariant : null,
+          assistMode:
+            chartKey === "relationship_graph" ? routeAssistMode : null,
+          lineMode: isLineModeDriven(chartKey) ? lineMode : null,
+        }),
+        setup: "true",
+      },
+    } as any);
   }
 
   function renderChart() {
@@ -413,9 +511,9 @@ export default function ChartKeyScreen() {
             games={unifiedGames as any}
             players={resolvedPlayers as any}
             primaryPlayerId={selectedPlayer?.id ?? null}
+            showHeader={false}
           />
         );
-
       case "radar":
         return selectedPlayer && radarPrimary ? (
           <RadarChart
@@ -424,46 +522,42 @@ export default function ChartKeyScreen() {
             primaryLabel={selectedPlayer.name || "Primary"}
             comparisonLabel={comparePlayer?.name || "Comparison"}
             title="Player Radar"
+            showHeader={false}
           />
         ) : (
           <Text style={styles.emptyText}>No radar data available yet.</Text>
         );
-
       case "relationship_graph":
-      case "relationship-graph":
-        return scopedPlayers.length >= 2 ? (
-          <RelationshipGraph
-            players={scopedPlayers as any}
-            relationships={relationships as any}
-            maxItems={20}
-            initialView={routeMode}
-            title="Relationship Graph"
-            subtitle="Directed assist flow across unified games."
+        return (
+          <AssistNetworkOverview
+            games={unifiedGames as any}
+            players={resolvedPlayers as any}
+            scopedPlayerIds={scopedPlayerIds}
+            mode={routeMode}
+            assistMode={routeAssistMode}
+            title="Assist Network"
+            subtitle="Directed assist flow across the filtered sample."
           />
-        ) : (
-          <Text style={styles.emptyText}>
-            Relationship Graph needs at least 2 players.
-          </Text>
         );
-
       case "multi_line_chart":
       case "multi-line-chart":
       case "multi-line":
         return scopedPlayers.length >= 2 ? (
-          <MultiLineChart
+          <LineChart
             data={unifiedSnapshots as any}
             players={scopedPlayers as any}
             statKey={selectedMetric}
-            scopedPlayerIds={selectedPlayerIds}
-            title={`${titleCase(selectedMetric)} Over Time`}
-            subtitle="Unified live and imported history"
+            selectedPlayerIds={scopedPlayerIds}
+            title={`${titleCase(selectedMetric)} Comparison Trend`}
+            subtitle="Shared renderer across scoped players"
+            mode={lineMode}
+            onChangeMode={setLineMode}
+            showModeSelector={false}
+            showHeader={false}
           />
         ) : (
-          <Text style={styles.emptyText}>
-            Multi-Line Chart needs at least 2 players.
-          </Text>
+          <Text style={styles.emptyText}>Multi-Line Chart needs at least 2 players.</Text>
         );
-
       case "bar_chart":
       case "bar":
         return (
@@ -471,20 +565,44 @@ export default function ChartKeyScreen() {
             data={unifiedSnapshots as any}
             players={resolvedPlayers as any}
             statKey={selectedMetric}
-            scopedPlayerIds={selectedPlayerIds}
+            scopedPlayerIds={scopedPlayerIds}
             title={`${titleCase(selectedMetric)} Comparison`}
             subtitle="Unified player comparison across tracked games."
             maxPlayers={8}
+            showHeader={false}
           />
         );
-
+      case "bump_chart":
+        return (
+          <BumpChart
+            data={unifiedSnapshots as any}
+            players={scopedPlayers as any}
+            statKey={selectedMetric}
+            selectedPlayerIds={scopedPlayerIds}
+            title={`${titleCase(selectedMetric)} Rank Movement`}
+            subtitle="Who climbed and who slipped from game to game."
+            showHeader={false}
+          />
+        );
+      case "consistency_band":
+        return (
+          <ConsistencyBandChart
+            data={unifiedSnapshots as any}
+            players={scopedPlayers as any}
+            statKey={selectedMetric}
+            selectedPlayerIds={scopedPlayerIds}
+            title={`${titleCase(selectedMetric)} Consistency`}
+            subtitle="Median plus range for stable versus swingy players."
+            showHeader={false}
+          />
+        );
       case "heatmap":
         return (
           <Heatmap
             data={unifiedSnapshots as any}
             players={scopedPlayers as any}
             statKey={selectedMetric}
-            scopedPlayerIds={selectedPlayerIds}
+            scopedPlayerIds={scopedPlayerIds}
             title={`${titleCase(selectedMetric)} Heatmap`}
             subtitle="Round and game intensity across scoped players."
             allowedModes={[
@@ -494,9 +612,19 @@ export default function ChartKeyScreen() {
               "rank",
               "swing",
             ]}
+            showHeader={false}
           />
         );
-
+      case "efficiency_failure_scatter":
+        return (
+          <EfficiencyFailureScatter
+            data={unifiedSnapshots as any}
+            players={resolvedPlayers as any}
+            scopedPlayerIds={scopedPlayerIds}
+            title="Efficiency vs Failure"
+            subtitle="Average efficiency versus failures across scoped players."
+          />
+        );
       case "line_chart":
       case "line":
         return (
@@ -506,20 +634,27 @@ export default function ChartKeyScreen() {
             statKey={selectedMetric}
             title={`${titleCase(selectedMetric)} Trend`}
             subtitle="Unified metric trend across tracked games."
-            selectedPlayerIds={selectedPlayerIds}
+            selectedPlayerIds={scopedPlayerIds}
+            mode={lineMode}
+            onChangeMode={setLineMode}
+            showModeSelector={false}
+            showHeader={false}
           />
         );
-
       case "replay_chart":
         return (
           <ReplayChart
-            replay={unifiedSnapshots as any}
-            players={scopedPlayers as any}
-            statKey={replayMetric}
-            title={`${titleCase(replayMetric)} Replay`}
+            replay={replaySnapshots as any}
+            players={replayPlayers as any}
+            statKey={replayMetric as any}
+            title={
+              selectedReplayGame
+                ? `${titleCase(replayMetric)} Replay`
+                : `${titleCase(replayMetric)} Replay`
+            }
+            showHeader={false}
           />
         );
-
       case "prestige_over_time":
         return (
           <LineChart
@@ -528,10 +663,13 @@ export default function ChartKeyScreen() {
             statKey="totalPrestige"
             title="Prestige Over Time"
             subtitle="Unified prestige trend across tracked games."
-            selectedPlayerIds={selectedPlayerIds}
+            selectedPlayerIds={scopedPlayerIds}
+            mode={lineMode}
+            onChangeMode={setLineMode}
+            showModeSelector={false}
+            showHeader={false}
           />
         );
-
       case "rivalry_graph":
         return selectedPlayer ? (
           <RivalryGraph
@@ -540,11 +678,8 @@ export default function ChartKeyScreen() {
             players={resolvedPlayers as any}
           />
         ) : (
-          <Text style={styles.emptyText}>
-            Rivalry Graph needs a selected player.
-          </Text>
+          <Text style={styles.emptyText}>Rivalry Graph needs a selected player.</Text>
         );
-
       case "head_to_head":
         return selectedPlayer && comparePlayer ? (
           <HeadToHeadChart
@@ -552,16 +687,12 @@ export default function ChartKeyScreen() {
             games={unifiedGames as any}
             playerId={selectedPlayer.id}
             compareId={comparePlayer.id}
-            title={`${selectedPlayer.name ?? "Player"} vs ${
-              comparePlayer.name ?? "Player"
-            }`}
+            title={`${selectedPlayer.name ?? "Player"} vs ${comparePlayer.name ?? "Player"}`}
+            showHeader={false}
           />
         ) : (
-          <Text style={styles.emptyText}>
-            Head-to-head requires two players.
-          </Text>
+          <Text style={styles.emptyText}>Head-to-head requires two players.</Text>
         );
-
       case "sparkline":
         return selectedPlayer ? (
           <Sparkline
@@ -575,21 +706,13 @@ export default function ChartKeyScreen() {
             showMetricSelector={false}
             metricTitle="Metric"
             narrativeTitle={`${titleCase(selectedMetric)} Summary`}
+            showSummary={false}
+            showStatsRow={false}
+            showNarrative={false}
           />
         ) : (
           <Text style={styles.emptyText}>Sparkline needs a selected player.</Text>
         );
-
-      case "assist_network_overview":
-        return (
-          <AssistNetworkOverview
-            relationships={relationships as any}
-            players={scopedPlayers as any}
-            title="Assist Network"
-            subtitle="Unified assist flow across tracked games."
-          />
-        );
-
       case "stacked_bar_chart":
         return (
           <StackedBarChart
@@ -604,474 +727,156 @@ export default function ChartKeyScreen() {
             onChangeMetric={setStackedMetricKey}
             defaultMetricKey={stackedDefaultMetric}
             players={resolvedPlayers as any}
-            selectedPlayerIds={selectedPlayerIds}
+            selectedPlayerIds={scopedPlayerIds}
             title={getMetricOrFallback(stackedMetricKey).label}
             subtitle={getMetricOrFallback(stackedMetricKey).description}
             emptyText="No stacked-bar data available yet."
-            showMetricSelector
-            showPlayerSelector
-            showCategorySelector
+            showMetricSelector={false}
+            showPlayerSelector={false}
+            showCategorySelector={false}
             playerMode="selected"
             maxRows={Math.max(8, resolvedPlayers.length)}
+            showHeader={false}
           />
         );
-
       case "compare":
         return (
-          <View style={styles.sectionCompact}>
-            <Text style={styles.emptyTitle}>Compare</Text>
+          <View style={styles.compareBlock}>
+            <Text style={styles.compareTitle}>Compare</Text>
             <Text style={styles.emptyText}>
-              This route preserves the existing compare workflow instead of
-              duplicating it here.
+              This route preserves the existing compare workflow instead of duplicating it here.
             </Text>
             <TouchableOpacity
-              style={styles.launchButton}
-              onPress={() => router.push("/charts/compare" as any)}
+              style={styles.primaryButton}
+              onPress={() => router.push(APP_ROUTES.compare as any)}
               activeOpacity={0.9}
             >
-              <Text style={styles.launchButtonText}>Open Compare</Text>
+              <Text style={styles.primaryButtonText}>Open Compare</Text>
             </TouchableOpacity>
           </View>
         );
-
       default:
         return (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Unsupported chart key</Text>
+          <View style={styles.compareBlock}>
+            <Text style={styles.compareTitle}>Unsupported chart key</Text>
             <Text style={styles.emptyText}>{chartKey}</Text>
           </View>
         );
     }
   }
 
-  const launchRows = [
-    { key: "elo", label: "ELO" },
-    { key: "radar", label: "Radar" },
-    { key: "relationship_graph", label: "Relationship Graph" },
-    { key: "multi_line_chart", label: "Multi-Line" },
-    { key: "bar_chart", label: "Bar Chart" },
-    { key: "heatmap", label: "Heatmap" },
-    { key: "line_chart", label: "Line Chart" },
-    { key: "replay_chart", label: "Replay Chart" },
-    { key: "prestige_over_time", label: "Prestige Over Time" },
-    { key: "rivalry_graph", label: "Rivalry Graph" },
-    { key: "head_to_head", label: "Head-to-Head" },
-    { key: "sparkline", label: "Sparkline" },
-    { key: "stacked_bar_chart", label: "Stacked Bar" },
-    { key: "assist_network_overview", label: "Assist Network" },
-    { key: "compare", label: "Compare" },
-  ];
-
   return (
     <SafeAreaView style={styles.container}>
+      <ScreenBackground preset="intel" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.heroCard}>
-          <Text style={styles.title}>{titleCase(chartKey)}</Text>
-          <Text style={styles.subtitle}>{buildSubheading(chartKey)}</Text>
+        <ChartShell
+          eyebrow="Charts"
+          title={resolveChartTitle(chartKey)}
+          subtitle={buildSubheading(chartKey)}
+          takeaway={detailModel.takeaway}
+          proofCards={detailModel.proofCards}
+          summaryVariant="compact"
+        >
+          {hasData ? (
+            renderChart()
+          ) : (
+            <ChartInfoCard variant="alt">
+              <Text style={styles.emptyText}>
+                Add or import games to populate the unified chart route.
+              </Text>
+            </ChartInfoCard>
+          )}
 
-          <View style={styles.statsRow}>
-            {headerStats.slice(0, 4).map((item) => {
-              const tone = toneStyles(item.tone);
-              return (
-                <View
-                  key={item.label}
-                  style={[styles.statCard, { backgroundColor: tone.bg }]}
-                >
-                  <Text style={[styles.statValue, { color: tone.value }]}>
-                    {item.value}
-                  </Text>
-                  <Text style={styles.statLabel} numberOfLines={1}>{item.label}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.tabGrid}>
-          {(["Overview", "Focus", "Launch"] as ViewTab[]).map((tab) => {
-            const active = tab === activeTab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={styles.underlineMainTab}
-                onPress={() => setActiveTab(tab)}
-                activeOpacity={0.9}
-              >
-                <Text
-                  style={[
-                    styles.underlineMainTabText,
-                    active && styles.underlineMainTabTextActive,
-                  ]}
-                >
-                  {tab}
-                </Text>
-                <View
-                  style={[
-                    styles.underlineMainTabLine,
-                    active && styles.underlineMainTabLineActive,
-                  ]}
-                />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {!hasData ? (
-          <View style={styles.sectionCompact}>
-            <Text style={styles.emptyTitle}>No chart data yet</Text>
-            <Text style={styles.emptyText}>
-              Add or import games to populate the unified chart route.
-            </Text>
-          </View>
-        ) : null}
-
-        {hasData && activeTab === "Focus" ? (
-          <View style={styles.sectionCompact}>
-            <SectionHeader title="Players" sub="Set focus and comparison" />
-            <View style={styles.underlineSelectorRow}>
-              {resolvedPlayers.map((player) => (
-                <UnderlineOption
-                  key={`focus-${player.id}`}
-                  label={player.name || "Unknown"}
-                  active={String(player.id) === String(selectedPlayer?.id)}
-                  onPress={() =>
-                    replaceRoute({
-                      playerId: player.id,
-                      ids: routeIds.length ? routeIds : undefined,
-                    })
-                  }
-                />
-              ))}
-            </View>
-
-            {resolvedPlayers.length > 1 ? (
-              <>
-                <SectionHeader title="Compare" sub="Optional comparison" />
-                <View style={styles.underlineSelectorRow}>
-                  {resolvedPlayers
-                    .filter((player) => String(player.id) !== String(selectedPlayer?.id))
-                    .map((player) => (
-                      <UnderlineOption
-                        key={`compare-${player.id}`}
-                        label={player.name || "Unknown"}
-                        active={String(player.id) === String(comparePlayer?.id)}
-                        onPress={() =>
-                          replaceRoute({
-                            compareId: player.id,
-                          })
-                        }
-                      />
-                    ))}
-                </View>
-              </>
-            ) : null}
-
-            {chartKey === "relationship_graph" ||
-            chartKey === "relationship-graph" ||
-            chartKey === "assist_network_overview" ? (
-              <>
-                <SectionHeader title="Graph Mode" sub="Flow or network view" />
-                <View style={styles.underlineSelectorRow}>
-                  {(["flow", "network"] as const).map((mode) => (
-                    <UnderlineOption
-                      key={mode}
-                      label={titleCase(mode)}
-                      active={routeMode === mode}
-                      onPress={() =>
-                        replaceRoute({
-                          mode,
-                        })
-                      }
-                    />
-                  ))}
-                </View>
-              </>
-            ) : null}
-
-            {isMetricDriven(chartKey) ? (
-              <>
-                <SectionHeader title="Metric" sub="Adjust metric view" />
-                <View style={styles.underlineSelectorRow}>
-                  {METRIC_OPTIONS.map((metric) => (
-                    <UnderlineOption
-                      key={metric}
-                      label={titleCase(metric)}
-                      active={metric === selectedMetric}
-                      onPress={() => setSelectedMetric(metric)}
-                    />
-                  ))}
-                </View>
-              </>
-            ) : null}
-          </View>
-        ) : null}
-
-        {hasData && activeTab === "Overview" ? (
-          <View style={styles.sectionCompact}>{renderChart()}</View>
-        ) : null}
-
-        {activeTab === "Launch" ? (
-          <View style={styles.sectionCompact}>
-            <SectionHeader title="Launch" sub="Jump to other chart routes" />
-            <View style={styles.launchList}>
-              {launchRows.map((row) => (
+          {setupChartKey ? (
+            <ChartInfoCard>
+              <View style={styles.setupActionRow}>
                 <TouchableOpacity
-                  key={row.key}
-                  style={styles.launchCard}
+                  style={styles.primaryButton}
+                  onPress={openChartSetup}
                   activeOpacity={0.9}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/charts/[chartKey]",
-                      params: buildRouteParams({
-                        chartKey: row.key,
-                        playerId: selectedPlayer?.id ?? null,
-                        compareId: comparePlayer?.id ?? null,
-                        ids: routeIds.length ? routeIds : selectedPlayerIds,
-                        metric: selectedMetric,
-                        mode:
-                          row.key === "relationship_graph" ||
-                          row.key === "assist_network_overview"
-                            ? routeMode
-                            : null,
-                      }),
-                    })
-                  }
                 >
-                  <Text style={styles.launchTitle}>{row.label}</Text>
-                  <Text style={styles.launchSub}>Open {row.label} route</Text>
+                  <Text style={styles.primaryButtonText}>Adjust</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        ) : null}
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => router.replace(APP_ROUTES.charts as any)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.secondaryButtonText}>Charts Home</Text>
+                </TouchableOpacity>
+              </View>
+            </ChartInfoCard>
+          ) : null}
+        </ChartShell>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function SectionHeader({
-  title,
-  sub,
-}: {
-  title: string;
-  sub: string;
-}) {
-  return (
-    <View style={styles.sectionHeaderRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={styles.sectionSub}>{sub}</Text>
-    </View>
-  );
-}
-
-function UnderlineOption({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={styles.underlineTabButton}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
-        {label}
-      </Text>
-      <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.bg,
+    backgroundColor: CHART_COLORS.bg,
   },
   scroll: {
     flex: 1,
   },
   contentContainer: {
-    padding: 14,
-    paddingBottom: 36,
-    gap: 10,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  heroCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  title: {
-    color: COLORS.text,
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  subtitle: {
-    color: COLORS.sub,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 12,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  statLabel: {
-    color: COLORS.text,
-    opacity: 0.84,
-    fontSize: 11,
-    marginTop: 3,
-  },
-  tabGrid: {
-    flexDirection: "row",
+  compareBlock: {
     gap: 8,
   },
-  underlineMainTab: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  underlineMainTabText: {
-    color: COLORS.sub,
-    fontSize: 13,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  underlineMainTabTextActive: {
-    color: COLORS.text,
-  },
-  underlineMainTabLine: {
-    marginTop: 6,
-    height: 2,
-    width: "100%",
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-  underlineMainTabLineActive: {
-    backgroundColor: COLORS.accent,
-  },
-  sectionCompact: {
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-    gap: 10,
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  sectionSub: {
-    color: COLORS.sub,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  underlineSelectorRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: 12,
-    rowGap: 8,
-  },
-  underlineTabButton: {
-    paddingBottom: 2,
-  },
-  underlineTabText: {
-    color: COLORS.sub,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  underlineTabTextActive: {
-    color: COLORS.accent,
-  },
-  underlineTabLine: {
-    marginTop: 4,
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-  underlineTabLineActive: {
-    backgroundColor: COLORS.accent,
-  },
-  emptyCard: {
-    paddingVertical: 8,
-  },
-  emptyTitle: {
-    color: COLORS.text,
+  compareTitle: {
+    color: CHART_COLORS.textStrong,
     fontSize: 14,
     fontWeight: "800",
   },
   emptyText: {
-    color: COLORS.sub,
+    color: CHART_COLORS.sub,
     fontSize: 12,
-    marginTop: 4,
     lineHeight: 18,
   },
-  launchList: {
+  setupActionRow: {
+    flexDirection: "row",
     gap: 8,
   },
-  launchCard: {
-    borderRadius: 14,
-    backgroundColor: COLORS.cardAlt,
+  primaryButton: {
+    flex: 1,
+    borderRadius: CHART_LAYOUT.chipRadius,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
-  },
-  launchTitle: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  launchSub: {
-    color: COLORS.sub,
-    fontSize: 11,
-    marginTop: 4,
-  },
-  launchButton: {
-    marginTop: 12,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderColor: `${CHART_COLORS.accent}55`,
+    backgroundColor: CHART_COLORS.accentSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.accentSoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
-  launchButtonText: {
-    color: COLORS.text,
+  primaryButtonText: {
+    color: CHART_COLORS.accent,
     fontSize: 12,
     fontWeight: "800",
+    textAlign: "center",
+  },
+  secondaryButton: {
+    flex: 1,
+    borderRadius: CHART_LAYOUT.chipRadius,
+    borderWidth: 1,
+    borderColor: `${CHART_COLORS.blue}55`,
+    backgroundColor: CHART_COLORS.blueSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    color: CHART_COLORS.blue,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
   },
 });

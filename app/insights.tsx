@@ -8,13 +8,18 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import StarryNight from '@/components/ui/StarryNight';
+import ScreenBackground from '@/components/ui/ScreenBackground';
 import { useStore } from '@/store/useStore';
 import CorrelationStats from '@/components/CorrelationStats';
 import InsightList from '@/components/InsightList';
-import PrestigeOverTimeChart from '@/components/charts/PrestigeOverTimeChart';
-import EfficiencyFailureScatter from '@/components/charts/EfficiencyFailureScatter';
-import AssistNetworkOverview from '@/components/charts/AssistNetworkOverview';
+import { APP_ROUTES } from '@/utils/appRoutes';
+import { resolveAllGamesToPlayers } from '@/utils/importedGameResolver';
+import {
+  buildRelationships,
+  canonicalizeGames,
+  collectUnifiedGames,
+  type FlexibleStore,
+} from '@/utils/charts';
 
 type PlayerLike = {
   id: string;
@@ -172,16 +177,28 @@ function MetricCard({
 
 export default function InsightsScreen() {
   const router = useRouter();
+  const store = useStore() as unknown as FlexibleStore;
 
-  const players = useStore((s: any) =>
-    Array.isArray(s.players) ? s.players : [],
-  ) as PlayerLike[];
+  const rawGames = useMemo(() => collectUnifiedGames(store), [store]);
 
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : [],
-  ) as StoredGame[];
+  const players = useMemo(() => {
+    if (!rawGames.length) return [];
 
-  const relationships = useStore((s: any) => s.relationships ?? {});
+    const resolved = resolveAllGamesToPlayers(rawGames as any) as PlayerLike[];
+    return [...resolved].sort((a, b) =>
+      String(a?.name ?? '').localeCompare(String(b?.name ?? '')),
+    );
+  }, [rawGames]);
+
+  const games = useMemo(
+    () => canonicalizeGames(rawGames, players as any) as StoredGame[],
+    [players, rawGames],
+  );
+
+  const relationships = useMemo(
+    () => buildRelationships(players as any, games as any),
+    [games, players],
+  );
 
   const globalStats = useMemo(() => {
     let totalPrestige = 0;
@@ -234,8 +251,7 @@ export default function InsightsScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.backgroundLayer}>
-        <StarryNight />
-        <View style={styles.backgroundDim} />
+        <ScreenBackground preset="intel" />
       </View>
 
       <ScrollView
@@ -245,27 +261,27 @@ export default function InsightsScreen() {
         <View style={styles.heroCard}>
           <Text style={styles.title}>Insights Hub</Text>
           <Text style={styles.subtitle}>
-            Global meta, trend charts, scatter analysis, assist network, and ranked signals.
+            Global meta, ranked signals, and synergy clues.
           </Text>
 
           <View style={styles.linkRow}>
             <Pressable
               style={styles.linkButton}
-              onPress={() => router.push('/compare')}
+              onPress={() => router.push(APP_ROUTES.compare)}
             >
               <Text style={styles.linkButtonText}>Compare</Text>
             </Pressable>
 
             <Pressable
               style={styles.linkButton}
-              onPress={() => router.push('/stats')}
+              onPress={() => router.push(APP_ROUTES.stats)}
             >
               <Text style={styles.linkButtonText}>Stats</Text>
             </Pressable>
 
             <Pressable
               style={styles.linkButton}
-              onPress={() => router.push('/elo')}
+              onPress={() => router.push(APP_ROUTES.elo)}
             >
               <Text style={styles.linkButtonText}>Elo</Text>
             </Pressable>
@@ -306,21 +322,6 @@ export default function InsightsScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Prestige Over Time</Text>
-          <PrestigeOverTimeChart games={games} players={players} />
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Efficiency vs Failure</Text>
-          <EfficiencyFailureScatter games={games} players={players} />
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Assist Network</Text>
-          <AssistNetworkOverview players={players} relationships={relationships} />
-        </View>
-
-        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Top Signals</Text>
           <InsightList insights={topInsights as Insight[]} />
         </View>
@@ -341,10 +342,6 @@ const styles = StyleSheet.create({
   },
   backgroundLayer: {
     ...StyleSheet.absoluteFillObject,
-  },
-  backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.16)',
   },
   container: {
     padding: 14,
