@@ -30,3 +30,25 @@ export function getRouteSyncedGroupIds({
 
   return validRouteIds;
 }
+
+export function getPreferredScopeIdsForChart({
+  chartKey,
+  routeIds,
+  currentIds,
+  players,
+}: {
+  chartKey: string;
+  routeIds: readonly string[];
+  currentIds: readonly string[];
+  players: readonly PlayerWithId[];
+}): string[] | null {
+  const validPlayerIds = new Set(players.map((player) => String(player.id)));
+  const validRouteIds = routeIds.filter((id) => validPlayerIds.has(String(id)));
+
+  if (chartKey === "relationship_graph" && validRouteIds.length >= 2) {
+    return haveSameIds(validRouteIds, currentIds) ? null : validRouteIds;
+  }
+
+  if (!validRouteIds.length) return null;
+  return haveSameIds(validRouteIds, currentIds) ? null : validRouteIds;
+}

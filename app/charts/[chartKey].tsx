@@ -58,12 +58,6 @@ import {
   type StorePlayer,
 } from "@/utils/charts";
 
-type AssistMetricMode =
-  | "assistPrestige"
-  | "assistCount"
-  | "assistEfficiency"
-  | "supportBalance";
-
 function getParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -98,19 +92,6 @@ function normalizeGraphMode(value?: string | string[]) {
     : "flow";
 }
 
-function normalizeAssistMode(value?: string | string[]) {
-  switch (String(getParam(value) ?? "assistPrestige").trim().toLowerCase()) {
-    case "assistcount":
-      return "assistCount";
-    case "assistefficiency":
-      return "assistEfficiency";
-    case "supportbalance":
-      return "supportBalance";
-    default:
-      return "assistPrestige";
-  }
-}
-
 function normalizeLineMode(value?: string | string[]) {
   const normalized = String(getParam(value) ?? "raw").trim().toLowerCase();
   if (normalized === "cumulative") return "cumulative";
@@ -141,7 +122,6 @@ function buildRouteParams(args: {
   ids?: string[];
   metric?: string | null;
   mode?: string | null;
-  assistMode?: AssistMetricMode | null;
   lineMode?: string | null;
 }) {
   const {
@@ -152,7 +132,6 @@ function buildRouteParams(args: {
     ids,
     metric,
     mode,
-    assistMode,
     lineMode,
   } = args;
   return {
@@ -163,7 +142,6 @@ function buildRouteParams(args: {
     ...(ids && ids.length ? { ids: ids.join(",") } : {}),
     ...(metric ? { metric } : {}),
     ...(mode ? { mode } : {}),
-    ...(assistMode ? { assistMode } : {}),
     ...(lineMode ? { lineMode } : {}),
   };
 }
@@ -203,14 +181,12 @@ export default function ChartKeyScreen() {
     ids?: string | string[];
     metric?: string | string[];
     mode?: string | string[];
-    assistMode?: string | string[];
     lineMode?: string | string[];
   }>();
 
   const store = useStore() as unknown as FlexibleStore;
   const chartKey = normalizeChartKey(params.chartKey);
   const routeMode = normalizeGraphMode(params.mode);
-  const routeAssistMode = normalizeAssistMode(params.assistMode);
   const routeLineMode = normalizeLineMode(params.lineMode);
   const routePlayerId = getParam(params.playerId);
   const routeCompareId = getParam(params.compareId);
@@ -425,11 +401,9 @@ export default function ChartKeyScreen() {
           playerId: selectedPlayer?.id ?? routePlayerId ?? null,
           compareId: comparePlayer?.id ?? routeCompareId ?? null,
           selectedGameId: routeSelectedGameId ?? null,
-          ids: scopedPlayerIds.length ? scopedPlayerIds : routeIds,
+          ids: routeIds.length ? routeIds : scopedPlayerIds,
           metric: setupMetric,
           mode: routeMode,
-          assistMode:
-            chartKey === "relationship_graph" ? routeAssistMode : null,
           lineMode: isLineModeDriven(chartKey) ? lineMode : null,
         }),
         setup: "true",
@@ -466,10 +440,9 @@ export default function ChartKeyScreen() {
           <AssistNetworkOverview
             games={unifiedGames as any}
             players={resolvedPlayers as any}
-            scopedPlayerIds={scopedPlayerIds}
-            exactScopePlayerIds={routeIds.length >= 2 ? scopedPlayerIds : undefined}
+            scopedPlayerIds={routeIds.length ? routeIds : scopedPlayerIds}
+            exactScopePlayerIds={routeIds.length >= 2 ? routeIds : undefined}
             mode={routeMode}
-            assistMode={routeAssistMode}
             title="Assist Network"
             subtitle="Directed assist flow across the filtered sample."
           />

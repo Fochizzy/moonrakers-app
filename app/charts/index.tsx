@@ -41,7 +41,7 @@ import {
   normalizeMetricForChart,
   type SimpleMetricKey,
 } from "@/utils/charts";
-import { getRouteSyncedGroupIds } from "@/utils/chartHubRouteState";
+import { getPreferredScopeIdsForChart } from "@/utils/chartHubRouteState";
 import { getMetricOrFallback } from "@/utils/metricMap";
 
 function getParam(value?: string | string[]) {
@@ -70,11 +70,6 @@ type StorePlayer = {
   color?: string;
 };
 
-type AssistMetricMode =
-  | "assistPrestige"
-  | "assistCount"
-  | "assistEfficiency"
-  | "supportBalance";
 type EloSetupTab =
   | "Leaderboard"
   | "Momentum"
@@ -86,15 +81,6 @@ type SetupOption = {
   label: string;
 };
 
-const ASSIST_MODE_OPTIONS: ReadonlyArray<{
-  key: AssistMetricMode;
-  label: string;
-}> = [
-  { key: "assistPrestige", label: "Prestige" },
-  { key: "assistCount", label: "Count" },
-  { key: "assistEfficiency", label: "Efficiency" },
-  { key: "supportBalance", label: "Balance" },
-];
 const LINE_MODE_OPTIONS: readonly LineMode[] = ["raw", "cumulative", "average"];
 const ELO_VIEW_OPTIONS: readonly EloSetupTab[] = [
   "Leaderboard",
@@ -111,26 +97,6 @@ function titleCase(value: string) {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function normalizeAssistMode(value?: string | string[]) {
-  switch (String(getParam(value) ?? "assistPrestige").trim().toLowerCase()) {
-    case "assistcount":
-      return "assistCount";
-    case "assistefficiency":
-      return "assistEfficiency";
-    case "supportbalance":
-      return "supportBalance";
-    default:
-      return "assistPrestige";
-  }
-}
-
-function getAssistModeLabel(value: AssistMetricMode) {
-  return (
-    ASSIST_MODE_OPTIONS.find((option) => option.key === value)?.label ??
-    "Prestige"
-  );
 }
 
 function normalizeLineMode(value?: string | string[]) {
@@ -481,7 +447,6 @@ export default function ChartsIndexScreen() {
     compareId?: string | string[];
     ids?: string | string[];
     metric?: string | string[];
-    assistMode?: string | string[];
     lineMode?: string | string[];
     eloTab?: string | string[];
     opponentId?: string | string[];
@@ -499,7 +464,6 @@ export default function ChartsIndexScreen() {
   const routeIdsParam = getParam(params.ids);
   const routeIds = useMemo(() => getParamList(routeIdsParam), [routeIdsParam]);
   const routeMetric = getParam(params.metric);
-  const routeAssistMode = normalizeAssistMode(params.assistMode);
   const routeLineMode = normalizeLineMode(params.lineMode);
   const routeEloTab = normalizeEloTab(params.eloTab);
   const routeOpponentId = getParam(params.opponentId);
@@ -527,8 +491,6 @@ export default function ChartsIndexScreen() {
   const [selectedChartKey, setSelectedChartKey] =
     useState<ChartCatalogKey>(routeChartKey);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(routeIds);
-  const [selectedAssistMode, setSelectedAssistMode] =
-    useState<AssistMetricMode>(routeAssistMode);
   const [selectedLineMode, setSelectedLineMode] =
     useState<LineMode>(routeLineMode);
   const [selectedEloTab, setSelectedEloTab] =
@@ -547,12 +509,6 @@ export default function ChartsIndexScreen() {
       setSetupOpen(routeSetupOpen);
     }
   }, [params.setup, routeSetupOpen]);
-
-  useEffect(() => {
-    if (getParam(params.assistMode) != null) {
-      setSelectedAssistMode(routeAssistMode);
-    }
-  }, [params.assistMode, routeAssistMode]);
 
   useEffect(() => {
     if (getParam(params.lineMode) != null) {
@@ -597,7 +553,8 @@ export default function ChartsIndexScreen() {
   }, [routeOpponentId, sortedPlayers]);
 
   useEffect(() => {
-    const nextRouteGroupIds = getRouteSyncedGroupIds({
+    const nextRouteGroupIds = getPreferredScopeIdsForChart({
+      chartKey: selectedChartKey,
       routeIds,
       currentIds: selectedGroupIds,
       players: sortedPlayers,
@@ -606,7 +563,7 @@ export default function ChartsIndexScreen() {
     if (nextRouteGroupIds) {
       setSelectedGroupIds(nextRouteGroupIds);
     }
-  }, [routeIds, selectedGroupIds, sortedPlayers]);
+  }, [routeIds, selectedChartKey, selectedGroupIds, sortedPlayers]);
 
   useEffect(() => {
     if (!selectedPlayerId && sortedPlayers.length) {
@@ -757,14 +714,6 @@ export default function ChartsIndexScreen() {
         })),
     [selectedPlayer?.id, sortedPlayers]
   );
-  const assistModeOptions = useMemo<SetupOption[]>(
-    () =>
-      ASSIST_MODE_OPTIONS.map((option) => ({
-        key: option.key,
-        label: option.label,
-      })),
-    []
-  );
   const lineModeOptions = useMemo<SetupOption[]>(
     () =>
       LINE_MODE_OPTIONS.map((mode) => ({
@@ -866,10 +815,6 @@ export default function ChartsIndexScreen() {
     if (getSupportedMetricKeysForChart(chart.key).length > 0) {
       params.metric =
         normalizeMetricForChart(chart.key, selectedMetric) ?? "totalPrestige";
-    }
-
-    if (chart.key === "relationship_graph") {
-      params.assistMode = selectedAssistMode;
     }
 
     if (supportsLineView(chart.key)) {
@@ -1018,18 +963,6 @@ export default function ChartsIndexScreen() {
                       onPress={() => setSelectedMetric(metric)}
                     />
                   ))}
-                </SetupSection>
-              ) : null}
-
-              {selectedChart.key === "relationship_graph" ? (
-                <SetupSection title="Assist metric">
-                  <SetupTabs
-                    items={assistModeOptions}
-                    value={selectedAssistMode}
-                    onChange={(next) =>
-                      setSelectedAssistMode(next as AssistMetricMode)
-                    }
-                  />
                 </SetupSection>
               ) : null}
 
