@@ -12,6 +12,11 @@ import { useRouter } from "expo-router";
 
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
+import {
+  clearRememberedLogin,
+  readRememberedLogin,
+  writeRememberedLogin,
+} from "@/lib/auth/rememberedLogin";
 import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
 import {
   buildSupabaseRedirectUrl,
@@ -72,6 +77,7 @@ export default function LoginScreen() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -171,6 +177,46 @@ export default function LoginScreen() {
     };
   }, [clearAuthState, setPasswordRecoveryPending]);
 
+  useEffect(() => {
+    let active = true;
+
+    async function hydrateRememberedLogin() {
+      try {
+        const rememberedLogin = await readRememberedLogin();
+
+        if (!active || !rememberedLogin) {
+          return;
+        }
+
+        setEmail(rememberedLogin.email);
+        setPassword(rememberedLogin.password);
+        setRememberMe(true);
+      } catch (error) {
+        console.warn("Failed to load remembered login.", error);
+      }
+    }
+
+    void hydrateRememberedLogin();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleRememberMeToggle() {
+    const nextValue = !rememberMe;
+
+    setRememberMe(nextValue);
+
+    if (!nextValue) {
+      try {
+        await clearRememberedLogin();
+      } catch (error) {
+        console.warn("Failed to clear remembered login.", error);
+      }
+    }
+  }
+
   async function handleLogin() {
     if (!canSubmit || busy) {
       return;
@@ -189,6 +235,19 @@ export default function LoginScreen() {
         setMessage(formatAuthMessage(error));
         setActiveAction(null);
         return;
+      }
+
+      try {
+        if (rememberMe) {
+          await writeRememberedLogin({
+            email: normalizedEmail,
+            password,
+          });
+        } else {
+          await clearRememberedLogin();
+        }
+      } catch (storageError) {
+        console.warn("Failed to update remembered login.", storageError);
       }
 
       setPasswordRecoveryPending(false);
@@ -268,7 +327,7 @@ export default function LoginScreen() {
 
   return (
     <PageShell
-      preset="auth"
+      preset="authHero"
       density="compact"
       viewport="fit"
       edges={["top", "left", "right", "bottom"]}
@@ -328,6 +387,38 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
             />
+
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: rememberMe }}
+              onPress={() => {
+                void handleRememberMeToggle();
+              }}
+              style={({ pressed }) => [
+                styles.rememberRow,
+                {
+                  opacity: pressed ? 0.86 : 1,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  rememberMe
+                    ? {
+                        backgroundColor: "rgba(114,170,211,0.76)",
+                        borderColor: "rgba(147,197,253,0.52)",
+                      }
+                    : {
+                        backgroundColor: "rgba(15,25,48,0.4)",
+                        borderColor: "rgba(59,130,246,0.24)",
+                      },
+                ]}
+              >
+                {rememberMe ? <View style={styles.checkboxInner} /> : null}
+              </View>
+              <Text style={styles.rememberText}>Remember me</Text>
+            </Pressable>
 
             {message ? (
               <Text
@@ -436,6 +527,33 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  rememberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    alignSelf: "flex-start",
+    paddingVertical: 2,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: "#18324F",
+  },
+  rememberText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "700",
+    color: "#D7E1F4",
   },
   actions: {
     gap: 10,
