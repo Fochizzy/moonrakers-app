@@ -140,15 +140,11 @@ export default function PlayersScreen() {
             <HubTileCard
               key={card.key}
               description={card.description}
-              iconKey={card.key === "cards" ? card.iconKey : null}
-              layout={card.key === "cards" ? "graphic" : "text"}
+              iconKey={card.iconKey ?? null}
+              layout={card.iconKey ? "graphic" : "text"}
               title={card.title}
               badge={card.bestFor}
-              style={
-                card.key === "cards"
-                  ? styles.surfaceTileGraphic
-                  : styles.surfaceTileText
-              }
+              style={card.iconKey ? styles.surfaceTileGraphic : styles.surfaceTileText}
               onPress={() => router.push(card.route as any)}
             />
           ))}

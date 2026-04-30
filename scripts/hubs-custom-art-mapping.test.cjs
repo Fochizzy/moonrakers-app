@@ -1,0 +1,96 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const projectRoot = path.resolve(__dirname, "..");
+
+function read(relPath) {
+  return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
+}
+
+const iconAccessSource = read(path.join("utils", "iconAccess.ts"));
+const appHubsSource = read(path.join("utils", "appHubs.ts"));
+
+assert.match(
+  iconAccessSource,
+  /hazardDieHub:\s*require\("\.\.\/assets\/icons\/Hazard_Die\.png"\)/,
+  "expected the hubs icon map to expose Hazard_Die.png for the hubs artwork set"
+);
+
+assert.match(
+  iconAccessSource,
+  /missionHub:\s*require\("\.\.\/assets\/icons\/Mission\.png"\)/,
+  "expected the hubs icon map to expose Mission.png for the hubs artwork set"
+);
+
+assert.match(
+  iconAccessSource,
+  /moneyHub:\s*require\("\.\.\/assets\/icons\/Money\.png"\)/,
+  "expected the hubs icon map to expose Money.png for the hubs artwork set"
+);
+
+assert.match(
+  iconAccessSource,
+  /objectiveHub:\s*require\("\.\.\/assets\/icons\/Objective\.png"\)/,
+  "expected the hubs icon map to expose Objective.png for the hubs artwork set"
+);
+
+assert.match(
+  iconAccessSource,
+  /prestigeHub:\s*require\("\.\.\/assets\/icons\/Prestige\.png"\)/,
+  "expected the hubs icon map to expose Prestige.png for the hubs artwork set"
+);
+
+assert.match(
+  appHubsSource,
+  /key:\s*"history"[\s\S]*?iconKey:\s*"missionHub"/,
+  "expected the history hub tile to use Mission art"
+);
+
+assert.match(
+  appHubsSource,
+  /key:\s*"analytics"[\s\S]*?iconKey:\s*"moneyHub"/,
+  "expected the analytics hub tile to use Money art"
+);
+
+assert.match(
+  appHubsSource,
+  /key:\s*"players"[\s\S]*?iconKey:\s*"prestigeHub"/,
+  "expected the players hub tile to use Prestige art"
+);
+
+assert.match(
+  appHubsSource,
+  /key:\s*"definitions"[\s\S]*?iconKey:\s*"objectiveHub"/,
+  "expected the definitions hub tile to use Objective art"
+);
+
+const bridgeBlock = appHubsSource.match(
+  /const BRIDGE_DESTINATIONS: HubCard\[] = \[([\s\S]*?)\];/
+);
+
+assert.ok(bridgeBlock, "expected the hubs source to define BRIDGE_DESTINATIONS");
+
+const bridgeIconKeys = [...bridgeBlock[1].matchAll(/iconKey:\s*"([^"]+)"/g)].map(
+  (match) => match[1]
+);
+
+assert.equal(
+  bridgeIconKeys.length,
+  4,
+  "expected four bridge destination icon assignments"
+);
+
+assert.equal(
+  new Set(bridgeIconKeys).size,
+  bridgeIconKeys.length,
+  "expected each bridge destination to use a different artwork key"
+);
+
+assert.match(
+  appHubsSource,
+  /key:\s*"insights"[\s\S]*?iconKey:\s*"hazardDieHub"/,
+  "expected the insights hub tile to use Hazard Die art so the new hubs asset set is fully represented"
+);
+
+console.log("hubs-custom-art-mapping.test.cjs passed");

@@ -1439,16 +1439,8 @@ export default function HomeScreen() {
                 key={card.key}
                 title={card.title}
                 description={card.description}
-                iconKey={
-                  card.key === "history" || card.key === "definitions"
-                    ? null
-                    : card.iconKey
-                }
-                layout={
-                  card.key === "history" || card.key === "definitions"
-                    ? "text"
-                    : "graphic"
-                }
+                iconKey={card.iconKey ?? null}
+                layout={card.iconKey ? "graphic" : "text"}
                 tint={
                   index % 2 === 0
                     ? "rgba(96,165,250,0.16)"
@@ -1783,19 +1775,21 @@ const styles = StyleSheet.create({
   },
   hubsPanel: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-start",
     paddingHorizontal: 4,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   hubGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    alignItems: "stretch",
-    alignContent: "center",
-    gap: 12,
+    alignContent: "flex-start",
   },
   hubTile: {
-    minHeight: 172,
+    width: "48.5%",
+    minHeight: 188,
+    marginBottom: 12,
   },
   groupCardCompact: {
     borderRadius: 10,
