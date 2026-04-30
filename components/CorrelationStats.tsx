@@ -1,13 +1,21 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 
-import { useStore } from '@/store/useStore';
 import Text from '@/components/ui/Text';
 import { chartColors, withAlpha } from '@/utils/chartTheme';
 import {
   buildCorrelationResults,
   getTopSynergyPairs,
 } from '@/utils/advancedStats';
+
+type CorrelationStatsProps = {
+  games?: any[];
+  players?: Array<{
+    id?: string;
+    name?: string;
+  }>;
+  relationships?: Record<string, any>;
+};
 
 function formatCorrelation(value: number) {
   if (!Number.isFinite(value)) return '0.00';
@@ -404,11 +412,11 @@ function SynergyCard({
   );
 }
 
-export default function CorrelationStats() {
-  const games = useStore((s: any) => s.games ?? []);
-  const players = useStore((s: any) => s.players ?? []);
-  const relationships = useStore((s: any) => s.relationships ?? {});
-
+export default function CorrelationStats({
+  games = [],
+  players = [],
+  relationships = {},
+}: CorrelationStatsProps) {
   const correlations = useMemo(() => {
     return buildCorrelationResults(games, relationships);
   }, [games, relationships]);

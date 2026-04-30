@@ -13,7 +13,11 @@ import { useStore } from '@/store/useStore';
 import CorrelationStats from '@/components/CorrelationStats';
 import InsightList from '@/components/InsightList';
 import AssistNetworkOverview from '@/components/charts/AssistNetworkOverview';
-import { canonicalizeGames, collectUnifiedGames } from '@/utils/charts';
+import {
+  buildRelationships,
+  canonicalizeGames,
+  collectUnifiedGames,
+} from '@/utils/charts';
 
 type PlayerLike = {
   id: string;
@@ -156,18 +160,18 @@ export default function InsightsScreen() {
   const games = useStore((s: any) =>
     Array.isArray(s.games) ? s.games : [],
   ) as StoredGame[];
-  const importedGames = useStore((s: any) =>
-    Array.isArray(s.importedGames) ? s.importedGames : [],
-  ) as StoredGame[];
-
-  const relationships = useStore((s: any) => s.relationships ?? {});
   const unifiedGames = useMemo(
     () =>
       canonicalizeGames(
-        collectUnifiedGames({ games, importedGames } as any),
+        collectUnifiedGames({ games } as any),
         players as any,
       ),
-    [games, importedGames, players],
+    [games, players],
+  );
+
+  const relationships = useMemo(
+    () => buildRelationships(players as any, unifiedGames as any),
+    [players, unifiedGames],
   );
 
   const globalStats = useMemo(() => {
@@ -282,7 +286,11 @@ export default function InsightsScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Correlations & Synergy</Text>
-          <CorrelationStats />
+          <CorrelationStats
+            games={unifiedGames}
+            players={players}
+            relationships={relationships}
+          />
         </View>
       </ScrollView>
     </View>

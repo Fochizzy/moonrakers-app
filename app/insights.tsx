@@ -177,9 +177,14 @@ function MetricCard({
 
 export default function InsightsScreen() {
   const router = useRouter();
-  const store = useStore() as unknown as FlexibleStore;
+  const games = useStore((state: any) =>
+    Array.isArray(state?.games) ? state.games : [],
+  );
 
-  const rawGames = useMemo(() => collectUnifiedGames(store), [store]);
+  const rawGames = useMemo(
+    () => collectUnifiedGames({ games } as FlexibleStore),
+    [games],
+  );
 
   const players = useMemo(() => {
     if (!rawGames.length) return [];
@@ -190,14 +195,14 @@ export default function InsightsScreen() {
     );
   }, [rawGames]);
 
-  const games = useMemo(
+  const canonicalGames = useMemo(
     () => canonicalizeGames(rawGames, players as any) as StoredGame[],
     [players, rawGames],
   );
 
   const relationships = useMemo(
-    () => buildRelationships(players as any, games as any),
-    [games, players],
+    () => buildRelationships(players as any, canonicalGames as any),
+    [canonicalGames, players],
   );
 
   const globalStats = useMemo(() => {
@@ -208,7 +213,7 @@ export default function InsightsScreen() {
     let totalFailures = 0;
     let playerRows = 0;
 
-    for (const game of games) {
+    for (const game of canonicalGames) {
       for (const totals of Object.values(game.totals ?? {})) {
         totalPrestige += getTotalPrestige(totals);
         totalScore += toNumber(totals?.score);
@@ -220,7 +225,7 @@ export default function InsightsScreen() {
     }
 
     return {
-      games: games.length,
+      games: canonicalGames.length,
       playerRows,
       avgPrestige: avg(totalPrestige, playerRows),
       avgScore: avg(totalScore, playerRows),
@@ -231,11 +236,11 @@ export default function InsightsScreen() {
           ? totalFailures / (totalContracts + totalAssists)
           : 0,
     };
-  }, [games]);
+  }, [canonicalGames]);
 
   const topInsights = useMemo(() => {
-    return buildTopInsights(games, players);
-  }, [games, players]);
+    return buildTopInsights(canonicalGames, players);
+  }, [canonicalGames, players]);
 
   const totalRelationships = useMemo(() => {
     let total = 0;
@@ -333,7 +338,11 @@ export default function InsightsScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Correlations & Synergy</Text>
-          <CorrelationStats />
+          <CorrelationStats
+            games={canonicalGames}
+            players={players}
+            relationships={relationships}
+          />
         </View>
       </ScrollView>
     </View>
