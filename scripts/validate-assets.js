@@ -2,6 +2,15 @@ const fs = require("fs");
 const path = require("path");
 
 const requiredIcons = [
+  "Green.png",
+  "Hazard_Die.png",
+  "Mission Card.png",
+  "Mission.png",
+  "Money.png",
+  "Objective.png",
+  "Prestige.png",
+  "Purple.png",
+  "Yellow.png",
   "add_remove.png",
   "charts.png",
   "compare.png",
