@@ -1,7 +1,24 @@
 const pkg = require('./package.json');
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? null;
-const supabasePublishableKey =
-  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? null;
+
+const DEFAULT_SUPABASE_URL = 'https://znpzawotdmkcdjpwjkds.supabase.co';
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
+  'sb_publishable_U657t2wc1r6ParKopa6F8A_mp0VZFxW';
+const APP_ICON_PATH = './assets/icon.png';
+
+function resolveEnvString(value, fallback) {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : fallback;
+}
+
+const supabaseUrl = resolveEnvString(
+  process.env.EXPO_PUBLIC_SUPABASE_URL,
+  DEFAULT_SUPABASE_URL
+);
+const supabasePublishableKey = resolveEnvString(
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  DEFAULT_SUPABASE_PUBLISHABLE_KEY
+);
 
 module.exports = {
   expo: {
@@ -12,6 +29,7 @@ module.exports = {
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
     scheme: 'moonrakers',
+    icon: APP_ICON_PATH,
     plugins: [
       'expo-router',
       'expo-secure-store',
@@ -27,7 +45,11 @@ module.exports = {
       ]
     ],
     android: {
-      package: 'com.fochizzy87.moonrakers'
+      package: 'com.fochizzy87.moonrakers',
+      adaptiveIcon: {
+        foregroundImage: APP_ICON_PATH,
+        backgroundColor: '#02030A'
+      }
     },
     extra: {
       EXPO_PUBLIC_SUPABASE_URL: supabaseUrl,

@@ -2,6 +2,8 @@
 import React, { useMemo, useState } from "react";
 import {
   Alert,
+  Image,
+  type ImageSourcePropType,
   Modal,
   Pressable,
   ScrollView,
@@ -16,6 +18,7 @@ import { useStore } from "@/store/useStore";
 import StarryNight from "@/components/ui/StarryNight";
 import Text from "@/components/ui/Text";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+import { APP_ICONS } from "@/utils/iconAccess";
 import {
   getPlayerAccentColor,
   getPlayerTintColor,
@@ -45,6 +48,7 @@ type GroupLike = {
 };
 
 const UI_COLORS: UiColor[] = ["Green", "Purple", "Blue", "Orange", "Yellow"];
+const ADA_MASA = require("@/assets/icons/Ada_Masa.png");
 
 function toCatalogColor(color?: string): CardColor {
   switch (String(color ?? "").trim().toLowerCase()) {
@@ -87,6 +91,46 @@ function getInitials(name: string) {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+function RosterArtCallout({
+  eyebrow,
+  title,
+  body,
+  source,
+  accentColor,
+  imageStyle,
+}: {
+  eyebrow: string;
+  title: string;
+  body: string;
+  source: ImageSourcePropType;
+  accentColor: string;
+  imageStyle?: object;
+}) {
+  return (
+    <View
+      style={[
+        styles.artCallout,
+        {
+          borderColor: `${accentColor}55`,
+          backgroundColor: `${accentColor}18`,
+        },
+      ]}
+    >
+      <View style={styles.artCalloutCopy}>
+        <Text style={[styles.artCalloutEyebrow, { color: accentColor }]}>{eyebrow}</Text>
+        <Text style={styles.artCalloutTitle}>{title}</Text>
+        <Text style={styles.artCalloutBody}>{body}</Text>
+      </View>
+
+      <Image
+        source={source}
+        resizeMode="contain"
+        style={[styles.artCalloutImage, imageStyle]}
+      />
+    </View>
+  );
 }
 
 export default function AddPlayersScreen() {
@@ -374,6 +418,15 @@ export default function AddPlayersScreen() {
           </View>
         </View>
 
+        <RosterArtCallout
+          eyebrow="Fleet Roster"
+          title="Build your captain lineup"
+          body="Keep player profiles, saved cards, and saved groups ready before game setup."
+          source={APP_ICONS.fullProfile}
+          accentColor="#93C5FD"
+          imageStyle={styles.headerCalloutImage}
+        />
+
         <View style={styles.tabRow}>
           <Pressable
             onPress={() => setTab("players")}
@@ -401,6 +454,16 @@ export default function AddPlayersScreen() {
           >
             <View style={styles.panel}>
               <Text style={styles.sectionTitle}>Create player</Text>
+
+              <RosterArtCallout
+                eyebrow="Quick Add"
+                title="Bring a new captain aboard"
+                body="Name the player, lock in a color, and pick the card art that will represent them."
+                source={APP_ICONS.orangePerson}
+                accentColor="#FB923C"
+                imageStyle={styles.createCalloutImage}
+              />
+
               <View style={styles.creationStepList}>
                 {["Identity", "Color", "Card"].map((step, index) => (
                   <View key={step} style={styles.creationStepPill}>
@@ -471,6 +534,19 @@ export default function AddPlayersScreen() {
             <View style={styles.panel}>
               <Text style={styles.sectionTitle}>Players</Text>
               <Text style={styles.helperText}>Tap player to edit or delete</Text>
+
+              <RosterArtCallout
+                eyebrow="Roster View"
+                title={sortedPlayers.length > 0 ? "Saved captains at a glance" : "Your saved captains land here"}
+                body={
+                  sortedPlayers.length > 0
+                    ? "Every saved player stays easy to scan before you jump into a new mission."
+                    : "Once you save players, this panel becomes your quick roster wall for edits and setup."
+                }
+                source={ADA_MASA}
+                accentColor="#C084FC"
+                imageStyle={styles.playersCalloutImage}
+              />
 
               <View style={styles.playerGrid}>
                 {sortedPlayers.map((player) => (
@@ -771,6 +847,55 @@ const styles = StyleSheet.create({
     color: "#8FAED7",
     fontSize: 13,
     marginTop: 2,
+  },
+  artCallout: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    overflow: "hidden",
+  },
+  artCalloutCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  artCalloutEyebrow: {
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  artCalloutTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  artCalloutBody: {
+    color: "#D5E3F8",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  artCalloutImage: {
+    width: 78,
+    height: 78,
+  },
+  headerCalloutImage: {
+    width: 126,
+    height: 126,
+    marginRight: -6,
+  },
+  createCalloutImage: {
+    width: 90,
+    height: 90,
+    marginRight: -2,
+  },
+  playersCalloutImage: {
+    width: 92,
+    height: 92,
   },
   tabRow: {
     flexDirection: "row",

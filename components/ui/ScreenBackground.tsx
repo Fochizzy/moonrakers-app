@@ -17,6 +17,7 @@ const RINGS = require("@/assets/Rings.png");
 export const BACKGROUND_PRESETS = {
   quiet: "quiet",
   auth: "auth",
+  authHero: "authHero",
   launch: "launch",
   analytics: "analytics",
   command: "command",
@@ -62,6 +63,15 @@ const PRESET_CONFIGS: Record<ScreenBackgroundPreset, BackgroundPresetConfig> = {
     artVariant: "fill",
     artOpacity: 0.58,
   },
+  authHero: {
+    base: "#080F22",
+    overlay: "rgba(8,15,34,0.44)",
+    glowA: "rgba(167,139,250,0.12)",
+    glowB: "rgba(96,165,250,0.08)",
+    artSource: AUTH_BACKGROUND,
+    artVariant: "fill",
+    artOpacity: 0.86,
+  },
   launch: {
     base: "#0A1326",
     overlay: "rgba(10,19,38,0.62)",
@@ -81,13 +91,13 @@ const PRESET_CONFIGS: Record<ScreenBackgroundPreset, BackgroundPresetConfig> = {
     artOpacity: 0.28,
   },
   command: {
-    base: "#071520",
-    overlay: "rgba(7,21,32,0.68)",
-    glowA: "rgba(34,197,94,0.12)",
-    glowB: "rgba(96,165,250,0.1)",
+    base: "#061321",
+    overlay: "rgba(6,19,33,0.74)",
+    glowA: "rgba(129,140,248,0.12)",
+    glowB: "rgba(96,165,250,0.08)",
     artSource: BACKGROUND_ALT,
     artVariant: "fill",
-    artOpacity: 0.5,
+    artOpacity: 0.46,
   },
   archive: {
     base: "#09111D",

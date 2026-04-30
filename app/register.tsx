@@ -218,7 +218,7 @@ export default function RegisterScreen() {
 
   return (
     <PageShell
-      preset="auth"
+      preset="authHero"
       density="compact"
       viewport="fit"
       edges={["top", "left", "right", "bottom"]}
