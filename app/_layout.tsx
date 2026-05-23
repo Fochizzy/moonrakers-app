@@ -42,7 +42,6 @@ import { APP_ROUTES } from "@/utils/appRoutes";
 import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
 import {
   loadGames,
-  loadGroups,
   loadPlayers,
 } from "@/utils/storage/storage";
 
@@ -148,15 +147,14 @@ async function loadAuthProfile(userId: string): Promise<AuthProfile> {
 }
 
 async function loadLocalSnapshot() {
-  const [players, groups, games] = await Promise.all([
+  const [players, games] = await Promise.all([
     loadPlayers(),
-    loadGroups(),
     loadGames(),
   ]);
 
   return {
     players: Array.isArray(players) ? players : [],
-    groups: Array.isArray(groups) ? groups : [],
+    groups: [],
     games: Array.isArray(games) ? games : [],
   };
 }
