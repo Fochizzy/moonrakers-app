@@ -8,6 +8,18 @@ const screenSource = fs.readFileSync(screenPath, "utf8");
 
 assert.doesNotMatch(
   screenSource,
+  /const\s+addGroup\s*=\s*useStore\(/,
+  "expected add-players.tsx to stop declaring the old local addGroup useStore hook",
+);
+
+assert.doesNotMatch(
+  screenSource,
+  /const\s+deleteGroup\s*=\s*useStore\(/,
+  "expected add-players.tsx to stop declaring the old local deleteGroup useStore hook",
+);
+
+assert.doesNotMatch(
+  screenSource,
   /state\.addGroup\b/,
   "expected add-players.tsx to stop reading the local addGroup store action",
 );
@@ -46,6 +58,18 @@ assert.match(
   screenSource,
   /Finish profile setup before managing shared groups\./,
   "expected the profile-setup shared-group guard copy to remain exact",
+);
+
+assert.match(
+  screenSource,
+  /Saved, but couldn't refresh yet\./,
+  "expected add-players.tsx to tell the truth when a shared-group save succeeds but refresh fails",
+);
+
+assert.match(
+  screenSource,
+  /Deleted, but couldn't refresh yet\./,
+  "expected add-players.tsx to tell the truth when a shared-group delete succeeds but refresh fails",
 );
 
 console.log("shared-groups-member-delete-ui.test.cjs passed");

@@ -22,7 +22,6 @@ import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
 import { deleteOwnProfile } from "@/lib/cloud/deleteOwnProfile";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import { createSharedGroup, deleteSharedGroup } from "@/lib/cloud/sharedGroups";
-import { persistLocalCacheSnapshot } from "@/lib/localCache/persistLocalCacheSnapshot";
 import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
@@ -329,11 +328,6 @@ export default function AddPlayersScreen() {
 
     try {
       await deleteOwnProfile();
-      await persistLocalCacheSnapshot({
-        players: [],
-        groups: [],
-        games: [],
-      });
       resetStore?.();
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) {
@@ -412,9 +406,14 @@ export default function AddPlayersScreen() {
         name: trimmed,
         playerIds: selectedGroupPlayerIds,
       });
-      await refreshCloudGroupState();
       setGroupName("");
       setSelectedGroupPlayerIds([]);
+
+      try {
+        await refreshCloudGroupState();
+      } catch {
+        Alert.alert("Group saved", "Saved, but couldn't refresh yet.");
+      }
     } catch (error) {
       Alert.alert("Couldn't save group", formatSupabaseConfigError(error));
     } finally {
@@ -443,7 +442,12 @@ export default function AddPlayersScreen() {
 
     try {
       await deleteSharedGroup(group.id);
-      await refreshCloudGroupState();
+
+      try {
+        await refreshCloudGroupState();
+      } catch {
+        Alert.alert("Group deleted", "Deleted, but couldn't refresh yet.");
+      }
     } catch (error) {
       Alert.alert("Couldn't delete group", formatSupabaseConfigError(error));
     } finally {
