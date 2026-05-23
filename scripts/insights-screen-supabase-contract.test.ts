@@ -9,16 +9,17 @@ async function main() {
       games: 5,
     },
   };
+  const client = {
+    async rpc(name: string, args: Record<string, unknown>) {
+      rpcCalls.push({ name, args });
+      return { data: rpcPayload, error: null };
+    },
+  };
 
   const payload = await getInsightsScreen(
+    client as any,
     {
       profileId: "insights-profile",
-    },
-    {
-      callRpc: async (name: string, args: Record<string, unknown>) => {
-        rpcCalls.push({ name, args });
-        return { data: rpcPayload, error: null };
-      },
     },
   );
 

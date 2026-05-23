@@ -11,16 +11,17 @@ async function main() {
       },
     },
   };
+  const client = {
+    async rpc(name: string, args: Record<string, unknown>) {
+      rpcCalls.push({ name, args });
+      return { data: rpcPayload, error: null };
+    },
+  };
 
   const payload = await getStatsScreen(
+    client as any,
     {
       profileId: "stats-profile",
-    },
-    {
-      callRpc: async (name: string, args: Record<string, unknown>) => {
-        rpcCalls.push({ name, args });
-        return { data: rpcPayload, error: null };
-      },
     },
   );
 

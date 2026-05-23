@@ -7,8 +7,15 @@ async function main() {
   const rpcPayload = {
     chartKey: "elo",
   };
+  const client = {
+    async rpc(name: string, args: Record<string, unknown>) {
+      rpcCalls.push({ name, args });
+      return { data: rpcPayload, error: null };
+    },
+  };
 
   const payload = await getChartDataset(
+    client as any,
     {
       chartKey: "elo",
       profileId: "chart-profile",
@@ -20,12 +27,6 @@ async function main() {
       lineMode: "raw",
       graphMode: null,
       opponentId: null,
-    },
-    {
-      callRpc: async (name: string, args: Record<string, unknown>) => {
-        rpcCalls.push({ name, args });
-        return { data: rpcPayload, error: null };
-      },
     },
   );
 

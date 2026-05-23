@@ -9,16 +9,17 @@ async function main() {
       games: 12,
     },
   };
+  const client = {
+    async rpc(name: string, args: Record<string, unknown>) {
+      rpcCalls.push({ name, args });
+      return { data: rpcPayload, error: null };
+    },
+  };
 
   const payload = await getAnalyticsHome(
+    client as any,
     {
       profileId: "11111111-1111-4111-8111-111111111111",
-    },
-    {
-      callRpc: async (name: string, args: Record<string, unknown>) => {
-        rpcCalls.push({ name, args });
-        return { data: rpcPayload, error: null };
-      },
     },
   );
 
