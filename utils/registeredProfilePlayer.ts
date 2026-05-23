@@ -53,6 +53,12 @@ function normalizeAssignedCardArtIndex(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+export function isLikelyRegisteredProfileId(value: unknown) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    normalizeId(value),
+  );
+}
+
 export function mergeRegisteredProfileIntoPlayer(
   existing: ExistingPlayerLike | null | undefined,
   profile: RegisteredProfilePlayerLike | null | undefined,
