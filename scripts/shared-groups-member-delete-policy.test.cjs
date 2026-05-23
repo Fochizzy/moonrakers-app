@@ -17,27 +17,68 @@ assert.equal(
 );
 
 const source = fs.readFileSync(migrationPath, "utf8");
+const normalize = (value) => value.replace(/\r\n/g, "\n");
+const normalizedSource = normalize(source);
+
+const createdGroupPolicies = Array.from(
+  normalizedSource.matchAll(/create policy "([^"]+)"\s+on public\.groups/gi),
+  (match) => match[1],
+);
+
+assert.deepEqual(
+  createdGroupPolicies,
+  [
+    "groups_insert_self_created",
+    "groups_update_own",
+    "groups_delete_group_members",
+  ],
+  "expected the migration to create only the intended public.groups policies in order",
+);
 
 assert.match(
-  source,
+  normalizedSource,
   /drop policy if exists "groups_manage_own" on public\.groups;/i,
   "expected the migration to remove the legacy creator-owned FOR ALL policy",
 );
 
 assert.match(
-  source,
+  normalizedSource,
+  /drop policy if exists "groups_insert_self_created" on public\.groups;/i,
+  "expected the migration to drop the insert policy before recreating it",
+);
+
+assert.match(
+  normalizedSource,
+  /drop policy if exists "groups_update_own" on public\.groups;/i,
+  "expected the migration to drop the update policy before recreating it",
+);
+
+assert.match(
+  normalizedSource,
+  /drop policy if exists "groups_delete_group_members" on public\.groups;/i,
+  "expected the migration to drop the delete policy before recreating it",
+);
+
+assert.doesNotMatch(
+  normalizedSource,
+  /on public\.groups[\s\S]*for all/i,
+  "expected the migration to avoid recreating a FOR ALL policy on public.groups",
+);
+
+assert.match(
+  normalizedSource,
   /create policy "groups_insert_self_created"[\s\S]*for insert[\s\S]*with check \(\(select auth\.uid\(\)\) = created_by\);/i,
   "expected the migration to keep shared-group inserts tied to the signed-in creator",
 );
 
 assert.match(
-  source,
+  normalizedSource,
   /create policy "groups_update_own"[\s\S]*for update[\s\S]*using \(\(select auth\.uid\(\)\) = created_by\)[\s\S]*with check \(\(select auth\.uid\(\)\) = created_by\);/i,
   "expected the migration to keep shared-group updates creator-owned",
 );
 
 assert.match(
-  source,
+  normalizedSource,
   /create policy "groups_delete_group_members"[\s\S]*for delete[\s\S]*from public\.group_members[\s\S]*public\.group_members\.group_id = groups\.id[\s\S]*public\.group_members\.profile_id = \(select auth\.uid\(\)\)/i,
   "expected the migration to authorize shared-group deletes through current membership",
 );
