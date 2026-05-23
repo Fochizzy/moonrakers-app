@@ -486,6 +486,20 @@ as $$
 declare
   rollup_payload jsonb;
   normalized_chart_key text := lower(coalesce(chart_key, 'default'));
+  stored_chart jsonb := null;
+  fallback_title text := 'Analytics chart';
+  fallback_subtitle text := 'Server-authored placeholder dataset.';
+  fallback_empty_state jsonb := jsonb_build_object(
+    'title', 'No chart data yet',
+    'description', 'Finish at least one tracked game to populate this chart.'
+  );
+  effective_chart jsonb := '{}'::jsonb;
+  effective_data jsonb := '{}'::jsonb;
+  effective_points jsonb := '[]'::jsonb;
+  effective_series jsonb := '[]'::jsonb;
+  effective_meta jsonb := '{}'::jsonb;
+  effective_generated_at jsonb := to_jsonb(now());
+  effective_point_count integer := 0;
 begin
   if profile_id is null or profile_id <> (select auth.uid()) then
     raise exception 'profile_id must match the authenticated profile';
@@ -499,22 +513,22 @@ begin
   if rollup_payload is not null and rollup_payload ? 'charts' then
     case normalized_chart_key
       when 'elo' then
-        return coalesce(
+        stored_chart := coalesce(
           rollup_payload->'charts'->'elo',
           rollup_payload->'charts'->'default'
         );
       when 'prestige' then
-        return coalesce(
+        stored_chart := coalesce(
           rollup_payload->'charts'->'prestige',
           rollup_payload->'charts'->'default'
         );
       when 'assists' then
-        return coalesce(
+        stored_chart := coalesce(
           rollup_payload->'charts'->'assists',
           rollup_payload->'charts'->'default'
         );
       else
-        return coalesce(
+        stored_chart := coalesce(
           rollup_payload->'charts'->normalized_chart_key,
           rollup_payload->'charts'->'default'
         );
@@ -523,118 +537,88 @@ begin
 
   case normalized_chart_key
     when 'elo' then
-      return jsonb_build_object(
-        'chartKey', 'elo',
-        'generatedAt', now(),
-        'title', 'Elo trend',
-        'subtitle', 'Server-authored placeholder dataset for Elo.',
-        'emptyState', jsonb_build_object(
-          'title', 'No Elo history yet',
-          'description', 'Finish at least one tracked game to populate Elo history.'
-        ),
-        'data', jsonb_build_object(
-          'points', '[]'::jsonb,
-          'series', '[]'::jsonb,
-          'meta', jsonb_build_object(
-            'hasData', false,
-            'pointCount', 0,
-            'profileId', profile_id,
-            'focusPlayerId', focus_player_id,
-            'comparePlayerId', compare_player_id,
-            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
-            'selectedGameId', selected_game_id,
-            'metricKey', metric_key,
-            'lineMode', line_mode,
-            'graphMode', graph_mode,
-            'opponentId', opponent_id
-          )
-        )
+      fallback_title := 'Elo trend';
+      fallback_subtitle := 'Server-authored placeholder dataset for Elo.';
+      fallback_empty_state := jsonb_build_object(
+        'title', 'No Elo history yet',
+        'description', 'Finish at least one tracked game to populate Elo history.'
       );
     when 'prestige' then
-      return jsonb_build_object(
-        'chartKey', 'prestige',
-        'generatedAt', now(),
-        'title', 'Prestige totals',
-        'subtitle', 'Server-authored placeholder dataset for prestige.',
-        'emptyState', jsonb_build_object(
-          'title', 'No prestige totals yet',
-          'description', 'Finish at least one tracked game to populate prestige totals.'
-        ),
-        'data', jsonb_build_object(
-          'points', '[]'::jsonb,
-          'series', '[]'::jsonb,
-          'meta', jsonb_build_object(
-            'hasData', false,
-            'pointCount', 0,
-            'profileId', profile_id,
-            'focusPlayerId', focus_player_id,
-            'comparePlayerId', compare_player_id,
-            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
-            'selectedGameId', selected_game_id,
-            'metricKey', metric_key,
-            'lineMode', line_mode,
-            'graphMode', graph_mode,
-            'opponentId', opponent_id
-          )
-        )
+      fallback_title := 'Prestige totals';
+      fallback_subtitle := 'Server-authored placeholder dataset for prestige.';
+      fallback_empty_state := jsonb_build_object(
+        'title', 'No prestige totals yet',
+        'description', 'Finish at least one tracked game to populate prestige totals.'
       );
     when 'assists' then
-      return jsonb_build_object(
-        'chartKey', 'assists',
-        'generatedAt', now(),
-        'title', 'Assist volume',
-        'subtitle', 'Server-authored placeholder dataset for assists.',
-        'emptyState', jsonb_build_object(
-          'title', 'No assist history yet',
-          'description', 'Finish at least one tracked game to populate assist history.'
-        ),
-        'data', jsonb_build_object(
-          'points', '[]'::jsonb,
-          'series', '[]'::jsonb,
-          'meta', jsonb_build_object(
-            'hasData', false,
-            'pointCount', 0,
-            'profileId', profile_id,
-            'focusPlayerId', focus_player_id,
-            'comparePlayerId', compare_player_id,
-            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
-            'selectedGameId', selected_game_id,
-            'metricKey', metric_key,
-            'lineMode', line_mode,
-            'graphMode', graph_mode,
-            'opponentId', opponent_id
-          )
-        )
+      fallback_title := 'Assist volume';
+      fallback_subtitle := 'Server-authored placeholder dataset for assists.';
+      fallback_empty_state := jsonb_build_object(
+        'title', 'No assist history yet',
+        'description', 'Finish at least one tracked game to populate assist history.'
       );
     else
-      return jsonb_build_object(
-        'chartKey', normalized_chart_key,
-        'generatedAt', now(),
-        'title', 'Analytics chart',
-        'subtitle', 'Server-authored placeholder dataset.',
-        'emptyState', jsonb_build_object(
-          'title', 'No chart data yet',
-          'description', 'Finish at least one tracked game to populate this chart.'
-        ),
-        'data', jsonb_build_object(
-          'points', '[]'::jsonb,
-          'series', '[]'::jsonb,
-          'meta', jsonb_build_object(
-            'hasData', false,
-            'pointCount', 0,
-            'profileId', profile_id,
-            'focusPlayerId', focus_player_id,
-            'comparePlayerId', compare_player_id,
-            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
-            'selectedGameId', selected_game_id,
-            'metricKey', metric_key,
-            'lineMode', line_mode,
-            'graphMode', graph_mode,
-            'opponentId', opponent_id
-          )
-        )
-      );
+      null;
   end case;
+
+  effective_chart := coalesce(stored_chart, '{}'::jsonb);
+
+  if effective_chart ? 'generatedAt' then
+    effective_generated_at := effective_chart->'generatedAt';
+  end if;
+
+  if jsonb_typeof(effective_chart->'data') = 'object' then
+    effective_data := effective_chart->'data';
+  end if;
+
+  if jsonb_typeof(effective_data->'points') = 'array' then
+    effective_points := effective_data->'points';
+  end if;
+
+  if jsonb_typeof(effective_data->'series') = 'array' then
+    effective_series := effective_data->'series';
+  end if;
+
+  if jsonb_typeof(effective_data->'meta') = 'object' then
+    effective_meta := effective_data->'meta';
+  end if;
+
+  effective_point_count := case
+    when jsonb_typeof(effective_meta->'pointCount') = 'number' then
+      (effective_meta->>'pointCount')::int
+    else
+      jsonb_array_length(effective_points)
+  end;
+
+  effective_meta := effective_meta || jsonb_build_object(
+    'hasData', effective_point_count > 0,
+    'pointCount', effective_point_count,
+    'profileId', profile_id,
+    'focusPlayerId', focus_player_id,
+    'comparePlayerId', compare_player_id,
+    'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
+    'selectedGameId', selected_game_id,
+    'metricKey', metric_key,
+    'lineMode', line_mode,
+    'graphMode', graph_mode,
+    'opponentId', opponent_id
+  );
+
+  return jsonb_build_object(
+    'chartKey', normalized_chart_key,
+    'generatedAt', effective_generated_at,
+    'title', coalesce(effective_chart->>'title', fallback_title),
+    'subtitle', coalesce(effective_chart->>'subtitle', fallback_subtitle),
+    'emptyState', case
+      when jsonb_typeof(effective_chart->'emptyState') = 'object' then effective_chart->'emptyState'
+      else fallback_empty_state
+    end,
+    'data', jsonb_build_object(
+      'points', effective_points,
+      'series', effective_series,
+      'meta', effective_meta
+    )
+  );
 end;
 $$;
 
