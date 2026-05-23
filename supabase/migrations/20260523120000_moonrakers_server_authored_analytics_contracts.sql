@@ -305,14 +305,11 @@ revoke all on function private.refresh_server_authored_analytics(uuid) from publ
 revoke all on function private.refresh_server_authored_analytics(uuid) from anon;
 revoke all on function private.refresh_server_authored_analytics(uuid) from authenticated;
 
-grant usage on schema private to authenticated;
-grant execute on function private.refresh_server_authored_analytics(uuid) to authenticated;
-
 create or replace function public.refresh_server_authored_analytics(target_profile_id uuid default auth.uid())
 returns jsonb
 language sql
-security invoker
-set search_path = public
+security definer
+set search_path = ''
 as $$
   select private.refresh_server_authored_analytics(target_profile_id);
 $$;
@@ -380,7 +377,9 @@ begin
     'overview', jsonb_build_object(
       'hero', jsonb_build_object(
         'title', 'Stats overview',
-        'takeaway', 'No stats rollup is available yet.'
+        'takeaway', 'No stats rollup is available yet.',
+        'games', 0,
+        'players', 0
       ),
       'cards', '[]'::jsonb,
       'topSignals', '[]'::jsonb
