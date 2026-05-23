@@ -83,4 +83,10 @@ assert.match(
   "expected the migration to authorize shared-group deletes through current membership",
 );
 
+assert.match(
+  normalizedSource,
+  /create policy "groups_delete_group_members"[\s\S]*created_by = \(select auth\.uid\(\)\)[\s\S]*not exists \(\s*select 1\s*from public\.group_members\s*where public\.group_members\.group_id = groups\.id/i,
+  "expected the migration to preserve creator cleanup for zero-member rollback groups",
+);
+
 console.log("shared-groups-member-delete-policy.test.cjs passed");

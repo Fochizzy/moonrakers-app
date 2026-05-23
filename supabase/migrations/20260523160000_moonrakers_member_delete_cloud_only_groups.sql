@@ -29,4 +29,12 @@ using (
     where public.group_members.group_id = groups.id
       and public.group_members.profile_id = (select auth.uid())
   )
+  or (
+    created_by = (select auth.uid())
+    and not exists (
+      select 1
+      from public.group_members
+      where public.group_members.group_id = groups.id
+    )
+  )
 );
