@@ -31,12 +31,24 @@ declare
   registered_player_count integer := 0;
   finished_game_count integer := 0;
   player_row_count integer := 0;
-  base_chart_data jsonb := '[]'::jsonb;
+  base_chart_points jsonb := '[]'::jsonb;
+  base_chart_data jsonb := '{}'::jsonb;
+  player_options jsonb := '[]'::jsonb;
+  player_detail jsonb := '{}'::jsonb;
   analytics_payload jsonb;
+  target_player_name text := null;
+  target_display_name text := null;
 begin
   if target_profile_id is null or target_profile_id <> (select auth.uid()) then
     raise exception 'target_profile_id must match the authenticated profile';
   end if;
+
+  select
+    public.profiles.player_name,
+    nullif(public.profiles.display_name, '')
+  into target_player_name, target_display_name
+  from public.profiles
+  where public.profiles.id = target_profile_id;
 
   select count(*)
   into registered_player_count
@@ -56,7 +68,7 @@ begin
   where public.game_participants.profile_id = target_profile_id;
 
   if finished_game_count > 0 then
-    base_chart_data := jsonb_build_array(
+    base_chart_points := jsonb_build_array(
       jsonb_build_object(
         'x', 1,
         'y', finished_game_count,
@@ -64,6 +76,46 @@ begin
       )
     );
   end if;
+
+  player_options := jsonb_build_array(
+    jsonb_build_object(
+      'id', target_profile_id,
+      'label', coalesce(target_display_name, target_player_name, 'Current player'),
+      'playerName', target_player_name,
+      'displayName', target_display_name
+    )
+  );
+
+  player_detail := jsonb_build_object(
+    'playerId', target_profile_id,
+    'label', coalesce(target_display_name, target_player_name, 'Current player'),
+    'summary', case
+      when finished_game_count > 0 then 'Server-authored player detail is available for this profile.'
+      else 'No finished games are available for this player yet.'
+    end,
+    'stats', jsonb_build_object(
+      'games', finished_game_count,
+      'playerRows', player_row_count
+    )
+  );
+
+  base_chart_data := jsonb_build_object(
+    'points', base_chart_points,
+    'series', case
+      when jsonb_array_length(base_chart_points) > 0 then jsonb_build_array(
+        jsonb_build_object(
+          'key', 'tracked-games',
+          'label', 'Tracked games',
+          'points', base_chart_points
+        )
+      )
+      else '[]'::jsonb
+    end,
+    'meta', jsonb_build_object(
+      'hasData', jsonb_array_length(base_chart_points) > 0,
+      'pointCount', jsonb_array_length(base_chart_points)
+    )
+  );
 
   analytics_payload := jsonb_build_object(
     'generatedAt', generated_at,
@@ -132,7 +184,11 @@ begin
           )
         )
       ),
-      'players', '[]'::jsonb,
+      'players', jsonb_build_object(
+        'options', player_options,
+        'selectedPlayerId', target_profile_id,
+        'detail', player_detail
+      ),
       'playstyle', jsonb_build_object(
         'summary', case
           when finished_game_count > 0 then 'More player-specific playstyle rollups can be layered onto this payload.'
@@ -140,8 +196,16 @@ begin
         end,
         'highlights', '[]'::jsonb
       ),
-      'correlations', '[]'::jsonb,
-      'games', '[]'::jsonb
+      'correlations', jsonb_build_object(
+        'summary', 'No correlations are available yet.',
+        'items', '[]'::jsonb,
+        'selectedKey', null
+      ),
+      'games', jsonb_build_object(
+        'items', '[]'::jsonb,
+        'selectedGameId', null,
+        'detail', null
+      )
     ),
     'insightsScreen', jsonb_build_object(
       'generatedAt', generated_at,
@@ -165,7 +229,11 @@ begin
         'nodes', '[]'::jsonb,
         'edges', '[]'::jsonb
       ),
-      'correlations', '[]'::jsonb
+      'correlations', jsonb_build_object(
+        'summary', 'No insight correlations are available yet.',
+        'items', '[]'::jsonb,
+        'selectedKey', null
+      )
     ),
     'charts', jsonb_build_object(
       'default', jsonb_build_object(
@@ -173,7 +241,10 @@ begin
         'generatedAt', generated_at,
         'title', 'Analytics chart',
         'subtitle', 'Server-authored placeholder dataset.',
-        'emptyState', 'No chart data is available yet.',
+        'emptyState', jsonb_build_object(
+          'title', 'No chart data yet',
+          'description', 'Finish at least one tracked game to populate this chart.'
+        ),
         'data', base_chart_data
       ),
       'elo', jsonb_build_object(
@@ -181,7 +252,10 @@ begin
         'generatedAt', generated_at,
         'title', 'Elo trend',
         'subtitle', 'Server-authored placeholder dataset for Elo.',
-        'emptyState', 'No Elo history is available yet.',
+        'emptyState', jsonb_build_object(
+          'title', 'No Elo history yet',
+          'description', 'Finish at least one tracked game to populate Elo history.'
+        ),
         'data', base_chart_data
       ),
       'prestige', jsonb_build_object(
@@ -189,7 +263,10 @@ begin
         'generatedAt', generated_at,
         'title', 'Prestige totals',
         'subtitle', 'Server-authored placeholder dataset for prestige.',
-        'emptyState', 'No prestige totals are available yet.',
+        'emptyState', jsonb_build_object(
+          'title', 'No prestige totals yet',
+          'description', 'Finish at least one tracked game to populate prestige totals.'
+        ),
         'data', base_chart_data
       ),
       'assists', jsonb_build_object(
@@ -197,7 +274,10 @@ begin
         'generatedAt', generated_at,
         'title', 'Assist volume',
         'subtitle', 'Server-authored placeholder dataset for assists.',
-        'emptyState', 'No assist history is available yet.',
+        'emptyState', jsonb_build_object(
+          'title', 'No assist history yet',
+          'description', 'Finish at least one tracked game to populate assist history.'
+        ),
         'data', base_chart_data
       )
     )
@@ -224,6 +304,9 @@ $$;
 revoke all on function private.refresh_server_authored_analytics(uuid) from public;
 revoke all on function private.refresh_server_authored_analytics(uuid) from anon;
 revoke all on function private.refresh_server_authored_analytics(uuid) from authenticated;
+
+grant usage on schema private to authenticated;
+grant execute on function private.refresh_server_authored_analytics(uuid) to authenticated;
 
 create or replace function public.refresh_server_authored_analytics(target_profile_id uuid default auth.uid())
 returns jsonb
@@ -302,13 +385,40 @@ begin
       'cards', '[]'::jsonb,
       'topSignals', '[]'::jsonb
     ),
-    'players', '[]'::jsonb,
+    'players', jsonb_build_object(
+      'options', jsonb_build_array(
+        jsonb_build_object(
+          'id', profile_id,
+          'label', 'Current player',
+          'playerName', null,
+          'displayName', null
+        )
+      ),
+      'selectedPlayerId', profile_id,
+      'detail', jsonb_build_object(
+        'playerId', profile_id,
+        'label', 'Current player',
+        'summary', 'No player detail is available yet.',
+        'stats', jsonb_build_object(
+          'games', 0,
+          'playerRows', 0
+        )
+      )
+    ),
     'playstyle', jsonb_build_object(
       'summary', 'No playstyle data is available yet.',
       'highlights', '[]'::jsonb
     ),
-    'correlations', '[]'::jsonb,
-    'games', '[]'::jsonb
+    'correlations', jsonb_build_object(
+      'summary', 'No correlations are available yet.',
+      'items', '[]'::jsonb,
+      'selectedKey', null
+    ),
+    'games', jsonb_build_object(
+      'items', '[]'::jsonb,
+      'selectedGameId', null,
+      'detail', null
+    )
   );
 end;
 $$;
@@ -347,7 +457,11 @@ begin
       'nodes', '[]'::jsonb,
       'edges', '[]'::jsonb
     ),
-    'correlations', '[]'::jsonb
+    'correlations', jsonb_build_object(
+      'summary', 'No insight correlations are available yet.',
+      'items', '[]'::jsonb,
+      'selectedKey', null
+    )
   );
 end;
 $$;
@@ -415,8 +529,27 @@ begin
         'generatedAt', now(),
         'title', 'Elo trend',
         'subtitle', 'Server-authored placeholder dataset for Elo.',
-        'emptyState', 'No Elo history is available yet.',
-        'data', '[]'::jsonb
+        'emptyState', jsonb_build_object(
+          'title', 'No Elo history yet',
+          'description', 'Finish at least one tracked game to populate Elo history.'
+        ),
+        'data', jsonb_build_object(
+          'points', '[]'::jsonb,
+          'series', '[]'::jsonb,
+          'meta', jsonb_build_object(
+            'hasData', false,
+            'pointCount', 0,
+            'profileId', profile_id,
+            'focusPlayerId', focus_player_id,
+            'comparePlayerId', compare_player_id,
+            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
+            'selectedGameId', selected_game_id,
+            'metricKey', metric_key,
+            'lineMode', line_mode,
+            'graphMode', graph_mode,
+            'opponentId', opponent_id
+          )
+        )
       );
     when 'prestige' then
       return jsonb_build_object(
@@ -424,8 +557,27 @@ begin
         'generatedAt', now(),
         'title', 'Prestige totals',
         'subtitle', 'Server-authored placeholder dataset for prestige.',
-        'emptyState', 'No prestige totals are available yet.',
-        'data', '[]'::jsonb
+        'emptyState', jsonb_build_object(
+          'title', 'No prestige totals yet',
+          'description', 'Finish at least one tracked game to populate prestige totals.'
+        ),
+        'data', jsonb_build_object(
+          'points', '[]'::jsonb,
+          'series', '[]'::jsonb,
+          'meta', jsonb_build_object(
+            'hasData', false,
+            'pointCount', 0,
+            'profileId', profile_id,
+            'focusPlayerId', focus_player_id,
+            'comparePlayerId', compare_player_id,
+            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
+            'selectedGameId', selected_game_id,
+            'metricKey', metric_key,
+            'lineMode', line_mode,
+            'graphMode', graph_mode,
+            'opponentId', opponent_id
+          )
+        )
       );
     when 'assists' then
       return jsonb_build_object(
@@ -433,8 +585,27 @@ begin
         'generatedAt', now(),
         'title', 'Assist volume',
         'subtitle', 'Server-authored placeholder dataset for assists.',
-        'emptyState', 'No assist history is available yet.',
-        'data', '[]'::jsonb
+        'emptyState', jsonb_build_object(
+          'title', 'No assist history yet',
+          'description', 'Finish at least one tracked game to populate assist history.'
+        ),
+        'data', jsonb_build_object(
+          'points', '[]'::jsonb,
+          'series', '[]'::jsonb,
+          'meta', jsonb_build_object(
+            'hasData', false,
+            'pointCount', 0,
+            'profileId', profile_id,
+            'focusPlayerId', focus_player_id,
+            'comparePlayerId', compare_player_id,
+            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
+            'selectedGameId', selected_game_id,
+            'metricKey', metric_key,
+            'lineMode', line_mode,
+            'graphMode', graph_mode,
+            'opponentId', opponent_id
+          )
+        )
       );
     else
       return jsonb_build_object(
@@ -442,8 +613,27 @@ begin
         'generatedAt', now(),
         'title', 'Analytics chart',
         'subtitle', 'Server-authored placeholder dataset.',
-        'emptyState', 'No chart data is available yet.',
-        'data', '[]'::jsonb
+        'emptyState', jsonb_build_object(
+          'title', 'No chart data yet',
+          'description', 'Finish at least one tracked game to populate this chart.'
+        ),
+        'data', jsonb_build_object(
+          'points', '[]'::jsonb,
+          'series', '[]'::jsonb,
+          'meta', jsonb_build_object(
+            'hasData', false,
+            'pointCount', 0,
+            'profileId', profile_id,
+            'focusPlayerId', focus_player_id,
+            'comparePlayerId', compare_player_id,
+            'scopedPlayerIds', coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb),
+            'selectedGameId', selected_game_id,
+            'metricKey', metric_key,
+            'lineMode', line_mode,
+            'graphMode', graph_mode,
+            'opponentId', opponent_id
+          )
+        )
       );
   end case;
 end;
