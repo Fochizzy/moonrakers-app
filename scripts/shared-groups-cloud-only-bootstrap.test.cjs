@@ -9,21 +9,45 @@ function read(relPath) {
 }
 
 const layoutSource = read(path.join("app", "_layout.tsx"));
+const helperMatch = layoutSource.match(
+  /async function loadLocalSnapshot\(\)\s*\{([\s\S]*?)\n\}/,
+);
+
+assert.ok(
+  helperMatch,
+  "expected _layout.tsx to define loadLocalSnapshot()",
+);
+
+const helperBody = helperMatch[1];
 
 assert.doesNotMatch(
-  layoutSource,
+  helperBody,
   /loadGroups\(\)/,
   "expected _layout.tsx to stop loading local groups during bootstrap",
 );
 
-assert.match(
-  layoutSource,
-  /const \[players,\s*games\] = await Promise\.all\(\[\s*loadPlayers\(\),\s*loadGames\(\),\s*\]\);/s,
+const promiseAllMatch = helperBody.match(
+  /const\s*\[\s*players\s*,\s*games\s*\]\s*=\s*await\s*Promise\.all\s*\(\s*\[([\s\S]*?)\]\s*\)/s,
+);
+
+assert.ok(
+  promiseAllMatch,
+  "expected loadLocalSnapshot to await Promise.all for local players and games",
+);
+
+const loadCalls = Array.from(
+  promiseAllMatch[1].matchAll(/load[A-Za-z]+\(\)/g),
+  (match) => match[0],
+);
+
+assert.deepStrictEqual(
+  loadCalls,
+  ["loadPlayers()", "loadGames()"],
   "expected loadLocalSnapshot to keep only local players and games",
 );
 
 assert.match(
-  layoutSource,
+  helperBody,
   /groups:\s*\[\],/,
   "expected loadLocalSnapshot to return an empty local groups array",
 );
