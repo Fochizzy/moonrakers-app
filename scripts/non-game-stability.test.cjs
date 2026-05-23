@@ -65,12 +65,14 @@ run("Non-game TypeScript surfaces use the current option and color contracts", (
     false,
     "Expected app/_layout.tsx to stop using headerBackTitleVisible"
   );
-
-  const blueMatches = manageSource.match(/^\s+blue:\s/mg) ?? [];
-  const blueSoftMatches = manageSource.match(/^\s+blueSoft:\s/mg) ?? [];
-
-  assert.equal(blueMatches.length, 1, "Expected exactly one blue color key");
-  assert.equal(blueSoftMatches.length, 1, "Expected exactly one blueSoft color key");
+  assert.ok(
+    manageSource.includes("Redirect"),
+    "Expected manage-players-groups.tsx to redirect instead of rendering local management"
+  );
+  assert.ok(
+    manageSource.includes("APP_ROUTES.roster"),
+    "Expected manage-players-groups.tsx to redirect to APP_ROUTES.roster"
+  );
 
   assert.equal(
     cardSource.includes("raw?.muted"),
