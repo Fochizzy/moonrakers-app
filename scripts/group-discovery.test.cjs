@@ -14,6 +14,12 @@ const addPlayersSource = read(path.join("app", "add-players.tsx"));
 
 assert.match(
   helperSource,
+  /export\s+type\s+GroupSortMode\s*=\s*\"most-played\"\s*\|\s*\"recent\"\s*\|\s*\"az\"/,
+  "expected utils/groupUsageRanking.ts to export GroupSortMode with the saved-group sort modes"
+);
+
+assert.match(
+  helperSource,
   /export\s+function\s+rankGroupsWithUsage(?:<[\s\S]*?>)?\s*\(/,
   "expected utils/groupUsageRanking.ts to export rankGroupsWithUsage("
 );
