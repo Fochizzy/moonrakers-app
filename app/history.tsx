@@ -10,15 +10,17 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 
 import { loadCloudSnapshot } from '@/lib/cloud/loadCloudSnapshot';
 import { loadRegisteredProfiles } from '@/lib/cloud/loadRegisteredProfiles';
 import { loadStatsSnapshot } from '@/lib/cloud/loadStatsSnapshot';
 import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
+import { importBackupFromPicker } from '@/lib/migration/importBackupFromPicker';
 import { formatSupabaseConfigError } from '@/lib/supabase';
 import { useStore } from '@/store/useStore';
+import ActionButton from '@/components/ui/ActionButton';
 import Text from '@/components/ui/Text';
 import { APP_ROUTES } from '@/utils/appRoutes';
 
@@ -285,12 +287,17 @@ function HistoryTab({
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ intent?: string | string[] }>();
 
   const authSession = useStore((s: any) => s.authSession);
   const authProfile = useStore((s: any) => s.authProfile);
   const rawPlayers = useStore((s: any) => s.players);
   const rawGames = useStore((s: any) => s.games);
   const hydrateCloudSnapshot = useStore((s: any) => s.hydrateCloudSnapshot);
+  const importIntent =
+    String(Array.isArray(params.intent) ? params.intent[0] : params.intent ?? '')
+      .trim()
+      .toLowerCase() === 'import';
 
   const players = useMemo<Player[]>(() => (Array.isArray(rawPlayers) ? rawPlayers : []), [rawPlayers]);
   const games = useMemo<StoredGame[]>(() => (Array.isArray(rawGames) ? rawGames : []), [rawGames]);
@@ -319,6 +326,7 @@ export default function HistoryScreen() {
   const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
   const [searchFocused, setSearchFocused] = useState(false);
   const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
+  const [importingBackup, setImportingBackup] = useState(false);
 
   const availableHistoryGroups = useMemo(() => {
     const names = games
@@ -413,6 +421,92 @@ export default function HistoryScreen() {
     }
   }, [displayedGames, selectedGameId]);
 
+  async function refreshCloudHistoryState(activeSession = authSession) {
+    if (!activeSession?.user?.id) {
+      return;
+    }
+
+    const [snapshot, registeredProfiles] = await Promise.all([
+      loadCloudSnapshot(activeSession.user.id),
+      loadRegisteredProfiles().catch(() => []),
+    ]);
+    const statsSnapshot = await loadStatsSnapshot({
+      profileId: activeSession.user.id,
+      groups: snapshot.groups,
+      games: snapshot.games,
+    });
+
+    hydrateCloudSnapshot({
+      session: activeSession,
+      snapshot: {
+        ...snapshot,
+        players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
+      },
+      statsSnapshot,
+    });
+  }
+
+  async function handleImportBackup() {
+    const signedInProfileId = String(authSession?.user?.id ?? '').trim();
+    const signedInPlayerName =
+      String(authProfile?.player_name ?? '').trim() ||
+      String(authProfile?.display_name ?? '').trim();
+
+    if (!signedInProfileId || !signedInPlayerName) {
+      Alert.alert('Profile required', 'Finish login and profile setup before importing a backup.');
+      return;
+    }
+
+    setImportingBackup(true);
+
+    try {
+      const registeredProfiles = await loadRegisteredProfiles().catch(() => []);
+      const resolvedProfilesByName = Object.fromEntries(
+        registeredProfiles.flatMap((profile: any) => {
+          const name = String(profile?.name ?? '').trim();
+          const displayName = String(profile?.displayName ?? '').trim();
+          const value = { id: String(profile?.id ?? '').trim(), player_name: name };
+
+          return [name, displayName]
+            .map((candidate) => candidate.trim().toLowerCase())
+            .filter(Boolean)
+            .map((candidate) => [candidate, value] as const);
+        }),
+      );
+
+      const result = await importBackupFromPicker({
+        signedInProfileId,
+        signedInPlayerName,
+        resolvedProfilesByName,
+      });
+
+      if (!result.imported) {
+        return;
+      }
+
+      try {
+        await refreshCloudHistoryState();
+        Alert.alert(
+          'Backup imported',
+          `Imported ${result.importedGroups} groups and ${result.importedGames} games.`,
+        );
+      } catch (refreshError) {
+        console.error('Backup imported, but cloud refresh failed:', refreshError);
+        Alert.alert(
+          'Backup imported',
+          `Imported ${result.importedGroups} groups and ${result.importedGames} games, but the local view could not refresh yet.`,
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Import failed',
+        formatSupabaseConfigError(error) || 'Something went wrong while importing that backup.',
+      );
+    } finally {
+      setImportingBackup(false);
+    }
+  }
+
   const handleDeleteGame = (game: StoredGame, index: number) => {
     const normalizedGameId = normalizeHistoryId(game?.id);
     const normalizedHostProfileId = normalizeHistoryId(game?.hostProfileId);
@@ -477,27 +571,7 @@ export default function HistoryScreen() {
                 }
 
                 try {
-                  const [snapshot, registeredProfiles] = await Promise.all([
-                    loadCloudSnapshot(activeSession.user.id),
-                    loadRegisteredProfiles().catch(() => []),
-                  ]);
-                  const statsSnapshot = await loadStatsSnapshot({
-                    profileId: activeSession.user.id,
-                    groups: snapshot.groups,
-                    games: snapshot.games,
-                  });
-
-                  hydrateCloudSnapshot({
-                    session: activeSession,
-                    snapshot: {
-                      ...snapshot,
-                      players: mergeRegisteredProfilesIntoPlayers(
-                        snapshot.players,
-                        registeredProfiles,
-                      ),
-                    },
-                    statsSnapshot,
-                  });
+                  await refreshCloudHistoryState(activeSession);
                 } catch (refreshError) {
                   console.error('Game deleted, but cloud refresh failed:', refreshError);
                   Alert.alert(
@@ -554,6 +628,30 @@ export default function HistoryScreen() {
               <Text style={styles.commandButtonText}>Back to Command</Text>
             </Pressable>
           </View>
+        </View>
+
+        <View style={[styles.sectionCompact, importIntent && styles.sectionCompactHighlighted]}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeaderCopy}>
+              <Text style={styles.sectionTitle}>Backup Center</Text>
+              <Text style={[styles.sectionSub, styles.sectionSubLeft]}>
+                Import older Moonrakers backups into this cloud profile
+              </Text>
+            </View>
+          </View>
+
+          <ActionButton
+            title={importingBackup ? 'Importing...' : 'Import backup'}
+            subtitle="Merge a local JSON backup into this signed-in profile"
+            onPress={() => {
+              void handleImportBackup();
+            }}
+            disabled={importingBackup}
+          />
+
+          <Text style={styles.backupCenterNote}>
+            Best for older local backup files you want reflected in History, Charts, and Stats.
+          </Text>
         </View>
 
         <View style={styles.sectionCompact}>
@@ -824,6 +922,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     marginBottom: 6,
   },
+  sectionCompactHighlighted: {
+    borderColor: 'rgba(168,85,247,0.48)',
+    backgroundColor: 'rgba(18,22,46,0.98)',
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -859,6 +961,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: 'right',
     flexShrink: 1,
+  },
+  sectionSubLeft: {
+    textAlign: 'left',
+  },
+  backupCenterNote: {
+    color: COLORS.muted,
+    fontSize: 10,
+    marginTop: 8,
   },
   input: {
     borderWidth: 1,
