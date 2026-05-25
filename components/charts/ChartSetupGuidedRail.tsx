@@ -12,6 +12,7 @@ type ChartSetupStageShellProps = {
   index: number;
   title: string;
   helper?: string | null;
+  lockedHelper?: string | null;
   summary?: string | null;
   status: "active" | "completed" | "locked";
   onEdit?: () => void;
@@ -23,6 +24,7 @@ export function ChartSetupStageShell({
   index,
   title,
   helper,
+  lockedHelper,
   summary,
   status,
   onEdit,
@@ -33,7 +35,7 @@ export function ChartSetupStageShell({
   const completed = status === "completed";
   const active = status === "active";
   const helperText = locked
-    ? helper || `Unlocks after ${title}`
+    ? lockedHelper || `Unlocks after ${title}`
     : completed
       ? summary
       : helper;
