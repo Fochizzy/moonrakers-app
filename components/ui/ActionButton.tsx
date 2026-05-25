@@ -22,29 +22,59 @@ type ActionButtonProps = {
   variant?: ActionButtonVariant;
 };
 
+type ActionTone = {
+  backgroundColor: string;
+  borderColor: string;
+  pressedBackgroundColor: string;
+  shadowColor: string;
+  shadowOpacity: number;
+  titleColor: string;
+  subtitleColor: string;
+};
+
 function getTone(variant: ActionButtonVariant, theme: ReturnType<typeof useTheme>) {
   switch (variant) {
     case "secondary":
       return {
-        backgroundColor: "rgba(103,232,249,0.12)",
-        borderColor: theme.colors.border.emphasis,
-      };
+        backgroundColor: "rgba(96,165,250,0.12)",
+        borderColor: "rgba(96,165,250,0.3)",
+        pressedBackgroundColor: "rgba(96,165,250,0.2)",
+        shadowColor: theme.colors.accent.info,
+        shadowOpacity: 0.16,
+        titleColor: "#E0F2FE",
+        subtitleColor: "rgba(224,242,254,0.82)",
+      } satisfies ActionTone;
     case "ghost":
       return {
-        backgroundColor: "rgba(255,255,255,0.03)",
-        borderColor: theme.colors.border.subtle,
-      };
+        backgroundColor: "rgba(255,255,255,0.02)",
+        borderColor: "rgba(148,163,184,0.16)",
+        pressedBackgroundColor: "rgba(255,255,255,0.06)",
+        shadowColor: "transparent",
+        shadowOpacity: 0,
+        titleColor: "#D7E7FF",
+        subtitleColor: "rgba(215,231,255,0.72)",
+      } satisfies ActionTone;
     case "danger":
       return {
-        backgroundColor: "rgba(248,113,113,0.12)",
-        borderColor: "rgba(248,113,113,0.28)",
-      };
+        backgroundColor: "rgba(239,68,68,0.14)",
+        borderColor: "rgba(248,113,113,0.32)",
+        pressedBackgroundColor: "rgba(239,68,68,0.24)",
+        shadowColor: theme.colors.accent.error,
+        shadowOpacity: 0.18,
+        titleColor: "#FECACA",
+        subtitleColor: "rgba(254,202,202,0.82)",
+      } satisfies ActionTone;
     case "primary":
     default:
       return {
-        backgroundColor: "rgba(168,85,247,0.16)",
-        borderColor: theme.colors.border.brand,
-      };
+        backgroundColor: "rgba(99,102,241,0.24)",
+        borderColor: "rgba(129,140,248,0.4)",
+        pressedBackgroundColor: "rgba(99,102,241,0.34)",
+        shadowColor: theme.colors.accent.primary,
+        shadowOpacity: 0.24,
+        titleColor: "#F8FBFF",
+        subtitleColor: "rgba(232,240,255,0.86)",
+      } satisfies ActionTone;
   }
 }
 
@@ -69,9 +99,14 @@ export default function ActionButton({
         {
           borderRadius: theme.shape.radius.button,
           backgroundColor: pressed && !disabled
-            ? theme.colors.interaction.selected
+            ? tone.pressedBackgroundColor
             : tone.backgroundColor,
           borderColor: tone.borderColor,
+          shadowColor: tone.shadowColor,
+          shadowOpacity: disabled ? 0 : tone.shadowOpacity,
+          shadowRadius: tone.shadowOpacity > 0 ? 16 : 0,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: disabled ? 0 : tone.shadowOpacity > 0 ? 4 : 0,
           opacity: disabled ? 0.55 : 1,
         },
         style,
@@ -80,8 +115,12 @@ export default function ActionButton({
       <View style={styles.content}>
         {icon}
         <View style={styles.copy}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          <Text style={[styles.title, { color: tone.titleColor }]}>{title}</Text>
+          {subtitle ? (
+            <Text style={[styles.subtitle, { color: tone.subtitleColor }]}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
       </View>
     </Pressable>
@@ -118,6 +157,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     textAlign: "center",
-    color: "rgba(232, 240, 255, 0.82)",
   },
 });

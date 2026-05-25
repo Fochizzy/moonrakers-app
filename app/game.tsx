@@ -20,7 +20,7 @@ import {
   usePlayers,
   useGroups,
 } from '@/store/useStore';
-import StarryNight from '@/components/ui/StarryNight';
+import ScreenBackground from '@/components/ui/ScreenBackground';
 import Text from '@/components/ui/Text';
 import { useSyncedGameDraft } from '@/lib/game-draft/useSyncedGameDraft';
 import {
@@ -1510,7 +1510,7 @@ export default function Game() {
 
   return (
     <View style={[styles.screen, { backgroundColor: appBackground }]}>
-      <StarryNight />
+      <ScreenBackground preset="tactical" />
 
       <View
         pointerEvents="none"

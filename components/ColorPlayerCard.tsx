@@ -23,8 +23,8 @@ import {
 import { getPlayerColors } from "@/utils/colors";
 import { buildPlayerIdentity } from "@/utils/playerIdentity";
 import { buildPlayerCardEloMap, resolvePlayerCardElo } from "@/utils/playerCardElo";
+import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
-import StarryNight from "@/components/ui/StarryNight";
 
 type PlayerStats = {
   prestige?: number;
@@ -874,7 +874,7 @@ export default function ColorPlayerCardScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.backgroundLayer}>
-        <StarryNight />
+        <ScreenBackground preset="quiet" />
         <View style={styles.backgroundDim} />
       </View>
 

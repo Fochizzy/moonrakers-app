@@ -1,15 +1,14 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
 
 import CorrelationStats from "@/components/CorrelationStats";
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
 import { buildAnalyticsPlayerDirectory } from "@/lib/cloud/analytics/analyticsPlayers";
 import ActionButton from "@/components/ui/ActionButton";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
@@ -84,36 +83,6 @@ function normalizePlayerOption(entry: PayloadRecord, index: number): PlayerOptio
     displayName: toStringValue(entry.displayName, ""),
     playerName: toStringValue(entry.playerName, ""),
   };
-}
-
-function SectionTabButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.sectionTabButton}>
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.sectionTabButtonText,
-          active && styles.sectionTabButtonTextActive,
-        ]}
-      >
-        {label}
-      </Text>
-      <View
-        style={[
-          styles.sectionTabUnderline,
-          active && styles.sectionTabUnderlineActive,
-        ]}
-      />
-    </Pressable>
-  );
 }
 
 export default function InsightsScreen() {
@@ -286,15 +255,18 @@ export default function InsightsScreen() {
     <PageShell preset="analytics">
       <HeroCard
         eyebrow="Analytics"
+        headerAction={
+          <ActionButton
+            title="Back to Command"
+            variant="ghost"
+            onPress={() => router.push(APP_ROUTES.home)}
+            style={styles.heroActionButton}
+          />
+        }
         subtitle={heroSubtitle}
+        title="Insights Hub"
         size="compact"
       >
-        <View style={styles.heroHeader}>
-          <Text style={styles.title}>Insights Hub</Text>
-          <Pressable onPress={() => router.push(APP_ROUTES.home)} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Back to Command</Text>
-          </Pressable>
-        </View>
         {hasPlayerAwareActions ? (
           <View style={styles.contextActionGrid}>
             <Pressable
@@ -345,53 +317,73 @@ export default function InsightsScreen() {
           </View>
         ) : (
           <View style={styles.linkRow}>
-            <Pressable
-              style={styles.linkButton}
+            <ActionButton
+              title="Compare"
+              variant="secondary"
               onPress={() => router.push(APP_ROUTES.compare)}
-            >
-              <Text style={styles.linkButtonText}>Compare</Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.linkButton}
+              style={styles.linkActionButton}
+            />
+            <ActionButton
+              title="Stats"
+              variant="ghost"
               onPress={() => router.push(APP_ROUTES.stats)}
-            >
-              <Text style={styles.linkButtonText}>Stats</Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.linkButton}
+              style={styles.linkActionButton}
+            />
+            <ActionButton
+              title="Elo"
+              variant="ghost"
               onPress={() => router.push(APP_ROUTES.elo)}
-            >
-              <Text style={styles.linkButtonText}>Elo</Text>
-            </Pressable>
+              style={styles.linkActionButton}
+            />
           </View>
         )}
-
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.sectionTabRail}
-          showsHorizontalScrollIndicator={false}
-        >
-          {insightSectionTabs.map((tab) => (
-            <SectionTabButton
-              key={tab.key}
-              label={tab.label}
-              active={activeSectionTab === tab.key}
-              onPress={() => setActiveSectionTab(tab.key)}
-            />
-          ))}
-        </ScrollView>
       </HeroCard>
+
+      <AnalyticsControlRail
+        title="Insight Lenses"
+        subtitle={
+          activeSectionTab === "pairingCorrelations"
+            ? "Pick the player whose server-authored correlation reads you want to inspect."
+            : "Switch between the published correlation lenses without leaving this route."
+        }
+        tabs={insightSectionTabs}
+        activeTabKey={activeSectionTab}
+        onTabChange={(key) => setActiveSectionTab(key as InsightSectionTab)}
+        actions={<DefinitionsJumpLink category="correlations" />}
+        search={
+          activeSectionTab === "pairingCorrelations"
+            ? {
+                query: playerSearchQuery,
+                onQueryChange: setPlayerSearchQuery,
+                placeholder: "Search players",
+                items: filteredPlayerOptions.map((player) => ({
+                  id: player.id,
+                  label: player.label,
+                  meta:
+                    player.displayName ||
+                    player.playerName ||
+                    (player.id === authProfileId
+                      ? "Signed-in player"
+                      : "Shared-network player"),
+                })),
+                selectedIds: selectedProfileId ? [selectedProfileId] : [],
+                onSelect: (id) => setSelectedProfileId(id),
+                emptyText: "No players match this search.",
+                helperText:
+                  "Select the player whose published personal correlations you want to inspect.",
+                variant: "list",
+              }
+            : null
+        }
+      />
 
       <AnalyticsStateSection
         eyebrow="Insights"
         title={activeSectionLabel}
-        actions={<DefinitionsJumpLink category="correlations" />}
         helpCategory="correlations"
         subtitle={
           activeSectionTab === "pairingCorrelations"
-            ? "Choose the player whose personal correlations you want to inspect."
+            ? "Published personal correlations and synergy reads from the shared insights payload."
             : "Published correlation trends and synergy reads from the shared insights payload."
         }
         state={insightsState}
@@ -410,42 +402,11 @@ export default function InsightsScreen() {
         tone={error ? "danger" : insightsState === "ready" ? "info" : "warning"}
       >
         {activeSectionTab === "pairingCorrelations" ? (
-          <View style={styles.selectorShell}>
-            <TextInput
-              style={styles.playerSearchInput}
-              value={playerSearchQuery}
-              onChangeText={setPlayerSearchQuery}
-              placeholder="Search players"
-              placeholderTextColor="#64748b"
-            />
-            <ScrollView
-              style={styles.playerSearchResults}
-              contentContainerStyle={styles.playerSearchResultsContent}
-              nestedScrollEnabled
-            >
-              {filteredPlayerOptions.length === 0 && playerSearchQuery.trim() ? (
-                <Text style={styles.playerSearchEmpty}>No players match this search.</Text>
-              ) : (
-                filteredPlayerOptions.map((player) => (
-                  <Pressable
-                    key={player.id}
-                    style={[
-                      styles.playerSearchResult,
-                      selectedProfileId === player.id && styles.playerSearchResultActive,
-                    ]}
-                    onPress={() => setSelectedProfileId(player.id)}
-                  >
-                    <View style={styles.playerSearchResultTextWrap}>
-                      <Text style={styles.playerSearchResultName}>{player.label}</Text>
-                      <Text style={styles.playerSearchResultMeta}>
-                        {player.displayName || player.playerName || (player.id === authProfileId ? "Signed-in player" : "Shared-network player")}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))
-              )}
-            </ScrollView>
-          </View>
+          <Text style={styles.sectionReadyHint}>
+            {selectedPlayer?.label
+              ? `Showing published personal correlations for ${selectedPlayer.label}.`
+              : "Choose a player above to focus the published personal correlation view."}
+          </Text>
         ) : (
           <Text style={styles.sectionReadyHint}>
             The correlation breakdown below is live and stays server-authored so the same trend language can be reused across analytics surfaces.
@@ -491,6 +452,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
+  },
+  heroActionButton: {
+    minWidth: 164,
+  },
+  linkActionButton: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     color: "#EAF2FF",

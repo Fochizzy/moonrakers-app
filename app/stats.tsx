@@ -8,6 +8,7 @@ import {
 import { useRouter } from "expo-router";
 
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
 import PlaystyleSection from "@/components/stats/PlaystyleSection";
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
@@ -30,6 +31,13 @@ type StatsTab = "overview" | "players" | "playstyle" | "correlations" | "games";
 
 type PayloadRecord = Record<string, unknown>;
 
+const statsTabs: Array<{ key: StatsTab; label: string }> = [
+  { key: "overview", label: "Home" },
+  { key: "players", label: "Players" },
+  { key: "playstyle", label: "Playstyle" },
+  { key: "correlations", label: "Insights" },
+  { key: "games", label: "Games" },
+];
 
 function toRecord(value: unknown): PayloadRecord {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -115,33 +123,6 @@ function normalizeTopSignals(value: unknown, generatedAt: unknown) {
     },
     ...topSignals,
   ];
-}
-
-function TabButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.tabButton}>
-      <Text
-        numberOfLines={1}
-        style={[styles.tabButtonText, active && styles.tabButtonTextActive]}
-      >
-        {label}
-      </Text>
-      <View
-        style={[
-          styles.tabButtonUnderline,
-          active && styles.tabButtonUnderlineActive,
-        ]}
-      />
-    </Pressable>
-  );
 }
 
 function StatPill({
@@ -910,13 +891,16 @@ export default function StatsScreen() {
                   ? "Loading Supabase-authored statistics."
                   : toStringValue(
                       hero.takeaway,
-                      "Supabase now authors the statistics payload for this screen.",
+              "Supabase now authors the statistics payload for this screen.",
                     )}
             </Text>
           </View>
-          <Pressable onPress={() => router.push(APP_ROUTES.home)} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Back to Command</Text>
-          </Pressable>
+          <ActionButton
+            title="Back to Command"
+            variant="ghost"
+            onPress={() => router.push(APP_ROUTES.home)}
+            style={styles.backActionButton}
+          />
         </View>
         <View style={styles.statsHeroHighlights}>
           {heroHighlights.map((item) => (
@@ -928,33 +912,13 @@ export default function StatsScreen() {
         </View>
       </SectionCard>
 
-      <View style={styles.primaryTabRail}>
-        <TabButton
-          label="Home"
-          active={activeTab === "overview"}
-          onPress={() => setActiveTab("overview")}
-        />
-        <TabButton
-          label="Players"
-          active={activeTab === "players"}
-          onPress={() => setActiveTab("players")}
-        />
-        <TabButton
-          label="Playstyle"
-          active={activeTab === "playstyle"}
-          onPress={() => setActiveTab("playstyle")}
-        />
-        <TabButton
-          label="Insights"
-          active={activeTab === "correlations"}
-          onPress={() => setActiveTab("correlations")}
-        />
-        <TabButton
-          label="Games"
-          active={activeTab === "games"}
-          onPress={() => setActiveTab("games")}
-        />
-      </View>
+      <AnalyticsControlRail
+        title="Browse Statistics"
+        subtitle="Move between the current server-authored slices without leaving the screen."
+        tabs={statsTabs}
+        activeTabKey={activeTab}
+        onTabChange={(key) => setActiveTab(key as StatsTab)}
+      />
 
       {activeTab === "overview" && renderOverviewTab()}
       {activeTab === "players" && renderPlayersTab()}
@@ -998,6 +962,9 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignSelf: "flex-start",
+  },
+  backActionButton: {
+    minWidth: 160,
   },
   backButtonText: {
     color: "#7D9BC4",

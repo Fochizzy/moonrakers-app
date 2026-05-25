@@ -5,14 +5,15 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import ScreenBackground from "@/components/ui/ScreenBackground";
+import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
+import ActionButton from "@/components/ui/ActionButton";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { useStore } from "@/store/useStore";
 
@@ -624,12 +625,7 @@ export default function IndexScreen() {
       : "Sentence updates live as you build the group condition.";
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.backgroundLayer}>
-        <ScreenBackground preset="analytics" />
-        <View style={styles.backgroundDim} />
-      </View>
-
+    <PageShell preset="analytics" density="compact" scroll={false}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
@@ -637,40 +633,44 @@ export default function IndexScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.navRow}>
-          <TouchableOpacity style={styles.navPill} onPress={() => router.push(APP_ROUTES.home)} activeOpacity={0.9}>
-            <Text style={styles.navPillText}>Back to Command</Text>
-          </TouchableOpacity>
-          <Pressable
-            style={({ pressed }) => [styles.navPill, pressed && { opacity: 0.9 }]}
-            onPress={() => router.push("/stats")}
-          >
-            <Text style={styles.navPillText}>Stats</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.tabGrid}>
-          <View style={styles.tabGridRowTwo}>
-            {[
-              { key: "conditional" as AffectTab, label: "Conditional Affect" },
-              { key: "cohesion" as AffectTab, label: "Cohesion Affect" },
-            ].map((tab) => {
-              const active = tab.key === activeTab;
-              return (
-                <Pressable
-                  key={tab.key}
-                  style={({ pressed }) => [styles.underlineMainTab, styles.underlineMainTabTwoCol, pressed && { opacity: 0.9 }]}
-                  onPress={() => setActiveTab(tab.key)}
-                >
-                  <Text style={[styles.underlineMainTabText, active && styles.underlineMainTabTextActive]}>
-                    {tab.label}
-                  </Text>
-                  <View style={[styles.underlineMainTabLine, active && styles.underlineMainTabLineActive]} />
-                </Pressable>
-              );
-            })}
+        <HeroCard
+          eyebrow="Compare"
+          title={activeTab === "conditional" ? "Conditional Affect" : "Cohesion Affect"}
+          subtitle={
+            activeTab === "conditional"
+              ? liveSentenceSubtitle
+              : "Select the side you want to compare on this page."
+          }
+          size="compact"
+          headerAction={
+            <ActionButton
+              title="Back to Command"
+              variant="ghost"
+              onPress={() => router.push(APP_ROUTES.home)}
+              style={styles.heroActionButton}
+            />
+          }
+        >
+          <View style={styles.heroActionsRow}>
+            <ActionButton
+              title="Stats"
+              variant="secondary"
+              onPress={() => router.push("/stats")}
+              style={styles.heroSecondaryAction}
+            />
           </View>
-        </View>
+        </HeroCard>
+
+        <AnalyticsControlRail
+          title="Compare Lens"
+          subtitle="Switch between the live condition builder and the full cohesion review."
+          tabs={[
+            { key: "conditional", label: "Conditional Affect" },
+            { key: "cohesion", label: "Cohesion Affect" },
+          ]}
+          activeTabKey={activeTab}
+          onTabChange={(key) => setActiveTab(key as AffectTab)}
+        />
 
         <View style={styles.sectionCompact}>
           <View style={styles.sectionHeaderRow}>
@@ -886,7 +886,7 @@ export default function IndexScreen() {
         metric={selectedMetricInfo as any}
         onClose={() => setSelectedMetricInfo(null)}
       />
-    </SafeAreaView>
+    </PageShell>
   );
 }
 
@@ -908,6 +908,16 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 6,
     paddingBottom: 10,
+  },
+  heroActionButton: {
+    minWidth: 164,
+  },
+  heroActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  heroSecondaryAction: {
+    minWidth: 132,
   },
 
   headerCard: {
