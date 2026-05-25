@@ -10,20 +10,20 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /<View style=\{styles\.heroActionRow\}>[\s\S]*\{setupOpen \? \([\s\S]*label="Open Chart"[\s\S]*onPress=\{\(\) => openChart\(selectedChart\)\}[\s\S]*tone="green"[\s\S]*size="compact"[\s\S]*<SetupBackButton onPress=\{\(\) => setChartSetupOpen\(false\)\} \/>[\s\S]*\) : \([\s\S]*label="Adjust"[\s\S]*onPress=\{\(\) => openSetup\(\)\}[\s\S]*tone="blue"[\s\S]*size="compact"[\s\S]*\)\}/s,
-  "expected the hero action row to swap from Adjust into Open Chart plus Close Setup when setup is open, without a star action"
+  /<ChartSetupHeroBar[\s\S]*setupOpen=\{setupOpen\}[\s\S]*onToggleSetup=\{/,
+  "expected the charts route to hand setup entry and exit to the lightweight hero bar"
 );
 
 assert.doesNotMatch(
   source,
-  /label=\{setupOpen \? "Close" : "Adjust"\}/,
-  "expected the sticky setup CTA to stop using the old Close label toggle during chart setup"
+  /label="Open Chart"[\s\S]*heroActionRow/,
+  "expected the hero to stop owning the primary Open Chart CTA"
 );
 
-assert.doesNotMatch(
+assert.match(
   source,
-  /function StarButton|styles\.starButton|styles\.starText|styles\.starTextActive|<StarButton/,
-  "expected the chart header star affordance to be removed altogether"
+  /<ChartSetupStageAction[\s\S]*title="Open Chart"/,
+  "expected the final Style stage to own the primary Open Chart CTA"
 );
 
 console.log("chart-setup-primary-cta.test.cjs passed");
