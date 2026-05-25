@@ -13,6 +13,11 @@ const suites = {
     "scripts/player-directory-visual-system.test.cjs",
     "scripts/game-flow-shell-upgrades.test.cjs",
     "scripts/legacy-cleanup-guards.test.cjs",
+    "scripts/chart-guided-rail-model.test.cjs",
+    "scripts/chart-guided-rail-structure.test.cjs",
+    "scripts/chart-guided-rail-route.test.cjs",
+    "scripts/chart-setup-primary-cta.test.cjs",
+    "scripts/chart-setup-back-pill.test.cjs",
   ],
 };
 
