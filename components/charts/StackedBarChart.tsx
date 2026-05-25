@@ -8,7 +8,12 @@ import {
 } from "react-native";
 import Svg, { Rect, Text as SvgText } from "react-native-svg";
 
+import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import ChartStage from "@/components/charts/ChartStage";
+import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
 import Text from "@/components/ui/Text";
+import { resolveStoredPlayerColor } from "@/utils/playerColor";
+import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 type Segment = {
   key: string;
@@ -46,21 +51,12 @@ export type StackedBarChartProps = {
   title?: string;
   subtitle?: string;
   emptyText?: string;
-
-  /**
-   * Future-facing metric support.
-   * If metricDataMap is provided, the chart becomes fully metric-driven.
-   */
   metricOptions?: MetricOption[];
   metricDataMap?: Record<string, StackedRow[]>;
   activeMetricKey?: string;
   defaultMetricKey?: string;
   onChangeMetric?: (metricKey: string) => void;
   showMetricSelector?: boolean;
-
-  /**
-   * Player scope controls.
-   */
   selectedPlayerIds?: string[];
   defaultSelectedPlayerIds?: string[];
   onChangeSelectedPlayerIds?: (playerIds: string[]) => void;
@@ -68,13 +64,10 @@ export type StackedBarChartProps = {
   playerMode?: PlayerMode;
   defaultPlayerMode?: PlayerMode;
   onChangePlayerMode?: (mode: PlayerMode) => void;
-
-  /**
-   * Density / list controls.
-   */
   maxRows?: number;
   maxVisibleMetricOptions?: number;
   showCategorySelector?: boolean;
+  showHeader?: boolean;
 };
 
 const COLORS = {
@@ -89,8 +82,6 @@ const COLORS = {
   blueSoft: "rgba(59,130,246,0.18)",
   green: "#22C55E",
   greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
   border: "rgba(255,255,255,0.08)",
   whiteSoft: "rgba(255,255,255,0.06)",
 };
@@ -147,7 +138,7 @@ function withAlpha(hexOrRgba: string, alpha: number) {
     if (hex.length === 3) {
       hex = hex
         .split("")
-        .map((c) => c + c)
+        .map((char) => char + char)
         .join("");
     }
 
@@ -162,45 +153,12 @@ function withAlpha(hexOrRgba: string, alpha: number) {
   return `rgba(255,255,255,${alpha})`;
 }
 
-function UnderlineOption({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.underlineTabButton} onPress={onPress}>
-      <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
-        {label}
-      </Text>
-      <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-    </Pressable>
-  );
-}
-
-function getMetricTone(metricKey?: string) {
-  switch (metricKey) {
-    case "directPrestige":
-    case "directEfficiency":
-    case "elo":
-    case "eloDelta":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    case "objectivePrestige":
-    case "contracts":
-    case "wins":
-    case "winRate":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    case "assistPrestigeReceived":
-    case "assistPrestigeSent":
-    case "assists":
-    case "assistEfficiency":
-      return { bg: COLORS.greenSoft, value: COLORS.green };
-    default:
-      return { bg: COLORS.accentSoft, value: COLORS.accent };
+function normalizeAccentColor(color?: string, index = 0) {
+  const raw = String(color ?? "").trim();
+  if (raw.startsWith("#") || raw.startsWith("rgb") || raw.startsWith("hsl")) {
+    return raw;
   }
+  return getPlayerAccentColor(resolveStoredPlayerColor(color, index));
 }
 
 function getRowTotal(row: StackedRow) {
@@ -224,7 +182,7 @@ function buildLegendFromRows(rows: StackedRow[]) {
         seen.set(segment.key, {
           key: segment.key,
           label: segment.label || titleCase(segment.key),
-          color: segment.color || COLORS.accent,
+          color: normalizeAccentColor(segment.color) || COLORS.accent,
         });
       }
     }
@@ -234,9 +192,9 @@ function buildLegendFromRows(rows: StackedRow[]) {
 }
 
 function resolvePlayerColor(row: StackedRow, players: PlayerLike[]) {
-  if (row.color) return row.color;
+  if (row.color) return normalizeAccentColor(row.color);
   const matched = players.find((player) => String(player.id) === String(row.id));
-  return matched?.color || COLORS.accent;
+  return normalizeAccentColor(matched?.color);
 }
 
 function buildChartWidth(deviceWidth: number) {
@@ -276,6 +234,21 @@ function clampRowsByPlayerMode(
   return rows.slice(0, maxRows);
 }
 
+function SectionHeader({
+  title,
+  sub,
+}: {
+  title: string;
+  sub: string;
+}) {
+  return (
+    <View style={styles.sectionHeaderRow}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionSub}>{sub}</Text>
+    </View>
+  );
+}
+
 function StackedBarChart({
   data = [],
   players = [],
@@ -298,6 +271,7 @@ function StackedBarChart({
   maxRows = 8,
   maxVisibleMetricOptions = 14,
   showCategorySelector = true,
+  showHeader = true,
 }: StackedBarChartProps) {
   const { width: deviceWidth } = useWindowDimensions();
 
@@ -325,6 +299,15 @@ function StackedBarChart({
     useState<string[]>(defaultSelectedPlayerIds);
   const [uncontrolledPlayerMode, setUncontrolledPlayerMode] =
     useState<PlayerMode>(defaultPlayerMode);
+
+  const normalizedPlayers = useMemo(
+    () =>
+      players.map((player, index) => ({
+        ...player,
+        color: normalizeAccentColor(player.color, index),
+      })),
+    [players]
+  );
 
   useEffect(() => {
     if (!isMetricControlled) {
@@ -371,13 +354,13 @@ function StackedBarChart({
       .map((row) => ({
         ...row,
         label: row.label || "Unknown",
-        color: resolvePlayerColor(row, players),
+        color: resolvePlayerColor(row, normalizedPlayers),
         segments: (row.segments || [])
           .map((segment) => ({
             ...segment,
             label: segment.label || titleCase(segment.key),
             value: Math.max(0, toNumber(segment.value)),
-            color: segment.color || COLORS.accent,
+            color: normalizeAccentColor(segment.color) || COLORS.accent,
           }))
           .filter((segment) => segment.value > 0),
       }))
@@ -389,13 +372,25 @@ function StackedBarChart({
       currentSelectedPlayerIds,
       maxRows
     );
-  }, [currentPlayerMode, currentSelectedPlayerIds, maxRows, players, resolvedRows]);
+  }, [
+    currentPlayerMode,
+    currentSelectedPlayerIds,
+    maxRows,
+    normalizedPlayers,
+    resolvedRows,
+  ]);
 
   const hasData = normalizedRows.length > 0;
   const totals = useMemo(() => normalizedRows.map(getRowTotal), [normalizedRows]);
   const grandTotal = useMemo(() => totals.reduce((sum, value) => sum + value, 0), [totals]);
+  const maxVisibleTotal = useMemo(
+    () => totals.reduce((max, value) => Math.max(max, value), 0),
+    [totals]
+  );
   const strongestRow = normalizedRows[0] ?? null;
   const strongestTotal = strongestRow ? getRowTotal(strongestRow) : 0;
+  const leaderShare = grandTotal > 0 ? Math.round((strongestTotal / grandTotal) * 100) : 0;
+  const dominantSegment = strongestRow ? getPrimarySegment(strongestRow) : null;
   const legend = useMemo(() => buildLegendFromRows(normalizedRows), [normalizedRows]);
 
   const selectedMetricOption = useMemo(() => {
@@ -417,53 +412,26 @@ function StackedBarChart({
   const chartInnerWidth = Math.max(chartWidth - labelWidth - rightValueWidth - 12, 120);
   const chartHeight = Math.max(normalizedRows.length * (barHeight + rowGap), 12);
 
-  const topCards = useMemo(() => {
-    if (!hasData) return [];
-
-    const dominantSegment = strongestRow ? getPrimarySegment(strongestRow) : null;
-    const dominantTone = getMetricTone(dominantSegment?.key);
-
-    return [
-      {
-        key: "leader",
-        label: "Top Total",
-        value: compactNumber(strongestTotal),
-        sub: strongestRow?.label || "No leader",
-        toneBg: COLORS.accentSoft,
-        toneValue: COLORS.accent,
-      },
-      {
-        key: "share",
-        label: "Leader Share",
-        value:
-          grandTotal > 0 ? `${Math.round((strongestTotal / grandTotal) * 100)}%` : "0%",
-        sub: "Of visible stack",
-        toneBg: COLORS.blueSoft,
-        toneValue: COLORS.blue,
-      },
-      {
-        key: "mix",
-        label: "Top Mix",
-        value: dominantSegment?.label || "—",
-        sub: dominantSegment ? compactNumber(dominantSegment.value) : "0",
-        toneBg: dominantTone.bg,
-        toneValue: dominantTone.value,
-      },
-    ];
-  }, [grandTotal, hasData, strongestRow, strongestTotal]);
-
-  const summaryText = useMemo(() => {
-    if (!hasData) return null;
-
-    const leaderName = strongestRow?.label || "Top player";
-    const leaderShare =
-      grandTotal > 0 ? `${Math.round((strongestTotal / grandTotal) * 100)}%` : "0%";
-    const metricLabel = selectedMetricOption?.label || title;
-
-    return `${leaderName} leads ${metricLabel.toLowerCase()} composition with ${compactNumber(
-      strongestTotal
-    )}, representing ${leaderShare} of the visible total.`;
-  }, [grandTotal, hasData, selectedMetricOption?.label, strongestRow, strongestTotal, title]);
+  const categoryTabs = useMemo(
+    () => metricCategories.map((category) => ({ key: category, label: category })),
+    [metricCategories]
+  );
+  const metricTabs = useMemo(
+    () =>
+      filteredMetricOptions.map((option) => ({
+        key: option.key,
+        label: option.shortLabel ?? option.label,
+      })),
+    [filteredMetricOptions]
+  );
+  const playerModeTabs = useMemo(
+    () => [
+      { key: "top", label: "Top" },
+      { key: "all", label: "All" },
+      { key: "selected", label: "Selected" },
+    ],
+    []
+  );
 
   function handleMetricChange(metricKey: string) {
     if (!hasMetricMap) return;
@@ -498,91 +466,73 @@ function StackedBarChart({
     <View style={styles.wrap}>
       {showMetricSelector && hasMetricMap ? (
         <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Metric</Text>
-            <Text style={styles.sectionSub}>
-              {selectedMetricOption?.label ?? titleCase(currentMetricKey || "metric")}
-            </Text>
-          </View>
+          <SectionHeader
+            title="Metric"
+            sub={selectedMetricOption?.label ?? titleCase(currentMetricKey || "metric")}
+          />
 
           {showCategorySelector && metricCategories.length > 1 ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.underlineSelectorRow}
+              contentContainerStyle={styles.underlineScroll}
             >
-              {metricCategories.map((category) => (
-                <UnderlineOption
-                  key={category}
-                  label={category}
-                  active={category === activeCategory}
-                  onPress={() => setActiveCategory(category)}
-                />
-              ))}
+              <ChartUnderlineTabs
+                items={categoryTabs}
+                activeKey={activeCategory}
+                onChange={setActiveCategory}
+              />
             </ScrollView>
           ) : null}
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.underlineSelectorRow}
+            contentContainerStyle={styles.underlineScroll}
           >
-            {filteredMetricOptions.map((option) => (
-              <UnderlineOption
-                key={option.key}
-                label={option.shortLabel ?? option.label}
-                active={option.key === currentMetricKey}
-                onPress={() => handleMetricChange(option.key)}
-              />
-            ))}
+            <ChartUnderlineTabs
+              items={metricTabs}
+              activeKey={currentMetricKey}
+              onChange={handleMetricChange}
+            />
           </ScrollView>
         </View>
       ) : null}
 
-      {showPlayerSelector && players.length > 0 ? (
+      {showPlayerSelector && normalizedPlayers.length > 0 ? (
         <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Players</Text>
-            <Text style={styles.sectionSub}>Scope and selection</Text>
-          </View>
+          <SectionHeader title="Players" sub="Scope and selection" />
 
-          <View style={styles.underlineSelectorRow}>
-            {(["top", "all", "selected"] as PlayerMode[]).map((mode) => (
-              <UnderlineOption
-                key={mode}
-                label={titleCase(mode)}
-                active={mode === currentPlayerMode}
-                onPress={() => handlePlayerModeChange(mode)}
-              />
-            ))}
-          </View>
+          <ChartUnderlineTabs
+            items={playerModeTabs}
+            activeKey={currentPlayerMode}
+            onChange={(mode) => handlePlayerModeChange(mode as PlayerMode)}
+          />
 
           {currentPlayerMode === "selected" ? (
-            <View style={[styles.underlineSelectorRow, { marginTop: 8 }]}>
-              {players.map((player) => {
+            <View style={styles.playerSelectionRow}>
+              {normalizedPlayers.map((player) => {
                 const active = currentSelectedPlayerIds.includes(String(player.id));
                 return (
                   <Pressable
                     key={player.id}
-                    style={styles.underlineTabButton}
+                    style={[
+                      styles.playerPill,
+                      active && {
+                        backgroundColor: withAlpha(player.color || COLORS.accent, 0.16),
+                        borderColor: withAlpha(player.color || COLORS.accent, 0.58),
+                      },
+                    ]}
                     onPress={() => togglePlayer(String(player.id))}
                   >
                     <Text
                       style={[
-                        styles.underlineTabText,
+                        styles.playerPillText,
                         { color: active ? player.color || COLORS.accent : COLORS.sub },
                       ]}
                     >
                       {player.name || "Unknown"}
                     </Text>
-                    <View
-                      style={[
-                        styles.underlineTabLine,
-                        active && {
-                          backgroundColor: player.color || COLORS.accent,
-                        },
-                      ]}
-                    />
                   </Pressable>
                 );
               })}
@@ -591,73 +541,66 @@ function StackedBarChart({
         </View>
       ) : null}
 
-      <View style={styles.sectionCompact}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.sectionSub}>{subtitle}</Text>
+      {showHeader ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
+      ) : null}
 
-        {!hasData ? <Text style={styles.emptyText}>{emptyText}</Text> : null}
+      {!hasData ? (
+        <View style={styles.sectionCompact}>
+          <Text style={styles.emptyText}>{emptyText}</Text>
+        </View>
+      ) : null}
 
-        {hasData ? (
-          <View style={styles.featuredSignalsWrap}>
-            <View
-              style={[
-                styles.featuredSignalCard,
-                { backgroundColor: topCards[0]?.toneBg ?? COLORS.accentSoft },
-              ]}
-            >
-              <Text style={styles.featuredSignalLabel} numberOfLines={1}>
-                {topCards[0]?.label ?? "Top Total"}
-              </Text>
-              <Text
-                style={[
-                  styles.featuredSignalValue,
-                  { color: topCards[0]?.toneValue ?? COLORS.accent },
-                ]}
-              >
-                {topCards[0]?.value ?? "0"}
-              </Text>
-              <Text style={styles.featuredSignalSub} numberOfLines={2}>
-                {topCards[0]?.sub ?? "—"}
-              </Text>
-            </View>
+      {hasData && strongestRow ? (
+        <ChartFocusCard
+          title={strongestRow.label}
+          value={compactNumber(strongestTotal)}
+          helper={`${selectedMetricOption?.label ?? title} leader | ${leaderShare}% of visible total`}
+          story={
+            dominantSegment
+              ? `${dominantSegment.label} is the biggest source at ${compactNumber(dominantSegment.value)}.`
+              : `${strongestRow.label} leads the visible stack right now.`
+          }
+          tone="comparison"
+          accentColor={strongestRow.color}
+          compact
+        />
+      ) : null}
 
-            <View style={styles.secondarySignalColumn}>
-              {topCards.slice(1).map((card) => (
-                <View
-                  key={card.key}
-                  style={[styles.secondarySignalCard, { backgroundColor: card.toneBg }]}
-                >
-                  <Text style={styles.metricLabelCompact} numberOfLines={1}>
-                    {card.label}
-                  </Text>
-                  <Text style={[styles.metricValueCompact, { color: card.toneValue }]}>
-                    {card.value}
-                  </Text>
-                  <Text style={styles.metricSubCompact} numberOfLines={1}>
-                    {card.sub}
-                  </Text>
+      {hasData ? (
+        <ChartStage
+          tone="comparison"
+          style={styles.chartStage}
+          plotStyle={styles.chartStagePlot}
+          header={
+            <SectionHeader
+              title="Composition"
+              sub={`${normalizedRows.length} players`}
+            />
+          }
+          footer={
+            <View style={styles.legendRow}>
+              {legend.map((item) => (
+                <View key={item.key} style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: item.color }]} />
+                  <Text style={styles.legendText}>{item.label}</Text>
                 </View>
               ))}
             </View>
-          </View>
-        ) : null}
-      </View>
-
-      {hasData ? (
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Composition</Text>
-            <Text style={styles.sectionSub}>{normalizedRows.length} players</Text>
-          </View>
-
+          }
+        >
           <View style={styles.chartFrame}>
             <Svg width={chartWidth} height={chartHeight}>
               {normalizedRows.map((row, rowIndex) => {
                 const y = rowIndex * (barHeight + rowGap);
                 const total = getRowTotal(row);
+                const rowTargetWidth =
+                  maxVisibleTotal > 0 ? (total / maxVisibleTotal) * chartInnerWidth : 0;
                 let xCursor = labelWidth;
+                let usedWidth = 0;
 
                 return (
                   <React.Fragment key={row.id}>
@@ -668,7 +611,7 @@ function StackedBarChart({
                       fontSize={11}
                       fontWeight="700"
                     >
-                      {row.label.length > 13 ? `${row.label.slice(0, 13)}…` : row.label}
+                      {row.label.length > 13 ? `${row.label.slice(0, 13)}...` : row.label}
                     </SvgText>
 
                     <Rect
@@ -684,13 +627,17 @@ function StackedBarChart({
 
                     {(row.segments || []).map((segment, segmentIndex) => {
                       const value = toNumber(segment.value);
+                      const rawWidth =
+                        maxVisibleTotal > 0 ? (value / maxVisibleTotal) * chartInnerWidth : 0;
+                      const remainingWidth = Math.max(0, rowTargetWidth - usedWidth);
                       const width =
-                        total > 0
-                          ? Math.max((value / total) * chartInnerWidth, value > 0 ? 4 : 0)
-                          : 0;
+                        segmentIndex === row.segments.length - 1
+                          ? remainingWidth
+                          : Math.min(rawWidth, remainingWidth);
 
                       const segmentX = xCursor;
                       xCursor += width;
+                      usedWidth += width;
 
                       const radius = row.segments.length === 1 ? 9 : 0;
                       const leftRadius = segmentIndex === 0 ? 9 : radius;
@@ -724,61 +671,9 @@ function StackedBarChart({
               })}
             </Svg>
           </View>
-
-          <View style={styles.legendRow}>
-            {legend.map((item) => (
-              <View key={item.key} style={styles.legendItem}>
-                <View style={[styles.legendSwatch, { backgroundColor: item.color }]} />
-                <Text style={styles.legendText}>{item.label}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
+        </ChartStage>
       ) : null}
 
-      {summaryText ? (
-        <View style={styles.sectionCompact}>
-          <Text style={styles.summaryText}>{summaryText}</Text>
-        </View>
-      ) : null}
-
-      {hasData ? (
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Player Breakdown</Text>
-            <Text style={styles.sectionSub}>Dense detail cards</Text>
-          </View>
-
-          <View style={styles.metricGridDense}>
-            {normalizedRows.map((row) => {
-              const total = getRowTotal(row);
-              const primary = getPrimarySegment(row);
-              const tone = getMetricTone(primary?.key);
-              const playerColor = resolvePlayerColor(row, players);
-
-              return (
-                <View
-                  key={`card-${row.id}`}
-                  style={[
-                    styles.metricCardDense,
-                    { backgroundColor: withAlpha(playerColor, 0.14) },
-                  ]}
-                >
-                  <Text style={styles.metricLabelCompact} numberOfLines={1}>
-                    {row.label}
-                  </Text>
-                  <Text style={[styles.metricValueCompact, { color: tone.value }]}>
-                    {compactNumber(total)}
-                  </Text>
-                  <Text style={styles.metricSubCompact} numberOfLines={2}>
-                    {primary ? `${primary.label} leads` : "No mix data"}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -790,9 +685,21 @@ export default memo(StackedBarChart);
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
-    gap: 6,
+    gap: 12,
   },
-
+  header: {
+    gap: 4,
+  },
+  title: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  subtitle: {
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 15,
+  },
   sectionCompact: {
     width: "100%",
     borderRadius: 14,
@@ -825,80 +732,38 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 11,
   },
-
-  underlineSelectorRow: {
+  underlineScroll: {
+    paddingRight: 12,
+  },
+  playerSelectionRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    columnGap: 12,
-    rowGap: 8,
-    alignItems: "flex-end",
+    gap: 8,
+    marginTop: 10,
   },
-  underlineTabButton: {
-    paddingBottom: 2,
-  },
-  underlineTabText: {
-    color: COLORS.sub,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  underlineTabTextActive: {
-    color: COLORS.accent,
-  },
-  underlineTabLine: {
-    marginTop: 4,
-    height: 2,
+  playerPill: {
     borderRadius: 999,
-    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  underlineTabLineActive: {
-    backgroundColor: COLORS.accent,
-  },
-
-  featuredSignalsWrap: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  featuredSignalCard: {
-    width: "52%",
-    minHeight: 132,
-    borderRadius: 14,
-    padding: 10,
-    justifyContent: "space-between",
-  },
-  featuredSignalLabel: {
-    color: COLORS.sub,
-    fontSize: 12,
-    lineHeight: 14,
-    marginBottom: 6,
-  },
-  featuredSignalValue: {
-    fontSize: 26,
-    fontWeight: "900",
-    lineHeight: 28,
-    marginBottom: 6,
-  },
-  featuredSignalSub: {
-    color: COLORS.muted,
+  playerPillText: {
     fontSize: 11,
-    lineHeight: 14,
+    fontWeight: "800",
   },
-  secondarySignalColumn: {
-    flex: 1,
-    justifyContent: "space-between",
-    gap: 4,
+  chartStage: {
+    marginBottom: 6,
   },
-  secondarySignalCard: {
-    borderRadius: 12,
-    padding: 10,
-    minHeight: 64,
+  chartStagePlot: {
+    paddingVertical: 10,
   },
-
   chartFrame: {
     width: "100%",
     alignItems: "center",
-    paddingVertical: 2,
+    paddingHorizontal: 8,
   },
-
   legendRow: {
     marginTop: 8,
     width: "100%",
@@ -921,44 +786,5 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 10,
     fontWeight: "700",
-  },
-
-  summaryText: {
-    color: COLORS.text,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-
-  metricGridDense: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
-  },
-  metricCardDense: {
-    width: "32%",
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    minHeight: 56,
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  metricLabelCompact: {
-    color: COLORS.sub,
-    fontSize: 10,
-    lineHeight: 12,
-    marginBottom: 4,
-  },
-  metricValueCompact: {
-    fontSize: 14,
-    fontWeight: "900",
-    lineHeight: 16,
-  },
-  metricSubCompact: {
-    color: COLORS.muted,
-    fontSize: 10,
-    marginTop: 4,
-    lineHeight: 12,
   },
 });

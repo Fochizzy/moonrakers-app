@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useStore } from '@/store/useStore';
+import { useGames, usePlayers } from '@/store/useStore';
 import { buildPlayerInsights } from '@/utils/playerInsights';
 
 type Insight = {
@@ -33,8 +33,8 @@ function titleFromInsight(text: string): string {
 }
 
 export function useInsights(playerId?: string): Insight[] {
-  const rawGames = useStore((s: any) => s.games);
-  const rawPlayers = useStore((s: any) => s.players);
+  const rawGames = useGames();
+  const rawPlayers = usePlayers();
 
   const games = Array.isArray(rawGames) ? rawGames : EMPTY_GAMES;
   const players = Array.isArray(rawPlayers)

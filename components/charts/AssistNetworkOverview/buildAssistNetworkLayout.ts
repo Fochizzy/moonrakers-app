@@ -8,10 +8,7 @@ export type AssistNetworkNode = {
   id: string;
   label: string;
   value: number;
-  incomingValue: number;
-  outgoingValue: number;
-  assistCount: number;
-  assistPrestige: number;
+  involvementFrequencyPerGame: number;
   supportBalance: number;
 };
 
@@ -23,6 +20,8 @@ export type AssistNetworkLink = {
   assistCount: number;
   assistPrestige: number;
   assistEfficiency: number;
+  assistFrequencyPerGame: number;
+  labelText: string;
   sourceLabel: string;
   targetLabel: string;
 };
@@ -41,8 +40,34 @@ export type RelationshipEdge = {
   target?: string;
   fromId?: string;
   toId?: string;
+  sourceId?: string;
+  targetId?: string;
   value?: number;
   weight?: number;
+  assistCount?: number;
+  assistPrestige?: number;
+  assistEfficiency?: number;
+  assistFrequencyPerGame?: number;
+};
+
+type NormalizedRelationshipEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  assistCount: number;
+  assistPrestige: number;
+  assistEfficiency: number;
+  assistFrequencyPerGame: number;
+  hasExplicitAssistEfficiency: boolean;
+};
+
+type WorkingAssistNetworkNode = {
+  id: string;
+  label: string;
+  incomingPrestige: number;
+  outgoingPrestige: number;
+  incomingFrequency: number;
+  outgoingFrequency: number;
 };
 
 export type PlayerLike = {
@@ -64,39 +89,128 @@ function clampMin(value: number, min: number): number {
   return value < min ? min : value;
 }
 
+function getAssistEfficiencyWeight(
+  assistCount: number,
+  assistPrestige: number,
+  assistEfficiency: number
+): number {
+  if (assistCount > 0) return assistCount;
+  return assistPrestige > 0 || assistEfficiency > 0 ? 1 : 0;
+}
+
 function getNodeLabel(playerId: string, playersById: Map<string, PlayerLike>): string {
   return playersById.get(playerId)?.name?.trim() || playerId;
 }
 
 function normalizeRelationships(
   input: Relationships | RelationshipEdge[] | undefined
-): Relationships {
-  if (!input) return {};
+): NormalizedRelationshipEdge[] {
+  if (!input) return [];
 
   if (Array.isArray(input)) {
-    const out: Relationships = {};
-    for (const edge of input) {
-      const source = String(edge.source ?? edge.fromId ?? "").trim();
-      const target = String(edge.target ?? edge.toId ?? "").trim();
-      const value = clampMin(toNumber(edge.value ?? edge.weight), 0);
-      if (!source || !target || source === target || value <= 0) continue;
-      if (!out[source]) out[source] = {};
-      out[source][target] = (out[source][target] || 0) + value;
+    const out: NormalizedRelationshipEdge[] = [];
+    for (const raw of input) {
+      const sourceId = String(
+        raw.sourceId ?? raw.source ?? raw.fromId ?? ""
+      ).trim();
+      const targetId = String(
+        raw.targetId ?? raw.target ?? raw.toId ?? ""
+      ).trim();
+      if (!sourceId || !targetId || sourceId === targetId) continue;
+
+      const assistCount = clampMin(toNumber(raw.assistCount), 0);
+      const assistPrestige = clampMin(
+        toNumber(raw.assistPrestige ?? raw.value ?? raw.weight),
+        0
+      );
+      const explicitAssistEfficiency = clampMin(
+        toNumber(raw.assistEfficiency),
+        0
+      );
+      const hasExplicitAssistCount =
+        raw.assistCount !== undefined && raw.assistCount !== null;
+      const hasExplicitAssistEfficiency =
+        raw.assistEfficiency !== undefined && raw.assistEfficiency !== null;
+      const assistEfficiency =
+        hasExplicitAssistEfficiency
+          ? explicitAssistEfficiency
+          : assistCount > 0
+          ? assistPrestige / assistCount
+          : clampMin(toNumber(raw.assistEfficiency), 0);
+      const assistFrequencyPerGame = clampMin(
+        toNumber(
+          raw.assistFrequencyPerGame ??
+            (assistCount > 0 ? assistCount : raw.weight ?? raw.value)
+        ),
+        0
+      );
+
+      if (
+        assistCount <= 0 &&
+        assistPrestige <= 0 &&
+        assistEfficiency <= 0 &&
+        assistFrequencyPerGame <= 0
+      ) {
+        continue;
+      }
+
+      out.push({
+        id: `${sourceId}__${targetId}`,
+        sourceId,
+        targetId,
+        assistCount:
+          assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0 ? assistCount : 1,
+        assistPrestige,
+        assistEfficiency:
+          hasExplicitAssistEfficiency
+            ? explicitAssistEfficiency
+            : assistCount > 0 || hasExplicitAssistCount || assistPrestige <= 0
+            ? assistEfficiency
+            : assistPrestige,
+        assistFrequencyPerGame,
+        hasExplicitAssistEfficiency,
+      });
     }
     return out;
   }
 
-  return input;
+  const out: NormalizedRelationshipEdge[] = [];
+
+  for (const [sourceIdRaw, nested] of Object.entries(input ?? {})) {
+    const sourceId = String(sourceIdRaw).trim();
+    if (!sourceId) continue;
+
+    for (const [targetIdRaw, rawWeight] of Object.entries(nested ?? {})) {
+      const targetId = String(targetIdRaw).trim();
+      if (!targetId || targetId === sourceId) continue;
+
+      const assistPrestige = clampMin(toNumber(rawWeight), 0);
+      if (assistPrestige <= 0) continue;
+
+      out.push({
+        id: `${sourceId}__${targetId}`,
+        sourceId,
+        targetId,
+        assistCount: 1,
+        assistPrestige,
+        assistEfficiency: assistPrestige,
+        assistFrequencyPerGame: assistPrestige,
+        hasExplicitAssistEfficiency: false,
+      });
+    }
+  }
+
+  return out;
 }
 
 export function buildAssistNetworkLayout(
   relationshipsInput: Relationships | RelationshipEdge[] = {},
   players: PlayerLike[] = [],
-  mode: AssistNetworkMode = "assistPrestige"
+  _mode: AssistNetworkMode = "assistPrestige"
 ): AssistNetworkLayout {
   const relationships = normalizeRelationships(relationshipsInput);
   const playersById = new Map(players.map((player) => [String(player.id), player]));
-  const nodeMap = new Map<string, AssistNetworkNode>();
+  const nodeMap = new Map<string, WorkingAssistNetworkNode>();
   const linkMap = new Map<string, AssistNetworkLink>();
 
   const ensureNode = (playerId: string) => {
@@ -104,12 +218,10 @@ export function buildAssistNetworkLayout(
       nodeMap.set(playerId, {
         id: playerId,
         label: getNodeLabel(playerId, playersById),
-        value: 0,
-        incomingValue: 0,
-        outgoingValue: 0,
-        assistCount: 0,
-        assistPrestige: 0,
-        supportBalance: 0,
+        incomingPrestige: 0,
+        outgoingPrestige: 0,
+        incomingFrequency: 0,
+        outgoingFrequency: 0,
       });
     }
     return nodeMap.get(playerId)!;
@@ -119,88 +231,105 @@ export function buildAssistNetworkLayout(
     ensureNode(String(player.id));
   }
 
-  for (const [sourceIdRaw, nested] of Object.entries(relationships ?? {})) {
-    const sourceId = String(sourceIdRaw).trim();
-    if (!sourceId) continue;
+  for (const raw of relationships) {
+    const sourceId = String(raw.sourceId ?? "").trim();
+    const targetId = String(raw.targetId ?? "").trim();
+    if (!sourceId || !targetId || sourceId === targetId) continue;
 
-    ensureNode(sourceId);
+    const assistCount = clampMin(toNumber(raw.assistCount), 0);
+    const assistPrestige = clampMin(toNumber(raw.assistPrestige), 0);
+    const assistEfficiency = raw.hasExplicitAssistEfficiency
+      ? clampMin(toNumber(raw.assistEfficiency), 0)
+      : assistCount > 0
+        ? assistPrestige / assistCount
+        : 0;
+    const assistFrequencyPerGame = clampMin(
+      toNumber(raw.assistFrequencyPerGame),
+      0
+    );
 
-    for (const [targetIdRaw, rawWeight] of Object.entries(nested ?? {})) {
-      const targetId = String(targetIdRaw).trim();
-      if (!targetId || targetId === sourceId) continue;
+    if (
+      assistCount <= 0 &&
+      assistPrestige <= 0 &&
+      assistEfficiency <= 0 &&
+      assistFrequencyPerGame <= 0
+    ) {
+      continue;
+    }
 
-      const assistPrestige = clampMin(toNumber(rawWeight), 0);
-      if (assistPrestige <= 0) continue;
+    const sourceNode = ensureNode(sourceId);
+    const targetNode = ensureNode(targetId);
 
-      const assistCount = 1;
-      const assistEfficiency = assistPrestige / Math.max(1, assistCount);
+    sourceNode.outgoingPrestige += assistPrestige;
+    sourceNode.outgoingFrequency += assistFrequencyPerGame;
 
-      const sourceNode = ensureNode(sourceId);
-      const targetNode = ensureNode(targetId);
+    targetNode.incomingPrestige += assistPrestige;
+    targetNode.incomingFrequency += assistFrequencyPerGame;
 
-      sourceNode.outgoingValue += assistPrestige;
-      sourceNode.assistPrestige += assistPrestige;
-      sourceNode.assistCount += assistCount;
+    const linkId = raw.id || `${sourceId}__${targetId}`;
+    const existing = linkMap.get(linkId);
 
-      targetNode.incomingValue += assistPrestige;
-      targetNode.assistPrestige += assistPrestige;
-      targetNode.assistCount += assistCount;
+    if (existing) {
+      const existingEfficiencyWeight = getAssistEfficiencyWeight(
+        existing.assistCount,
+        existing.assistPrestige,
+        existing.assistEfficiency
+      );
+      const incomingEfficiencyWeight = getAssistEfficiencyWeight(
+        assistCount,
+        assistPrestige,
+        assistEfficiency
+      );
 
-      const linkId = `${sourceId}__${targetId}`;
-      const existing = linkMap.get(linkId);
-
-      if (existing) {
-        existing.assistPrestige += assistPrestige;
-        existing.assistCount += assistCount;
-        existing.assistEfficiency =
-          existing.assistPrestige / Math.max(1, existing.assistCount);
-      } else {
-        linkMap.set(linkId, {
-          id: linkId,
-          source: sourceId,
-          target: targetId,
-          value: 0,
-          assistCount,
-          assistPrestige,
-          assistEfficiency,
-          sourceLabel: sourceNode.label,
-          targetLabel: targetNode.label,
-        });
-      }
+      existing.assistPrestige += assistPrestige;
+      existing.assistCount += assistCount;
+      existing.assistFrequencyPerGame += assistFrequencyPerGame;
+      existing.assistEfficiency =
+        existingEfficiencyWeight + incomingEfficiencyWeight > 0
+          ? (
+              existing.assistEfficiency * existingEfficiencyWeight +
+              assistEfficiency * incomingEfficiencyWeight
+            ) /
+            (existingEfficiencyWeight + incomingEfficiencyWeight)
+          : 0;
+    } else {
+      linkMap.set(linkId, {
+        id: linkId,
+        source: sourceId,
+        target: targetId,
+        value: 0,
+        assistCount,
+        assistPrestige,
+        assistEfficiency,
+        assistFrequencyPerGame,
+        labelText: "",
+        sourceLabel: sourceNode.label,
+        targetLabel: targetNode.label,
+      });
     }
   }
 
   const nodes = Array.from(nodeMap.values()).map((node) => {
-    const supportBalance = node.incomingValue - node.outgoingValue;
-
-    let value = node.assistPrestige;
-    if (mode === "assistCount") value = node.assistCount;
-    if (mode === "assistEfficiency") {
-      value = node.assistPrestige / Math.max(1, node.assistCount);
-    }
-    if (mode === "supportBalance") {
-      value = Math.abs(supportBalance);
-    }
+    const supportBalance = node.incomingPrestige - node.outgoingPrestige;
+    const involvementFrequencyPerGame =
+      node.incomingFrequency + node.outgoingFrequency;
 
     return {
-      ...node,
-      value,
+      id: node.id,
+      label: node.label,
+      value: involvementFrequencyPerGame,
+      involvementFrequencyPerGame,
       supportBalance,
     };
   });
 
   const links = Array.from(linkMap.values()).map((link) => {
-    let value = link.assistPrestige;
-    if (mode === "assistCount") value = link.assistCount;
-    if (mode === "assistEfficiency") value = link.assistEfficiency;
-    if (mode === "supportBalance") {
-      const reverse = linkMap.get(`${link.target}__${link.source}`);
-      value = Math.abs(link.assistPrestige - toNumber(reverse?.assistPrestige));
-    }
+    const value = clampMin(link.assistFrequencyPerGame, 0);
 
     return {
       ...link,
-      value: clampMin(value, 0),
+      value,
+      labelText: `${value.toFixed(1)}/game`,
     };
   });
 

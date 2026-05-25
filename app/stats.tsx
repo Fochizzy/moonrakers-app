@@ -1,211 +1,120 @@
-import React, { useMemo, useState } from "react";
+import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
-  View,
+  Pressable,
   ScrollView,
   StyleSheet,
-  Pressable,
-  TouchableOpacity,
+  View,
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { useStore } from "@/store/useStore";
-import StarryNight from "@/components/ui/StarryNight";
+import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
+import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
+import ActionButton from "@/components/ui/ActionButton";
+import { getStatsScreen } from "@/lib/cloud/analytics/getStatsScreen";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
+import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
+import { formatSupabaseConfigError } from "@/lib/supabase";
+import { useStore } from "@/store/useStore";
+import { buildChartsRoute, buildHistoryRoute, buildHomeRoute, APP_ROUTES } from "@/utils/appRoutes";
+import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
+import { formatDate } from "@/utils/formatters";
+import { COLORS } from "@/utils/colors";
+import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
 
-import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+type StatsTab = "overview" | "players" | "playstyle" | "correlations" | "games";
 
-import {
-  buildLeaderboard,
-  buildLeagueSummary,
-  type Player,
-  type Game,
-} from "@/utils/statsEngine";
-import { buildDerivedPlayerStats } from "@/utils/derivedMetricsEngine";
-import { buildGlobalCorrelations } from "@/utils/correlationEngine";
-import { buildIndividualCorrelations } from "@/utils/individualCorrelationEngine";
-import { buildGameCorrelations } from "@/utils/gameCorrelationEngine";
+type PayloadRecord = Record<string, unknown>;
 
-type StatsTab = "overview" | "players" | "correlations" | "games";
-type CorrelationTab = "global" | "individual" | "game";
 
-const GLOBAL_CORRELATION_TIERS = [
-  {
-    title: "Tier 1 · Primary Signals",
-    keys: [
-      "allContractsEfficiency",
-      "failureRate",
-      "earlyLeadRate",
-      "lateLeadRate",
-      "objectivesPerGame",
-      "assists",
-      "assistPrestigeReceived",
-      "prestigePerTurn",
-    ],
-  },
-  {
-    title: "Tier 2 · Conversion + Advanced",
-    keys: [
-      "consistencyScore",
-      "clutchScore",
-      "leadConversion",
-      "objectiveConversionRate",
-      "supportConversionRate",
-      "opponentStrength",
-    ],
-  },
-  {
-    title: "Tier 3 · Meta / Style",
-    keys: ["avgStartSeat", "interactionIndex", "aggroIndex", "tempoIndex"],
-  },
-];
-
-const INDIVIDUAL_CORRELATION_TIERS = [
-  {
-    title: "Tier 1 · Core",
-    keys: [
-      "allContractsEfficiency",
-      "earlyLeadRate",
-      "lateLeadRate",
-      "objectivesPerGame",
-    ],
-  },
-  {
-    title: "Tier 2 · Support",
-    keys: ["assists", "assistPrestigeReceived", "clutchScore"],
-  },
-  {
-    title: "Tier 3 · Context",
-    keys: ["opponentStrength", "tempoIndex"],
-  },
-];
-
-const GAME_CORRELATION_TIERS = [
-  {
-    title: "Tier 2 · Match Conditions",
-    keys: [
-      "totalAssistsVsEarlyLeaderWinning",
-      "totalObjectivesVsObjectiveLeaderWinning",
-      "supportDensityVsSupportLeaderWinning",
-    ],
-  },
-  {
-    title: "Tier 3 · Environment",
-    keys: [
-      "averageEfficiencyVsEarlyLeaderWinning",
-      "failuresVsSupportLeaderWinning",
-      "interactionDensityVsObjectiveLeaderWinning",
-    ],
-  },
-];
-
-function getRowsForTier(rows: any[], keys: string[]) {
-  return keys.map((k) => rows.find((r) => r.key === k)).filter(Boolean);
+function toRecord(value: unknown): PayloadRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as PayloadRecord)
+    : {};
 }
 
-const COLORS = {
-  bg: "#040814",
-  surface: "#0A1428",
-  surfaceAlt: "#0F172A",
-  surfaceGlass: "#0B1323",
-
-  borderSoft: "rgba(148, 163, 184, 0.18)",
-  borderStrong: "rgba(139, 92, 246, 0.36)",
-
-  textPrimary: "#F8FBFF",
-  textSecondary: "#C7D6F3",
-  textMuted: "#8EA6C8",
-
-  brand: "#8B5CF6",
-  brandTint: "rgba(139, 92, 246, 0.16)",
-
-  cyan: "#67E8F9",
-  blueGlow: "#60A5FA",
-
-  success: "#22c55e",
-  danger: "#ef4444",
-  gold: "#FBBF24",
-  purple: "#A855F7",
-  blue: "#3B82F6",
-  teal: "#22D3EE",
-  pink: "#EC4899",
-};
-
-function formatPercent(value: number) {
-  if (!Number.isFinite(value)) return "0%";
-  return `${(value * 100).toFixed(0)}%`;
+function toArray(value: unknown): PayloadRecord[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is PayloadRecord => Boolean(entry) && typeof entry === "object")
+    : [];
 }
 
-function formatSigned(value: number, digits = 1) {
-  if (!Number.isFinite(value)) return "";
-  if (value > 0) return `+${value.toFixed(digits)}`;
-  if (value < 0) return value.toFixed(digits);
-  return `0.${"0".repeat(Math.max(0, digits - 1))}`;
+
+function normalizeStatsList(value: unknown) {
+  return Object.entries(toRecord(value)).map(([key, entry]) => ({
+    key,
+    label: key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " "),
+    value: toDisplayValue(entry),
+  }));
 }
 
-function formatCorrelation(value: number) {
-  if (!Number.isFinite(value)) return "0.00";
-  return value.toFixed(2);
+function normalizePlayerOption(entry: PayloadRecord, index: number) {
+  const id = toStringValue(entry.id, `player-${index}`);
+  const displayName = toStringValue(entry.displayName, "");
+  const playerName = toStringValue(entry.playerName, "");
+  const label = toStringValue(entry.label, "") || displayName || playerName || `Player ${index + 1}`;
+
+  return {
+    id,
+    label,
+    playerName,
+    displayName,
+  };
 }
 
-function formatCorrelationValue(value: number) {
-  if (!Number.isFinite(value)) return "0.00";
-  return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
-}
-
-function getCorrelationStrength(value: number) {
-  const abs = Math.abs(value);
-  if (abs >= 0.7) return "Very Strong";
-  if (abs >= 0.5) return "Strong";
-  if (abs >= 0.3) return "Moderate";
-  if (abs >= 0.1) return "Weak";
-  return "Minimal";
-}
-
-function getCorrelationTone(value: number) {
-  const abs = Math.abs(value);
-  if (abs < 0.1) return "Neutral";
-  return value > 0 ? "Positive" : "Negative";
-}
-
-function getCorrelationMeaning(label: string, value: number) {
-  if (!Number.isFinite(value)) {
-    return `${label} currently has no usable signal.`;
+function formatGeneratedAtValue(value: unknown) {
+  if (
+    typeof value !== "string" &&
+    typeof value !== "number" &&
+    !(value instanceof Date)
+  ) {
+    return null;
   }
 
-  const abs = Math.abs(value);
+  const formatted = formatDate(value);
+  return formatted === "Invalid Date" ? null : formatted;
+}
 
-  if (abs < 0.1) {
-    return `${label} is not showing a meaningful relationship to winning yet.`;
+function normalizeTopSignals(value: unknown, generatedAt: unknown) {
+  const formattedGeneratedAt = formatGeneratedAtValue(generatedAt);
+  const topSignals = toArray(value).map((signal) => {
+    const signalKey = toStringValue(signal.key, "");
+    if (signalKey !== "refresh-status" && signalKey !== "last-refreshed") {
+      return signal;
+    }
+
+    return {
+      ...signal,
+      label: "Last refreshed",
+      value: formattedGeneratedAt ?? "Unavailable",
+    };
+  });
+
+  if (!formattedGeneratedAt) {
+    return topSignals;
   }
 
-  const lower = label.toLowerCase();
+  const hasRefreshSignal = topSignals.some((signal) => {
+    const signalKey = toStringValue(signal.key, "");
+    return signalKey === "refresh-status" || signalKey === "last-refreshed";
+  });
 
-  if (value > 0) {
-    return `${getCorrelationStrength(
-      value
-    )} positive relationship. Higher ${lower} tends to line up with more winning.`;
+  if (hasRefreshSignal) {
+    return topSignals;
   }
 
-  return `${getCorrelationStrength(
-    value
-  )} negative relationship. Higher ${lower} tends to line up with less winning.`;
-}
-
-function getTopWinningSignals(rows: any[]) {
-  return [...rows]
-    .filter((row) => Number.isFinite(row?.value))
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-    .slice(0, 3);
-}
-
-function getPlayerColor(color?: string) {
-  if (!color) return COLORS.brand;
-  return color;
-}
-
-function getGlowColor(color?: string) {
-  const base = getPlayerColor(color);
-  return `${base}22`;
+  return [
+    {
+      key: "last-refreshed",
+      label: "Last refreshed",
+      value: formattedGeneratedAt,
+    },
+    ...topSignals,
+  ];
 }
 
 function TabButton({
@@ -219,7 +128,10 @@ function TabButton({
 }) {
   return (
     <Pressable onPress={onPress} style={styles.tabButton}>
-      <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>
+      <Text
+        numberOfLines={1}
+        style={[styles.tabButtonText, active && styles.tabButtonTextActive]}
+      >
         {label}
       </Text>
       <View
@@ -236,1018 +148,791 @@ function StatPill({
   label,
   value,
   accent,
-  strong = false,
-  metricKey,
-  onInfoPress,
 }: {
   label: string;
   value: string | number;
   accent?: string;
-  strong?: boolean;
-  metricKey?: string;
-  onInfoPress?: () => void;
 }) {
   return (
     <View
       style={[
         styles.statPill,
-        strong && styles.statPillStrong,
-        accent ? { borderColor: accent, backgroundColor: `${accent}12` } : null,
+        accent
+          ? { borderColor: `${accent}88`, backgroundColor: `${accent}12` }
+          : null,
       ]}
     >
-      <View style={styles.statPillHeader}>
-        <Text style={styles.statPillLabel}>{label}</Text>
-        {metricKey && onInfoPress ? (
-          <TouchableOpacity
-            onPress={onInfoPress}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.infoButtonText}>?</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-      <Text style={[styles.statPillValue, strong && styles.statPillValueStrong]}>
-        {value}
-      </Text>
+      <Text style={styles.statPillLabel}>{label}</Text>
+      <Text style={styles.statPillValue}>{value}</Text>
     </View>
   );
-}
-
-function CorrelationRowCard({ row }: { row: any }) {
-  const tone = getCorrelationTone(row.value);
-  const accent =
-    tone === "Neutral"
-      ? COLORS.textMuted
-      : tone === "Positive"
-        ? COLORS.success
-        : COLORS.danger;
-
-  return (
-    <View style={[styles.correlationCard, { borderColor: `${accent}55` }]}>
-      <View style={styles.correlationHeader}>
-        <Text style={styles.correlationLabel}>{row.label}</Text>
-        <View
-          style={[
-            styles.correlationBadge,
-            { borderColor: `${accent}66`, backgroundColor: `${accent}16` },
-          ]}
-        >
-          <Text style={[styles.correlationBadgeText, { color: accent }]}>
-            {formatCorrelationValue(row.value)} · {getCorrelationStrength(row.value)}{" "}
-            {tone}
-          </Text>
-        </View>
-      </View>
-      <Text style={styles.correlationMeaning}>
-        {getCorrelationMeaning(row.label, row.value)}
-      </Text>
-    </View>
-  );
-}
-
-function PlayerSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.playerSection}>
-      <Text style={styles.playerSectionTitle}>{title}</Text>
-      <View style={styles.compactGrid}>{children}</View>
-    </View>
-  );
-}
-
-function safeMetric(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function getGameWinnerId(game: any) {
-  return game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId ?? null;
-}
-
-function getGameRows(game: any) {
-  const totals = game?.totals ?? {};
-  return Object.entries(totals).map(([playerId, stats]: any) => ({
-    playerId,
-    prestige:
-      safeMetric(
-        stats?.totalPrestige ?? stats?.prestige ?? stats?.directPrestige
-      ) + safeMetric(stats?.assistPrestigeReceived),
-    assists: safeMetric(stats?.assists),
-    objectives: safeMetric(stats?.contracts),
-    failures: safeMetric(stats?.failures),
-  }));
-}
-
-function buildSelectableGames(games: any[]) {
-  return [...games].reverse().map((game: any, index: number) => {
-    const rows = getGameRows(game).sort((a, b) => b.prestige - a.prestige);
-    const winnerId = getGameWinnerId(game) ?? rows[0]?.playerId ?? null;
-    const leader = rows[0];
-    const runnerUp = rows[1];
-    const margin = leader && runnerUp ? leader.prestige - runnerUp.prestige : 0;
-
-    return {
-      id: String(game?.id ?? `game-${index}`),
-      label: `Game ${games.length - index}`,
-      winnerId,
-      margin,
-      assists: rows.reduce((sum, row) => sum + row.assists, 0),
-      objectives: rows.reduce((sum, row) => sum + row.objectives, 0),
-      failures: rows.reduce((sum, row) => sum + row.failures, 0),
-      rows,
-    };
-  });
 }
 
 export default function StatsScreen() {
   const router = useRouter();
-
+  const authSession = useStore((state: any) => state.authSession);
+  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
+  const profileId = String(authSession?.user?.id ?? "").trim();
   const [activeTab, setActiveTab] = useState<StatsTab>("overview");
-  const [activeCorrelationTab, setActiveCorrelationTab] =
-    useState<CorrelationTab>("global");
-  const [selectedCorrelationPlayerId, setSelectedCorrelationPlayerId] =
-    useState<string | null>(null);
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
+  const analyticsRefreshTick = useAnalyticsRefreshTick();
+  const [error, setError] = useState<string | null>(null);
+  const analyticsQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(profileId),
+    queryKey: `stats-screen:${profileId || "anon"}`,
+    load: () =>
+      getStatsScreen({
+        profileId,
+      }),
+  });
+  useEffect(() => {
+    const nextError = analyticsQuery.error;
+    if (nextError !== null) {
+      setError(formatSupabaseConfigError(nextError) || "Failed to load stats.");
+    } else {
+      setError(null);
+    }
+  }, [analyticsQuery.error]);
+  const payload = toRecord(analyticsQuery.payload);
+  const loading = analyticsQuery.loading;
+  const isStale = analyticsQuery.isStale;
+  const staleMessage = analyticsQuery.staleMessage;
 
-  const players = useStore((s: any) =>
-    Array.isArray(s.players) ? s.players : []
-  ) as Player[];
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : []
-  ) as Game[];
+  const overview = toRecord(payload?.overview);
+  const hero = toRecord(overview.hero);
+  const heroHighlights = [
+    { label: "Players", value: toDisplayValue(hero.players, "0") },
+    { label: "Games", value: toDisplayValue(hero.games, "0") },
+    { label: "Takeaway", value: toStringValue(hero.takeaway, "Awaiting analytics") },
+  ];
+  const overviewCards = toArray(overview.cards);
+  const topSignals = normalizeTopSignals(overview.topSignals, payload?.generatedAt);
+  const playersSection = toRecord(payload?.players);
+  const playstyleSection = toRecord(payload?.playstyle);
+  const correlationsSection = toRecord(payload?.correlations);
+  const gamesSection = toRecord(payload?.games);
+  const playerOptions = toArray(playersSection.options).map(normalizePlayerOption);
+  const sourceKind = isStale ? "server-stale" : "server";
+  const sourceLabel = isStale ? "Stale server data" : "Server data";
+  const staleSourceCaption = isStale
+    ? `Showing the last successful Supabase stats payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
+    : null;
 
-  const goToDefinition = (metricKey: string) => {
-    router.push({
-      pathname: "/definitions",
-      params: { metric: metricKey },
-    });
-  };
+  useEffect(() => {
+    const preferredPlayerId = toStringValue(playersSection.selectedPlayerId, "");
+    if (!preferredPlayerId) {
+      if (!selectedPlayerId && playerOptions[0]?.id) {
+        setSelectedPlayerId(playerOptions[0].id);
+      }
+      return;
+    }
 
-  const baseLeaderboard = useMemo(
-    () => buildLeaderboard(players, games),
-    [players, games]
-  );
+    setSelectedPlayerId((current) => current ?? preferredPlayerId);
+  }, [playerOptions, playersSection.selectedPlayerId, selectedPlayerId]);
 
-  const leaderboard = useMemo(
-    () => buildDerivedPlayerStats(baseLeaderboard, games),
-    [baseLeaderboard, games]
-  );
+  const normalizedQuery = deferredPlayerSearchQuery.trim().toLowerCase();
+  const filteredPlayerOptions = useMemo(() => {
+    if (!normalizedQuery) {
+      return playerOptions;
+    }
 
-  const summary = useMemo(
-    () => buildLeagueSummary(baseLeaderboard, games),
-    [baseLeaderboard, games]
-  );
+    return playerOptions.filter((player) =>
+      player.label.toLowerCase().includes(normalizedQuery),
+    );
+  }, [normalizedQuery, playerOptions]);
 
-  const globalCorrelations = useMemo(
-    () => buildGlobalCorrelations(leaderboard),
-    [leaderboard]
-  );
+  const selectedPlayerDetail = useMemo(() => {
+    const detail = toRecord(playersSection.detail);
+    const detailPlayerId = toStringValue(detail.playerId, "");
+    if (!detailPlayerId || !selectedPlayerId || detailPlayerId === selectedPlayerId) {
+      return detail;
+    }
 
-  const topSignals = useMemo(
-    () => getTopWinningSignals(globalCorrelations),
-    [globalCorrelations]
-  );
+    const selectedPlayer = playerOptions.find((player) => player.id === selectedPlayerId);
+    return {
+      playerId: selectedPlayerId,
+      label: selectedPlayer?.label ?? "Selected player",
+      summary: "This Supabase payload does not yet expose a separate detail card for the selected player.",
+      stats: {},
+    };
+  }, [playerOptions, playersSection.detail, selectedPlayerId]);
 
-  const resolvedCorrelationPlayerId =
-    selectedCorrelationPlayerId ?? leaderboard[0]?.id ?? null;
-  const resolvedPlayerId = selectedPlayerId ?? leaderboard[0]?.id ?? null;
-
-  const individualCorrelations = useMemo(
+  const playstyleHighlights = toArray(playstyleSection.highlights);
+  const correlationItems = [
+    ...toArray(correlationsSection.items),
+    ...toArray(correlationsSection.pairing),
+    ...toArray(correlationsSection.macro),
+  ];
+  const gamesItems = toArray(gamesSection.items);
+  const detailStats = normalizeStatsList(selectedPlayerDetail.stats);
+  const hasLeagueData =
+    overviewCards.length > 0 ||
+    topSignals.length > 0 ||
+    playstyleHighlights.length > 0 ||
+    correlationItems.length > 0 ||
+    gamesItems.length > 0 ||
+    toNumberValue(hero.games) > 0;
+  const overviewRecoveryState = useMemo(
     () =>
-      buildIndividualCorrelations(
-        leaderboard,
-        resolvedCorrelationPlayerId ?? undefined
-      ),
-    [leaderboard, resolvedCorrelationPlayerId]
+      resolveAnalyticsRecoveryState({
+        loading,
+        error,
+        playersCount: players.length,
+        gamesCount: games.length,
+      }),
+    [error, games.length, loading, players.length],
   );
-
-  const selectedCorrelationPlayer = useMemo(
+  const playerRecoveryState = useMemo(
     () =>
-      leaderboard.find((p: any) => p.id === resolvedCorrelationPlayerId) ?? null,
-    [leaderboard, resolvedCorrelationPlayerId]
+      resolveAnalyticsRecoveryState({
+        loading,
+        error,
+        playersCount: players.length,
+        gamesCount: games.length,
+        playerOptionsCount: playerOptions.length,
+        hasLeagueData,
+        selectedPlayerHasDetail: detailStats.length > 0,
+      }),
+    [detailStats.length, error, games.length, hasLeagueData, loading, playerOptions.length, players.length],
   );
 
-  const selectedPlayer = useMemo(
-    () => leaderboard.find((p: any) => p.id === resolvedPlayerId) ?? null,
-    [leaderboard, resolvedPlayerId]
-  );
+  function renderSharedRecoveryCard(kind: "no-players" | "no-games" | "player-empty") {
+    if (kind === "no-players") {
+      return {
+        title: "No tracked players yet",
+        body: "Set up your roster first so the analytics surfaces have real commanders to work with.",
+        primaryAction: {
+          label: "Open roster",
+          onPress: () => router.push(APP_ROUTES.roster),
+        },
+        secondaryAction: {
+          label: "Profiles",
+          onPress: () => router.push(APP_ROUTES.playerDirectory),
+          variant: "secondary" as const,
+        },
+        tone: "warning" as const,
+      };
+    }
 
-  const selectableGames = useMemo(() => buildSelectableGames(games), [games]);
+    if (kind === "player-empty") {
+      return {
+        title: "No player-specific detail yet",
+        body: "League data exists, but the current player does not have a full detail payload on this screen yet.",
+        primaryAction: {
+          label: "Choose another player",
+          onPress: () => {
+            const fallbackPlayer =
+              filteredPlayerOptions.find((player) => player.id !== selectedPlayerId) ??
+              playerOptions.find((player) => player.id !== selectedPlayerId) ??
+              filteredPlayerOptions[0] ??
+              playerOptions[0];
+            if (fallbackPlayer?.id) {
+              setSelectedPlayerId(fallbackPlayer.id);
+            }
+          },
+        },
+        secondaryAction: {
+          label: "Open charts",
+          onPress: () => router.push(buildChartsRoute()),
+          variant: "secondary" as const,
+        },
+        tone: "warning" as const,
+      };
+    }
 
-  const resolvedGameId = selectedGameId ?? selectableGames[0]?.id ?? null;
+    return {
+      title: "No tracked games yet",
+      body: "Your roster is ready, but you need mission history before the analytics hub can populate.",
+      primaryAction: {
+        label: "Start tracked game",
+        onPress: () => router.push(buildHomeRoute("game")),
+      },
+      secondaryAction: {
+        label: "Import backup",
+        onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
+        variant: "secondary" as const,
+      },
+      tone: "warning" as const,
+    };
+  }
 
-  const selectedGame = useMemo(
-    () => selectableGames.find((g) => g.id === resolvedGameId) ?? null,
-    [selectableGames, resolvedGameId]
-  );
+  function renderOverviewTab() {
+    const recoveryProps =
+      overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games"
+        ? renderSharedRecoveryCard(overviewRecoveryState.kind)
+        : null;
 
-  const gameCorrelations = useMemo(
-    () => buildGameCorrelations(games),
-    [games]
-  );
-
-  const renderOverviewTab = () => (
-    <View style={styles.card}>
-      <Text style={styles.eyebrow}>Overview</Text>
-      <Pressable
-        style={styles.compareButtonTop}
-        onPress={() => router.push("/charts/compare")}
+    return (
+      <AnalyticsStateSection
+        eyebrow="Overview"
+        title={toStringValue(hero.title, "Mission Snapshot")}
+        subtitle={toStringValue(
+          hero.takeaway,
+          "Supabase is the source of truth for these summaries.",
+        )}
+        actions={<DefinitionsJumpLink category="scoring" />}
+        helpCategory="scoring"
+        state={
+          loading
+            ? "loading"
+            : error
+              ? "error"
+              : recoveryProps
+                ? "empty"
+                : "ready"
+        }
+        sourceKind={sourceKind}
+        sourceLabel={sourceLabel}
+        sourceCaption={
+          staleSourceCaption ||
+          "League totals, overview cards, and top signals now come from the published Supabase stats payload."
+        }
+        messageTitle={
+          loading ? "Loading stats" : error ? "Stats unavailable" : recoveryProps?.title
+        }
+        messageBody={
+          loading
+            ? "Pulling the latest Supabase-authored statistics payload."
+            : error
+              ? error
+              : recoveryProps?.body
+        }
+        primaryAction={recoveryProps?.primaryAction}
+        secondaryAction={recoveryProps?.secondaryAction}
+        tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
-        <Text style={styles.compareButtonText}>Compare Players</Text>
-      </Pressable>
+        <View style={styles.compactGrid}>
+          {overviewCards.length > 0 ? (
+            overviewCards.map((card, index) => (
+              <StatPill
+                key={toStringValue(card.key, `overview-card-${index}`)}
+                label={toStringValue(card.title ?? card.label, `Card ${index + 1}`)}
+                value={toDisplayValue(card.value)}
+                accent={index % 2 === 0 ? COLORS.cyan : COLORS.blueGlow}
+              />
+            ))
+          ) : (
+            heroHighlights.map((item) => (
+              <StatPill
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                accent={COLORS.cyan}
+              />
+            ))
+          )}
+        </View>
 
-      <View style={styles.compactGrid}>
-        <StatPill label="Players" value={leaderboard.length} strong />
-        <StatPill label="Games" value={games.length} strong />
-        <StatPill
-          label="Prestige"
-          value={summary.totalPrestige}
-          accent={COLORS.blueGlow}
-          strong
-          metricKey="totalPrestige"
-          onInfoPress={() => goToDefinition("totalPrestige")}
-        />
-        <StatPill
-          label="Total Score"
-          value={summary.totalScore}
-          accent={COLORS.purple}
-          strong
-          metricKey="score"
-          onInfoPress={() => goToDefinition("score")}
-        />
-        <StatPill
-          label="Assist Sent"
-          value={summary.totalAssistSent.toFixed(1)}
-          accent={COLORS.teal}
-          metricKey="assistPrestigeSent"
-          onInfoPress={() => goToDefinition("assistPrestigeSent")}
-        />
-        <StatPill
-          label="Assist Received"
-          value={summary.totalAssistReceived.toFixed(1)}
-          accent={COLORS.blueGlow}
-          metricKey="assistPrestigeReceived"
-          onInfoPress={() => goToDefinition("assistPrestigeReceived")}
-        />
-        <StatPill
-          label="Avg Winner Seat"
-          value={summary.avgWinnerSeat > 0 ? summary.avgWinnerSeat.toFixed(2) : ""}
-          accent={COLORS.blue}
-        />
-        <StatPill
-          label="Seat ? Win Corr"
-          value={formatCorrelation(summary.turnOrderWinCorrelation)}
-          accent={COLORS.success}
-        />
-      </View>
-
-      <View style={styles.signalSection}>
-        <Text style={styles.compactSectionTitle}>Top 3 Winning Signals</Text>
-        <View style={styles.signalList}>
-          {topSignals.map((signal: any, index: number) => {
-            const accent = signal.value >= 0 ? COLORS.success : COLORS.danger;
-            return (
+        <View style={styles.signalSection}>
+          <Text style={styles.compactSectionTitle}>Top Signals</Text>
+          {topSignals.length > 0 ? (
+            topSignals.map((signal, index) => (
               <View
-                key={signal.key}
-                style={[styles.signalCard, { borderColor: `${accent}55` }]}
+                key={toStringValue(signal.key, `signal-${index}`)}
+                style={styles.signalCard}
               >
-                <View style={styles.signalRank}>
-                  <Text style={styles.signalRankText}>#{index + 1}</Text>
-                </View>
+                <Text style={styles.signalRank}>#{index + 1}</Text>
                 <View style={styles.signalBody}>
-                  <Text style={styles.signalLabel}>{signal.label}</Text>
-                  <Text style={[styles.signalValue, { color: accent }]}>
-                    {formatCorrelationValue(signal.value)} ·{" "}
-                    {getCorrelationStrength(signal.value)}
+                  <Text style={styles.signalLabel}>
+                    {toStringValue(signal.label, `Signal ${index + 1}`)}
                   </Text>
+                  <Text style={styles.signalValue}>{toDisplayValue(signal.value)}</Text>
                 </View>
               </View>
-            );
-          })}
+            ))
+          ) : (
+            <Text style={styles.emptyInlineText}>
+              Supabase has not returned any top signals yet.
+            </Text>
+          )}
         </View>
-      </View>
-    </View>
-  );
-
-  const renderPlayersTab = () => {
-    if (!leaderboard.length) {
-      return (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No stats yet</Text>
-          <Text style={styles.emptyText}>
-            Finish a few games to populate the stats view.
-          </Text>
-        </View>
-      );
-    }
-
-    if (!selectedPlayer) {
-      return (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No player selected</Text>
-          <Text style={styles.emptyText}>
-            Choose a player to view their stats breakdown.
-          </Text>
-        </View>
-      );
-    }
-
-    const accent = getPlayerColor(selectedPlayer.color);
-    const selectedIndex = leaderboard.findIndex(
-      (p: any) => p.id === selectedPlayer.id
+      </AnalyticsStateSection>
     );
+  }
+
+  function renderPlayersTab() {
+    const recoveryProps =
+      playerRecoveryState.kind === "no-players" ||
+      playerRecoveryState.kind === "no-games" ||
+      playerRecoveryState.kind === "player-empty"
+        ? renderSharedRecoveryCard(playerRecoveryState.kind)
+        : !playerOptions.length
+          ? {
+              title: "No player analytics yet",
+              body: "Supabase has not returned any player options for this account yet.",
+              primaryAction: null,
+              secondaryAction: null,
+              tone: "warning" as const,
+            }
+          : null;
+
+    if (loading || error || recoveryProps) {
+      return (
+        <AnalyticsStateSection
+          eyebrow="Players"
+          title="Player analytics"
+          subtitle="Inspect the published player directory and detail cards authored by Supabase."
+          actions={<DefinitionsJumpLink category="efficiency" />}
+          helpCategory="efficiency"
+          state={loading ? "loading" : error ? "error" : "empty"}
+          sourceKind={sourceKind}
+          sourceLabel={sourceLabel}
+          sourceCaption={staleSourceCaption}
+          messageTitle={
+            loading
+              ? "Loading player analytics"
+              : error
+                ? "Player analytics unavailable"
+                : recoveryProps?.title
+          }
+          messageBody={
+            loading
+              ? "Refreshing player cards from the Supabase stats payload."
+              : error
+                ? error
+                : recoveryProps?.body
+          }
+          primaryAction={recoveryProps?.primaryAction ?? null}
+          secondaryAction={recoveryProps?.secondaryAction ?? null}
+          tone={error ? "danger" : recoveryProps?.tone ?? "warning"}
+        />
+      );
+    }
 
     return (
       <View style={styles.playersList}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.selectorWrap}
-        >
-          {leaderboard.map((player: any) => {
-            const active = player.id === resolvedPlayerId;
-            return (
-              <Pressable
-                key={player.id}
-                onPress={() => setSelectedPlayerId(player.id)}
-                style={styles.selectorTab}
-              >
-                <Text
-                  style={[
-                    styles.selectorTabText,
-                    active && styles.selectorTabTextActive,
-                  ]}
-                >
-                  {player.name}
-                </Text>
-                <View
-                  style={[
-                    styles.selectorTabUnderline,
-                    active && styles.selectorTabUnderlineActive,
-                  ]}
-                />
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={[styles.playerCard, { borderColor: `${accent}33` }]}>
-          <View style={[styles.playerAccent, { backgroundColor: accent }]} />
-          <View
-            style={[
-              styles.playerGlow,
-              { backgroundColor: getGlowColor(selectedPlayer.color) },
-            ]}
+        <SectionCard title="Player Directory">
+          <PlayerSearchPicker
+            query={playerSearchQuery}
+            onQueryChange={setPlayerSearchQuery}
+            placeholder="Search players"
+            items={filteredPlayerOptions.map((player) => ({
+              id: player.id,
+              label: player.label,
+              meta:
+                player.displayName ||
+                player.playerName ||
+                "Supabase-authored player entry",
+            }))}
+            selectedIds={selectedPlayerId ? [selectedPlayerId] : []}
+            onSelect={setSelectedPlayerId}
+            nestedScrollEnabled
           />
+        </SectionCard>
 
-          <View style={styles.playerHeader}>
-            <View style={styles.playerHeaderLeft}>
-              <View
-                style={[
-                  styles.playerCardBadgeWrap,
-                  { shadowColor: getPlayerColor(selectedPlayer.color) },
-                ]}
-              >
-                <PlayerCardIcon
-                  player={selectedPlayer as any}
-                  size={42}
-                  borderRadius={10}
-                  showInitial={false}
+        <AnalyticsStateSection
+          eyebrow="Player Detail"
+          title={toStringValue(selectedPlayerDetail.label, "Selected player")}
+          subtitle={toStringValue(
+            selectedPlayerDetail.summary,
+            "Supabase will populate this panel with richer player detail as analytics contracts expand.",
+          )}
+          actions={<DefinitionsJumpLink category="efficiency" />}
+          helpCategory="efficiency"
+          state="ready"
+          sourceKind={sourceKind}
+          sourceLabel={sourceLabel}
+          sourceCaption={
+            staleSourceCaption ||
+            "This detail card is published from the shared stats payload, so the same player read can be reused across analytics surfaces."
+          }
+        >
+          {detailStats.length > 0 ? (
+            <View style={styles.compactGrid}>
+              {detailStats.map((item) => (
+                <StatPill
+                  key={item.key}
+                  label={item.label}
+                  value={item.value}
+                  accent={COLORS.purple}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.rankText, { color: accent }]}>
-                  #{selectedIndex + 1}
-                </Text>
-                <Text style={styles.playerName}>{selectedPlayer.name}</Text>
-                <Text style={styles.playerMeta}>
-                  {formatPercent(selectedPlayer.winRate)} win ·{" "}
-                  {selectedPlayer.games} games ·{" "}
-                  {selectedPlayer.avgPrestigePerGame.toFixed(1)} prestige/game
-                </Text>
-              </View>
+              ))}
             </View>
-
-            <View style={styles.playerPrimaryValueWrap}>
-              <Text style={styles.playerPrimaryValue}>
-                {selectedPlayer.totalPrestige}
-              </Text>
-              <Text style={styles.playerPrimaryLabel}>prestige</Text>
-            </View>
-          </View>
-
-          <PlayerSection title="Core">
-            <StatPill
-              label="Wins"
-              value={selectedPlayer.wins}
-              accent={COLORS.success}
-              strong
-              metricKey="wins"
-              onInfoPress={() => goToDefinition("wins")}
-            />
-            <StatPill
-              label="Direct"
-              value={selectedPlayer.directPrestige}
-              accent={COLORS.blueGlow}
-              strong
-              metricKey="directPrestige"
-              onInfoPress={() => goToDefinition("directPrestige")}
-            />
-            <StatPill
-              label="Assist In"
-              value={selectedPlayer.assistPrestigeReceived.toFixed(1)}
-              accent={COLORS.teal}
-              strong
-              metricKey="assistPrestigeReceived"
-              onInfoPress={() => goToDefinition("assistPrestigeReceived")}
-            />
-            <StatPill
-              label="Assist Out"
-              value={selectedPlayer.assistPrestigeSent.toFixed(1)}
-              accent={COLORS.purple}
-              strong
-              metricKey="assistPrestigeSent"
-              onInfoPress={() => goToDefinition("assistPrestigeSent")}
-            />
-            <StatPill
-              label="All Eff"
-              value={selectedPlayer.allContractsEfficiency.toFixed(2)}
-              accent={COLORS.success}
-              metricKey="allContractsEfficiency"
-              onInfoPress={() => goToDefinition("allContractsEfficiency")}
-            />
-            <StatPill
-              label="Assist Eff"
-              value={selectedPlayer.assistanceEfficiency.toFixed(2)}
-              accent={COLORS.purple}
-              metricKey="assistanceEfficiency"
-              onInfoPress={() => goToDefinition("assistanceEfficiency")}
-            />
-            <StatPill
-              label="Direct Eff"
-              value={selectedPlayer.directEfficiency.toFixed(2)}
-              accent={COLORS.blueGlow}
-              metricKey="directEfficiency"
-              onInfoPress={() => goToDefinition("directEfficiency")}
-            />
-            <StatPill
-              label="Fail %"
-              value={formatPercent(selectedPlayer.failureRate)}
-              accent={COLORS.danger}
-              metricKey="failureRate"
-              onInfoPress={() => goToDefinition("failureRate")}
-            />
-          </PlayerSection>
-
-          <PlayerSection title="Performance">
-            <StatPill
-              label="Consistency"
-              value={selectedPlayer.consistencyScore.toFixed(2)}
-              accent={COLORS.success}
-              metricKey="consistencyScore"
-              onInfoPress={() => goToDefinition("consistencyScore")}
-            />
-            <StatPill
-              label="Clutch"
-              value={formatPercent(selectedPlayer.clutchScore)}
-              accent={COLORS.blue}
-              metricKey="clutchScore"
-              onInfoPress={() => goToDefinition("clutchScore")}
-            />
-            <StatPill
-              label="Carry"
-              value={formatPercent(selectedPlayer.carryFactor)}
-              accent={COLORS.blueGlow}
-              metricKey="carryFactor"
-              onInfoPress={() => goToDefinition("carryFactor")}
-            />
-            <StatPill
-              label="Momentum"
-              value={formatSigned(selectedPlayer.momentum)}
-              accent={COLORS.purple}
-              metricKey="momentum"
-              onInfoPress={() => goToDefinition("momentum")}
-            />
-            <StatPill
-              label="Prestige / Turn"
-              value={selectedPlayer.prestigePerTurn.toFixed(2)}
-              accent={COLORS.teal}
-              metricKey="prestigePerTurn"
-              onInfoPress={() => goToDefinition("prestigePerTurn")}
-            />
-            <StatPill
-              label="Early Lead %"
-              value={formatPercent(selectedPlayer.earlyLeadRate)}
-              accent={COLORS.blue}
-            />
-            <StatPill
-              label="Late Lead %"
-              value={formatPercent(selectedPlayer.lateLeadRate)}
-              accent={COLORS.gold}
-            />
-            <StatPill
-              label="Lead Conv"
-              value={formatPercent(selectedPlayer.leadConversion)}
-              accent={COLORS.success}
-              metricKey="leadConversion"
-              onInfoPress={() => goToDefinition("leadConversion")}
-            />
-            <StatPill
-              label="Late Lead Conv"
-              value={formatPercent(selectedPlayer.lateLeadConversion)}
-              accent="#10B981"
-              metricKey="lateLeadConversion"
-              onInfoPress={() => goToDefinition("lateLeadConversion")}
-            />
-            <StatPill
-              label="Objective Conv"
-              value={formatPercent(selectedPlayer.objectiveConversionRate)}
-              accent={COLORS.cyan}
-            />
-            <StatPill
-              label="Support Conv"
-              value={formatPercent(selectedPlayer.supportConversionRate)}
-              accent={COLORS.purple}
-            />
-            <StatPill
-              label="Avg Margin"
-              value={formatSigned(selectedPlayer.avgPrestigeMarginPerGame)}
-              accent={COLORS.blueGlow}
-            />
-            <StatPill
-              label="Best Margin"
-              value={formatSigned(selectedPlayer.bestPrestigeMargin)}
-              accent={COLORS.blueGlow}
-            />
-            <StatPill
-              label="Objectives / Game"
-              value={selectedPlayer.objectivesPerGame.toFixed(2)}
-              accent={COLORS.gold}
-            />
-            <StatPill
-              label="Assists / Game"
-              value={selectedPlayer.assistsGivenPerGame.toFixed(2)}
-              accent={COLORS.teal}
-            />
-            <StatPill
-              label="Assist In / Game"
-              value={selectedPlayer.assistsReceivedPerGame.toFixed(2)}
-              accent={COLORS.blueGlow}
-            />
-          </PlayerSection>
-
-          <PlayerSection title="Context">
-            <StatPill
-              label="Opponent Str"
-              value={selectedPlayer.opponentStrength.toFixed(2)}
-              accent={COLORS.textSecondary}
-            />
-            <StatPill
-              label="Tempo"
-              value={selectedPlayer.tempoIndex.toFixed(2)}
-              accent={COLORS.pink}
-              metricKey="tempoIndex"
-              onInfoPress={() => goToDefinition("tempoIndex")}
-            />
-            <StatPill
-              label="Interaction"
-              value={selectedPlayer.interactionIndex.toFixed(2)}
-              accent={COLORS.cyan}
-            />
-            <StatPill
-              label="Aggro"
-              value={selectedPlayer.aggroIndex.toFixed(2)}
-              accent={COLORS.danger}
-            />
-            <StatPill
-              label="Seat ? Win Corr"
-              value={formatCorrelation(selectedPlayer.turnOrderWinCorrelation)}
-              accent={COLORS.success}
-            />
-            <StatPill
-              label="Assist Count In"
-              value={selectedPlayer.assistCountBySource}
-            />
-          </PlayerSection>
-        </View>
+          ) : (
+            <Text style={styles.emptyInlineText}>
+              No detailed player stats were returned in the current Supabase payload.
+            </Text>
+          )}
+        </AnalyticsStateSection>
       </View>
     );
-  };
+  }
 
-  const renderCorrelationTab = () => (
-    <View style={styles.card}>
-      <Text style={styles.eyebrow}>Correlations</Text>
-      <Text style={styles.title}>Win Signals</Text>
+  function renderPlaystyleTab() {
+    const recoveryProps =
+      overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games"
+        ? renderSharedRecoveryCard(overviewRecoveryState.kind)
+        : null;
+    const spotlightEntry = playstyleHighlights[0] ?? null;
+    const supportingEntries = playstyleHighlights.slice(1);
 
-      <View style={styles.subtabWrap}>
-        <TabButton
-          label="Global"
-          active={activeCorrelationTab === "global"}
-          onPress={() => setActiveCorrelationTab("global")}
-        />
-        <TabButton
-          label="Individual"
-          active={activeCorrelationTab === "individual"}
-          onPress={() => setActiveCorrelationTab("individual")}
-        />
-        <TabButton
-          label="Game"
-          active={activeCorrelationTab === "game"}
-          onPress={() => setActiveCorrelationTab("game")}
-        />
-      </View>
-
-      {activeCorrelationTab === "global" && (
-        <View style={styles.list}>
-          <Text style={styles.subtitle}>
-            Across all players, these are the strongest league-wide win signals.
-          </Text>
-
-          {GLOBAL_CORRELATION_TIERS.map((tier) => {
-            const rows = getRowsForTier(globalCorrelations, tier.keys);
-            if (!rows.length) return null;
-
-            return (
-              <View key={tier.title} style={styles.tierSection}>
-                <Text style={styles.compactSectionTitle}>{tier.title}</Text>
-                <View style={styles.list}>
-                  {rows.map((row: any) => (
-                    <CorrelationRowCard key={row.key} row={row} />
-                  ))}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      {activeCorrelationTab === "individual" && (
-        <View style={styles.list}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.selectorWrap}
-          >
-            {leaderboard.map((player: any) => {
-              const active = player.id === resolvedCorrelationPlayerId;
-              return (
-                <Pressable
-                  key={player.id}
-                  onPress={() => setSelectedCorrelationPlayerId(player.id)}
-                  style={styles.selectorTab}
-                >
-                  <Text
-                    style={[
-                      styles.selectorTabText,
-                      active && styles.selectorTabTextActive,
-                    ]}
-                  >
-                    {player.name}
-                  </Text>
-                  <View
-                    style={[
-                      styles.selectorTabUnderline,
-                      active && styles.selectorTabUnderlineActive,
-                    ]}
-                  />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          {selectedCorrelationPlayer ? (
-            <Text style={styles.subtitle}>
-              What tends to drive wins specifically for{" "}
-              {selectedCorrelationPlayer.name}.
-            </Text>
-          ) : null}
-
-          {INDIVIDUAL_CORRELATION_TIERS.map((tier) => {
-            const rows = getRowsForTier(individualCorrelations, tier.keys);
-            if (!rows.length) return null;
-
-            return (
-              <View key={tier.title} style={styles.tierSection}>
-                <Text style={styles.compactSectionTitle}>{tier.title}</Text>
-                <View style={styles.list}>
-                  {rows.map((row: any) => (
-                    <CorrelationRowCard key={row.key} row={row} />
-                  ))}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      {activeCorrelationTab === "game" && (
-        <View style={styles.list}>
-          <Text style={styles.subtitle}>
-            Match-condition signals showing what kinds of games favor a certain
-            type of winner.
-          </Text>
-
-          {GAME_CORRELATION_TIERS.map((tier) => {
-            const rows = getRowsForTier(gameCorrelations, tier.keys);
-            if (!rows.length) return null;
-
-            return (
-              <View key={tier.title} style={styles.tierSection}>
-                <Text style={styles.compactSectionTitle}>{tier.title}</Text>
-                <View style={styles.list}>
-                  {rows.map((row: any) => (
-                    <CorrelationRowCard key={row.key} row={row} />
-                  ))}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
-
-  const renderGamesTab = () => (
-    <View style={styles.card}>
-      <Text style={styles.eyebrow}>Games</Text>
-      <Text style={styles.subtitle}>
-        Select a game to inspect its outcome, environment, and margin.
-      </Text>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.selectorWrap}
+    return (
+      <AnalyticsStateSection
+        eyebrow="Spotlight"
+        title="Playstyle Spotlight"
+        subtitle={toStringValue(
+          playstyleSection.summary,
+          "Stay-at-base tempo, style reads, and support fingerprints now lead the scouting pass on this screen.",
+        )}
+        actions={
+          <View style={styles.sectionActions}>
+            <DefinitionsJumpLink label="Playstyle" metric="playstyle" />
+            <DefinitionsJumpLink label="Efficiency" category="efficiency" />
+          </View>
+        }
+        helpMetric="playstyle"
+        state={
+          loading
+            ? "loading"
+            : error
+              ? "error"
+              : recoveryProps
+                ? "empty"
+                : "ready"
+        }
+        sourceKind={sourceKind}
+        sourceLabel={sourceLabel}
+        sourceCaption={
+          staleSourceCaption ||
+          "Playstyle spotlight is published from Supabase so stay-at-base tempo and style read stay consistent with the deeper player intel surfaces."
+        }
+        messageTitle={
+          loading
+            ? "Loading playstyle"
+            : error
+              ? "Playstyle unavailable"
+              : recoveryProps?.title
+        }
+        messageBody={
+          loading
+            ? "Fetching playstyle summaries from Supabase."
+            : error
+              ? error
+              : recoveryProps?.body
+        }
+        primaryAction={recoveryProps?.primaryAction}
+        secondaryAction={recoveryProps?.secondaryAction}
+        tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
-        {selectableGames.map((game) => {
-          const active = game.id === resolvedGameId;
-          return (
-            <Pressable
-              key={game.id}
-              onPress={() => setSelectedGameId(game.id)}
-              style={styles.selectorTab}
-            >
-              <Text
-                style={[
-                  styles.selectorTabText,
-                  active && styles.selectorTabTextActive,
-                ]}
-              >
-                {game.label}
-              </Text>
-              <View
-                style={[
-                  styles.selectorTabUnderline,
-                  active && styles.selectorTabUnderlineActive,
-                ]}
-              />
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {selectedGame ? (
-        <View style={styles.gamePanel}>
-          <Text style={styles.compactSectionTitle}>{selectedGame.label}</Text>
-
-          <View style={styles.compactGrid}>
-            <StatPill
-              label="Margin"
-              value={selectedGame.margin.toFixed(1)}
-              accent={COLORS.blueGlow}
-              strong
-            />
-            <StatPill
-              label="Assists"
-              value={selectedGame.assists}
-              accent={COLORS.teal}
-              strong
-            />
-            <StatPill
-              label="Objectives"
-              value={selectedGame.objectives}
-              accent={COLORS.gold}
-              strong
-            />
-            <StatPill
-              label="Failures"
-              value={selectedGame.failures}
-              accent={COLORS.danger}
-              strong
-            />
-          </View>
-
-          <View style={styles.list}>
-            {selectedGame.rows.map((row: any, index: number) => {
-              const isWinner = row.playerId === selectedGame.winnerId;
-              const player = leaderboard.find((p: any) => p.id === row.playerId);
-
-              return (
-                <View key={row.playerId} style={styles.gameRowCard}>
-                  <View style={styles.gameRowIdentity}>
-                    <View
-                      style={[
-                        styles.gamePlayerCardWrap,
-                        { shadowColor: getPlayerColor(player?.color) },
-                      ]}
-                    >
-                      <PlayerCardIcon
-                        player={(player ?? {
-                          id: row.playerId,
-                          name: player?.name ?? row.playerId,
-                          color: player?.color,
-                          assignedCardArtIndex: player?.assignedCardArtIndex,
-                          initials:
-                            player?.initials ??
-                            (player?.name?.slice(0, 2)?.toUpperCase() ?? "?"),
-                        }) as any}
-                        size={26}
-                        borderRadius={6}
-                        showInitial={true}
-                      />
-                    </View>
-                    <View style={styles.gameRowIdentityText}>
-                      <Text style={styles.gameRowTitle}>
-                        {index + 1}. {player?.name ?? row.playerId}
-                      </Text>
-                      <Text style={styles.gameRowMeta}>
-                        {isWinner ? "Winner" : "Participant"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.gameRowStats}>
-                    <Text style={styles.gameRowStat}>
-                      P {row.prestige.toFixed(1)}
-                    </Text>
-                    <Text style={styles.gameRowStat}>A {row.assists}</Text>
-                    <Text style={styles.gameRowStat}>O {row.objectives}</Text>
-                    <Text style={styles.gameRowStat}>F {row.failures}</Text>
-                  </View>
+        {playstyleHighlights.length > 0 ? (
+          <View style={styles.signalSection}>
+            <Text style={styles.playstyleLead}>
+              Stay-at-base tempo, base-rate share, and style read are now treated like first-pass scouting clues instead of background stats.
+            </Text>
+            {spotlightEntry ? (
+              <View style={styles.playstyleSpotlightCard}>
+                <Text style={styles.playstyleSpotlightEyebrow}>Stay-at-Base Spotlight</Text>
+                <Text style={styles.playstyleSpotlightLabel}>
+                  {toStringValue(spotlightEntry.label, "Playstyle signal")}
+                </Text>
+                <Text style={styles.playstyleSpotlightValue}>
+                  {toDisplayValue(spotlightEntry.value)}
+                </Text>
+              </View>
+            ) : null}
+            {supportingEntries.map((entry, index) => (
+              <View key={toStringValue(entry.key, `playstyle-${index}`)} style={styles.signalCard}>
+                <Text style={styles.signalRank}>#{index + 2}</Text>
+                <View style={styles.signalBody}>
+                  <Text style={styles.signalLabel}>
+                    {toStringValue(entry.label, `Highlight ${index + 2}`)}
+                  </Text>
+                  <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
                 </View>
-              );
-            })}
+              </View>
+            ))}
           </View>
-        </View>
-      ) : (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No games yet</Text>
-          <Text style={styles.emptyText}>Finish a game to inspect it here.</Text>
-        </View>
-      )}
-    </View>
-  );
+        ) : (
+          <Text style={styles.emptyInlineText}>
+            No playstyle highlights are available in the current Supabase payload.
+          </Text>
+        )}
+      </AnalyticsStateSection>
+    );
+  }
+
+  function renderCorrelationsTab() {
+    const recoveryProps =
+      overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games"
+        ? renderSharedRecoveryCard(overviewRecoveryState.kind)
+        : null;
+
+    return (
+      <AnalyticsStateSection
+        eyebrow="Insights"
+        title="Correlation feed"
+        subtitle={toStringValue(
+          correlationsSection.summary,
+          "These correlation summaries now come from Supabase instead of local derivation.",
+        )}
+        actions={<DefinitionsJumpLink category="correlations" />}
+        helpCategory="correlations"
+        state={
+          loading
+            ? "loading"
+            : error
+              ? "error"
+              : recoveryProps
+                ? "empty"
+                : "ready"
+        }
+        sourceKind={sourceKind}
+        sourceLabel={sourceLabel}
+        sourceCaption={
+          staleSourceCaption ||
+          "Correlation entries below are served from the Supabase insights payload instead of route-local math."
+        }
+        messageTitle={
+          loading
+            ? "Loading correlations"
+            : error
+              ? "Correlations unavailable"
+              : recoveryProps?.title
+        }
+        messageBody={
+          loading
+            ? "Waiting for Supabase-authored correlation data."
+            : error
+              ? error
+              : recoveryProps?.body
+        }
+        primaryAction={recoveryProps?.primaryAction}
+        secondaryAction={recoveryProps?.secondaryAction}
+        tone={error ? "danger" : recoveryProps?.tone ?? "info"}
+      >
+        {correlationItems.length > 0 ? (
+          <View style={styles.signalSection}>
+            {correlationItems.map((entry, index) => (
+              <View key={toStringValue(entry.key, `correlation-${index}`)} style={styles.signalCard}>
+                <Text style={styles.signalRank}>#{index + 1}</Text>
+                <View style={styles.signalBody}>
+                  <Text style={styles.signalLabel}>
+                    {toStringValue(entry.label, `Correlation ${index + 1}`)}
+                  </Text>
+                  <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyInlineText}>
+            Supabase has not returned any correlation entries yet.
+          </Text>
+        )}
+      </AnalyticsStateSection>
+    );
+  }
+
+  function renderGamesTab() {
+    const recoveryProps =
+      overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games"
+        ? renderSharedRecoveryCard(overviewRecoveryState.kind)
+        : null;
+
+    return (
+      <AnalyticsStateSection
+        eyebrow="Games"
+        title="Supabase summary"
+        subtitle="Any game-level summaries on this screen now come from Supabase."
+        state={
+          loading
+            ? "loading"
+            : error
+              ? "error"
+              : recoveryProps
+                ? "empty"
+                : "ready"
+        }
+        sourceKind={sourceKind}
+        sourceLabel={sourceLabel}
+        sourceCaption={
+          staleSourceCaption ||
+          "This game summary is published from Supabase so it stays aligned with the other analytics hubs."
+        }
+        messageTitle={
+          loading
+            ? "Loading game summaries"
+            : error
+              ? "Game analytics unavailable"
+              : recoveryProps?.title
+        }
+        messageBody={
+          loading
+            ? "Requesting server-authored game analytics."
+            : error
+              ? error
+              : recoveryProps?.body
+        }
+        primaryAction={recoveryProps?.primaryAction}
+        secondaryAction={recoveryProps?.secondaryAction}
+        tone={error ? "danger" : recoveryProps?.tone ?? "info"}
+      >
+        {gamesItems.length > 0 ? (
+          <View style={styles.signalSection}>
+            {gamesItems.map((entry, index) => (
+              <View key={toStringValue(entry.id ?? entry.key, `game-${index}`)} style={styles.signalCard}>
+                <Text style={styles.signalRank}>#{index + 1}</Text>
+                <View style={styles.signalBody}>
+                  <Text style={styles.signalLabel}>
+                    {toStringValue(entry.label ?? entry.title, `Game ${index + 1}`)}
+                  </Text>
+                  <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyInlineText}>
+            No game-specific analytics items were returned in the current payload.
+          </Text>
+        )}
+      </AnalyticsStateSection>
+    );
+  }
 
   return (
-    <View style={styles.root}>
-      <View style={styles.backgroundLayer}>
-        <StarryNight />
-        <View style={styles.backgroundNebulaPurple} />
-        <View style={styles.backgroundNebulaBlue} />
-        <View style={styles.backgroundDim} />
+    <PageShell preset="analytics">
+      <HeroCard
+        eyebrow="Statistics"
+        title="Statistics"
+        subtitle={
+          error
+            ? error
+            : loading
+              ? "Loading Supabase-authored statistics."
+              : toStringValue(
+                  hero.takeaway,
+                  "Supabase now authors the statistics payload for this screen.",
+                )
+        }
+        size="compact"
+      >
+        <View style={styles.heroHeader}>
+          <View style={styles.heroTitleWrap}>
+            <Text style={styles.heroTitle}>Mission Snapshot</Text>
+          </View>
+          <Pressable onPress={() => router.push(APP_ROUTES.home)} style={styles.backButton}>
+            <Text style={styles.backButtonText}>Back to Command</Text>
+          </Pressable>
+        </View>
+        <View style={styles.statsHeroHighlights}>
+          {heroHighlights.map((item) => (
+            <View key={item.label} style={styles.heroHighlightPill}>
+              <Text style={styles.heroHighlightLabel}>{item.label}</Text>
+              <Text style={styles.heroHighlightValue}>{item.value}</Text>
+            </View>
+          ))}
+        </View>
+      </HeroCard>
+
+      <View style={styles.primaryTabRail}>
+        <TabButton
+          label="Home"
+          active={activeTab === "overview"}
+          onPress={() => setActiveTab("overview")}
+        />
+        <TabButton
+          label="Players"
+          active={activeTab === "players"}
+          onPress={() => setActiveTab("players")}
+        />
+        <TabButton
+          label="Playstyle"
+          active={activeTab === "playstyle"}
+          onPress={() => setActiveTab("playstyle")}
+        />
+        <TabButton
+          label="Insights"
+          active={activeTab === "correlations"}
+          onPress={() => setActiveTab("correlations")}
+        />
+        <TabButton
+          label="Games"
+          active={activeTab === "games"}
+          onPress={() => setActiveTab("games")}
+        />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.heroCard}>
-          <View style={styles.heroTitleWrap}>
-            <Text style={styles.heroEyebrow}>View Your Mission Log</Text>
-            <Text style={styles.brandTitle}>Moonraker&apos;s</Text>
-            <Text style={styles.heroTitle}>Statistics</Text>
-          </View>
-        </View>
-
-        <View style={styles.tabWrap}>
-          <TabButton
-            label="Home"
-            active={activeTab === "overview"}
-            onPress={() => setActiveTab("overview")}
-          />
-          <TabButton
-            label="Players"
-            active={activeTab === "players"}
-            onPress={() => setActiveTab("players")}
-          />
-          <TabButton
-            label="Insights"
-            active={activeTab === "correlations"}
-            onPress={() => setActiveTab("correlations")}
-          />
-          <TabButton
-            label="Games"
-            active={activeTab === "games"}
-            onPress={() => setActiveTab("games")}
-          />
-        </View>
-
-        {activeTab === "overview" && renderOverviewTab()}
-        {activeTab === "players" && renderPlayersTab()}
-        {activeTab === "correlations" && renderCorrelationTab()}
-        {activeTab === "games" && renderGamesTab()}
-      </ScrollView>
-    </View>
+      {activeTab === "overview" && renderOverviewTab()}
+      {activeTab === "players" && renderPlayersTab()}
+      {activeTab === "playstyle" && renderPlaystyleTab()}
+      {activeTab === "correlations" && renderCorrelationsTab()}
+      {activeTab === "games" && renderGamesTab()}
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-  },
-  backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backgroundNebulaPurple: {
-    position: "absolute",
-    top: -80,
-    left: -30,
-    width: 220,
-    height: 220,
-    borderRadius: 999,
-    backgroundColor: "rgba(168,85,247,0.14)",
-  },
-  backgroundNebulaBlue: {
-    position: "absolute",
-    bottom: -120,
-    right: -20,
-    width: 260,
-    height: 260,
-    borderRadius: 999,
-    backgroundColor: "rgba(59,130,246,0.10)",
-  },
-  backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.20)",
-  },
-  content: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 20,
-    gap: 8,
-  },
-  heroCard: {
-    backgroundColor: COLORS.surfaceGlass,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: COLORS.borderStrong,
-    gap: 6,
-    shadowColor: "#8B5CF6",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
-  },
-  brandTitle: {
-    color: COLORS.brand,
-    fontSize: 24,
-    fontWeight: "900",
-  },
-  heroTitleWrap: {
-    gap: 2,
-  },
-  heroEyebrow: {
-    color: COLORS.cyan,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  heroTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  heroSubtitle: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  tabWrap: {
+  heroHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 14,
-    paddingHorizontal: 2,
-    paddingVertical: 2,
+    alignItems: "center",
+    marginBottom: 8,
   },
-  subtabWrap: {
+  heroTitleWrap: {
+    flex: 1,
+  },
+  heroTitle: {
+    color: "#EAF2FF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  backButton: {
+    alignSelf: "flex-start",
+  },
+  backButtonText: {
+    color: "#7D9BC4",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  statsHeroHighlights: {
     flexDirection: "row",
     flexWrap: "wrap",
-    columnGap: 14,
-    rowGap: 8,
+    gap: 10,
+    marginTop: 6,
+  },
+  heroHighlightPill: {
+    minWidth: 92,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    gap: 4,
+  },
+  heroHighlightLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  heroHighlightValue: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  primaryTabPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  primaryTabRail: {
+    flexDirection: "row",
+    flexWrap: "nowrap",
     alignItems: "flex-end",
+    gap: 4,
   },
   tabButton: {
     flex: 1,
+    minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 4,
@@ -1274,53 +959,42 @@ const styles = StyleSheet.create({
   tabButtonUnderlineActive: {
     backgroundColor: COLORS.cyan,
   },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.18)",
-    gap: 8,
-  },
-  eyebrow: {
-    color: COLORS.cyan,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  title: {
-    color: COLORS.textPrimary,
-    fontSize: 16,
-    fontWeight: "900",
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 17,
-  },
   compactGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 6,
   },
-  list: {
-    gap: 8,
+  statPill: {
+    width: "48.5%",
+    minWidth: 0,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    backgroundColor: "rgba(22,35,56,0.96)",
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    gap: 2,
+  },
+  statPillLabel: {
+    fontSize: 8,
+    color: COLORS.textMuted,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
+  },
+  statPillValue: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
   },
   signalSection: {
     gap: 6,
-    marginTop: 2,
   },
   compactSectionTitle: {
     color: COLORS.textPrimary,
     fontSize: 12,
     fontWeight: "900",
-  },
-  signalList: {
-    gap: 6,
   },
   signalCard: {
     flexDirection: "row",
@@ -1330,20 +1004,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderWidth: 1,
+    borderColor: COLORS.borderSoft,
     backgroundColor: COLORS.surfaceAlt,
   },
   signalRank: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  signalRankText: {
-    color: COLORS.textPrimary,
+    color: COLORS.cyan,
     fontSize: 11,
     fontWeight: "900",
+    minWidth: 24,
   },
   signalBody: {
     flex: 1,
@@ -1357,287 +1025,105 @@ const styles = StyleSheet.create({
   signalValue: {
     fontSize: 10,
     fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  statPill: {
-    width: "48.5%",
-    minWidth: 0,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    backgroundColor: "rgba(22,35,56,0.96)",
-    borderWidth: 1,
-    borderColor: COLORS.borderSoft,
-  },
-  statPillStrong: {
-    backgroundColor: "rgba(20,34,54,1)",
-  },
-  statPillHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-    marginBottom: 2,
-  },
-  statPillLabel: {
-    fontSize: 8,
-    color: COLORS.textMuted,
-    fontWeight: "700",
-  },
-  statPillValue: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-  },
-  statPillValueStrong: {
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  infoButtonText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: "900",
-  },
-  compareButtonTop: {
-    marginTop: 2,
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(168,85,247,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(168,85,247,0.45)",
-  },
-  compareButtonText: {
-    color: "#E9D5FF",
-    fontWeight: "900",
-    fontSize: 11,
-    letterSpacing: 0.4,
-  },
-  emptyCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.borderSoft,
-    gap: 6,
-  },
-  emptyTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  emptyText: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  playerSection: {
-    gap: 6,
-    marginTop: 2,
-  },
-  playerSectionTitle: {
-    color: COLORS.cyan,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.9,
-    textTransform: "uppercase",
+    color: COLORS.gold,
+    letterSpacing: 0.25,
   },
   playersList: {
     gap: 8,
   },
-  playerCard: {
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: 18,
-    padding: 10,
-    backgroundColor: COLORS.surfaceAlt,
-    borderWidth: 1,
-    gap: 8,
-  },
-  playerAccent: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-  },
-  playerGlow: {
-    position: "absolute",
-    top: -24,
-    right: -24,
-    width: 90,
-    height: 90,
-    borderRadius: 999,
-  },
-  playerCardBadgeWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 3,
-  },
-  playerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  playerHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-  },
-  rankText: {
-    fontSize: 10,
-    fontWeight: "900",
-    marginBottom: 2,
-  },
-  playerName: {
-    color: COLORS.textPrimary,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  playerMeta: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  playerPrimaryValueWrap: {
-    alignItems: "flex-end",
-  },
-  playerPrimaryValue: {
-    color: COLORS.textPrimary,
-    fontSize: 22,
-    fontWeight: "900",
-    lineHeight: 24,
-  },
-  playerPrimaryLabel: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  selectorWrap: {
-    gap: 14,
-    paddingRight: 12,
-    alignItems: "center",
-  },
-  selectorTab: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
-    gap: 6,
-  },
-  selectorTabText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  selectorTabTextActive: {
-    color: COLORS.textPrimary,
-    fontWeight: "900",
-  },
-  selectorTabUnderline: {
-    width: "100%",
-    minWidth: 44,
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-  selectorTabUnderlineActive: {
-    backgroundColor: COLORS.cyan,
-  },
-  tierSection: {
-    gap: 6,
-    marginTop: 2,
-  },
-  gamePanel: {
-    gap: 8,
-    marginTop: 2,
-  },
-  gameRowCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+  playerSearchInput: {
+    minHeight: 42,
     borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    color: COLORS.textPrimary,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  playerSearchResults: {
+    maxHeight: 210,
+  },
+  playerSearchResultsContent: {
+    gap: 6,
+    paddingBottom: 2,
+  },
+  playerSearchResult: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: COLORS.borderSoft,
     backgroundColor: COLORS.surfaceAlt,
   },
-  gameRowIdentity: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
+  playerSearchResultActive: {
+    borderColor: COLORS.cyan,
   },
-  gameRowIdentityText: {
+  playerSearchResultTextWrap: {
     flex: 1,
+    gap: 2,
   },
-  gameRowTitle: {
+  playerSearchResultName: {
     color: COLORS.textPrimary,
     fontSize: 12,
-    fontWeight: "900",
-  },
-  gameRowMeta: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    marginTop: 2,
-  },
-  gameRowStats: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-  },
-  gameRowStat: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
     fontWeight: "800",
   },
-  correlationCard: {
-    borderRadius: 14,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: COLORS.borderSoft,
-    backgroundColor: COLORS.surfaceAlt,
-    gap: 6,
+  playerSearchResultMeta: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontWeight: "700",
   },
-  correlationHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+  playerSearchResultAction: {
+    color: COLORS.cyan,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  emptyInlineText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  sectionActions: {
+    alignItems: "flex-end",
     gap: 8,
   },
-  correlationBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-  },
-  correlationBadgeText: {
-    fontSize: 10,
-    fontWeight: "900",
-  },
-  correlationLabel: {
-    color: COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: "900",
-    flex: 1,
-  },
-  correlationMeaning: {
+  playstyleLead: {
     color: COLORS.textSecondary,
     fontSize: 11,
     lineHeight: 17,
+  },
+  playstyleSpotlightCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.28)",
+    backgroundColor: "rgba(11,28,25,0.94)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  playstyleSpotlightEyebrow: {
+    color: COLORS.green,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  playstyleSpotlightLabel: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  playstyleSpotlightValue: {
+    color: COLORS.gold,
+    fontSize: 12,
+    fontWeight: "900",
   },
 });

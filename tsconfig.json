@@ -7,6 +7,7 @@
     "noUncheckedIndexedAccess": false,
     "noImplicitReturns": false,
     "noFallthroughCasesInSwitch": false,
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
@@ -91,4 +92,3 @@
     "utils/validators.ts"
   ]
 }
-

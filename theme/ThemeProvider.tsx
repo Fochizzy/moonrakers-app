@@ -9,11 +9,22 @@ import { colors } from './colors';
 import { spacing } from './spacing';
 import { fonts, textStyles } from './typography';
 
+const shape = {
+  radius: {
+    card: 20,
+    chip: 999,
+    segmentShell: 18,
+    segment: 14,
+    button: 14,
+  },
+} as const;
+
 export type Theme = {
   colors: typeof colors;
   spacing: typeof spacing;
   fonts: typeof fonts;
   text: typeof textStyles;
+  shape: typeof shape;
   isDark: boolean;
 };
 
@@ -42,6 +53,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       spacing,
       fonts,
       text: textStyles,
+      shape,
       isDark,
     }),
     [isDark]

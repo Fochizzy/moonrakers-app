@@ -1,85 +1,44 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
-  SafeAreaView,
-  ScrollView,
+  Pressable,
   StyleSheet,
-  Text,
-  TouchableOpacity,
+  TextInput,
   View,
 } from "react-native";
-import { useStore } from "@/store/useStore";
-import { calculateElo } from "@/utils/elo";
+import { useRouter } from "expo-router";
+import {
+  useAuthSession,
+  useAuthProfile,
+  useGames,
+  usePlayers,
+} from "@/store/useStore";
+import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import ActionButton from "@/components/ui/ActionButton";
+import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
+import Text from "@/components/ui/Text";
+import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
+import { APP_ROUTES } from "@/utils/appRoutes";
+import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
+import { COLORS } from "@/utils/colors";
+import {
+  type EloMetricCard,
+  type EloSummary,
+} from "@/lib/cloud/analytics/types";
+import {
+  formatMetricValue,
+  formatPercentFromDecimal,
+} from "@/utils/formatters";
+import { toNumber } from "@/utils/numbers";
+import { normalizeId } from "@/utils/strings";
+import { resolvePreferredChartPlayerId } from "@/utils/charts";
+import { buildGameRowsByPlayer } from "@/utils/gameRowsByPlayer";
 
-const COLORS = {
-  bg: "#081120",
-  card: "rgba(12,18,38,0.92)",
-  cardAlt: "rgba(16,24,48,0.95)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  muted: "#64748B",
-  accent: "#A855F7",
-  accentSoft: "rgba(168,85,247,0.18)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-  danger: "#F87171",
-  dangerSoft: "rgba(248,113,113,0.14)",
-};
-
-type StorePlayer = {
-  id: string;
-  name?: string;
-  color?: string;
-};
-
-type EloMetricTab =
-  | "Leaderboard"
-  | "Momentum"
-  | "Skills"
-  | "Context"
-  | "Projection";
-
-type SimpleEloRow = {
-  gameId: string;
-  createdAt: number;
-  playerId: string;
-  opponentIds: string[];
-  win: number;
-};
-
-type PlayerSummary = {
-  playerId: string;
-  name: string;
-  currentElo: number;
-  peakElo: number;
-  confidence: number;
-  gamesPlayed: number;
-  wins: number;
-  losses: number;
-  avgDelta: number;
-  bestDelta: number;
-  worstDelta: number;
-  recentForm: string;
-};
-
-type StatCard = {
-  key: string;
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "default" | "accent" | "blue" | "green" | "danger";
-};
-
-const TABS: EloMetricTab[] = [
-  "Leaderboard",
-  "Momentum",
-  "Skills",
-  "Context",
-  "Projection",
-];
+type EloMetricTab = "Leaderboard" | "Momentum" | "Skills" | "Context" | "Projection";
+type StorePlayer = { id: string; name?: string; color?: string };
 
 const DEFAULT_ELO = 1000;
 
@@ -100,684 +59,445 @@ function toneStyles(
   }
 }
 
-function toNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function normalizeId(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function formatMetricValue(value: string | number | undefined): string {
-  if (typeof value === "string") return value;
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return `${Math.round(value)}`;
-  }
-  return "0";
-}
-
-function formatPercentFromDecimal(value: number): string {
-  return `${Math.round((Number.isFinite(value) ? value : 0) * 100)}%`;
-}
-
-function formatSignedNumber(value: number): string {
-  const rounded = Math.round(Number.isFinite(value) ? value : 0);
-  if (rounded > 0) return `+${rounded}`;
-  return `${rounded}`;
-}
-
-function getGameWinnerId(game: any): string | null {
-  const explicit = normalizeId(
-    game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId
-  );
-  if (explicit) return explicit;
-
-  const totals = game?.totals ?? {};
-  const players = Array.isArray(game?.players) ? game.players : [];
-
-  const ranked = players
-    .map((p: any) => {
-      const id = normalizeId(p?.id ?? p?.playerId);
-      const totalPrestige = toNumber(
-        totals?.[id]?.totalPrestige ?? totals?.[id]?.prestige
-      );
-      const score = toNumber(totals?.[id]?.score);
-      return { id, totalPrestige, score };
-    })
-    .filter((row: any) => row.id)
-    .sort((a: any, b: any) => {
-      if (b.totalPrestige !== a.totalPrestige) {
-        return b.totalPrestige - a.totalPrestige;
-      }
-      if (b.score !== a.score) return b.score - a.score;
-      return a.id.localeCompare(b.id);
-    });
-
-  return ranked[0]?.id ?? null;
-}
-
-function getChronologicalGames(games: any[]): any[] {
-  return [...(Array.isArray(games) ? games : [])].sort((a, b) => {
-    const createdDiff = toNumber(a?.createdAt) - toNumber(b?.createdAt);
-    if (createdDiff !== 0) return createdDiff;
-    return normalizeId(a?.id).localeCompare(normalizeId(b?.id));
-  });
-}
-
-function buildGameRowsByPlayer(
-  games: any[],
-  players: StorePlayer[]
-): Record<string, SimpleEloRow[]> {
-  const rowsByPlayer: Record<string, SimpleEloRow[]> = {};
-  const validPlayerIds = new Set(
-    players.map((player) => normalizeId(player.id)).filter(Boolean)
-  );
-
-  for (const player of players) {
-    const id = normalizeId(player.id);
-    rowsByPlayer[id] = [];
-  }
-
-  for (const game of getChronologicalGames(games)) {
-    const participantIds = Array.from(
-      new Set(
-        (Array.isArray(game?.players) ? game.players : [])
-          .map((player: any) => normalizeId(player?.id ?? player?.playerId))
-          .filter((id: string) => Boolean(id) && validPlayerIds.has(id))
-      )
-    );
-
-    if (participantIds.length < 2) continue;
-
-    const winnerId = getGameWinnerId(game);
-    if (!winnerId || !participantIds.includes(winnerId)) continue;
-
-    const gameId =
-      normalizeId(game?.id ?? game?.gameId) ||
-      `${toNumber(game?.createdAt)}-${winnerId}`;
-
-    for (const playerId of participantIds) {
-      if (!rowsByPlayer[playerId]) rowsByPlayer[playerId] = [];
-      rowsByPlayer[playerId].push({
-        gameId,
-        createdAt: toNumber(game?.createdAt),
-        playerId,
-        opponentIds: participantIds.filter((id) => id !== playerId),
-        win: playerId === winnerId ? 1 : 0,
-      });
-    }
-  }
-
-  return rowsByPlayer;
-}
-
-function computeConfidence(rows: SimpleEloRow[]): number {
-  if (!rows.length) return 0;
-  return Math.min(1, rows.length / 12);
-}
-
-function buildContextRows(
-  rows: SimpleEloRow[],
-  selectedOpponentId: string | null
-): SimpleEloRow[] {
-  if (!selectedOpponentId) return rows;
-  return rows.filter((row) => row.opponentIds.includes(selectedOpponentId));
-}
-
-function buildSummary(
-  playerId: string,
-  players: StorePlayer[],
-  rowsByPlayer: Record<string, SimpleEloRow[]>,
-  eloMap: Record<string, number>
-): PlayerSummary {
-  const rows = rowsByPlayer[playerId] ?? [];
-  const name =
-    players.find((player) => normalizeId(player.id) === playerId)?.name ||
-    "Unknown";
-  const currentEloRaw = eloMap[playerId];
-  const currentElo =
-    typeof currentEloRaw === "number" && Number.isFinite(currentEloRaw)
-      ? currentEloRaw
-      : DEFAULT_ELO;
-
-  const wins = rows.filter((row) => row.win === 1).length;
-  const losses = rows.length - wins;
-
-  return {
-    playerId,
-    name,
-    currentElo,
-    peakElo: currentElo,
-    confidence: computeConfidence(rows),
-    gamesPlayed: rows.length,
-    wins,
-    losses,
-    avgDelta: 0,
-    bestDelta: 0,
-    worstDelta: 0,
-    recentForm: rows
-      .slice(-5)
-      .map((row) => (row.win ? "W" : "L"))
-      .join(""),
-  };
-}
-
-function buildTopCards(
-  summary: PlayerSummary,
-  rows: SimpleEloRow[],
-  contextRows: SimpleEloRow[]
-): StatCard[] {
-  const winRate = rows.length ? summary.wins / rows.length : 0;
-  const contextWinRate = contextRows.length
-    ? contextRows.filter((row) => row.win === 1).length / contextRows.length
-    : 0;
-
-  return [
-    {
-      key: "current-elo",
-      label: "Current ELO",
-      value: `${Math.round(summary.currentElo)}`,
-      sub: `${summary.gamesPlayed} rated game${
-        summary.gamesPlayed === 1 ? "" : "s"
-      }`,
-      tone: "accent",
-    },
-    {
-      key: "peak-elo",
-      label: "Peak ELO",
-      value: `${Math.round(summary.peakElo)}`,
-      sub: "Matched to leaderboard source",
-      tone: "blue",
-    },
-    {
-      key: "win-rate",
-      label: "Win Rate",
-      value: formatPercentFromDecimal(winRate),
-      sub: contextRows.length
-        ? `H2H ${formatPercentFromDecimal(contextWinRate)}`
-        : "All rated games",
-      tone: "green",
-    },
-  ];
-}
-
-function buildSectionCards(
-  activeTab: EloMetricTab,
-  summary: PlayerSummary,
-  rows: SimpleEloRow[],
-  contextRows: SimpleEloRow[],
-  opponentName: string | null
-): { title: string; cards: StatCard[] } {
-  const winRate = rows.length ? summary.wins / rows.length : 0;
-  const contextWins = contextRows.filter((row) => row.win === 1).length;
-  const contextWinRate = contextRows.length
-    ? contextWins / contextRows.length
-    : 0;
-
-  switch (activeTab) {
-    case "Momentum":
-      return {
-        title: "Momentum Snapshot",
-        cards: [
-          {
-            key: "recent-form",
-            label: "Recent Form",
-            value: summary.recentForm || "—",
-            tone: "accent",
-          },
-          {
-            key: "games",
-            label: "Rated Games",
-            value: `${summary.gamesPlayed}`,
-            tone: "default",
-          },
-          {
-            key: "wins",
-            label: "Wins",
-            value: `${summary.wins}`,
-            tone: "green",
-          },
-          {
-            key: "losses",
-            label: "Losses",
-            value: `${summary.losses}`,
-            tone: "danger",
-          },
-          {
-            key: "winrate",
-            label: "Win Rate",
-            value: formatPercentFromDecimal(winRate),
-            tone: winRate >= 0.5 ? "green" : "danger",
-          },
-          {
-            key: "confidence",
-            label: "Confidence",
-            value: formatPercentFromDecimal(summary.confidence),
-            tone: "blue",
-          },
-        ],
-      };
-
-    case "Skills":
-      return {
-        title: "Rating Profile",
-        cards: [
-          {
-            key: "current",
-            label: "Current ELO",
-            value: `${Math.round(summary.currentElo)}`,
-            tone: "accent",
-          },
-          {
-            key: "peak",
-            label: "Peak ELO",
-            value: `${Math.round(summary.peakElo)}`,
-            tone: "blue",
-          },
-          {
-            key: "games",
-            label: "Rated Games",
-            value: `${summary.gamesPlayed}`,
-            tone: "default",
-          },
-          {
-            key: "record",
-            label: "Record",
-            value: `${summary.wins}-${summary.losses}`,
-            tone: summary.wins >= summary.losses ? "green" : "danger",
-          },
-          {
-            key: "confidence",
-            label: "Confidence",
-            value: formatPercentFromDecimal(summary.confidence),
-            tone: "blue",
-          },
-          {
-            key: "winrate",
-            label: "Win Rate",
-            value: formatPercentFromDecimal(winRate),
-            tone: winRate >= 0.5 ? "green" : "danger",
-          },
-        ],
-      };
-
-    case "Context":
-      return {
-        title: "Context Split",
-        cards: [
-          {
-            key: "sample",
-            label: opponentName ? `Games vs ${opponentName}` : "Filtered Games",
-            value: `${contextRows.length}`,
-            tone: "accent",
-          },
-          {
-            key: "context-winrate",
-            label: "Head-to-Head Win Rate",
-            value: formatPercentFromDecimal(contextWinRate),
-            tone: contextWinRate >= 0.5 ? "green" : "danger",
-          },
-          {
-            key: "context-wins",
-            label: "Filter Wins",
-            value: `${contextWins}`,
-            tone: "green",
-          },
-          {
-            key: "context-losses",
-            label: "Filter Losses",
-            value: `${Math.max(0, contextRows.length - contextWins)}`,
-            tone: "danger",
-          },
-          {
-            key: "context-current",
-            label: "Current ELO",
-            value: `${Math.round(summary.currentElo)}`,
-            tone: "blue",
-          },
-          {
-            key: "context-confidence",
-            label: "Confidence",
-            value: formatPercentFromDecimal(summary.confidence),
-            tone: "default",
-          },
-        ],
-      };
-
-    case "Projection":
-      return {
-        title: "Projection Window",
-        cards: [
-          {
-            key: "current-proj",
-            label: "Current ELO",
-            value: `${Math.round(summary.currentElo)}`,
-            tone: "accent",
-          },
-          {
-            key: "next-win",
-            label: "Next Win Range",
-            value: `${Math.round(summary.currentElo)}`,
-            tone: "green",
-          },
-          {
-            key: "next-loss",
-            label: "Next Loss Range",
-            value: `${Math.round(summary.currentElo)}`,
-            tone: "danger",
-          },
-          {
-            key: "record-proj",
-            label: "Record",
-            value: `${summary.wins}-${summary.losses}`,
-            tone: "default",
-          },
-          {
-            key: "confidence-proj",
-            label: "Confidence",
-            value: formatPercentFromDecimal(summary.confidence),
-            tone: "blue",
-          },
-          {
-            key: "games-proj",
-            label: "Rated Games",
-            value: `${summary.gamesPlayed}`,
-            tone: "default",
-          },
-        ],
-      };
-
-    case "Leaderboard":
-    default:
-      return {
-        title: "Leaderboard Metrics",
-        cards: [
-          {
-            key: "leader-current",
-            label: "Current ELO",
-            value: `${Math.round(summary.currentElo)}`,
-            tone: "accent",
-          },
-          {
-            key: "leader-peak",
-            label: "Peak ELO",
-            value: `${Math.round(summary.peakElo)}`,
-            tone: "blue",
-          },
-          {
-            key: "leader-games",
-            label: "Rated Games",
-            value: `${summary.gamesPlayed}`,
-            tone: "default",
-          },
-          {
-            key: "leader-record",
-            label: "Record",
-            value: `${summary.wins}-${summary.losses}`,
-            tone: summary.wins >= summary.losses ? "green" : "danger",
-          },
-          {
-            key: "leader-winrate",
-            label: "Win Rate",
-            value: formatPercentFromDecimal(winRate),
-            tone: winRate >= 0.5 ? "green" : "danger",
-          },
-          {
-            key: "leader-confidence",
-            label: "Confidence",
-            value: formatPercentFromDecimal(summary.confidence),
-            tone: "blue",
-          },
-        ],
-      };
-  }
-}
-
-function buildInsight(
-  activeTab: EloMetricTab,
-  summary: PlayerSummary,
-  contextRows: SimpleEloRow[],
-  opponentName: string | null
-): { title: string; body: string } {
-  switch (activeTab) {
-    case "Momentum":
-      return {
-        title: "Momentum Insight",
-        body:
-          summary.gamesPlayed === 0
-            ? "No rated games yet. Finish a saved game to start real leaderboard-backed ELO tracking."
-            : `${summary.name} has played ${summary.gamesPlayed} rated game${
-                summary.gamesPlayed === 1 ? "" : "s"
-              } with recent form ${summary.recentForm || "—"}.`,
-      };
-
-    case "Skills":
-      return {
-        title: "Rating Insight",
-        body:
-          summary.gamesPlayed === 0
-            ? "This screen now uses the same ELO source as the leaderboard."
-            : `${summary.name} currently sits at ${Math.round(
-                summary.currentElo
-              )}. The headline ELO now matches leaderboard ordering exactly.`,
-      };
-
-    case "Context":
-      return {
-        title: "Context Insight",
-        body:
-          opponentName && contextRows.length
-            ? `${summary.name} has ${
-                contextRows.filter((row) => row.win === 1).length
-              } win${
-                contextRows.filter((row) => row.win === 1).length === 1
-                  ? ""
-                  : "s"
-              } in ${contextRows.length} rated game${
-                contextRows.length === 1 ? "" : "s"
-              } against ${opponentName}.`
-            : "Select an opponent to isolate head-to-head results from saved game history.",
-      };
-
-    case "Projection":
-      return {
-        title: "Projection Insight",
-        body:
-          summary.gamesPlayed === 0
-            ? "Projection is limited until saved games exist."
-            : `Current displayed ELO is now aligned to the leaderboard source. Projection cards are informational and no longer use the old separate ELO engine.`,
-      };
-
-    case "Leaderboard":
-    default:
-      return {
-        title: "Leaderboard Insight",
-        body:
-          summary.gamesPlayed === 0
-            ? "Leaderboard and ELO now share the same current-rating source."
-            : `${summary.name} is ranked using the same current ELO value as the leaderboard view.`,
-      };
-  }
-}
-
 export default function EloScreen() {
-  const games = useStore((s: any) => s.games || []);
-  const players = useStore((s: any) => s.players || []);
-
-  const sortedPlayers = useMemo<StorePlayer[]>(() => {
-    return [...players].sort((a: StorePlayer, b: StorePlayer) =>
-      String(a?.name || "").localeCompare(String(b?.name || ""))
-    );
-  }, [players]);
+  const router = useRouter();
+  const authSession = useAuthSession();
+  const authProfile = useAuthProfile();
+  const players = usePlayers() ?? [];
+  const games = useGames() ?? [];
+  const profileId = String(authProfile?.id ?? authSession?.user?.id ?? "").trim();
 
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(
     null
   );
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
   const [activeTab, setActiveTab] =
     useState<EloMetricTab>("Leaderboard");
+  const eloQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(profileId),
+    queryKey: `elo-screen:${profileId || "anon"}:${selectedPlayerId || "all"}:${selectedOpponentId || "none"}`,
+    load: () =>
+      getEloScreen({
+        profileId,
+        focusPlayerId: selectedPlayerId,
+        opponentId: selectedOpponentId,
+        sortKey: "elo",
+      }),
+  });
+  const payload =
+    eloQuery.payload && typeof eloQuery.payload === "object"
+      ? (eloQuery.payload as Record<string, unknown>)
+      : null;
+  const loading = eloQuery.loading;
+  const error = eloQuery.error;
+  const isStale = eloQuery.isStale;
+  const staleMessage = eloQuery.staleMessage;
 
-  useEffect(() => {
-    if (!selectedPlayerId && sortedPlayers.length) {
-      setSelectedPlayerId(normalizeId(sortedPlayers[0].id));
-    }
-  }, [selectedPlayerId, sortedPlayers]);
+  const rawPlayerOptions = useMemo<StorePlayer[]>(() => {
+    const source = Array.isArray(payload?.playerOptions)
+      ? payload.playerOptions
+      : [];
 
-  useEffect(() => {
-    if (selectedOpponentId === selectedPlayerId) {
-      setSelectedOpponentId(null);
-    }
-  }, [selectedOpponentId, selectedPlayerId]);
+    return source
+      .map((entry: any) => ({
+        id: normalizeId(entry?.id),
+        name:
+          String(entry?.name ?? entry?.label ?? entry?.displayName ?? "")
+            .trim() || "Unknown",
+        color: String(entry?.color ?? "").trim() || undefined,
+      }))
+      .filter((player) => Boolean(player.id));
+  }, [payload?.playerOptions]);
 
-  const eloMap = useMemo<Record<string, number>>(() => {
-    try {
-      const raw = calculateElo(games);
-      if (!raw || typeof raw !== "object") return {};
-      return raw as Record<string, number>;
-    } catch {
-      return {};
-    }
+  const sortedPlayers = useMemo<StorePlayer[]>(() => [...rawPlayerOptions], [rawPlayerOptions]);
+
+  const rawLeaderboardRows = useMemo(() => {
+    const source = Array.isArray(payload?.leaderboardRows)
+      ? payload.leaderboardRows
+      : [];
+
+    return source
+      .map((row: any) => ({
+        rank: toNumber(row?.rank),
+        playerId: normalizeId(row?.playerId ?? row?.id),
+        name:
+          String(row?.name ?? row?.label ?? row?.displayName ?? "").trim() ||
+          "Unknown",
+        currentElo: toNumber(row?.currentElo) || DEFAULT_ELO,
+        peakElo: toNumber(row?.peakElo) || toNumber(row?.currentElo) || DEFAULT_ELO,
+        confidence: toNumber(row?.confidence),
+        gamesPlayed: toNumber(row?.gamesPlayed),
+        wins: toNumber(row?.wins),
+        losses: toNumber(row?.losses),
+      }))
+      .filter((row) => Boolean(row.playerId));
+  }, [payload?.leaderboardRows]);
+
+  const gameDrivenPlayerIds = useMemo(() => {
+    return new Set(
+      (games as any[]).flatMap((game) =>
+        Array.isArray(game?.players)
+          ? game.players
+              .map((p: any) => normalizeId(p?.id ?? p?.playerId))
+              .filter(Boolean)
+          : []
+      )
+    );
   }, [games]);
 
-  const rowsByPlayer = useMemo(
-    () => buildGameRowsByPlayer(games, sortedPlayers),
-    [games, sortedPlayers]
+  const analyticsPlayers = useMemo<StorePlayer[]>(() => {
+    const playersWithSavedGames = sortedPlayers.filter((player) =>
+      gameDrivenPlayerIds.has(normalizeId(player.id)),
+    );
+
+    return playersWithSavedGames.length ? playersWithSavedGames : sortedPlayers;
+  }, [sortedPlayers, gameDrivenPlayerIds]);
+
+  const preferredPlayerId = useMemo(
+    () =>
+      resolvePreferredChartPlayerId({
+        availablePlayers: analyticsPlayers,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+      }),
+    [analyticsPlayers, authProfile?.id, authSession?.user?.id]
   );
+
+  useEffect(() => {
+    if (!analyticsPlayers.length) {
+      return;
+    }
+
+    const activeId = normalizeId(selectedPlayerId);
+    const hasActivePlayer = analyticsPlayers.some(
+      (player) => normalizeId(player.id) === activeId
+    );
+
+    if (!activeId || !hasActivePlayer) {
+      setSelectedPlayerId(preferredPlayerId ?? normalizeId(analyticsPlayers[0].id));
+    }
+  }, [analyticsPlayers, preferredPlayerId, selectedPlayerId]);
+
+  const normalizedPlayerQuery = deferredPlayerSearchQuery.trim().toLowerCase();
+  const filteredPlayerOptions = useMemo(() => {
+    if (!normalizedPlayerQuery) {
+      return analyticsPlayers;
+    }
+
+    return analyticsPlayers.filter((player) => {
+      const searchTargets = [
+        String(player?.name ?? ""),
+        normalizeId(player?.id),
+      ]
+        .filter(Boolean)
+        .map((value) => value.toLowerCase());
+
+      return searchTargets.some((value) => value.includes(normalizedPlayerQuery));
+    });
+  }, [analyticsPlayers, normalizedPlayerQuery]);
+
+  useEffect(() => {
+    const activeOpponentId = normalizeId(selectedOpponentId);
+    const isValidOpponent = analyticsPlayers.some(
+      (player) =>
+        normalizeId(player.id) === activeOpponentId &&
+        normalizeId(player.id) !== normalizeId(selectedPlayerId)
+    );
+
+    if (selectedOpponentId === selectedPlayerId || (activeOpponentId && !isValidOpponent)) {
+      setSelectedOpponentId(null);
+    }
+  }, [analyticsPlayers, selectedOpponentId, selectedPlayerId]);
 
   const selectedPlayer = useMemo(
     () =>
-      sortedPlayers.find(
+      analyticsPlayers.find(
         (p) => normalizeId(p.id) === normalizeId(selectedPlayerId)
       ) || null,
-    [sortedPlayers, selectedPlayerId]
+    [analyticsPlayers, selectedPlayerId]
   );
 
   const opponentOptions = useMemo(
     () =>
-      sortedPlayers.filter(
+      analyticsPlayers.filter(
         (p) => normalizeId(p.id) !== normalizeId(selectedPlayerId)
       ),
-    [sortedPlayers, selectedPlayerId]
+    [analyticsPlayers, selectedPlayerId]
   );
 
-  const selectedRows = useMemo(
-    () => rowsByPlayer[normalizeId(selectedPlayerId)] ?? [],
-    [rowsByPlayer, selectedPlayerId]
-  );
+  const selectedSummary = useMemo<EloSummary>(() => {
+    const summary = payload?.summary;
+    return {
+      playerId: normalizeId((summary as any)?.playerId ?? selectedPlayerId),
+      name:
+        String((summary as any)?.name ?? selectedPlayer?.name ?? "Unknown").trim() ||
+        "Unknown",
+      currentElo: toNumber((summary as any)?.currentElo) || DEFAULT_ELO,
+      peakElo:
+        toNumber((summary as any)?.peakElo) ||
+        toNumber((summary as any)?.currentElo) ||
+        DEFAULT_ELO,
+      confidence: toNumber((summary as any)?.confidence),
+      gamesPlayed: toNumber((summary as any)?.gamesPlayed),
+      wins: toNumber((summary as any)?.wins),
+      losses: toNumber((summary as any)?.losses),
+      avgDelta: toNumber((summary as any)?.avgDelta),
+      bestDelta: toNumber((summary as any)?.bestDelta),
+      worstDelta: toNumber((summary as any)?.worstDelta),
+      recentForm:
+        String((summary as any)?.recentForm ?? "").trim() || "-",
+    };
+  }, [payload?.summary, selectedPlayer, selectedPlayerId]);
 
-  const selectedContextRows = useMemo(
-    () => buildContextRows(selectedRows, selectedOpponentId),
-    [selectedRows, selectedOpponentId]
-  );
+  const topCards = useMemo<EloMetricCard[]>(() => {
+    const source = Array.isArray(payload?.topCards) ? payload.topCards : [];
 
-  const selectedSummary = useMemo(
-    () =>
-      buildSummary(
-        normalizeId(selectedPlayerId),
-        sortedPlayers,
-        rowsByPlayer,
-        eloMap
-      ),
-    [selectedPlayerId, sortedPlayers, rowsByPlayer, eloMap]
-  );
+    return source.map((card: any) => ({
+      key: String(card?.key ?? ""),
+      label: String(card?.label ?? ""),
+      value: String(card?.value ?? "0"),
+      sub:
+        typeof card?.sub === "string" && card.sub.trim() ? card.sub.trim() : undefined,
+      tone:
+        card?.tone === "accent" ||
+        card?.tone === "blue" ||
+        card?.tone === "green" ||
+        card?.tone === "danger"
+          ? card.tone
+          : "default",
+    }));
+  }, [payload?.topCards]);
 
-  const selectedOpponentName = useMemo(() => {
-    return (
-      sortedPlayers.find(
-        (player) =>
-          normalizeId(player.id) === normalizeId(selectedOpponentId)
-      )?.name || null
-    );
-  }, [sortedPlayers, selectedOpponentId]);
+  const activeSection = useMemo(() => {
+    const sections = payload?.sections;
+    const section =
+      sections && typeof sections === "object"
+        ? (sections as Record<string, any>)[activeTab]
+        : null;
 
-  const topCards = useMemo(
-    () => buildTopCards(selectedSummary, selectedRows, selectedContextRows),
-    [selectedSummary, selectedRows, selectedContextRows]
-  );
+    const cards = Array.isArray(section?.cards)
+      ? section.cards.map((card: any) => ({
+          key: String(card?.key ?? ""),
+          label: String(card?.label ?? ""),
+          value: String(card?.value ?? "0"),
+          sub:
+            typeof card?.sub === "string" && card.sub.trim()
+              ? card.sub.trim()
+              : undefined,
+          tone:
+            card?.tone === "accent" ||
+            card?.tone === "blue" ||
+            card?.tone === "green" ||
+            card?.tone === "danger"
+              ? card.tone
+              : "default",
+        }))
+      : [];
 
-  const activeSection = useMemo(
-    () =>
-      buildSectionCards(
-        activeTab,
-        selectedSummary,
-        selectedRows,
-        selectedContextRows,
-        selectedOpponentName
-      ),
-    [
-      activeTab,
-      selectedSummary,
-      selectedRows,
-      selectedContextRows,
-      selectedOpponentName,
-    ]
-  );
+    return {
+      title:
+        typeof section?.title === "string" && section.title.trim()
+          ? section.title.trim()
+          : "ELO Metrics",
+      cards,
+    };
+  }, [activeTab, payload?.sections]);
 
-  const activeInsight = useMemo(
-    () =>
-      buildInsight(
-        activeTab,
-        selectedSummary,
-        selectedContextRows,
-        selectedOpponentName
-      ),
-    [activeTab, selectedSummary, selectedContextRows, selectedOpponentName]
-  );
+  const activeInsight = useMemo(() => {
+    const insights = payload?.insights;
+    const insight =
+      insights && typeof insights === "object"
+        ? (insights as Record<string, any>)[activeTab]
+        : null;
 
-  const hasData = selectedRows.length > 0;
+    return {
+      title:
+        typeof insight?.title === "string" && insight.title.trim()
+          ? insight.title.trim()
+          : `${activeTab} Insight`,
+      body:
+        typeof insight?.body === "string" && insight.body.trim()
+          ? insight.body.trim()
+          : "No server-authored ELO insight is available yet.",
+    };
+  }, [activeTab, payload?.insights]);
+
+  const hasData = selectedSummary.gamesPlayed > 0;
 
   const leaderboardRows = useMemo(() => {
-    return sortedPlayers
+    const gameRows = buildGameRowsByPlayer(games, analyticsPlayers);
+    return analyticsPlayers
       .map((player) => {
         const playerId = normalizeId(player.id);
-        const summary = buildSummary(playerId, sortedPlayers, rowsByPlayer, eloMap);
+        const cloudRow = rawLeaderboardRows.find(
+          (r) => normalizeId(r.playerId) === playerId
+        );
         return {
-          rank: 0,
+          rank: toNumber(cloudRow?.rank),
           playerId,
-          name: player.name || "Unknown",
-          currentElo: summary.currentElo,
-          peakElo: summary.peakElo,
-          confidence: summary.confidence,
+          name: player.name ?? "Unknown",
+          currentElo: toNumber(cloudRow?.currentElo) || DEFAULT_ELO,
+          peakElo: toNumber(cloudRow?.peakElo) || toNumber(cloudRow?.currentElo) || DEFAULT_ELO,
+          confidence: toNumber(cloudRow?.confidence),
+          gamesPlayed: toNumber(cloudRow?.gamesPlayed) || (gameRows[playerId]?.length ?? 0),
+          wins: toNumber(cloudRow?.wins),
+          losses: toNumber(cloudRow?.losses),
           isSelected: playerId === normalizeId(selectedPlayerId),
         };
       })
-      .sort((a, b) => {
-        if (b.currentElo !== a.currentElo) return b.currentElo - a.currentElo;
-        if (b.peakElo !== a.peakElo) return b.peakElo - a.peakElo;
-        return a.name.localeCompare(b.name);
-      })
-      .map((row, index) => ({
-        ...row,
-        rank: index + 1,
-      }));
-  }, [sortedPlayers, rowsByPlayer, eloMap, selectedPlayerId]);
+      .filter((row) => Boolean(row.playerId));
+  }, [analyticsPlayers, games, rawLeaderboardRows, selectedPlayerId]);
 
   const featuredCard = topCards[0];
   const secondaryCards = topCards.slice(1, 3);
+  const emptyStateDescription =
+    error ||
+    (typeof (payload?.emptyState as any)?.description === "string" &&
+    String((payload?.emptyState as any)?.description).trim()
+      ? String((payload?.emptyState as any)?.description).trim()
+      : "No server-authored ELO data is available yet.");
+  const sourceKind = isStale ? "server-stale" : "server";
+  const sourceLabel = isStale ? "Stale server data" : "Server data";
+  const staleSourceCaption = isStale
+    ? `Showing the last successful Supabase ELO payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
+    : null;
+  const recoveryState = resolveAnalyticsRecoveryState({
+    loading,
+    error,
+    playersCount: players.length,
+    gamesCount: games.length,
+  });
+  const sharedSectionState =
+    loading
+      ? "loading"
+      : error
+        ? "error"
+        : recoveryState.kind === "no-players" || recoveryState.kind === "no-games" || !hasData
+          ? "empty"
+          : "ready";
+  const leaderboardSectionState =
+    loading
+      ? "loading"
+      : error
+        ? "error"
+        : recoveryState.kind === "no-players" ||
+            recoveryState.kind === "no-games" ||
+            !leaderboardRows.length
+          ? "empty"
+          : "ready";
+  const emptyStateTitle =
+    recoveryState.kind === "no-players"
+      ? "No tracked players yet"
+      : recoveryState.kind === "no-games"
+        ? "No tracked games yet"
+        : error
+          ? "ELO analytics unavailable"
+          : "No ELO data yet";
+  const emptyStateBody =
+    recoveryState.kind === "no-players"
+      ? "Set up your roster first so the published ELO payload has real players to rank."
+      : recoveryState.kind === "no-games"
+        ? "Track or import games before expecting the shared ELO payload to populate."
+        : error
+          ? error
+          : emptyStateDescription;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
+    <PageShell preset="analytics" density="compact">
+      <HeroCard
+        eyebrow="ELO"
+        title="Player Focus"
+        subtitle="Select a player to explore ratings"
+        size="compact"
+        variant="stat"
+        headerAction={
+          <ActionButton
+            variant="ghost"
+            title="Back to Command"
+            onPress={() => router.push(APP_ROUTES.home)}
+            style={styles.backButton}
+          />
+        }
       >
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Player</Text>
-            <Text style={styles.sectionSub}>Select focus player</Text>
-          </View>
+        <TextInput
+          value={playerSearchQuery}
+          onChangeText={setPlayerSearchQuery}
+          placeholder="Search players"
+          placeholderTextColor={COLORS.muted}
+          style={styles.playerSearchInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
+        <View style={styles.underlineSelectorRow}>
+          {filteredPlayerOptions.map((player) => {
+            const active =
+              normalizeId(player.id) === normalizeId(selectedPlayerId);
+            return (
+              <Pressable
+                key={player.id}
+                style={({ pressed }) => [styles.underlineTabButton, pressed && { opacity: 0.9 }]}
+                onPress={() => setSelectedPlayerId(normalizeId(player.id))}
+              >
+                <Text
+                  style={[
+                    styles.underlineTabText,
+                    active && styles.underlineTabTextActive,
+                  ]}
+                >
+                  {player.name || "Unknown"}
+                </Text>
+                <View
+                  style={[
+                    styles.underlineTabLine,
+                    active && styles.underlineTabLineActive,
+                  ]}
+                />
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {filteredPlayerOptions.length ? null : (
+          <Text style={styles.emptyText}>
+            No players match that search yet.
+          </Text>
+        )}
+      </HeroCard>
+
+      {activeTab === "Context" ? (
+        <SectionCard title="Opponent" subtitle="Optional head-to-head filter">
           <View style={styles.underlineSelectorRow}>
-            {sortedPlayers.map((player) => {
+            <Pressable
+              style={({ pressed }) => [styles.underlineTabButton, pressed && { opacity: 0.9 }]}
+              onPress={() => setSelectedOpponentId(null)}
+            >
+              <Text
+                style={[
+                  styles.underlineTabText,
+                  !selectedOpponentId && styles.underlineTabTextActive,
+                ]}
+              >
+                None
+              </Text>
+              <View
+                style={[
+                  styles.underlineTabLine,
+                  !selectedOpponentId && styles.underlineTabLineActive,
+                ]}
+              />
+            </Pressable>
+
+            {opponentOptions.map((player) => {
               const active =
-                normalizeId(player.id) === normalizeId(selectedPlayerId);
+                normalizeId(player.id) === normalizeId(selectedOpponentId);
               return (
-                <TouchableOpacity
+                <Pressable
                   key={player.id}
-                  style={styles.underlineTabButton}
-                  onPress={() => setSelectedPlayerId(normalizeId(player.id))}
-                  activeOpacity={0.9}
+                  style={({ pressed }) => [styles.underlineTabButton, pressed && { opacity: 0.9 }]}
+                  onPress={() => setSelectedOpponentId(normalizeId(player.id))}
                 >
                   <Text
                     style={[
@@ -793,84 +513,51 @@ export default function EloScreen() {
                       active && styles.underlineTabLineActive,
                     ]}
                   />
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
-        </View>
+        </SectionCard>
+      ) : null}
 
-        {activeTab === "Context" ? (
-          <View style={styles.sectionCompact}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Opponent</Text>
-              <Text style={styles.sectionSub}>
-                Optional head-to-head filter
-              </Text>
-            </View>
-
-            <View style={styles.underlineSelectorRow}>
-              <TouchableOpacity
-                style={styles.underlineTabButton}
-                onPress={() => setSelectedOpponentId(null)}
-                activeOpacity={0.9}
+      <View style={styles.tabGrid}>
+        <View style={styles.tabGridRowTwo}>
+          {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
+            const active = tab === activeTab;
+            return (
+              <Pressable
+                key={tab}
+                style={({ pressed }) => [styles.underlineMainTab, styles.underlineMainTabTwoCol, pressed && { opacity: 0.9 }]}
+                onPress={() => setActiveTab(tab)}
               >
                 <Text
                   style={[
-                    styles.underlineTabText,
-                    !selectedOpponentId && styles.underlineTabTextActive,
+                    styles.underlineMainTabText,
+                    active && styles.underlineMainTabTextActive,
                   ]}
                 >
-                  None
+                  {tab}
                 </Text>
                 <View
                   style={[
-                    styles.underlineTabLine,
-                    !selectedOpponentId && styles.underlineTabLineActive,
+                    styles.underlineMainTabLine,
+                    active && styles.underlineMainTabLineActive,
                   ]}
                 />
-              </TouchableOpacity>
+              </Pressable>
+            );
+          })}
+        </View>
 
-              {opponentOptions.map((player) => {
-                const active =
-                  normalizeId(player.id) === normalizeId(selectedOpponentId);
-                return (
-                  <TouchableOpacity
-                    key={player.id}
-                    style={styles.underlineTabButton}
-                    onPress={() => setSelectedOpponentId(normalizeId(player.id))}
-                    activeOpacity={0.9}
-                  >
-                    <Text
-                      style={[
-                        styles.underlineTabText,
-                        active && styles.underlineTabTextActive,
-                      ]}
-                    >
-                      {player.name || "Unknown"}
-                    </Text>
-                    <View
-                      style={[
-                        styles.underlineTabLine,
-                        active && styles.underlineTabLineActive,
-                      ]}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.tabGrid}>
-          <View style={styles.tabGridRowTwo}>
-            {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
+        <View style={styles.tabGridRowThree}>
+          {(["Skills", "Context", "Projection"] as EloMetricTab[]).map(
+            (tab) => {
               const active = tab === activeTab;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={tab}
-                  style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
+                  style={({ pressed }) => [styles.underlineMainTab, styles.underlineMainTabThreeCol, pressed && { opacity: 0.9 }]}
                   onPress={() => setActiveTab(tab)}
-                  activeOpacity={0.9}
                 >
                   <Text
                     style={[
@@ -886,148 +573,144 @@ export default function EloScreen() {
                       active && styles.underlineMainTabLineActive,
                     ]}
                   />
-                </TouchableOpacity>
+                </Pressable>
               );
-            })}
-          </View>
-
-          <View style={styles.tabGridRowThree}>
-            {(["Skills", "Context", "Projection"] as EloMetricTab[]).map(
-              (tab) => {
-                const active = tab === activeTab;
-                return (
-                  <TouchableOpacity
-                    key={tab}
-                    style={[
-                      styles.underlineMainTab,
-                      styles.underlineMainTabThreeCol,
-                    ]}
-                    onPress={() => setActiveTab(tab)}
-                    activeOpacity={0.9}
-                  >
-                    <Text
-                      style={[
-                        styles.underlineMainTabText,
-                        active && styles.underlineMainTabTextActive,
-                      ]}
-                    >
-                      {tab}
-                    </Text>
-                    <View
-                      style={[
-                        styles.underlineMainTabLine,
-                        active && styles.underlineMainTabLineActive,
-                      ]}
-                    />
-                  </TouchableOpacity>
-                );
-              }
-            )}
-          </View>
+            }
+          )}
         </View>
+      </View>
 
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Top 3 Winning Signals</Text>
-            <Text style={styles.sectionSub}>
-              {selectedPlayer?.name || "No player selected"}
-            </Text>
-          </View>
-
-          {!hasData ? (
-            <Text style={styles.emptyText}>
-              No rated ELO rows available for this player yet.
-            </Text>
-          ) : (
-            <View style={styles.featuredSignalsWrap}>
-              {featuredCard ? (
-                <View
-                  style={[
-                    styles.featuredSignalCard,
-                    { backgroundColor: toneStyles(featuredCard.tone).bg },
-                  ]}
-                >
+      <AnalyticsStateSection
+        title="Top 3 Winning Signals"
+        subtitle={selectedPlayer?.name || "No player selected"}
+        actions={<DefinitionsJumpLink category="elo" />}
+        helpCategory="elo"
+        state={sharedSectionState}
+        sourceKind={sourceKind}
+        sourceLabel={sourceLabel}
+        sourceCaption={
+          staleSourceCaption ||
+          "This focus view uses the published Supabase ELO payload, so its top signals stay aligned with the shared leaderboard."
+        }
+        messageTitle={emptyStateTitle}
+        messageBody={loading ? "Loading server-authored ELO metrics." : emptyStateBody}
+        tone={error ? "danger" : sharedSectionState === "ready" ? "info" : "warning"}
+      >
+        {sharedSectionState === "ready" ? (
+          <View style={styles.featuredSignalsWrap}>
+            {featuredCard ? (
+              <View
+                style={[
+                  styles.featuredSignalCard,
+                  { backgroundColor: toneStyles(featuredCard.tone).bg },
+                ]}
+              >
+                <View style={styles.featuredSignalHeader}>
                   <Text style={styles.featuredSignalLabel} numberOfLines={1}>
                     {featuredCard.label}
                   </Text>
-                  <Text
+                  {featuredCard.key === "current-elo" ? (
+                    <DefinitionsJumpLink label="Definition" metric="elo_current" />
+                  ) : featuredCard.key === "peak-elo" ? (
+                    <DefinitionsJumpLink label="Definition" metric="elo_peak" />
+                  ) : (
+                    <DefinitionsJumpLink label="Definition" category="elo" />
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.featuredSignalValue,
+                    { color: toneStyles(featuredCard.tone).value },
+                  ]}
+                >
+                  {featuredCard.value}
+                </Text>
+                {featuredCard.sub ? (
+                  <Text style={styles.featuredSignalSub} numberOfLines={2}>
+                    {featuredCard.sub}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            <View style={styles.secondarySignalColumn}>
+              {secondaryCards.map((card) => {
+                const tone = toneStyles(card.tone);
+                return (
+                  <View
+                    key={card.key}
                     style={[
-                      styles.featuredSignalValue,
-                      { color: toneStyles(featuredCard.tone).value },
+                      styles.secondarySignalCard,
+                      { backgroundColor: tone.bg },
                     ]}
                   >
-                    {featuredCard.value}
-                  </Text>
-                  {featuredCard.sub ? (
-                    <Text style={styles.featuredSignalSub} numberOfLines={2}>
-                      {featuredCard.sub}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-
-              <View style={styles.secondarySignalColumn}>
-                {secondaryCards.map((card) => {
-                  const tone = toneStyles(card.tone);
-                  return (
-                    <View
-                      key={card.key}
-                      style={[
-                        styles.secondarySignalCard,
-                        { backgroundColor: tone.bg },
-                      ]}
-                    >
+                    <View style={styles.secondarySignalHeader}>
                       <Text style={styles.metricLabelCompact} numberOfLines={1}>
                         {card.label}
                       </Text>
-                      <Text
-                        style={[
-                          styles.metricValueCompact,
-                          { color: tone.value },
-                        ]}
-                      >
-                        {card.value}
-                      </Text>
-                      {card.sub ? (
-                        <Text style={styles.metricSubCompact} numberOfLines={1}>
-                          {card.sub}
-                        </Text>
-                      ) : null}
+                      {card.key === "current-elo" ? (
+                        <DefinitionsJumpLink label="Definition" metric="elo_current" />
+                      ) : card.key === "peak-elo" ? (
+                        <DefinitionsJumpLink label="Definition" metric="elo_peak" />
+                      ) : (
+                        <DefinitionsJumpLink label="Definition" category="elo" />
+                      )}
                     </View>
-                  );
-                })}
-              </View>
+                    <Text
+                      style={[
+                        styles.metricValueCompact,
+                        { color: tone.value },
+                      ]}
+                    >
+                      {card.value}
+                    </Text>
+                    {card.sub ? (
+                      <Text style={styles.metricSubCompact} numberOfLines={1}>
+                        {card.sub}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })}
             </View>
-          )}
-        </View>
-
-        <View style={styles.insightCardCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>{activeInsight.title}</Text>
-            <Text style={styles.insightChip}>{activeTab.toUpperCase()}</Text>
           </View>
-          <Text style={styles.insightText}>{activeInsight.body}</Text>
-        </View>
+        ) : null}
+      </AnalyticsStateSection>
 
-        {activeTab === "Leaderboard" ? (
-          <View style={styles.sectionCompact}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Leaderboard</Text>
-              <Text style={styles.sectionSub}>
-                All players ranked by current ELO
-              </Text>
-            </View>
+      <SectionCard
+        title={activeInsight.title}
+        actions={<Text style={styles.insightChip}>{activeTab.toUpperCase()}</Text>}
+      >
+        <Text style={styles.insightText}>{activeInsight.body}</Text>
+      </SectionCard>
 
+      {activeTab === "Leaderboard" ? (
+        <AnalyticsStateSection
+          title="Leaderboard"
+          subtitle="All players ranked by current ELO"
+          state={leaderboardSectionState}
+          sourceKind={sourceKind}
+          sourceLabel={sourceLabel}
+          sourceCaption={
+            staleSourceCaption ||
+            "This leaderboard uses the same published ELO source as the home leaderboard tab."
+          }
+          messageTitle={emptyStateTitle}
+          messageBody={loading ? "Loading server-authored leaderboard." : emptyStateBody}
+          tone={error ? "danger" : leaderboardSectionState === "ready" ? "info" : "warning"}
+          helpCategory="elo"
+        >
+          {leaderboardSectionState === "ready" ? (
             <View style={styles.leaderboardList}>
               {leaderboardRows.map((row) => (
-                <TouchableOpacity
+                <Pressable
                   key={row.playerId}
-                  style={[
+                  style={({ pressed }) => [
                     styles.leaderboardRow,
                     row.isSelected && styles.leaderboardRowSelected,
+                    pressed && { opacity: 0.9 },
                   ]}
                   onPress={() => setSelectedPlayerId(row.playerId)}
-                  activeOpacity={0.9}
                 >
                   <View style={styles.leaderboardLeft}>
                     <View
@@ -1061,104 +744,82 @@ export default function EloScreen() {
                     </Text>
                     <Text style={styles.leaderboardMeta}>Current ELO</Text>
                   </View>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
-          </View>
-        ) : null}
+          ) : null}
+        </AnalyticsStateSection>
+      ) : null}
 
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>{activeSection.title}</Text>
-            <Text style={styles.sectionSub}>Active tab metrics</Text>
-          </View>
-
-          {!hasData ? (
-            <Text style={styles.emptyText}>No metric data available yet.</Text>
-          ) : (
-            <View style={styles.metricGridDense}>
-              {activeSection.cards.slice(0, 6).map((card) => {
-                const tone = toneStyles(card.tone);
-                return (
-                  <View
-                    key={card.key}
+      <AnalyticsStateSection
+        title={activeSection.title}
+        subtitle="Active tab metrics"
+        actions={<DefinitionsJumpLink category="elo" />}
+        helpCategory="elo"
+        state={sharedSectionState}
+        sourceKind={sourceKind}
+        sourceLabel={sourceLabel}
+        sourceCaption={
+          staleSourceCaption ||
+          `Published ${activeTab.toLowerCase()} metrics from the shared ELO payload.`
+        }
+        messageTitle={emptyStateTitle}
+        messageBody={loading ? "Loading server-authored section metrics." : emptyStateBody}
+        tone={error ? "danger" : sharedSectionState === "ready" ? "info" : "warning"}
+      >
+        {sharedSectionState === "ready" ? (
+          <View style={styles.metricGridDense}>
+            {activeSection.cards.slice(0, 6).map((card) => {
+              const tone = toneStyles(card.tone);
+              return (
+                <View
+                  key={card.key}
+                  style={[
+                    styles.metricCardDense,
+                    { backgroundColor: tone.bg },
+                  ]}
+                >
+                  <Text style={styles.metricLabelCompact} numberOfLines={2}>
+                    {card.label}
+                  </Text>
+                  <Text
                     style={[
-                      styles.metricCardDense,
-                      { backgroundColor: tone.bg },
+                      styles.metricValueCompact,
+                      { color: tone.value },
                     ]}
                   >
-                    <Text style={styles.metricLabelCompact} numberOfLines={2}>
-                      {card.label}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.metricValueCompact,
-                        { color: tone.value },
-                      ]}
-                    >
-                      {formatMetricValue(card.value)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+                    {formatMetricValue(card.value)}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+      </AnalyticsStateSection>
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-  },
-  scroll: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 8,
-    paddingBottom: 12,
-  },
-  sectionCompact: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 6,
-  },
-  insightCardCompact: {
-    backgroundColor: COLORS.cardAlt,
-    borderRadius: 14,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 6,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 12,
-    marginBottom: 6,
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-    flexShrink: 1,
-  },
-  sectionSub: {
-    color: COLORS.sub,
-    fontSize: 10,
-    textAlign: "right",
-    flexShrink: 1,
+  backButton: {
+    alignSelf: "flex-start",
   },
   emptyText: {
     color: COLORS.sub,
     fontSize: 11,
+  },
+  playerSearchInput: {
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    color: COLORS.text,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
   },
   underlineSelectorRow: {
     flexDirection: "row",
@@ -1239,6 +900,9 @@ const styles = StyleSheet.create({
     padding: 10,
     justifyContent: "space-between",
   },
+  featuredSignalHeader: {
+    gap: 4,
+  },
   featuredSignalLabel: {
     color: COLORS.sub,
     fontSize: 12,
@@ -1265,6 +929,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     minHeight: 72,
+  },
+  secondarySignalHeader: {
+    gap: 4,
   },
   leaderboardList: {
     gap: 4,

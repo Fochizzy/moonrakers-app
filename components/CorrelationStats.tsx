@@ -1,13 +1,30 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  useWindowDimensions,
+  type ViewStyle,
+} from 'react-native';
 
-import { useStore } from '@/store/useStore';
 import Text from '@/components/ui/Text';
+import InsightsSectionPanel from '@/components/insights/InsightsSectionPanel';
 import { chartColors, withAlpha } from '@/utils/chartTheme';
 import {
   buildCorrelationResults,
   getTopSynergyPairs,
 } from '@/utils/advancedStats';
+
+type CorrelationStatsProps = {
+  games?: any[];
+  players?: Array<{
+    id?: string;
+    name?: string;
+  }>;
+  relationships?: Record<string, any>;
+  serverData?: Record<string, any>;
+  serverOnly?: boolean;
+  view?: 'all' | 'pairing' | 'macro' | 'synergy';
+};
 
 function formatCorrelation(value: number) {
   if (!Number.isFinite(value)) return '0.00';
@@ -49,8 +66,8 @@ function getEarliestLeaderMap(game: any) {
   const rounds = Array.isArray(game?.rounds)
     ? game.rounds
     : Array.isArray(game?.timeline)
-    ? game.timeline
-    : [];
+      ? game.timeline
+      : [];
 
   if (players.length === 0 || rounds.length === 0) {
     return result;
@@ -195,8 +212,8 @@ function getDirectionMeta(value: number) {
   return { label: 'Neutral', color: '#cbd5e1' };
 }
 
-function getBarFillStyle(value: number, color: string) {
-  const width = `${Math.max(8, Math.abs(value) * 100)}%`;
+function getBarFillStyle(value: number, color: string): ViewStyle {
+  const width = `${Math.max(8, Math.abs(value) * 100)}%` as `${number}%`;
 
   if (value > 0.08) {
     return {
@@ -216,35 +233,9 @@ function getBarFillStyle(value: number, color: string) {
 
   return {
     alignSelf: 'center' as const,
-    width: '12%',
+    width: '12%' as `${number}%`,
     backgroundColor: withAlpha('#cbd5e1', 0.55),
   };
-}
-
-function SectionPanel({
-  eyebrow,
-  title,
-  meta,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  meta?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.sectionPanel}>
-      <View pointerEvents="none" style={styles.sectionGlow} />
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionTitleWrap}>
-          <Text style={styles.sectionEyebrow}>{eyebrow}</Text>
-          <Text style={styles.sectionTitle}>{title}</Text>
-        </View>
-        {meta ? <Text style={styles.sectionMeta}>{meta}</Text> : null}
-      </View>
-      {children}
-    </View>
-  );
 }
 
 function SummaryStat({
@@ -273,10 +264,12 @@ function CorrelationCard({
   label,
   value,
   strength,
+  compact = false,
 }: {
   label: string;
   value: number;
   strength?: string;
+  compact?: boolean;
 }) {
   const strengthMeta = getStrengthMeta(value);
   const directionMeta = getDirectionMeta(value);
@@ -285,6 +278,7 @@ function CorrelationCard({
     <View
       style={[
         styles.metricCard,
+        compact && styles.metricCardCompact,
         {
           borderColor: withAlpha(strengthMeta.color, 0.3),
         },
@@ -295,12 +289,20 @@ function CorrelationCard({
         style={[styles.metricGlow, { backgroundColor: strengthMeta.glow }]}
       />
 
-      <View style={styles.metricHeader}>
-        <Text style={styles.metricLabel} numberOfLines={1}>{label}</Text>
+      <View style={[styles.metricHeader, compact && styles.metricHeaderCompact]}>
+        <Text
+          style={[styles.metricLabel, compact && styles.metricLabelCompact]}
+          numberOfLines={1}
+          adjustsFontSizeToFit={compact}
+          minimumFontScale={0.7}
+        >
+          {label}
+        </Text>
 
         <View
           style={[
             styles.metricBadge,
+            compact && styles.metricBadgeCompact,
             {
               backgroundColor: withAlpha(strengthMeta.color, 0.14),
               borderColor: withAlpha(strengthMeta.color, 0.38),
@@ -313,13 +315,20 @@ function CorrelationCard({
         </View>
       </View>
 
-      <View style={styles.metricNumbers}>
+      <View style={[styles.metricNumbers, compact && styles.metricNumbersCompact]}>
         <View style={styles.metricPrimaryBlock}>
           <Text style={styles.metricPrimaryLabel}>Coefficient</Text>
-          <Text style={styles.metricValue}>r = {formatCorrelation(value)}</Text>
+          <Text style={[styles.metricValue, compact && styles.metricValueCompact]}>
+            r = {formatCorrelation(value)}
+          </Text>
         </View>
 
-        <View style={styles.metricPrimaryBlockRight}>
+        <View
+          style={[
+            styles.metricPrimaryBlockRight,
+            compact && styles.metricPrimaryBlockRightCompact,
+          ]}
+        >
           <Text style={styles.metricPrimaryLabel}>Signal</Text>
           <Text style={[styles.metricDirection, { color: directionMeta.color }]}>
             {directionMeta.label}
@@ -356,10 +365,10 @@ function SynergyCard({
     rank === 0
       ? '#facc15'
       : rank === 1
-      ? '#67e8f9'
-      : rank === 2
-      ? '#c084fc'
-      : '#94a3b8';
+        ? '#67e8f9'
+        : rank === 2
+          ? '#c084fc'
+          : '#94a3b8';
 
   return (
     <View style={[styles.synergyCard, { borderColor: withAlpha(accent, 0.24) }]}>
@@ -404,29 +413,116 @@ function SynergyCard({
   );
 }
 
-export default function CorrelationStats() {
-  const games = useStore((s: any) => s.games ?? []);
-  const players = useStore((s: any) => s.players ?? []);
-  const relationships = useStore((s: any) => s.relationships ?? {});
+export default function CorrelationStats({
+  games = [],
+  players = [],
+  relationships = {},
+  serverData,
+  serverOnly = false,
+  view = 'all',
+}: CorrelationStatsProps) {
+  const { width } = useWindowDimensions();
+  const showOverviewChrome = view === 'all';
+  const isTwoColumn = width >= 360 && (view === 'pairing' || view === 'macro');
+  const serverPersonalCorrelations = useMemo(() => {
+    const personal = Array.isArray(serverData?.personal) ? serverData.personal : [];
 
+    return personal
+      .filter((item: any) => item && typeof item === 'object')
+      .map((item: any) => ({
+        label: String(item.label ?? item.title ?? "Personal").trim() || "Personal",
+        value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
+        strength:
+          typeof item.strength === 'string' && item.strength.trim()
+            ? item.strength.trim()
+            : undefined,
+      }));
+  }, [serverData?.personal]);
+  const serverPairingCorrelations = useMemo(() => {
+    const pairing = Array.isArray(serverData?.pairing)
+      ? serverData.pairing
+      : Array.isArray(serverData?.items)
+        ? serverData.items
+        : [];
+
+    return pairing
+      .filter((item: any) => item && typeof item === 'object')
+      .map((item: any) => ({
+        label: String(item.label ?? item.title ?? "Correlation").trim() || "Correlation",
+        value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
+        strength:
+          typeof item.strength === 'string' && item.strength.trim()
+            ? item.strength.trim()
+            : undefined,
+      }));
+  }, [serverData?.items, serverData?.pairing]);
+  const serverMacroCorrelations = useMemo(() => {
+    const macro = Array.isArray(serverData?.macro) ? serverData.macro : [];
+
+    return macro
+      .filter((item: any) => item && typeof item === 'object')
+      .map((item: any) => ({
+        label: String(item.label ?? item.title ?? "Macro").trim() || "Macro",
+        value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
+        strength:
+          typeof item.strength === 'string' && item.strength.trim()
+            ? item.strength.trim()
+            : undefined,
+      }));
+  }, [serverData?.macro]);
+  const serverSynergyPairs = useMemo(() => {
+    const pairs = Array.isArray(serverData?.synergyPairs)
+      ? serverData.synergyPairs
+      : [];
+
+    return pairs
+      .filter((item: any) => item && typeof item === 'object')
+      .map((item: any, index: number) => ({
+        a: String(item.a ?? item.leftPlayerId ?? item.leftId ?? `pair-a-${index}`),
+        b: String(item.b ?? item.rightPlayerId ?? item.rightId ?? `pair-b-${index}`),
+        score: Number.isFinite(Number(item.score)) ? Number(item.score) : 0,
+      }));
+  }, [serverData?.synergyPairs]);
   const correlations = useMemo(() => {
+    if (
+      serverOnly ||
+      serverPersonalCorrelations.length > 0 ||
+      serverPairingCorrelations.length > 0
+    ) {
+      return [...serverPersonalCorrelations, ...serverPairingCorrelations];
+    }
+
     return buildCorrelationResults(games, relationships);
-  }, [games, relationships]);
+  }, [
+    games,
+    relationships,
+    serverOnly,
+    serverPairingCorrelations,
+    serverPersonalCorrelations,
+  ]);
 
   const globalMetaCorrelations = useMemo(() => {
+    if (serverOnly || serverMacroCorrelations.length > 0) {
+      return serverMacroCorrelations;
+    }
+
     return computeGlobalMetaCorrelations(games);
-  }, [games]);
+  }, [games, serverMacroCorrelations, serverOnly]);
 
   const synergyPairs = useMemo(() => {
+    if (serverOnly || serverSynergyPairs.length > 0) {
+      return serverSynergyPairs;
+    }
+
     return getTopSynergyPairs(relationships, 5);
-  }, [relationships]);
+  }, [relationships, serverOnly, serverSynergyPairs]);
 
   const playerNameMap = useMemo(() => {
     return new Map((players ?? []).map((player: any) => [player.id, player.name]));
   }, [players]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, !showOverviewChrome && styles.containerCompact]}>
       <View pointerEvents="none" style={styles.nebulaPurple} />
       <View pointerEvents="none" style={styles.nebulaBlue} />
       <View pointerEvents="none" style={styles.nebulaCyan} />
@@ -437,99 +533,139 @@ export default function CorrelationStats() {
       <View pointerEvents="none" style={styles.star4} />
       <View pointerEvents="none" style={styles.star5} />
 
-      <View style={styles.hero}>
-        <Text style={styles.heroEyebrow}>TACTICAL INTELLIGENCE</Text>
-        <Text style={styles.heroTitle}>Correlation Matrix</Text>
-        <Text style={styles.heroSubtitle}>
-          Real-time prestige outcome signals, macro gameplay correlations, and
-          top alliance chemistry in a hardened sci-fi analytics panel.
-        </Text>
-      </View>
-
-      <View style={styles.summaryRow}>
-        <SummaryStat
-          value={correlations.length}
-          label="Relationship Signals"
-          accent={chartColors?.purple ?? '#a855f7'}
-        />
-        <SummaryStat
-          value={globalMetaCorrelations.length}
-          label="Meta Factors"
-          accent={chartColors?.blue ?? '#3b82f6'}
-        />
-        <SummaryStat
-          value={synergyPairs.length}
-          label="Synergy Pairs"
-          accent="#67e8f9"
-        />
-      </View>
-
-      <SectionPanel
-        eyebrow="RELATIONSHIP DATA"
-        title="Pairing Correlations"
-        meta={`${correlations.length} metrics`}
-      >
-        <Text style={styles.sectionDescription}>
-          Winner logic is based on Prestige. Secondary score data is not used
-          to determine final outcome here.
-        </Text>
-
-        <View style={styles.metricList}>
-          {correlations.map((item: any) => (
-            <CorrelationCard
-              key={item.label}
-              label={item.label}
-              value={item.value}
-              strength={item.strength}
-            />
-          ))}
-        </View>
-      </SectionPanel>
-
-      <SectionPanel
-        eyebrow="GLOBAL META"
-        title="Macro Correlations"
-        meta={`${globalMetaCorrelations.length} factors`}
-      >
-        <View style={styles.metricList}>
-          {globalMetaCorrelations.map((item) => (
-            <CorrelationCard
-              key={item.label}
-              label={item.label}
-              value={item.value}
-            />
-          ))}
-        </View>
-      </SectionPanel>
-
-      <SectionPanel
-        eyebrow="ALLIANCE MATRIX"
-        title="Top Synergy Pairs"
-        meta={synergyPairs.length === 0 ? 'No data' : `${synergyPairs.length} pairs`}
-      >
-        {synergyPairs.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No alliance telemetry yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Play more games to surface repeat-winning pair chemistry and support
-              patterns.
+      {showOverviewChrome ? (
+        <>
+          <View style={styles.hero}>
+            <Text style={styles.heroEyebrow}>TACTICAL INTELLIGENCE</Text>
+            <Text style={styles.heroTitle}>Correlation Matrix</Text>
+            <Text style={styles.heroSubtitle}>
+              Real-time prestige outcome signals, macro gameplay correlations, and
+              top alliance chemistry in a hardened sci-fi analytics panel.
             </Text>
           </View>
-        ) : (
-          <View style={styles.synergyList}>
-            {synergyPairs.map((pair: any, index: number) => (
-              <SynergyCard
-                key={`${pair.a}-${pair.b}`}
-                rank={index}
-                names={`${playerNameMap.get(pair.a) ?? pair.a} + ${
-                  playerNameMap.get(pair.b) ?? pair.b
-                }`}
-                score={pair.score}
-              />
-            ))}
+
+          <View style={styles.summaryRow}>
+            <SummaryStat
+              value={correlations.length}
+              label="Relationship Signals"
+              accent={chartColors?.purple ?? '#a855f7'}
+            />
+            <SummaryStat
+              value={globalMetaCorrelations.length}
+              label="Meta Factors"
+              accent={chartColors?.blue ?? '#3b82f6'}
+            />
+            <SummaryStat
+              value={synergyPairs.length}
+              label="Synergy Pairs"
+              accent="#67e8f9"
+            />
           </View>
-        )}
-      </SectionPanel>
+        </>
+      ) : null}
+
+      {(view === 'all' || view === 'pairing') && (
+        <InsightsSectionPanel
+          eyebrow="RELATIONSHIP DATA"
+          title="Personal Correlations"
+          meta={`${correlations.length} metrics`}
+        >
+          <Text style={styles.sectionDescription}>
+            Winner logic is based on Prestige. Secondary score data is not used
+            to determine final outcome here.
+          </Text>
+
+          {correlations.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No personal correlations yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Supabase has not returned any personal correlation signals for this
+                view yet.
+              </Text>
+            </View>
+          ) : (
+            <View style={isTwoColumn ? styles.metricListTwoColumn : styles.metricList}>
+              {correlations.map((item: any) => (
+                <View
+                  key={item.label}
+                  style={isTwoColumn ? styles.metricCellTwoColumn : styles.metricCell}
+                >
+                  <CorrelationCard
+                    label={item.label}
+                    value={item.value}
+                    strength={item.strength}
+                    compact={isTwoColumn}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        </InsightsSectionPanel>
+      )}
+
+      {(view === 'all' || view === 'macro') && (
+        <InsightsSectionPanel
+          eyebrow="GLOBAL META"
+          title="Macro Correlations"
+          meta={`${globalMetaCorrelations.length} factors`}
+        >
+          {globalMetaCorrelations.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No macro correlations yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Supabase has not returned any macro correlation signals for this
+                view yet.
+              </Text>
+            </View>
+          ) : (
+            <View style={isTwoColumn ? styles.metricListTwoColumn : styles.metricList}>
+              {globalMetaCorrelations.map((item) => (
+                <View
+                  key={item.label}
+                  style={isTwoColumn ? styles.metricCellTwoColumn : styles.metricCell}
+                >
+                  <CorrelationCard
+                    label={item.label}
+                    value={item.value}
+                    compact={isTwoColumn}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        </InsightsSectionPanel>
+      )}
+
+      {(view === 'all' || view === 'synergy') && (
+        <InsightsSectionPanel
+          eyebrow="ALLIANCE MATRIX"
+          title="Top Synergy Pairs"
+          meta={synergyPairs.length === 0 ? 'No data' : `${synergyPairs.length} pairs`}
+        >
+          {synergyPairs.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No alliance telemetry yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Play more games to surface repeat-winning pair chemistry and support
+                patterns.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.synergyList}>
+              {synergyPairs.map((pair: any, index: number) => (
+                <SynergyCard
+                  key={`${pair.a}-${pair.b}`}
+                  rank={index}
+                  names={`${playerNameMap.get(pair.a) ?? pair.a} + ${
+                    playerNameMap.get(pair.b) ?? pair.b
+                  }`}
+                  score={pair.score}
+                />
+              ))}
+            </View>
+          )}
+        </InsightsSectionPanel>
+      )}
     </View>
   );
 }
@@ -550,7 +686,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 16,
   },
-
+  containerCompact: {
+    paddingTop: 16,
+    gap: 0,
+  },
   nebulaPurple: {
     position: 'absolute',
     top: -54,
@@ -587,7 +726,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(244,114,182,0.06)',
   },
-
   star1: {
     position: 'absolute',
     top: 20,
@@ -633,7 +771,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.62)',
   },
-
   hero: {
     gap: 6,
   },
@@ -655,7 +792,6 @@ const styles = StyleSheet.create({
     color: 'rgba(226,232,240,0.78)',
     maxWidth: 580,
   },
-
   summaryRow: {
     flexDirection: 'row',
     gap: 10,
@@ -696,62 +832,28 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     width: '100%',
   },
-
-  sectionPanel: {
-    position: 'relative',
-    overflow: 'hidden',
-    gap: 12,
-    padding: 15,
-    borderRadius: 22,
-    backgroundColor: 'rgba(7,11,23,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.12)',
-  },
-  sectionGlow: {
-    position: 'absolute',
-    top: -30,
-    right: -10,
-    width: 140,
-    height: 140,
-    borderRadius: 999,
-    backgroundColor: 'rgba(59,130,246,0.05)',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  sectionTitleWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  sectionEyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    color: 'rgba(103,232,249,0.94)',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#f8fafc',
-  },
-  sectionMeta: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: 'rgba(148,163,184,0.88)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
-  },
   sectionDescription: {
     fontSize: 13,
     lineHeight: 19,
     color: 'rgba(148,163,184,0.88)',
   },
-
   metricList: {
     gap: 10,
+  },
+  metricListTwoColumn: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 0,
+    rowGap: 10,
+    justifyContent: 'space-between',
+  },
+  metricCell: {
+    width: '100%',
+  },
+  metricCellTwoColumn: {
+    width: '49%',
+    maxWidth: '49%',
   },
   metricCard: {
     position: 'relative',
@@ -761,6 +863,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: 'rgba(10,16,30,0.96)',
     gap: 12,
+  },
+  metricCardCompact: {
+    minHeight: 214,
+    padding: 12,
   },
   metricGlow: {
     position: 'absolute',
@@ -776,6 +882,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 10,
   },
+  metricHeaderCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
   metricLabel: {
     flex: 1,
     fontSize: 15,
@@ -783,11 +895,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#f8fafc',
   },
+  metricLabelCompact: {
+    flex: 0,
+    width: '100%',
+    fontSize: 13,
+    lineHeight: 16,
+  },
   metricBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
+  },
+  metricBadgeCompact: {
+    alignSelf: 'flex-start',
   },
   metricBadgeText: {
     fontSize: 10,
@@ -800,6 +921,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  metricNumbersCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   metricPrimaryBlock: {
     flex: 1,
     gap: 3,
@@ -807,6 +933,9 @@ const styles = StyleSheet.create({
   metricPrimaryBlockRight: {
     alignItems: 'flex-end',
     gap: 3,
+  },
+  metricPrimaryBlockRightCompact: {
+    alignItems: 'flex-start',
   },
   metricPrimaryLabel: {
     fontSize: 10,
@@ -819,6 +948,9 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '900',
     color: '#ffffff',
+  },
+  metricValueCompact: {
+    fontSize: 18,
   },
   metricDirection: {
     fontSize: 12,
@@ -858,7 +990,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(148,163,184,0.82)',
   },
-
   synergyList: {
     gap: 10,
   },
@@ -931,7 +1062,6 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 999,
   },
-
   emptyState: {
     padding: 18,
     borderRadius: 18,
@@ -951,5 +1081,3 @@ const styles = StyleSheet.create({
     color: 'rgba(148,163,184,0.84)',
   },
 });
-
-

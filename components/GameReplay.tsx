@@ -164,37 +164,19 @@ export default function GameReplay({
 }: Props) {
   const [step, setStep] = useState(0);
 
-  if (!timeline.length) {
-    return (
-      <ChartShell
-        title="Game Replay"
-        subtitle="Step through saved round snapshots across the match."
-      >
-        <AnimatedCard style={styles.emptyCard}>
-          <View style={styles.nebulaA} />
-          <View style={styles.nebulaB} />
-          <Text style={styles.emptyEyebrow}>Replay Offline</Text>
-          <Text style={styles.emptyTitle}>No replay data available</Text>
-          <Text style={styles.emptyBody}>
-            Save round snapshots during gameplay to unlock a round-by-round replay timeline.
-          </Text>
-        </AnimatedCard>
-      </ChartShell>
-    );
-  }
+  const hasTimeline = timeline.length > 0;
+  const safeStep = hasTimeline ? Math.min(step, timeline.length - 1) : 0;
+  const current = hasTimeline ? timeline[safeStep] : undefined;
+  const previous = hasTimeline && safeStep > 0 ? timeline[safeStep - 1] : undefined;
 
-  const safeStep = Math.min(step, timeline.length - 1);
-  const current = timeline[safeStep];
-  const previous = safeStep > 0 ? timeline[safeStep - 1] : undefined;
-
-  const canGoPrev = safeStep > 0;
-  const canGoNext = safeStep < timeline.length - 1;
+  const canGoPrev = hasTimeline && safeStep > 0;
+  const canGoNext = hasTimeline && safeStep < timeline.length - 1;
   const progress = timeline.length > 1 ? safeStep / (timeline.length - 1) : 1;
 
   const rankedPlayers = useMemo(() => {
     return [...players]
       .map((player) => {
-        const stats = current.snapshot?.[player.id] ?? {};
+        const stats = current?.snapshot?.[player.id] ?? {};
         const prevStats = previous?.snapshot?.[player.id] ?? {};
 
         const totalPrestige = getTotalPrestige(stats);
@@ -220,6 +202,25 @@ export default function GameReplay({
   }, [players, current, previous]);
 
   const leader = rankedPlayers[0];
+
+  if (!hasTimeline) {
+    return (
+      <ChartShell
+        title="Game Replay"
+        subtitle="Step through saved round snapshots across the match."
+      >
+        <AnimatedCard style={styles.emptyCard}>
+          <View style={styles.nebulaA} />
+          <View style={styles.nebulaB} />
+          <Text style={styles.emptyEyebrow}>Replay Offline</Text>
+          <Text style={styles.emptyTitle}>No replay data available</Text>
+          <Text style={styles.emptyBody}>
+            Save round snapshots during gameplay to unlock a round-by-round replay timeline.
+          </Text>
+        </AnimatedCard>
+      </ChartShell>
+    );
+  }
 
   return (
     <ChartShell

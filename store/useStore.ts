@@ -1,11 +1,14 @@
 
 import { create } from 'zustand';
+import { mergeRegisteredProfileIntoPlayer } from '../utils/registeredProfilePlayer';
 
 export type Player = {
   id: string;
   name: string;
   initials?: string;
   color?: string;
+  displayName?: string;
+  hasSavedGames?: boolean;
   assignedCardArtIndex?: number | null;
 };
 
@@ -24,6 +27,7 @@ export type PlayerGameTotals = {
   assistPrestigeReceived: number;
   assistPrestigeSent: number;
   assistPrestigeBySource: Record<string, number>;
+  assistCountBySource?: Record<string, number>;
   objectivePrestige: number;
   score: number;
   assists: number;
@@ -69,6 +73,7 @@ export type ActiveGameCurrent = {
 
 export type Game = {
   id: string;
+  hostProfileId?: string;
   players: GamePlayer[];
   totals: GameTotals;
   winnerId?: string;
@@ -81,6 +86,37 @@ export type Game = {
   timeline?: StoredRound[];
   roundCount?: number;
   objectiveStatsEligible?: boolean;
+};
+
+export type AuthSession = {
+  user: {
+    id: string;
+    email?: string | null;
+  };
+} | null;
+
+export type AuthProfile = {
+  id: string;
+  player_name?: string | null;
+  display_name?: string | null;
+  favorite_color?: string | null;
+  assigned_card_art_index?: number | null;
+} | null;
+
+export type AuthBootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export type StatsGroupSnapshot = {
+  groupId: string;
+  name?: string;
+  updatedAt?: string | null;
+  [key: string]: unknown;
+};
+
+export type StatsSnapshot = {
+  personal: Record<string, unknown>;
+  global: Record<string, unknown>;
+  groups: StatsGroupSnapshot[];
+  loadedAt: number;
 };
 
 export type ActiveGame = {
@@ -115,6 +151,31 @@ function normalizeStringOrUndefined(v: any): string | undefined {
   return normalized || undefined;
 }
 
+function isRecoveredPlayerName(v: any): boolean {
+  return normalizeName(v).toLowerCase() === 'recovered player';
+}
+
+function isRecoveredPlayerRecord(v: any): boolean {
+  return isRecoveredPlayerName(v?.name ?? v?.playerName ?? v?.displayName);
+}
+
+function getInitialsFromName(name: string): string {
+  const parts = String(name ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return '?';
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+}
+
 function normalizeAssistMap(input: any): Record<string, number> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
 
@@ -123,6 +184,16 @@ function normalizeAssistMap(input: any): Record<string, number> {
       .map(([id, value]) => [normalizeId(id), safeNumber(value)])
       .filter(([id]) => Boolean(id))
   );
+}
+
+function normalizeAssistSourceMap(...inputs: any[]): Record<string, number> {
+  return inputs.reduce((merged, input) => {
+    const normalized = normalizeAssistMap(input);
+    for (const [playerId, value] of Object.entries(normalized)) {
+      merged[playerId] = safeNumber(merged[playerId]) + safeNumber(value);
+    }
+    return merged;
+  }, {} as Record<string, number>);
 }
 
 function normalizeRound(raw: any): StoredRound | null {
@@ -166,11 +237,110 @@ function createEmptyCurrent(): ActiveGameCurrent {
   };
 }
 
+function sanitizeStoredPlayers(players: any): Player[] {
+  const seen = new Set<string>();
+
+  return (Array.isArray(players) ? players : [])
+    .map((rawPlayer: any) => {
+      const id = normalizeId(rawPlayer?.id);
+      const name = normalizeName(rawPlayer?.name);
+
+      if (!id || !name || isRecoveredPlayerName(name) || seen.has(id)) {
+        return null;
+      }
+
+      seen.add(id);
+
+      return {
+        ...rawPlayer,
+        id,
+        name,
+        initials:
+          normalizeStringOrUndefined(rawPlayer?.initials) || getInitialsFromName(name),
+        color: normalizeStringOrUndefined(rawPlayer?.color),
+        displayName: normalizeStringOrUndefined(rawPlayer?.displayName),
+        hasSavedGames:
+          typeof rawPlayer?.hasSavedGames === 'boolean'
+            ? rawPlayer.hasSavedGames
+            : undefined,
+        assignedCardArtIndex:
+          typeof rawPlayer?.assignedCardArtIndex === 'number' &&
+          Number.isFinite(rawPlayer.assignedCardArtIndex)
+            ? rawPlayer.assignedCardArtIndex
+            : null,
+      } satisfies Player;
+    })
+    .filter((player): player is Player => Boolean(player));
+}
+
+function sanitizeStoredGroups(groups: any, validPlayerIds: Set<string>): Group[] {
+  return (Array.isArray(groups) ? groups : [])
+    .map((rawGroup: any) => {
+      const id = normalizeId(rawGroup?.id);
+      const name = normalizeName(rawGroup?.name);
+
+      if (!id || !name) {
+        return null;
+      }
+
+      const playerIds = Array.from(
+        new Set(
+          (Array.isArray(rawGroup?.playerIds) ? rawGroup.playerIds : [])
+            .map((playerId: any) => normalizeId(playerId))
+            .filter((playerId) => Boolean(playerId) && validPlayerIds.has(playerId))
+        )
+      );
+
+      if (playerIds.length === 0) {
+        return null;
+      }
+
+      return {
+        ...rawGroup,
+        id,
+        name,
+        playerIds,
+        createdAt:
+          typeof rawGroup?.createdAt === 'number' && Number.isFinite(rawGroup.createdAt)
+            ? rawGroup.createdAt
+            : undefined,
+        objectiveStatsEligible:
+          typeof rawGroup?.objectiveStatsEligible === 'boolean'
+            ? rawGroup.objectiveStatsEligible
+            : undefined,
+      } satisfies Group;
+    })
+    .filter((group): group is Group => Boolean(group));
+}
+
+function sanitizeStoredGames(games: any): Game[] {
+  return (Array.isArray(games) ? games : [])
+    .map((game: any) => normalizeImportedGame(game))
+    .filter((game) => Array.isArray(game?.players) && game.players.length > 0);
+}
+
+function sanitizeSnapshotState(input: {
+  players?: any;
+  groups?: any;
+  games?: any;
+}) {
+  const players = sanitizeStoredPlayers(input.players);
+  const validPlayerIds = new Set(players.map((player) => player.id));
+
+  return {
+    players,
+    groups: sanitizeStoredGroups(input.groups, validPlayerIds),
+    games: sanitizeStoredGames(input.games),
+  };
+}
+
 function normalizeImportedGame(raw: any): Game {
   const playerMap = new Map<string, GamePlayer>();
 
   if (Array.isArray(raw?.players)) {
     raw.players.forEach((p: any, index: number) => {
+      if (isRecoveredPlayerRecord(p)) return;
+
       const id = normalizeId(p?.id ?? p?.playerId);
       if (!id) return;
 
@@ -214,16 +384,6 @@ function normalizeImportedGame(raw: any): Game {
     .map(normalizeRound)
     .filter((round): round is StoredRound => Boolean(round));
 
-  for (const round of [...rounds, ...timeline]) {
-    if (!playerMap.has(round.playerId)) {
-      playerMap.set(round.playerId, {
-        id: round.playerId,
-        name: 'Recovered Player',
-        assignedCardArtIndex: null,
-      });
-    }
-  }
-
   const totals: GameTotals = {};
   const rawTotals =
     raw?.totals && typeof raw.totals === 'object' && !Array.isArray(raw.totals)
@@ -233,14 +393,7 @@ function normalizeImportedGame(raw: any): Game {
   Object.entries(rawTotals).forEach(([rawPlayerId, t]: any) => {
     const id = normalizeId(rawPlayerId);
     if (!id) return;
-
-    if (!playerMap.has(id)) {
-      playerMap.set(id, {
-        id,
-        name: 'Recovered Player',
-        assignedCardArtIndex: null,
-      });
-    }
+    if (!playerMap.has(id)) return;
 
     const direct = safeNumber(t?.directPrestige);
     const assist = safeNumber(t?.assistPrestigeReceived);
@@ -262,7 +415,13 @@ function normalizeImportedGame(raw: any): Game {
       directPrestige: direct,
       assistPrestigeReceived: assist,
       assistPrestigeSent: safeNumber(t?.assistPrestigeSent),
-      assistPrestigeBySource: normalizeAssistMap(t?.assistPrestigeBySource),
+      assistPrestigeBySource: normalizeAssistSourceMap(
+        t?.assistPrestigeBySource,
+        t?.assistPrestigeByPlayer,
+        t?.assistPrestigeFromPlayers,
+        t?.assistSources
+      ),
+      assistCountBySource: normalizeAssistMap(t?.assistCountBySource),
       objectivePrestige: objective,
       score: safeNumber(t?.score),
       assists: safeNumber(t?.assists),
@@ -289,6 +448,7 @@ function normalizeImportedGame(raw: any): Game {
 
   return {
     id: normalizeId(raw?.id) || `${Date.now()}-${Math.random()}`,
+    hostProfileId: normalizeStringOrUndefined(raw?.hostProfileId),
     players: Array.from(playerMap.values()),
     totals,
     winnerId: sanitizeWinner(getResolvedWinner(raw)),
@@ -346,20 +506,60 @@ type StartActiveGameInput = {
   groupName?: string;
 };
 
+type CloudSnapshotInput = {
+  profile: AuthProfile;
+  players: Player[];
+  groups: Group[];
+  games: Game[];
+};
+
+type RegisteredProfileInput = {
+  id: string;
+  name: string;
+  displayName?: string;
+  color?: string;
+  assignedCardArtIndex?: number | null;
+  hasSavedGames?: boolean;
+};
+
 type Store = {
   players: Player[];
   groups: Group[];
   games: Game[];
   activeGame: ActiveGame | null;
   selectedGroupId: string | null;
+  authSession: AuthSession;
+  authProfile: AuthProfile;
+  authBootstrapStatus: AuthBootstrapStatus;
+  authError: string | null;
+  passwordRecoveryPending: boolean;
+  statsSnapshot: StatsSnapshot | null;
 
   selectedPlayerId: string | null;
   selectedGameId: string | null;
   selectedComparePlayerIds: string[];
 
+  setAuthSession: (session: AuthSession) => void;
+  setAuthProfile: (profile: AuthProfile) => void;
+  setAuthBootstrapStatus: (status: AuthBootstrapStatus) => void;
+  setAuthError: (message: string | null) => void;
+  setPasswordRecoveryPending: (pending: boolean) => void;
+  setStatsSnapshot: (snapshot: StatsSnapshot | null) => void;
+  hydrateAuthBootstrap: (input: {
+    session: AuthSession;
+    profile: AuthProfile;
+  }) => void;
+  hydrateCloudSnapshot: (input: {
+    session: AuthSession;
+    snapshot: CloudSnapshotInput;
+    statsSnapshot?: StatsSnapshot | null;
+  }) => void;
+  clearAuthState: () => void;
+
   setPlayers: (players: Player[]) => void;
   addPlayer: (player: Player) => void;
   updatePlayer: (playerId: string, updates: Partial<Player>) => void;
+  upsertRegisteredProfile: (profile: RegisteredProfileInput) => void;
   removePlayer: (playerId: string) => void;
   deletePlayer: (playerId: string) => void;
 
@@ -394,20 +594,114 @@ export const useStore = create<Store>((set, get) => ({
   games: [],
   activeGame: null,
   selectedGroupId: null,
+  authSession: null,
+  authProfile: null,
+  authBootstrapStatus: 'idle',
+  authError: null,
+  passwordRecoveryPending: false,
+  statsSnapshot: null,
 
   selectedPlayerId: null,
   selectedGameId: null,
   selectedComparePlayerIds: [],
 
+  setAuthSession: (session) =>
+    set({
+      authSession: session,
+    }),
+
+  setAuthProfile: (profile) =>
+    set({
+      authProfile: profile,
+    }),
+
+  setAuthBootstrapStatus: (status) =>
+    set({
+      authBootstrapStatus: status,
+    }),
+
+  setAuthError: (message) =>
+    set({
+      authError: message,
+    }),
+
+  setPasswordRecoveryPending: (pending) =>
+    set({
+      passwordRecoveryPending: Boolean(pending),
+    }),
+
+  setStatsSnapshot: (snapshot) =>
+    set({
+      statsSnapshot: snapshot,
+    }),
+
+  hydrateAuthBootstrap: ({ session, profile }) =>
+    set({
+      authSession: session,
+      authProfile: profile,
+      authBootstrapStatus: 'ready',
+      authError: null,
+    }),
+
+  hydrateCloudSnapshot: ({ session, snapshot, statsSnapshot = null }) =>
+    set(() => {
+      const sanitized = sanitizeSnapshotState({
+        players: snapshot.players,
+        groups: snapshot.groups,
+        games: snapshot.games,
+      });
+
+      return {
+      authSession: session,
+      authProfile: snapshot.profile,
+      players: sanitized.players,
+      groups: sanitized.groups,
+      games: sanitized.games,
+      statsSnapshot,
+      authBootstrapStatus: 'ready',
+      authError: null,
+      };
+    }),
+
+  clearAuthState: () =>
+    set({
+      authSession: null,
+      authProfile: null,
+      authBootstrapStatus: 'idle',
+      authError: null,
+      passwordRecoveryPending: false,
+      statsSnapshot: null,
+    }),
+
   setPlayers: (players) =>
     set({
-      players: Array.isArray(players) ? players : [],
+      players: sanitizeStoredPlayers(players),
     }),
 
   addPlayer: (player) =>
     set((state) => ({
       players: [...state.players, player],
     })),
+
+  upsertRegisteredProfile: (profile) =>
+    set((state) => {
+      const existingPlayer =
+        state.players.find((player) => player.id === normalizeId(profile?.id)) ?? null;
+      const nextPlayer = mergeRegisteredProfileIntoPlayer(existingPlayer, profile);
+
+      if (!nextPlayer) {
+        return {};
+      }
+
+      const exists = state.players.some((player) => player.id === nextPlayer.id);
+      return {
+        players: exists
+          ? state.players.map((player) =>
+              player.id === nextPlayer.id ? { ...player, ...nextPlayer } : player
+            )
+          : [...state.players, nextPlayer],
+      };
+    }),
 
   updatePlayer: (playerId, updates) =>
     set((state) => {
@@ -558,9 +852,9 @@ export const useStore = create<Store>((set, get) => ({
   deletePlayer: (playerId) => get().removePlayer(playerId),
 
   setGroups: (groups) =>
-    set({
-      groups: Array.isArray(groups) ? groups : [],
-    }),
+    set((state) => ({
+      groups: sanitizeStoredGroups(groups, new Set(state.players.map((player) => player.id))),
+    })),
 
   addGroup: (group) =>
     set((state) => ({
@@ -586,9 +880,9 @@ export const useStore = create<Store>((set, get) => ({
 
   setGames: (games) =>
     set(() => {
-      const normalizedGames = Array.isArray(games)
-        ? games.map(normalizeImportedGame).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
-        : [];
+      const normalizedGames = sanitizeStoredGames(games).sort(
+        (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
+      );
       const currentSelectedGameId = get().selectedGameId;
 
       const validSelectedGameId =
@@ -604,11 +898,18 @@ export const useStore = create<Store>((set, get) => ({
     }),
 
   addGame: (game) =>
-    set((state) => ({
-      games: [normalizeImportedGame(game), ...state.games].sort(
-        (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
-      ),
-    })),
+    set((state) => {
+      const normalizedGame = normalizeImportedGame(game);
+      if (!Array.isArray(normalizedGame.players) || normalizedGame.players.length === 0) {
+        return {};
+      }
+
+      return {
+        games: [normalizedGame, ...state.games].sort(
+          (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
+        ),
+      };
+    }),
 
   removeGame: (gameId) =>
     set((state) => {
@@ -675,6 +976,10 @@ export const useStore = create<Store>((set, get) => ({
             Number((t as any).assistedEfficiency) ||
             Number(existingTotals.assistedEfficiency) ||
             0,
+          assistCountBySource: {
+            ...(existingTotals.assistCountBySource || {}),
+            ...(((t as any).assistCountBySource || {}) as Record<string, number>),
+          },
           assistPrestigeBySource: {
             ...(existingTotals.assistPrestigeBySource || {}),
             ...(((t as any).assistPrestigeBySource || {}) as Record<string, number>),
@@ -688,6 +993,7 @@ export const useStore = create<Store>((set, get) => ({
     const mergeGame = (a: Game, b: Game): Game => ({
       ...a,
       ...b,
+      hostProfileId: b.hostProfileId ?? a.hostProfileId,
       totals: mergeTotals(a.totals, b.totals),
       rounds: b.rounds && b.rounds.length > 0 ? b.rounds : a.rounds,
       timeline:
@@ -712,7 +1018,10 @@ export const useStore = create<Store>((set, get) => ({
     });
 
     for (const game of existing) {
-      byId.set(game.id, normalizeImportedGame(game));
+      const normalizedGame = normalizeImportedGame(game);
+      if (normalizedGame.players.length > 0) {
+        byId.set(game.id, normalizedGame);
+      }
     }
 
     for (const game of incomingGames) {
@@ -874,8 +1183,36 @@ export const useStore = create<Store>((set, get) => ({
       games: [],
       activeGame: null,
       selectedGroupId: null,
+      authSession: null,
+      authProfile: null,
+      authBootstrapStatus: 'idle',
+      authError: null,
+      passwordRecoveryPending: false,
+      statsSnapshot: null,
       selectedPlayerId: null,
       selectedGameId: null,
       selectedComparePlayerIds: [],
     }),
 }));
+
+export type StoreState = Store;
+
+export function useGames() { return useStore((s: Store) => s.games); }
+export function usePlayers() { return useStore((s: Store) => s.players); }
+export function useGroups() { return useStore((s: Store) => s.groups); }
+export function useActiveGame() { return useStore((s: Store) => s.activeGame); }
+export function useSelectedGroupId() { return useStore((s: Store) => s.selectedGroupId); }
+export function useAuthSession() { return useStore((s: Store) => s.authSession); }
+export function useAuthProfile() { return useStore((s: Store) => s.authProfile); }
+export function useAuthBootstrapStatus() { return useStore((s: Store) => s.authBootstrapStatus); }
+export function usePasswordRecoveryPending() { return useStore((s: Store) => s.passwordRecoveryPending); }
+export function useStatsSnapshot() { return useStore((s: Store) => s.statsSnapshot); }
+export function useSelectedPlayerId() { return useStore((s: Store) => s.selectedPlayerId); }
+export function useSelectedGameId() { return useStore((s: Store) => s.selectedGameId); }
+export function useSelectedComparePlayerIds() { return useStore((s: Store) => s.selectedComparePlayerIds); }
+export function useSetSelectedPlayerId() { return useStore((s: Store) => s.setSelectedPlayerId); }
+export function usePatchActiveGame() { return useStore((s: Store) => s.patchActiveGame); }
+export function useClearActiveGame() { return useStore((s: Store) => s.clearActiveGame); }
+export function useHydrateCloudSnapshot() { return useStore((s: Store) => s.hydrateCloudSnapshot); }
+export function useClearAuthState() { return useStore((s: Store) => s.clearAuthState); }
+export function useSetPasswordRecoveryPending() { return useStore((s: Store) => s.setPasswordRecoveryPending); }

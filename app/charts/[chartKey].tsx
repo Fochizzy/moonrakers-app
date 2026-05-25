@@ -1,70 +1,53 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  SafeAreaView,
-  ScrollView,
+  Pressable,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
+import ChartInsightStrip from "@/components/charts/ChartInsightStrip";
+import ChartMetricChip from "@/components/charts/ChartMetricChip";
+import ChartSurface from "@/components/charts/ChartSurface";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
-import { EloChart } from "@/components/charts/ELO/exports";
-import RadarChart from "@/components/charts/RadarChart";
-import RelationshipGraph from "@/components/charts/RelationshipGraph";
-import MultiLineChart from "@/components/charts/MultiLineChart";
+import AssistNetworkOverview from "@/components/charts/AssistNetworkOverview";
 import BarChart from "@/components/charts/BarChart";
+import BumpChart from "@/components/charts/BumpChart";
+import { resolveChartDetailProvenance } from "@/lib/charts/chartDetailProvenance";
+import {
+  CHART_COLORS,
+  CHART_LAYOUT,
+} from "@/components/charts/chartVisualSystem";
+import {
+  canAdjustChartFromHub,
+  resolveChartCatalogEntry as resolveChartMetadata,
+} from "@/components/charts/chartCatalog";
+import ConsistencyBandChart from "@/components/charts/ConsistencyBandChart";
+import EfficiencyFailureScatter from "@/components/charts/EfficiencyFailureScatter";
+import HeadToHeadChart from "@/components/charts/HeadToHeadChart";
 import Heatmap from "@/components/charts/Heatmap";
 import LineChart from "@/components/charts/LineChart";
+import EloChart from "@/components/charts/ELO/EloChart";
+import PrestigeOverTimeChart from "@/components/charts/PrestigeOverTimeChart";
+import RadarChart from "@/components/charts/RadarChart";
 import ReplayChart from "@/components/charts/ReplayChart";
 import RivalryGraph from "@/components/charts/RivalryGraph";
-import HeadToHeadChart from "@/components/charts/HeadToHeadChart";
-import StackedBarChart from "@/components/charts/StackedBarChart";
 import Sparkline from "@/components/charts/Sparkline";
-import AssistNetworkOverview from "@/components/charts/AssistNetworkOverview";
-
+import StackedBarChart from "@/components/charts/StackedBarChart";
+import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
+import { getChartDataset } from "@/lib/cloud/analytics/getChartDataset";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useStore } from "@/store/useStore";
-import { resolveAllGamesToPlayers } from "@/utils/importedGameResolver";
-import { getMetricOrFallback } from "@/utils/metricMap";
-import {
-  METRIC_OPTIONS,
-  buildMetricDataMap,
-  buildRadarStatsForPlayer,
-  buildRelationships,
-  buildSparkSeries,
-  buildStackedMetricOptions,
-  buildUnifiedSnapshots,
-  canonicalizeGames,
-  collectUnifiedGames,
-  getPlayerById,
-  normalizeReplayMetric,
-  type FlexibleStore,
-  type RadarStats,
-  type SimpleMetricKey,
-  type SnapshotPoint,
-  type StackedRow,
-  type StorePlayer,
-} from "@/utils/charts";
+import { APP_ROUTES } from "@/utils/appRoutes";
+import { buildLocalChartDetailState } from "@/utils/chartDetailLocalData";
+import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
 
-const COLORS = {
-  bg: "#081120",
-  card: "rgba(12,18,38,0.92)",
-  cardAlt: "rgba(16,24,48,0.95)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  accent: "#A855F7",
-  accentSoft: "rgba(168,85,247,0.18)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-};
-
-type ViewTab = "Overview" | "Focus" | "Launch";
+type PayloadRecord = Record<string, unknown>;
+type CloudFallbackSnapshot = Awaited<ReturnType<typeof loadCloudSnapshot>>;
 
 function getParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -75,25 +58,50 @@ function getParamList(value?: string | string[]) {
   if (!raw) return [];
   return raw
     .split(",")
-    .map((x) => x.trim())
+    .map((entry) => entry.trim())
     .filter(Boolean);
 }
 
 function normalizeChartKey(value?: string | string[]) {
-  return String(getParam(value) ?? "radar").trim().toLowerCase();
-}
-
-function normalizeMetricKey(value?: string | string[]): SimpleMetricKey {
-  const raw = String(getParam(value) ?? "totalPrestige").trim();
-  return METRIC_OPTIONS.includes(raw as SimpleMetricKey)
-    ? (raw as SimpleMetricKey)
-    : "totalPrestige";
+  const normalized = String(getParam(value) ?? "radar").trim().toLowerCase();
+  if (normalized === "replay") return "replay_chart";
+  if (normalized === "efficiency-failure-scatter") {
+    return "efficiency_failure_scatter";
+  }
+  if (
+    normalized === "relationship-graph" ||
+    normalized === "assist_network_overview"
+  ) {
+    return "relationship_graph";
+  }
+  return normalized;
 }
 
 function normalizeGraphMode(value?: string | string[]) {
-  const raw = String(getParam(value) ?? "").trim().toLowerCase();
-  return raw === "network" ? "network" : "flow";
+  return String(getParam(value) ?? "flow").trim().toLowerCase() === "network"
+    ? "network"
+    : "flow";
 }
+
+function normalizeLineMode(value?: string | string[]) {
+  const normalized = String(getParam(value) ?? "raw").trim().toLowerCase();
+  if (normalized === "cumulative") return "cumulative";
+  if (normalized === "average") return "average";
+  return "raw";
+}
+
+function toRecord(value: unknown): PayloadRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as PayloadRecord)
+    : {};
+}
+
+function toArray(value: unknown): PayloadRecord[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is PayloadRecord => Boolean(entry) && typeof entry === "object")
+    : [];
+}
+
 
 function titleCase(value: string) {
   return value
@@ -105,973 +113,882 @@ function titleCase(value: string) {
 }
 
 function buildSubheading(chartKey: string) {
-  switch (chartKey) {
-    case "radar":
-      return "Trait-style player profile using unified live and imported history.";
-    case "relationship_graph":
-    case "relationship-graph":
-    case "assist_network_overview":
-      return "Support flow and relationship network across unified games.";
-    case "multi_line_chart":
-    case "multi-line-chart":
-    case "multi-line":
-      return "Trend comparison across unified live and imported history.";
-    case "bar_chart":
-    case "bar":
-      return "Compact comparison bars across many different player metrics.";
-    case "heatmap":
-      return "Round and game intensity view for the selected metric.";
-    case "line_chart":
-    case "line":
-      return "Metric trend line across unified game history.";
-    case "replay_chart":
-      return "Replay progression from unified snapshot history.";
-    case "prestige_over_time":
-      return "Prestige trend view through the shared route pipeline.";
-    case "rivalry_graph":
-      return "Head-to-head rivalry centered on the selected player.";
-    case "head_to_head":
-      return "Direct two-player matchup across shared games.";
-    case "stacked_bar_chart":
-      return "Metric composition view across scoped players.";
-    case "sparkline":
-      return "Selected-player micro-trend for the active metric.";
-    case "compare":
-      return "Direct comparison workflow.";
-    default:
-      return "Unified chart route.";
-  }
-}
-
-function toneStyles(tone?: "accent" | "blue" | "green" | "blue") {
-  switch (tone) {
-    case "accent":
-      return { bg: COLORS.accentSoft, value: COLORS.accent };
-    case "blue":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    case "green":
-      return { bg: COLORS.greenSoft, value: COLORS.green };
-    case "blue":
-      return { bg: COLORS.blueSoft, value: COLORS.blue };
-    default:
-      return { bg: COLORS.whiteSoft, value: COLORS.text };
-  }
+  if (chartKey === "compare") return "Direct comparison workflow.";
+  if (chartKey === "prestige_over_time") return "Prestige trend view.";
+  return resolveChartMetadata(chartKey).hook;
 }
 
 function buildRouteParams(args: {
   chartKey: string;
   playerId?: string | null;
   compareId?: string | null;
+  selectedGameId?: string | null;
   ids?: string[];
   metric?: string | null;
   mode?: string | null;
+  lineMode?: string | null;
 }) {
-  const { chartKey, playerId, compareId, ids, metric, mode } = args;
+  const {
+    chartKey,
+    playerId,
+    compareId,
+    selectedGameId,
+    ids,
+    metric,
+    mode,
+    lineMode,
+  } = args;
   return {
     chartKey,
     ...(playerId ? { playerId } : {}),
     ...(compareId ? { compareId } : {}),
+    ...(selectedGameId ? { selectedGameId, gameId: selectedGameId } : {}),
     ...(ids && ids.length ? { ids: ids.join(",") } : {}),
     ...(metric ? { metric } : {}),
     ...(mode ? { mode } : {}),
+    ...(lineMode ? { lineMode } : {}),
   };
 }
 
-function isMetricDriven(chartKey: string) {
+function isLineModeDriven(chartKey: string) {
   return (
-    chartKey === "bar_chart" ||
-    chartKey === "bar" ||
-    chartKey === "heatmap" ||
     chartKey === "line_chart" ||
     chartKey === "line" ||
-    chartKey === "replay_chart" ||
-    chartKey === "sparkline" ||
     chartKey === "multi_line_chart" ||
     chartKey === "multi-line-chart" ||
-    chartKey === "multi-line"
+    chartKey === "multi-line" ||
+    chartKey === "prestige_over_time"
+  );
+}
+
+function resolveChartTitle(chartKey: string) {
+  if (chartKey === "compare") return "Compare";
+  if (chartKey === "prestige_over_time") return "Prestige Over Time";
+  return resolveChartMetadata(chartKey).title || titleCase(chartKey);
+}
+
+function resolveSetupChartKey(chartKey: string) {
+  if (!canAdjustChartFromHub(chartKey)) return null;
+  if (chartKey === "compare") return null;
+  if (chartKey === "prestige_over_time") return "line_chart";
+  return resolveChartMetadata(chartKey).key;
+}
+
+function DatasetStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <View style={styles.datasetStat}>
+      <Text style={styles.datasetStatLabel}>{label}</Text>
+      <Text style={styles.datasetStatValue}>{value}</Text>
+    </View>
   );
 }
 
 export default function ChartKeyScreen() {
   const router = useRouter();
+  const authSession = useStore((state: any) => state.authSession);
+  const rawPlayers = useStore((state: any) => state.players);
+  const rawGames = useStore((state: any) => state.games);
   const params = useLocalSearchParams<{
     chartKey?: string | string[];
     playerId?: string | string[];
     compareId?: string | string[];
+    selectedGameId?: string | string[];
+    gameId?: string | string[];
     ids?: string | string[];
     metric?: string | string[];
     mode?: string | string[];
+    lineMode?: string | string[];
+    opponentId?: string | string[];
   }>();
 
-  const store = useStore() as unknown as FlexibleStore;
   const chartKey = normalizeChartKey(params.chartKey);
-  const routeMetric = normalizeMetricKey(params.metric);
   const routeMode = normalizeGraphMode(params.mode);
+  const routeLineMode = normalizeLineMode(params.lineMode);
   const routePlayerId = getParam(params.playerId);
   const routeCompareId = getParam(params.compareId);
+  const routeSelectedGameId =
+    getParam(params.selectedGameId) ?? getParam(params.gameId);
   const routeIds = getParamList(params.ids);
-
-  const rawGames = useMemo(() => collectUnifiedGames(store), [store]);
-
-  const resolvedPlayers = useMemo<StorePlayer[]>(() => {
-    if (!rawGames?.length) return [];
-    const resolved = resolveAllGamesToPlayers(rawGames as any) as StorePlayer[];
-    return [...resolved].sort((a, b) =>
-      String(a?.name || "").localeCompare(String(b?.name || ""))
-    );
-  }, [rawGames]);
-
-  const unifiedGames = useMemo(
-    () => canonicalizeGames(rawGames, resolvedPlayers),
-    [rawGames, resolvedPlayers]
-  );
-
-  const [activeTab, setActiveTab] = useState<ViewTab>("Overview");
-  const [selectedMetric, setSelectedMetric] =
-    useState<SimpleMetricKey>(routeMetric);
-  const [stackedMetricKey, setStackedMetricKey] = useState<string>(
-    String(getParam(params.metric) ?? "totalPrestige")
-  );
-
-  const selectedPlayer = useMemo(
+  const routeIdsKey = routeIds.join(",");
+  const routeMetric = getParam(params.metric);
+  const routeOpponentId = getParam(params.opponentId);
+  const setupChartKey = useMemo(() => resolveSetupChartKey(chartKey), [chartKey]);
+  const profileId = String(authSession?.user?.id ?? "").trim();
+  const storePlayers = Array.isArray(rawPlayers) ? rawPlayers : [];
+  const storeGames = Array.isArray(rawGames) ? rawGames : [];
+  const storeChartData = useMemo(
     () =>
-      getPlayerById(resolvedPlayers, routePlayerId) ??
-      resolvedPlayers[0] ??
-      null,
-    [resolvedPlayers, routePlayerId]
-  );
-
-  const comparePlayer = useMemo(() => {
-    if (routeCompareId) {
-      return getPlayerById(resolvedPlayers, routeCompareId);
-    }
-    const others = resolvedPlayers.filter(
-      (player) => String(player.id) !== String(selectedPlayer?.id)
-    );
-    return others[0] ?? null;
-  }, [resolvedPlayers, routeCompareId, selectedPlayer]);
-
-  const scopedPlayers = useMemo(() => {
-    if (chartKey === "head_to_head") {
-      const pair = resolvedPlayers.filter(
-        (player) =>
-          String(player.id) === String(selectedPlayer?.id) ||
-          String(player.id) === String(comparePlayer?.id)
-      );
-      if (pair.length > 0) return pair;
-    }
-
-    if (routeIds.length > 0) {
-      const matched = routeIds
-        .map((id) => getPlayerById(resolvedPlayers, id))
-        .filter(Boolean) as StorePlayer[];
-      if (matched.length > 0) return matched;
-    }
-
-    if (selectedPlayer) {
-      const base = [
-        selectedPlayer,
-        ...resolvedPlayers.filter(
-          (player) => String(player.id) !== String(selectedPlayer.id)
-        ),
-      ];
-      return base.slice(0, Math.min(4, base.length));
-    }
-
-    return resolvedPlayers.slice(0, Math.min(4, resolvedPlayers.length));
-  }, [chartKey, resolvedPlayers, routeIds, selectedPlayer, comparePlayer]);
-
-  const radarPrimary = useMemo<RadarStats | undefined>(
-    () =>
-      selectedPlayer
-        ? buildRadarStatsForPlayer(selectedPlayer.id, unifiedGames)
-        : undefined,
-    [selectedPlayer, unifiedGames]
-  );
-
-  const radarComparison = useMemo<RadarStats | undefined>(
-    () =>
-      comparePlayer
-        ? buildRadarStatsForPlayer(comparePlayer.id, unifiedGames)
-        : undefined,
-    [comparePlayer, unifiedGames]
-  );
-
-  const relationships = useMemo(
-    () => buildRelationships(resolvedPlayers, unifiedGames),
-    [resolvedPlayers, unifiedGames]
-  );
-
-  const unifiedSnapshots = useMemo<SnapshotPoint[]>(
-    () => buildUnifiedSnapshots(unifiedGames, resolvedPlayers),
-    [unifiedGames, resolvedPlayers]
-  );
-
-  const selectedPlayerIds = scopedPlayers.map((player) => String(player.id));
-  const replayMetric = normalizeReplayMetric(selectedMetric);
-
-  const sparkPrimarySeries = useMemo(
-    () => buildSparkSeries(unifiedSnapshots, selectedPlayer?.id, selectedMetric),
-    [unifiedSnapshots, selectedPlayer?.id, selectedMetric]
-  );
-
-  const sparkComparisonSeries = useMemo(
-    () => buildSparkSeries(unifiedSnapshots, comparePlayer?.id, selectedMetric),
-    [unifiedSnapshots, comparePlayer?.id, selectedMetric]
-  );
-
-  const stackedMetricOptions = useMemo(() => buildStackedMetricOptions(), []);
-  const stackedMetricDataMap = useMemo<Record<string, StackedRow[]>>(
-    () => buildMetricDataMap(resolvedPlayers, unifiedGames),
-    [resolvedPlayers, unifiedGames]
-  );
-
-  const stackedDefaultMetric = useMemo(() => {
-    const candidate = String(getParam(params.metric) ?? "");
-    if (
-      candidate &&
-      stackedMetricOptions.some((metric) => metric.key === candidate)
-    ) {
-      return candidate;
-    }
-    return "totalPrestige";
-  }, [params.metric, stackedMetricOptions]);
-
-  const hasData = unifiedGames.length > 0 && resolvedPlayers.length > 0;
-
-  const headerStats = useMemo(() => {
-    const focusGames = selectedPlayer
-      ? unifiedGames.filter((game) => game?.totals?.[selectedPlayer.id])
-      : [];
-
-    return [
-      { label: "Games", value: String(unifiedGames.length), tone: "blue" as const },
-      {
-        label: "Players",
-        value: String(resolvedPlayers.length),
-        tone: "accent" as const,
-      },
-      {
-        label: "Scope",
-        value: String(scopedPlayers.length),
-        tone: "green" as const,
-      },
-      {
-        label: "Metric",
-        value: titleCase(selectedMetric),
-        tone: "blue" as const,
-      },
-      ...(focusGames.length || selectedPlayer
-        ? [
-            {
-              label: "Focus Games",
-              value: String(focusGames.length),
-              tone: "green" as const,
-            },
-          ]
-        : []),
-    ];
-  }, [
-    resolvedPlayers.length,
-    scopedPlayers.length,
-    selectedMetric,
-    selectedPlayer,
-    unifiedGames,
-  ]);
-
-  function replaceRoute(next: {
-    playerId?: string | null;
-    compareId?: string | null;
-    ids?: string[];
-    metric?: string | null;
-    mode?: string | null;
-  }) {
-    router.replace({
-      pathname: "/charts/[chartKey]",
-      params: buildRouteParams({
+      buildLocalChartDetailState({
         chartKey,
-        playerId: next.playerId ?? routePlayerId ?? null,
-        compareId:
-          next.compareId !== undefined ? next.compareId : routeCompareId ?? null,
-        ids: next.ids ?? routeIds,
-        metric: next.metric ?? selectedMetric,
-        mode:
-          chartKey === "relationship_graph" ||
-          chartKey === "relationship-graph" ||
-          chartKey === "assist_network_overview"
-            ? next.mode ?? routeMode
-            : null,
+        players: storePlayers,
+        games: storeGames,
+        routePlayerId: routePlayerId ?? null,
+        routeCompareId: routeCompareId ?? null,
+        routeSelectedGameId: routeSelectedGameId ?? null,
+        routeIds,
+        routeMetric: routeMetric ?? null,
       }),
-    });
+    [
+      chartKey,
+      storeGames,
+      storePlayers,
+      routeCompareId,
+      routeIdsKey,
+      routeMetric,
+      routePlayerId,
+      routeSelectedGameId,
+    ],
+  );
+  const [cloudFallbackSnapshot, setCloudFallbackSnapshot] =
+    useState<CloudFallbackSnapshot | null>(null);
+  const [cloudFallbackLoading, setCloudFallbackLoading] = useState(false);
+  const [cloudFallbackAttempted, setCloudFallbackAttempted] = useState(false);
+  const datasetQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(profileId),
+    queryKey: [
+      "chart-dataset",
+      profileId || "anon",
+      chartKey,
+      routePlayerId || "none",
+      routeCompareId || "none",
+      routeIdsKey || "all",
+      routeSelectedGameId || "none",
+      routeMetric || "none",
+      routeLineMode || "raw",
+      routeMode || "flow",
+      routeOpponentId || "none",
+    ].join(":"),
+    load: () =>
+      getChartDataset({
+        chartKey,
+        profileId,
+        focusPlayerId: routePlayerId ?? null,
+        comparePlayerId: routeCompareId ?? null,
+        scopedPlayerIds: routeIds.length ? routeIds : null,
+        selectedGameId: routeSelectedGameId ?? null,
+        metricKey: routeMetric ?? null,
+        lineMode: routeLineMode ?? null,
+        graphMode: routeMode ?? null,
+        opponentId: routeOpponentId ?? null,
+      }),
+  });
+  const dataset = toRecord(datasetQuery.payload);
+  const loading = datasetQuery.loading;
+  const error = datasetQuery.error;
+  const isStale = datasetQuery.isStale;
+  const staleMessage = datasetQuery.staleMessage;
+
+  useEffect(() => {
+    setCloudFallbackSnapshot(null);
+    setCloudFallbackLoading(false);
+    setCloudFallbackAttempted(false);
+  }, [profileId]);
+
+  const datasetData = toRecord(dataset.data);
+  const datasetMeta = toRecord(datasetData.meta);
+  const datasetPoints = toArray(datasetData.points);
+  const datasetSeries = toArray(datasetData.series);
+  const emptyState = toRecord(dataset?.emptyState);
+  const summaryChips = [
+    routeMetric ? `Metric: ${routeMetric}` : null,
+    routeLineMode && isLineModeDriven(chartKey) ? `Mode: ${routeLineMode}` : null,
+    routeMode === "network" ? "Graph: network" : null,
+    routePlayerId ? `Focus: ${routePlayerId}` : null,
+  ].filter(Boolean) as string[];
+  const pointCount = toNumberValue(datasetMeta.pointCount, datasetPoints.length);
+  const hasData = Boolean(datasetMeta.hasData) || pointCount > 0 || datasetSeries.length > 0;
+  const cloudFallbackPlayers = cloudFallbackSnapshot?.players ?? [];
+  const cloudFallbackGames = cloudFallbackSnapshot?.games ?? [];
+  const localFallbackPlayers = storeChartData.hasData
+    ? storePlayers
+    : cloudFallbackPlayers;
+  const localFallbackGames = storeChartData.hasData
+    ? storeGames
+    : cloudFallbackGames;
+  const localChartData = useMemo(
+    () =>
+      buildLocalChartDetailState({
+        chartKey,
+        players: localFallbackPlayers,
+        games: localFallbackGames,
+        routePlayerId: routePlayerId ?? null,
+        routeCompareId: routeCompareId ?? null,
+        routeSelectedGameId: routeSelectedGameId ?? null,
+        routeIds,
+        routeMetric: routeMetric ?? null,
+      }),
+    [
+      chartKey,
+      localFallbackGames,
+      localFallbackPlayers,
+      routeCompareId,
+      routeIdsKey,
+      routeMetric,
+      routePlayerId,
+      routeSelectedGameId,
+    ],
+  );
+  const shouldUseLocalChartFallback =
+    localChartData.hasData && !loading && (Boolean(error) || !hasData);
+  const usingCloudFallbackData =
+    shouldUseLocalChartFallback &&
+    !storeChartData.hasData &&
+    localChartData.hasData;
+  const shouldLoadCloudFallback =
+    Boolean(profileId) &&
+    !storeChartData.hasData &&
+    !cloudFallbackSnapshot &&
+    !cloudFallbackAttempted &&
+    !cloudFallbackLoading &&
+    !loading &&
+    (Boolean(error) || !hasData);
+  const provenance = useMemo(
+    () =>
+      resolveChartDetailProvenance({
+        hasServerPayload: hasData && !shouldUseLocalChartFallback,
+        isStale,
+        usingCloudFallbackData,
+        staleMessage,
+      }),
+    [hasData, isStale, shouldUseLocalChartFallback, staleMessage, usingCloudFallbackData],
+  );
+  const heroSubtitle = shouldUseLocalChartFallback
+    ? provenance.caption
+    : isStale
+      ? provenance.caption
+    : toStringValue(dataset?.subtitle, buildSubheading(chartKey));
+
+  useEffect(() => {
+    if (!shouldLoadCloudFallback || !profileId) {
+      return;
+    }
+
+    let cancelled = false;
+    setCloudFallbackAttempted(true);
+    setCloudFallbackLoading(true);
+
+    void loadCloudSnapshot(profileId)
+      .then((snapshot) => {
+        if (!cancelled) {
+          setCloudFallbackSnapshot(snapshot);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCloudFallbackSnapshot(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCloudFallbackLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudFallbackAttempted, profileId, shouldLoadCloudFallback]);
+
+  function renderSparklineFallback() {
+    if (!localChartData.sparklineValues.length) {
+      return <Text style={styles.emptyText}>No sparkline trend is available yet.</Text>;
+    }
+
+    return (
+      <View style={styles.sparklineFallback}>
+        <Text style={styles.sparklineTitle}>
+          {localChartData.selectedPlayer?.name ?? "Player"} Trend
+        </Text>
+        <Sparkline
+          data={localChartData.sparklineValues}
+          width={300}
+          height={60}
+          color={CHART_COLORS.accent}
+          strokeWidth={3}
+        />
+      </View>
+    );
   }
 
-  function renderChart() {
+  function renderLocalChartFallback() {
     switch (chartKey) {
-      case "elo":
-        return (
-          <EloChart
-            games={unifiedGames as any}
-            players={resolvedPlayers as any}
-            primaryPlayerId={selectedPlayer?.id ?? null}
-          />
-        );
-
       case "radar":
-        return selectedPlayer && radarPrimary ? (
+        return localChartData.radarPrimary ? (
           <RadarChart
-            primary={radarPrimary as any}
-            comparison={radarComparison as any}
-            primaryLabel={selectedPlayer.name || "Primary"}
-            comparisonLabel={comparePlayer?.name || "Comparison"}
-            title="Player Radar"
+            primary={localChartData.radarPrimary}
+            primaryLabel={localChartData.selectedPlayer?.name ?? "Player"}
+            title={`${localChartData.selectedPlayer?.name ?? "Player"} Radar`}
+            showHeader={false}
           />
         ) : (
-          <Text style={styles.emptyText}>No radar data available yet.</Text>
+          <Text style={styles.emptyText}>No radar profile is available yet.</Text>
         );
-
+      case "sparkline":
+        return renderSparklineFallback();
       case "relationship_graph":
-      case "relationship-graph":
-        return scopedPlayers.length >= 2 ? (
-          <RelationshipGraph
-            players={scopedPlayers as any}
-            relationships={relationships as any}
-            maxItems={20}
-            initialView={routeMode}
-            title="Relationship Graph"
-            subtitle="Directed assist flow across unified games."
+      case "assist_network_overview":
+        return (
+          <AssistNetworkOverview
+            games={localChartData.scopedGames as any}
+            players={localChartData.chartPlayers as any}
+            scopedPlayerIds={localChartData.scopedPlayerIds}
+          />
+        );
+      case "head_to_head":
+        return localChartData.selectedPlayer && localChartData.comparePlayer ? (
+          <HeadToHeadChart
+            data={localChartData.snapshots as any}
+            players={
+              [localChartData.selectedPlayer, localChartData.comparePlayer] as any
+            }
+            playerId={localChartData.selectedPlayer.id}
+            compareId={localChartData.comparePlayer.id}
+            scopedPlayerIds={[
+              localChartData.selectedPlayer.id,
+              localChartData.comparePlayer.id,
+            ]}
+            showHeader={false}
           />
         ) : (
           <Text style={styles.emptyText}>
-            Relationship Graph needs at least 2 players.
+            Pick two players with saved games to open head-to-head.
           </Text>
         );
-
+      case "rivalry_graph":
+        return localChartData.selectedPlayer ? (
+          <RivalryGraph
+            playerId={localChartData.selectedPlayer.id}
+            games={localChartData.scopedGames as any}
+            players={localChartData.chartPlayers as any}
+          />
+        ) : (
+          <Text style={styles.emptyText}>No rivalry data is available yet.</Text>
+        );
+      case "line_chart":
+      case "line":
       case "multi_line_chart":
       case "multi-line-chart":
       case "multi-line":
-        return scopedPlayers.length >= 2 ? (
-          <MultiLineChart
-            data={unifiedSnapshots as any}
-            players={scopedPlayers as any}
-            statKey={selectedMetric}
-            scopedPlayerIds={selectedPlayerIds}
-            title={`${titleCase(selectedMetric)} Over Time`}
-            subtitle="Unified live and imported history"
+        return (
+          <LineChart
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            statKey={localChartData.metricKey}
+            scopedPlayerIds={localChartData.scopedPlayerIds}
+            mode={routeLineMode}
+            showModeSelector={false}
+            showHeader={false}
           />
-        ) : (
-          <Text style={styles.emptyText}>
-            Multi-Line Chart needs at least 2 players.
-          </Text>
         );
-
+      case "prestige_over_time":
+        return (
+          <PrestigeOverTimeChart
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            selectedPlayerIds={localChartData.scopedPlayerIds}
+          />
+        );
+      case "stacked_bar_chart":
+        return (
+          <StackedBarChart
+            data={localChartData.stackedRows as any}
+            players={localChartData.chartPlayers as any}
+            emptyText="No stacked chart data available yet."
+            showCategorySelector={false}
+            showHeader={false}
+          />
+        );
       case "bar_chart":
       case "bar":
         return (
           <BarChart
-            data={unifiedSnapshots as any}
-            players={resolvedPlayers as any}
-            statKey={selectedMetric}
-            scopedPlayerIds={selectedPlayerIds}
-            title={`${titleCase(selectedMetric)} Comparison`}
-            subtitle="Unified player comparison across tracked games."
-            maxPlayers={8}
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            statKey={localChartData.metricKey}
+            scopedPlayerIds={localChartData.scopedPlayerIds}
+            showHeader={false}
           />
         );
-
       case "heatmap":
         return (
           <Heatmap
-            data={unifiedSnapshots as any}
-            players={scopedPlayers as any}
-            statKey={selectedMetric}
-            scopedPlayerIds={selectedPlayerIds}
-            title={`${titleCase(selectedMetric)} Heatmap`}
-            subtitle="Round and game intensity across scoped players."
-            allowedModes={[
-              "raw",
-              "relativeToLobby",
-              "relativeToPlayerAverage",
-              "rank",
-              "swing",
-            ]}
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            statKey={localChartData.metricKey}
+            scopedPlayerIds={localChartData.scopedPlayerIds}
+            showHeader={false}
           />
         );
-
-      case "line_chart":
-      case "line":
+      case "elo":
         return (
-          <LineChart
-            data={unifiedSnapshots as any}
-            players={scopedPlayers as any}
-            statKey={selectedMetric}
-            title={`${titleCase(selectedMetric)} Trend`}
-            subtitle="Unified metric trend across tracked games."
-            selectedPlayerIds={selectedPlayerIds}
+          <EloChart
+            games={localChartData.scopedGames as any}
+            players={localChartData.chartPlayers as any}
+            primaryPlayerId={localChartData.selectedPlayer?.id ?? null}
+            showHeader={false}
           />
         );
-
+      case "efficiency_failure_scatter":
+        return (
+          <EfficiencyFailureScatter
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            scopedPlayerIds={localChartData.scopedPlayerIds}
+          />
+        );
+      case "bump_chart":
+        return (
+          <BumpChart
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            statKey={localChartData.metricKey}
+            scopedPlayerIds={localChartData.scopedPlayerIds}
+            showHeader={false}
+          />
+        );
+      case "consistency_band":
+        return (
+          <ConsistencyBandChart
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            statKey={localChartData.metricKey}
+            scopedPlayerIds={localChartData.scopedPlayerIds}
+            showHeader={false}
+          />
+        );
       case "replay_chart":
         return (
           <ReplayChart
-            replay={unifiedSnapshots as any}
-            players={scopedPlayers as any}
-            statKey={replayMetric}
-            title={`${titleCase(replayMetric)} Replay`}
+            replay={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            statKey={localChartData.metricKey as any}
+            title="Replay Chart"
+            showHeader={false}
           />
         );
-
-      case "prestige_over_time":
-        return (
-          <LineChart
-            data={unifiedSnapshots as any}
-            players={scopedPlayers as any}
-            statKey="totalPrestige"
-            title="Prestige Over Time"
-            subtitle="Unified prestige trend across tracked games."
-            selectedPlayerIds={selectedPlayerIds}
-          />
-        );
-
-      case "rivalry_graph":
-        return selectedPlayer ? (
-          <RivalryGraph
-            playerId={selectedPlayer.id}
-            games={unifiedGames as any}
-            players={resolvedPlayers as any}
-          />
-        ) : (
-          <Text style={styles.emptyText}>
-            Rivalry Graph needs a selected player.
-          </Text>
-        );
-
-      case "head_to_head":
-        return selectedPlayer && comparePlayer ? (
-          <HeadToHeadChart
-            players={[selectedPlayer, comparePlayer] as any}
-            games={unifiedGames as any}
-            playerId={selectedPlayer.id}
-            compareId={comparePlayer.id}
-            title={`${selectedPlayer.name ?? "Player"} vs ${
-              comparePlayer.name ?? "Player"
-            }`}
-          />
-        ) : (
-          <Text style={styles.emptyText}>
-            Head-to-head requires two players.
-          </Text>
-        );
-
-      case "sparkline":
-        return selectedPlayer ? (
-          <Sparkline
-            data={sparkPrimarySeries as any}
-            comparisonData={
-              sparkComparisonSeries.length ? (sparkComparisonSeries as any) : undefined
-            }
-            primaryLabel={selectedPlayer.name || "Primary"}
-            comparisonLabel={comparePlayer?.name || "Comparison"}
-            defaultMetricKey={selectedMetric}
-            showMetricSelector={false}
-            metricTitle="Metric"
-            narrativeTitle={`${titleCase(selectedMetric)} Summary`}
-          />
-        ) : (
-          <Text style={styles.emptyText}>Sparkline needs a selected player.</Text>
-        );
-
-      case "assist_network_overview":
-        return (
-          <AssistNetworkOverview
-            relationships={relationships as any}
-            players={scopedPlayers as any}
-            title="Assist Network"
-            subtitle="Unified assist flow across tracked games."
-          />
-        );
-
-      case "stacked_bar_chart":
-        return (
-          <StackedBarChart
-            data={
-              stackedMetricDataMap[stackedMetricKey] ??
-              stackedMetricDataMap[stackedDefaultMetric] ??
-              []
-            }
-            metricDataMap={stackedMetricDataMap}
-            metricOptions={stackedMetricOptions}
-            activeMetricKey={stackedMetricKey}
-            onChangeMetric={setStackedMetricKey}
-            defaultMetricKey={stackedDefaultMetric}
-            players={resolvedPlayers as any}
-            selectedPlayerIds={selectedPlayerIds}
-            title={getMetricOrFallback(stackedMetricKey).label}
-            subtitle={getMetricOrFallback(stackedMetricKey).description}
-            emptyText="No stacked-bar data available yet."
-            showMetricSelector
-            showPlayerSelector
-            showCategorySelector
-            playerMode="selected"
-            maxRows={Math.max(8, resolvedPlayers.length)}
-          />
-        );
-
-      case "compare":
-        return (
-          <View style={styles.sectionCompact}>
-            <Text style={styles.emptyTitle}>Compare</Text>
-            <Text style={styles.emptyText}>
-              This route preserves the existing compare workflow instead of
-              duplicating it here.
-            </Text>
-            <TouchableOpacity
-              style={styles.launchButton}
-              onPress={() => router.push("/charts/compare" as any)}
-              activeOpacity={0.9}
-            >
-              <Text style={styles.launchButtonText}>Open Compare</Text>
-            </TouchableOpacity>
-          </View>
-        );
-
       default:
-        return (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Unsupported chart key</Text>
-            <Text style={styles.emptyText}>{chartKey}</Text>
-          </View>
-        );
+        return null;
     }
   }
 
-  const launchRows = [
-    { key: "elo", label: "ELO" },
-    { key: "radar", label: "Radar" },
-    { key: "relationship_graph", label: "Relationship Graph" },
-    { key: "multi_line_chart", label: "Multi-Line" },
-    { key: "bar_chart", label: "Bar Chart" },
-    { key: "heatmap", label: "Heatmap" },
-    { key: "line_chart", label: "Line Chart" },
-    { key: "replay_chart", label: "Replay Chart" },
-    { key: "prestige_over_time", label: "Prestige Over Time" },
-    { key: "rivalry_graph", label: "Rivalry Graph" },
-    { key: "head_to_head", label: "Head-to-Head" },
-    { key: "sparkline", label: "Sparkline" },
-    { key: "stacked_bar_chart", label: "Stacked Bar" },
-    { key: "assist_network_overview", label: "Assist Network" },
-    { key: "compare", label: "Compare" },
-  ];
+  function openChartSetup() {
+    if (!setupChartKey) return;
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
+    router.push({
+      pathname: APP_ROUTES.charts,
+      params: {
+        ...buildRouteParams({
+          chartKey: setupChartKey,
+          playerId: routePlayerId ?? null,
+          compareId: routeCompareId ?? null,
+          selectedGameId: routeSelectedGameId ?? null,
+          ids: routeIds,
+          metric: routeMetric ?? null,
+          mode: routeMode,
+          lineMode: isLineModeDriven(chartKey) ? routeLineMode : null,
+        }),
+        setup: "true",
+      },
+    } as any);
+  }
+
+  function openCommandPage() {
+    router.push(APP_ROUTES.home);
+  }
+
+  function renderDataset() {
+    if (shouldUseLocalChartFallback) {
+      const localChart = renderLocalChartFallback();
+      if (localChart) {
+        return (
+          <ChartSurface
+            eyebrow={provenance.label}
+            title={
+              usingCloudFallbackData
+                ? "Showing Supabase game history"
+                : "Showing saved history data"
+            }
+            subtitle={provenance.caption}
+          >
+            <AnalyticsRecoveryCard
+              title={
+                usingCloudFallbackData
+                  ? "Showing Supabase game history"
+                  : "Showing saved history data"
+              }
+              body={
+                error
+                  ? usingCloudFallbackData
+                    ? "The published chart dataset is unavailable right now, so this view is using Supabase game history directly."
+                    : "The published chart dataset is unavailable right now, so this view is using the games saved on this device."
+                  : usingCloudFallbackData
+                    ? "The published chart dataset has no rows yet, so this view is using Supabase game history directly."
+                    : "The published chart dataset has no rows yet, so this view is using the games saved on this device."
+              }
+              tone="warning"
+              sourceKind={usingCloudFallbackData ? "supabase-fallback" : "device-fallback"}
+              sourceLabel={usingCloudFallbackData ? "Supabase fallback" : "Device fallback"}
+              primaryAction={
+                canAdjustChartFromHub(chartKey)
+                  ? {
+                      label: "Adjust setup",
+                      onPress: openChartSetup,
+                    }
+                  : null
+              }
+              secondaryAction={{
+                label: "Command",
+                onPress: openCommandPage,
+                variant: "secondary",
+              }}
+            />
+            {summaryChips.length ? (
+              <View style={styles.surfaceChipRow}>
+                {summaryChips.map((chip) => (
+                  <ChartMetricChip key={chip} label={chip} />
+                ))}
+              </View>
+            ) : null}
+            <ChartInsightStrip label="Source" value={provenance.label} />
+            {localChart}
+          </ChartSurface>
+        );
+      }
+    }
+
+    if (loading) {
+      return <Text style={styles.emptyText}>Loading Supabase-authored chart dataset.</Text>;
+    }
+
+    if (error) {
+      return <Text style={styles.emptyText}>{error}</Text>;
+    }
+
+    if (cloudFallbackLoading && !hasData) {
+      return <Text style={styles.emptyText}>Loading Supabase game history.</Text>;
+    }
+
+    if (!hasData) {
+      return (
+        <AnalyticsRecoveryCard
+          title={toStringValue(emptyState.title, "No chart data yet")}
+          body={toStringValue(
+            emptyState.subtitle,
+            toStringValue(
+              emptyState.description,
+              "Supabase has not published any data for this chart yet.",
+            ),
+          )}
+          tone="info"
+          sourceKind="server"
+          sourceLabel="Server data"
+          primaryAction={
+            canAdjustChartFromHub(chartKey)
+              ? {
+                  label: "Adjust setup",
+                  onPress: openChartSetup,
+                }
+              : null
+          }
+          secondaryAction={{
+            label: "Command",
+            onPress: openCommandPage,
+            variant: "secondary",
+          }}
+        />
+      );
+    }
+
+    return (
+      <ChartSurface
+        eyebrow={provenance.label}
+        title="Dataset summary"
+        subtitle={provenance.caption}
       >
-        <View style={styles.heroCard}>
-          <Text style={styles.title}>{titleCase(chartKey)}</Text>
-          <Text style={styles.subtitle}>{buildSubheading(chartKey)}</Text>
+        <View style={styles.datasetSummaryRow}>
+          <DatasetStat label="Points" value={pointCount} />
+          <DatasetStat label="Series" value={datasetSeries.length} />
+          <DatasetStat
+            label="Generated"
+            value={toStringValue(dataset?.generatedAt, "now").slice(0, 16) || "now"}
+          />
+        </View>
 
-          <View style={styles.statsRow}>
-            {headerStats.slice(0, 4).map((item) => {
-              const tone = toneStyles(item.tone);
+        {summaryChips.length ? (
+          <View style={styles.surfaceChipRow}>
+            {summaryChips.map((chip) => (
+              <ChartMetricChip key={chip} label={chip} />
+            ))}
+          </View>
+        ) : null}
+
+        <View style={styles.datasetInsightStack}>
+          <ChartInsightStrip label="Source" value={provenance.label} />
+          <ChartInsightStrip
+            label="Refresh state"
+            value={isStale ? "Stale" : "Live"}
+          />
+        </View>
+
+        {datasetSeries.length > 0 ? (
+          <View style={styles.seriesList}>
+            {datasetSeries.map((series, index) => {
+              const seriesPoints = toArray(series.points);
               return (
                 <View
-                  key={item.label}
-                  style={[styles.statCard, { backgroundColor: tone.bg }]}
+                  key={toStringValue(series.key, `series-${index}`)}
+                  style={styles.seriesCard}
                 >
-                  <Text style={[styles.statValue, { color: tone.value }]}>
-                    {item.value}
+                  <Text style={styles.seriesTitle}>
+                    {toStringValue(series.label, `Series ${index + 1}`)}
                   </Text>
-                  <Text style={styles.statLabel} numberOfLines={1}>{item.label}</Text>
+                  <Text style={styles.seriesMeta}>
+                    {seriesPoints.length} points
+                  </Text>
+                  {seriesPoints.length > 0 ? (
+                    <View style={styles.pointList}>
+                      {seriesPoints.slice(0, 5).map((point, pointIndex) => (
+                        <Text
+                          key={`${toStringValue(series.key, `series-${index}`)}-${pointIndex}`}
+                          style={styles.pointText}
+                        >
+                          {toStringValue(point.label, `Point ${pointIndex + 1}`)} • {toDisplayValue(point.y, "0")}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
           </View>
-        </View>
-
-        <View style={styles.tabGrid}>
-          {(["Overview", "Focus", "Launch"] as ViewTab[]).map((tab) => {
-            const active = tab === activeTab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={styles.underlineMainTab}
-                onPress={() => setActiveTab(tab)}
-                activeOpacity={0.9}
-              >
-                <Text
-                  style={[
-                    styles.underlineMainTabText,
-                    active && styles.underlineMainTabTextActive,
-                  ]}
-                >
-                  {tab}
-                </Text>
-                <View
-                  style={[
-                    styles.underlineMainTabLine,
-                    active && styles.underlineMainTabLineActive,
-                  ]}
-                />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {!hasData ? (
-          <View style={styles.sectionCompact}>
-            <Text style={styles.emptyTitle}>No chart data yet</Text>
-            <Text style={styles.emptyText}>
-              Add or import games to populate the unified chart route.
+        ) : (
+          <View style={styles.seriesCard}>
+            <Text style={styles.seriesTitle}>Server dataset</Text>
+            <Text style={styles.seriesMeta}>
+              {datasetPoints.length} points returned
             </Text>
-          </View>
-        ) : null}
-
-        {hasData && activeTab === "Focus" ? (
-          <View style={styles.sectionCompact}>
-            <SectionHeader title="Players" sub="Set focus and comparison" />
-            <View style={styles.underlineSelectorRow}>
-              {resolvedPlayers.map((player) => (
-                <UnderlineOption
-                  key={`focus-${player.id}`}
-                  label={player.name || "Unknown"}
-                  active={String(player.id) === String(selectedPlayer?.id)}
-                  onPress={() =>
-                    replaceRoute({
-                      playerId: player.id,
-                      ids: routeIds.length ? routeIds : undefined,
-                    })
-                  }
-                />
-              ))}
-            </View>
-
-            {resolvedPlayers.length > 1 ? (
-              <>
-                <SectionHeader title="Compare" sub="Optional comparison" />
-                <View style={styles.underlineSelectorRow}>
-                  {resolvedPlayers
-                    .filter((player) => String(player.id) !== String(selectedPlayer?.id))
-                    .map((player) => (
-                      <UnderlineOption
-                        key={`compare-${player.id}`}
-                        label={player.name || "Unknown"}
-                        active={String(player.id) === String(comparePlayer?.id)}
-                        onPress={() =>
-                          replaceRoute({
-                            compareId: player.id,
-                          })
-                        }
-                      />
-                    ))}
-                </View>
-              </>
-            ) : null}
-
-            {chartKey === "relationship_graph" ||
-            chartKey === "relationship-graph" ||
-            chartKey === "assist_network_overview" ? (
-              <>
-                <SectionHeader title="Graph Mode" sub="Flow or network view" />
-                <View style={styles.underlineSelectorRow}>
-                  {(["flow", "network"] as const).map((mode) => (
-                    <UnderlineOption
-                      key={mode}
-                      label={titleCase(mode)}
-                      active={routeMode === mode}
-                      onPress={() =>
-                        replaceRoute({
-                          mode,
-                        })
-                      }
-                    />
-                  ))}
-                </View>
-              </>
-            ) : null}
-
-            {isMetricDriven(chartKey) ? (
-              <>
-                <SectionHeader title="Metric" sub="Adjust metric view" />
-                <View style={styles.underlineSelectorRow}>
-                  {METRIC_OPTIONS.map((metric) => (
-                    <UnderlineOption
-                      key={metric}
-                      label={titleCase(metric)}
-                      active={metric === selectedMetric}
-                      onPress={() => setSelectedMetric(metric)}
-                    />
-                  ))}
-                </View>
-              </>
-            ) : null}
-          </View>
-        ) : null}
-
-        {hasData && activeTab === "Overview" ? (
-          <View style={styles.sectionCompact}>{renderChart()}</View>
-        ) : null}
-
-        {activeTab === "Launch" ? (
-          <View style={styles.sectionCompact}>
-            <SectionHeader title="Launch" sub="Jump to other chart routes" />
-            <View style={styles.launchList}>
-              {launchRows.map((row) => (
-                <TouchableOpacity
-                  key={row.key}
-                  style={styles.launchCard}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/charts/[chartKey]",
-                      params: buildRouteParams({
-                        chartKey: row.key,
-                        playerId: selectedPlayer?.id ?? null,
-                        compareId: comparePlayer?.id ?? null,
-                        ids: routeIds.length ? routeIds : selectedPlayerIds,
-                        metric: selectedMetric,
-                        mode:
-                          row.key === "relationship_graph" ||
-                          row.key === "assist_network_overview"
-                            ? routeMode
-                            : null,
-                      }),
-                    })
-                  }
-                >
-                  <Text style={styles.launchTitle}>{row.label}</Text>
-                  <Text style={styles.launchSub}>Open {row.label} route</Text>
-                </TouchableOpacity>
+            <View style={styles.pointList}>
+              {datasetPoints.slice(0, 8).map((point, index) => (
+                <Text key={`point-${index}`} style={styles.pointText}>
+                  {toStringValue(point.label, `Point ${index + 1}`)} • {toDisplayValue(point.y, "0")}
+                </Text>
               ))}
             </View>
           </View>
+        )}
+      </ChartSurface>
+    );
+  }
+
+  return (
+    <PageShell preset="analytics" contentContainerStyle={styles.pageContent}>
+      <HeroCard
+        eyebrow="Charts"
+        title={toStringValue(dataset?.title, resolveChartTitle(chartKey))}
+        size="compact"
+        style={styles.heroCard}
+      >
+        <Text style={styles.heroSubtitle} numberOfLines={2}>
+          {heroSubtitle}
+        </Text>
+        {setupChartKey ? (
+          <View style={styles.heroActionRow}>
+            <Pressable
+              style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.9 }]}
+              onPress={openChartSetup}
+            >
+              <Text style={styles.primaryButtonText}>Back to Adjust</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.9 }]}
+              onPress={openCommandPage}
+            >
+              <Text style={styles.secondaryButtonText}>Back to Command</Text>
+            </Pressable>
+          </View>
         ) : null}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
+      </HeroCard>
 
-function SectionHeader({
-  title,
-  sub,
-}: {
-  title: string;
-  sub: string;
-}) {
-  return (
-    <View style={styles.sectionHeaderRow}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={styles.sectionSub}>{sub}</Text>
-    </View>
-  );
-}
-
-function UnderlineOption({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={styles.underlineTabButton}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
-        {label}
-      </Text>
-      <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-    </TouchableOpacity>
+      <SectionCard style={styles.chartSection}>
+        {renderDataset()}
+      </SectionCard>
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-  },
-  scroll: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 14,
-    paddingBottom: 36,
-    gap: 10,
+  pageContent: {
+    gap: 8,
+    paddingBottom: 18,
   },
   heroCard: {
+    borderRadius: 20,
+  },
+  heroSubtitle: {
+    color: CHART_COLORS.sub,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "700",
+  },
+  heroActionRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  chartSection: {
+    padding: 10,
+    gap: 4,
     borderRadius: 18,
-    padding: 14,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
-  title: {
-    color: COLORS.text,
-    fontSize: 22,
-    fontWeight: "900",
+  compareBlock: {
+    gap: 6,
   },
-  subtitle: {
-    color: COLORS.sub,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 12,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  statLabel: {
-    color: COLORS.text,
-    opacity: 0.84,
-    fontSize: 11,
-    marginTop: 3,
-  },
-  tabGrid: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  underlineMainTab: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  underlineMainTabText: {
-    color: COLORS.sub,
-    fontSize: 13,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  underlineMainTabTextActive: {
-    color: COLORS.text,
-  },
-  underlineMainTabLine: {
-    marginTop: 6,
-    height: 2,
-    width: "100%",
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-  underlineMainTabLineActive: {
-    backgroundColor: COLORS.accent,
-  },
-  sectionCompact: {
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-    gap: 10,
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  sectionSub: {
-    color: COLORS.sub,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  underlineSelectorRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: 12,
-    rowGap: 8,
-  },
-  underlineTabButton: {
-    paddingBottom: 2,
-  },
-  underlineTabText: {
-    color: COLORS.sub,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  underlineTabTextActive: {
-    color: COLORS.accent,
-  },
-  underlineTabLine: {
-    marginTop: 4,
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: "transparent",
-  },
-  underlineTabLineActive: {
-    backgroundColor: COLORS.accent,
-  },
-  emptyCard: {
-    paddingVertical: 8,
-  },
-  emptyTitle: {
-    color: COLORS.text,
+  compareTitle: {
+    color: CHART_COLORS.textStrong,
     fontSize: 14,
     fontWeight: "800",
   },
   emptyText: {
-    color: COLORS.sub,
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 18,
+    color: CHART_COLORS.sub,
+    fontSize: 11,
+    lineHeight: 16,
   },
-  launchList: {
+  primaryButton: {
+    alignSelf: "flex-start",
+    borderRadius: CHART_LAYOUT.chipRadius,
+    borderWidth: 1,
+    borderColor: `${CHART_COLORS.accent}55`,
+    backgroundColor: CHART_COLORS.accentSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    color: CHART_COLORS.accent,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  secondaryButton: {
+    alignSelf: "flex-start",
+    borderRadius: CHART_LAYOUT.chipRadius,
+    borderWidth: 1,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: CHART_COLORS.whiteSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
+  secondaryButtonText: {
+    color: CHART_COLORS.sub,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  datasetStack: {
+    gap: 10,
+  },
+  surfaceChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  datasetInsightStack: {
+    gap: 0,
+  },
+  sparklineFallback: {
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: CHART_COLORS.cardAlt,
+    padding: 12,
+    alignItems: "center",
+  },
+  sparklineTitle: {
+    color: CHART_COLORS.textStrong,
+    fontSize: 12,
+    fontWeight: "900",
+    alignSelf: "flex-start",
+  },
+  datasetSummaryRow: {
+    flexDirection: "row",
     gap: 8,
   },
-  launchCard: {
+  datasetStat: {
+    flex: 1,
     borderRadius: 14,
-    backgroundColor: COLORS.cardAlt,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: CHART_COLORS.cardAlt,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
   },
-  launchTitle: {
-    color: COLORS.text,
-    fontSize: 14,
+  datasetStatLabel: {
+    color: CHART_COLORS.sub,
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  datasetStatValue: {
+    color: CHART_COLORS.textStrong,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  datasetChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  datasetChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: CHART_COLORS.whiteSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  datasetChipText: {
+    color: CHART_COLORS.sub,
+    fontSize: 10,
     fontWeight: "800",
   },
-  launchSub: {
-    color: COLORS.sub,
+  seriesList: {
+    gap: 8,
+  },
+  seriesCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: CHART_COLORS.cardAlt,
+    padding: 10,
+    gap: 6,
+  },
+  seriesTitle: {
+    color: CHART_COLORS.textStrong,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  seriesMeta: {
+    color: CHART_COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  pointList: {
+    gap: 4,
+  },
+  pointText: {
+    color: CHART_COLORS.textStrong,
     fontSize: 11,
-    marginTop: 4,
-  },
-  launchButton: {
-    marginTop: 12,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.accentSoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  launchButtonText: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: "800",
+    lineHeight: 16,
   },
 });

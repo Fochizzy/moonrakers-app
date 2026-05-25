@@ -14,10 +14,15 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
-import { useStore } from "@/store/useStore";
-import { calculateElo } from "@/utils/elo";
+import {
+  useGames,
+  usePlayers,
+  useSelectedPlayerId,
+  useSetSelectedPlayerId,
+} from "@/store/useStore";
 import { getPlayerColors } from "@/utils/colors";
 import { buildPlayerIdentity } from "@/utils/playerIdentity";
+import { buildPlayerCardEloMap, resolvePlayerCardElo } from "@/utils/playerCardElo";
 import Text from "@/components/ui/Text";
 import StarryNight from "@/components/ui/StarryNight";
 
@@ -39,6 +44,8 @@ type Player = {
   name?: string;
   initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
+  artIndex?: number | null;
   elo?: number;
   prestige?: number;
   totalPrestige?: number;
@@ -160,6 +167,21 @@ function buildCardArtIndex(color?: string, seed = 0) {
   return row * 5 + column;
 }
 
+function resolveRenderableCardArtIndex(player?: Player | null) {
+  return typeof player?.assignedCardArtIndex === "number" &&
+    Number.isFinite(player.assignedCardArtIndex)
+    ? player.assignedCardArtIndex
+    : typeof player?.artIndex === "number" &&
+        Number.isFinite(player.artIndex)
+      ? player.artIndex
+      : typeof player?.id === "string" || typeof player?.id === "number"
+        ? buildCardArtIndex(
+            player?.color,
+            Number(String(player?.id).replace(/\D/g, "").slice(-3) || 0)
+          )
+        : buildCardArtIndex(player?.color, 0);
+}
+
 function CropCardArt({
   artIndex,
   width,
@@ -195,13 +217,7 @@ function SmallPlayerArt({
   player: Player;
   size?: number;
 }) {
-  const artIndex =
-    typeof player?.id === "string" || typeof player?.id === "number"
-      ? buildCardArtIndex(
-          player?.color,
-          Number(String(player?.id).replace(/\D/g, "").slice(-3) || 0)
-        )
-      : buildCardArtIndex(player?.color, 0);
+  const artIndex = resolveRenderableCardArtIndex(player);
 
   return (
     <View
@@ -469,7 +485,7 @@ function StatTile({
   );
 }
 
-function PlayerCard({
+export function PlayerCard({
   player,
   games,
   isSelected = false,
@@ -490,7 +506,7 @@ function PlayerCard({
       base: safeString(raw?.base, "#8B5CF6"),
       text: safeString(raw?.text, "#F8FAFC"),
       border: safeString(raw?.border, "rgba(148,163,184,0.16)"),
-      muted: safeString(raw?.muted, "#94A3B8"),
+      muted: safeString(raw?.subtext, "#94A3B8"),
     };
   }, [safePlayer?.color]);
 
@@ -546,13 +562,7 @@ function PlayerCard({
   const subtitle = safeString(identity.subtitle, "No player data");
   const featuredStats = `${resolved.gamesPlayed} Games • ${resolved.wins} Wins • ${winRate}% WR`;
 
-  const artIndex =
-    typeof safePlayer?.id === "string" || typeof safePlayer?.id === "number"
-      ? buildCardArtIndex(
-          safePlayer?.color,
-          Number(String(safePlayer?.id).replace(/\D/g, "").slice(-3) || 0)
-        )
-      : buildCardArtIndex(safePlayer?.color, 0);
+  const artIndex = resolveRenderableCardArtIndex(safePlayer);
 
   const openPlayerProfile = () => {
     if (!safePlayer?.id) return;
@@ -783,23 +793,13 @@ export default function ColorPlayerCardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ playerId?: string | string[] }>();
 
-  const players = useStore((s: any) =>
-    Array.isArray(s.players) ? s.players : []
-  ) as Player[];
-
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : []
-  ) as Game[];
-
-  const selectedPlayerIdFromStore = useStore((s: any) => s?.selectedPlayerId);
-  const setSelectedPlayerId = useStore((s: any) => s?.setSelectedPlayerId);
+  const players = (usePlayers() ?? []) as Player[];
+  const games = (useGames() ?? []) as Game[];
+  const selectedPlayerIdFromStore = useSelectedPlayerId();
+  const setSelectedPlayerId = useSetSelectedPlayerId();
 
   const eloMap = useMemo(() => {
-    try {
-      return calculateElo(games as any) ?? {};
-    } catch {
-      return {};
-    }
+    return buildPlayerCardEloMap(games);
   }, [games]);
 
   const routePlayerId =
@@ -839,7 +839,7 @@ export default function ColorPlayerCardScreen() {
           contractsFailed: resolved.contractsFailed,
           objectivesCompleted: resolved.objectivesCompleted,
           assists: resolved.assists,
-          elo: Math.round((eloMap as any)[String(player.id)] ?? 1000),
+          elo: resolvePlayerCardElo(String(player.id), eloMap),
         };
       })
       .sort((a, b) => {
@@ -866,7 +866,7 @@ export default function ColorPlayerCardScreen() {
     }
 
     router.replace({
-      pathname: "/ColorPlayerCard",
+      pathname: "/player-cards",
       params: { playerId: String(playerId) },
     });
   };

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Text from '@/components/ui/Text';
 import {
@@ -206,7 +206,7 @@ function getMatchupVerdict(
   baseline: CompareRow | undefined
 ): string {
   if (!baseline || rows.length <= 1) {
-    return 'Add another player to compare this stat.';
+    return 'Add another player.';
   }
 
   const otherRows = rows.filter((row) => row.id !== baseline.id);
@@ -216,20 +216,11 @@ function getMatchupVerdict(
     const delta = toNumber(metric.getValue(other as any)) - toNumber(metric.getValue(baseline as any));
 
     if (delta === 0) {
-      return `${other.label} and ${baseline.label} are about even in ${metric.label.toLowerCase()}.`;
+      return `Even on ${metric.label.toLowerCase()}.`;
     }
 
     const betterRow = delta > 0 ? other : baseline;
-    const weakerRow = delta > 0 ? baseline : other;
-    const strength = getMagnitudeWord(String(metric.key), delta);
-
-    if (strength === 'slightly') {
-      return `${betterRow.label} is a little better than ${weakerRow.label} in ${metric.label.toLowerCase()}.`;
-    }
-    if (strength === 'clearly') {
-      return `${betterRow.label} is clearly better than ${weakerRow.label} in ${metric.label.toLowerCase()}.`;
-    }
-    return `${betterRow.label} is much better than ${weakerRow.label} in ${metric.label.toLowerCase()}.`;
+    return `${betterRow.label} leads ${metric.label.toLowerCase()}.`;
   }
 
   let bestRow: CompareRow | null = baseline;
@@ -250,26 +241,28 @@ function getMatchupVerdict(
   }
 
   if (!bestRow || !worstRow) {
-    return `This shows how the players compare in ${metric.label.toLowerCase()}.`;
+    return `Compare ${metric.label.toLowerCase()}.`;
   }
 
   const spread = bestValue - worstValue;
-  const strength = getMagnitudeWord(String(metric.key), spread);
 
   if (spread === 0) {
-    return `All selected players are about even in ${metric.label.toLowerCase()}.`;
+    return `Even on ${metric.label.toLowerCase()}.`;
   }
-  if (strength === 'slightly') {
-    return `${bestRow.label} is a little ahead in ${metric.label.toLowerCase()}, and ${worstRow.label} is lowest.`;
-  }
-  if (strength === 'clearly') {
-    return `${bestRow.label} is clearly ahead in ${metric.label.toLowerCase()}, and ${worstRow.label} is furthest behind.`;
-  }
-  return `${bestRow.label} is much better than the rest in ${metric.label.toLowerCase()}, and ${worstRow.label} is furthest behind.`;
+  return `${bestRow.label} leads ${metric.label.toLowerCase()}.`;
+}
+
+function isMetricFlat(metric: MetricDescriptor, rows: CompareRow[]): boolean {
+  if (rows.length < 2) return false;
+
+  const values = rows.map((row) => toNumber(metric.getValue(row as any)));
+  const first = values[0] ?? 0;
+
+  return values.every((value) => nearlyEqual(value, first));
 }
 
 export default function CompareMatrixCard({
-  title = 'Data Summary',
+  title,
   rows,
   visibleMetrics,
   topMetricsOnly,
@@ -279,24 +272,57 @@ export default function CompareMatrixCard({
   onToggleGroupCollapse,
 }: Props) {
   const baseline = rows[0];
+  const displayEntries = useMemo(() => {
+    const filteredEntries: VisibleMetricEntry[] = [];
+    let pendingGroup: VisibleMetricEntry | null = null;
+    let pendingMetrics: VisibleMetricEntry[] = [];
+
+    function flushPendingGroup() {
+      if (!pendingGroup) return;
+      if (pendingMetrics.length > 0) {
+        filteredEntries.push(pendingGroup, ...pendingMetrics);
+      }
+      pendingGroup = null;
+      pendingMetrics = [];
+    }
+
+    for (const entry of visibleMetrics) {
+      if (entry.type === 'group') {
+        flushPendingGroup();
+        pendingGroup = entry;
+        continue;
+      }
+
+      if (isMetricFlat(entry.metric, rows)) {
+        continue;
+      }
+
+      if (pendingGroup) {
+        pendingMetrics.push(entry);
+      } else {
+        filteredEntries.push(entry);
+      }
+    }
+
+    flushPendingGroup();
+
+    return filteredEntries;
+  }, [rows, visibleMetrics]);
 
   return (
     <View style={styles.shell}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>{title}</Text>
+        {title ? <Text style={styles.title}>{title}</Text> : <View style={styles.headerSpacer} />}
 
         <Pressable onPress={onToggleTopMetricsOnly} style={[styles.filterCard, topMetricsOnly && styles.filterCardActive]}>
           <Text style={[styles.filterLabel, topMetricsOnly && styles.filterLabelActive]}>
-            {topMetricsOnly ? 'Top metrics only' : 'All visible metrics'}
-          </Text>
-          <Text style={[styles.filterSub, topMetricsOnly && styles.filterSubActive]}>
-            Tap to {topMetricsOnly ? 'show all' : 'trim the list'}
+            {topMetricsOnly ? 'Top metrics' : 'All metrics'}
           </Text>
         </Pressable>
       </View>
 
       <View style={styles.stack}>
-        {visibleMetrics.map((entry) => {
+        {displayEntries.map((entry) => {
           if (entry.type === 'group') {
             return (
               <Pressable
@@ -305,7 +331,6 @@ export default function CompareMatrixCard({
                 style={styles.groupCard}
               >
                 <Text style={styles.groupLabel}>{entry.group.label}</Text>
-                <Text style={styles.groupSub}>Tap to collapse or expand this metric family</Text>
               </Pressable>
             );
           }
@@ -336,21 +361,12 @@ export default function CompareMatrixCard({
                       : null;
                   const isBest = bestWorst.best !== null && nearlyEqual(value, bestWorst.best);
                   const isWorst = bestWorst.worst !== null && nearlyEqual(value, bestWorst.worst);
-                  const biggestAdvantage = getBiggestAdvantageForRow(row, baseline, visibleMetrics);
 
                   return (
                     <View key={`${String(metric.key)}-${row.id}`} style={styles.playerRow}>
                       <View style={styles.playerMain}>
                         <Text style={styles.playerName}>{row.label}</Text>
-                        {row.id !== baseline?.id && biggestAdvantage ? (
-                          <Text style={styles.playerInsight}>{biggestAdvantage}</Text>
-                        ) : (
-                          <Text style={styles.playerInsightMuted}>
-                            {baseline?.id === row.id
-                              ? `${baseline?.label ?? 'Baseline'} is the comparison anchor.`
-                              : 'Compared against the current baseline.'}
-                          </Text>
-                        )}
+                        {baseline?.id === row.id ? <Text style={styles.playerMeta}>Anchor</Text> : null}
                       </View>
 
                       <View style={styles.valuePanel}>
@@ -368,9 +384,6 @@ export default function CompareMatrixCard({
                         {row.id !== baseline?.id ? (
                           <>
                             <Text style={[styles.deltaValue, { color: deltaColor }]}>{formatDelta(delta)}</Text>
-                            <Text style={styles.deltaSentence}>
-                              {interpretDelta(String(metric.key), delta, row.label, baseline?.label ?? 'baseline')}
-                            </Text>
                           </>
                         ) : null}
 
@@ -390,25 +403,28 @@ export default function CompareMatrixCard({
 
 const styles = StyleSheet.create({
   shell: {
-    gap: 12,
+    gap: 8,
   },
   headerRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     alignItems: 'stretch',
+  },
+  headerSpacer: {
+    flex: 1,
   },
   title: {
     flex: 1,
     color: '#F8FBFF',
     fontSize: 18,
     fontWeight: '900',
-    paddingTop: 8,
+    paddingTop: 6,
   },
   filterCard: {
-    minWidth: 170,
+    minWidth: 148,
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     backgroundColor: 'rgba(15,23,42,0.92)',
     borderWidth: 1,
     borderColor: 'rgba(148,163,184,0.18)',
@@ -426,20 +442,12 @@ const styles = StyleSheet.create({
   filterLabelActive: {
     color: '#F8FBFF',
   },
-  filterSub: {
-    color: '#8FA6C4',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  filterSubActive: {
-    color: '#CFFFE0',
-  },
   stack: {
-    gap: 10,
+    gap: 8,
   },
   groupCard: {
     borderRadius: 14,
-    padding: 14,
+    padding: 10,
     backgroundColor: 'rgba(86, 120, 255, 0.16)',
     borderWidth: 1,
     borderColor: 'rgba(125, 235, 255, 0.22)',
@@ -449,18 +457,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
-  groupSub: {
-    color: '#D7F7FF',
-    fontSize: 10,
-    marginTop: 4,
-  },
   metricCard: {
     borderRadius: 14,
-    padding: 14,
+    padding: 10,
     backgroundColor: 'rgba(15,23,42,0.80)',
     borderWidth: 1,
     borderColor: 'rgba(71,85,105,0.24)',
-    gap: 12,
+    gap: 6,
   },
   metricTitle: {
     color: '#F8FBFF',
@@ -468,20 +471,20 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   metricVerdict: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 10,
-    lineHeight: 18,
+    lineHeight: 14,
     color: '#93C5FD',
     fontWeight: '700',
   },
   rowStack: {
-    gap: 10,
+    gap: 6,
   },
   playerRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     borderRadius: 14,
-    padding: 12,
+    padding: 8,
     backgroundColor: 'rgba(8,14,28,0.82)',
     borderWidth: 1,
     borderColor: 'rgba(71,85,105,0.18)',
@@ -494,17 +497,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
-  playerInsight: {
-    marginTop: 4,
-    color: '#A7F3D0',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  playerInsightMuted: {
-    marginTop: 4,
+  playerMeta: {
+    marginTop: 2,
     color: '#94A3B8',
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 9,
+    fontWeight: '700',
   },
   valuePanel: {
     flex: 1,
@@ -523,20 +520,12 @@ const styles = StyleSheet.create({
     color: '#FCA5A5',
   },
   deltaValue: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 10,
     fontWeight: '900',
   },
-  deltaSentence: {
-    marginTop: 2,
-    color: '#94A3B8',
-    fontSize: 10,
-    lineHeight: 14,
-    textAlign: 'right',
-    maxWidth: 220,
-  },
   tierText: {
-    marginTop: 4,
+    marginTop: 3,
     fontSize: 10,
     fontWeight: '700',
   },

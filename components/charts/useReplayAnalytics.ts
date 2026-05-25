@@ -12,6 +12,7 @@ export type ReplayMetricKey =
   | "assistPrestigeReceived"
   | "objectivePrestige"
   | "score"
+  | "assists"
   | "contracts"
   | "failures"
   | "efficiency"
@@ -90,6 +91,7 @@ function readMetricValue(
     current?.objectivePrestige ?? current?.objectiveCount
   );
   const score = toNumber(current?.score);
+  const assists = toNumber(current?.assists);
   const contracts = toNumber(current?.contracts);
   const failures = toNumber(current?.failures);
   const efficiency = toNumber(current?.efficiency);
@@ -105,6 +107,8 @@ function readMetricValue(
       return objectivePrestige;
     case "score":
       return score;
+    case "assists":
+      return assists;
     case "contracts":
       return contracts;
     case "failures":
@@ -120,20 +124,44 @@ function readMetricValue(
   }
 }
 
-function buildDerivedReplay(
+export function buildDerivedReplay(
   replay: readonly ReplayPoint[],
   players: readonly ReplayPlayer[],
   metricKey: ReplayMetricKey
 ): ReplayPoint[] {
   return replay.map((point, index) => {
     const previousPoint = index > 0 ? replay[index - 1] : undefined;
-    const snapshot: ReplaySnapshotRecord = {};
+    const baseSnapshot =
+      point?.snapshot && typeof point.snapshot === "object"
+        ? { ...point.snapshot }
+        : {};
+    const snapshot: ReplaySnapshotRecord = {
+      ...baseSnapshot,
+    };
+    const nestedPlayers =
+      baseSnapshot.players &&
+      typeof baseSnapshot.players === "object" &&
+      !Array.isArray(baseSnapshot.players)
+        ? { ...(baseSnapshot.players as Record<string, unknown>) }
+        : null;
 
     for (const player of players) {
-      snapshot[player.id] = {
-        value: readMetricValue(metricKey, point, player, previousPoint),
+      const sourceSnapshot = getPlayerSnapshot(point, player.id) ?? {};
+      const metricValue = readMetricValue(metricKey, point, player, previousPoint);
+      const derivedSnapshot = {
+        ...sourceSnapshot,
+        [metricKey]: metricValue,
+        value: metricValue,
       };
+
+      snapshot[player.id] = derivedSnapshot;
+
+      if (nestedPlayers) {
+        nestedPlayers[player.id] = derivedSnapshot;
+      }
     }
+
+    if (nestedPlayers) snapshot.players = nestedPlayers;
 
     return {
       round: typeof point.round === "number" ? point.round : index + 1,
@@ -179,6 +207,7 @@ function buildSummary(
     assistPrestigeReceived: "assist prestige",
     objectivePrestige: "objective prestige",
     score: "score",
+    assists: "assists",
     contracts: "contracts",
     failures: "failures",
     efficiency: "efficiency",

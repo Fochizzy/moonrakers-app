@@ -63,6 +63,7 @@ export type ConditionalState = {
   selectionMode: ConditionalSelectionMode;
   viewMode: ConditionalViewMode;
   selectorCollapsed: boolean;
+  hasRunCompare: boolean;
   sortKey: ConditionalSortKey;
   sortDirection: SortDirection;
 };
@@ -74,6 +75,7 @@ export type ConditionalAction =
   | { type: 'set-selection-mode'; mode: ConditionalSelectionMode }
   | { type: 'set-view-mode'; mode: ConditionalViewMode }
   | { type: 'toggle-selector-collapsed' }
+  | { type: 'run-compare' }
   | { type: 'clear' }
   | { type: 'set-sort'; key: ConditionalSortKey }
   | { type: 'apply-preset'; ids: string[]; anchorId?: string | null }
@@ -307,6 +309,7 @@ export const initialConditionalState: ConditionalState = {
   selectionMode: 'must',
   viewMode: 'present',
   selectorCollapsed: false,
+  hasRunCompare: false,
   sortKey: 'winRateDelta',
   sortDirection: 'desc',
 };
@@ -326,6 +329,7 @@ export function conditionalReducer(
           mustIncludeIds: state.mustIncludeIds.filter((id) => id !== action.id),
           mayIncludeIds: state.mayIncludeIds.filter((id) => id !== action.id),
           anchorId: state.anchorId === action.id ? null : state.anchorId,
+          hasRunCompare: false,
         };
       }
 
@@ -336,12 +340,14 @@ export function conditionalReducer(
         return {
           ...state,
           mustIncludeIds: [...state.mustIncludeIds, action.id],
+          hasRunCompare: false,
         };
       }
 
       return {
         ...state,
         mayIncludeIds: [...state.mayIncludeIds, action.id],
+        hasRunCompare: false,
       };
     }
 
@@ -351,19 +357,23 @@ export function conditionalReducer(
         mustIncludeIds: state.mustIncludeIds.filter((id) => id !== action.id),
         mayIncludeIds: state.mayIncludeIds.filter((id) => id !== action.id),
         anchorId: state.anchorId === action.id ? null : state.anchorId,
+        hasRunCompare: false,
       };
 
     case 'set-anchor':
-      return { ...state, anchorId: action.id };
+      return { ...state, anchorId: action.id, hasRunCompare: false };
 
     case 'set-selection-mode':
-      return { ...state, selectionMode: action.mode };
+      return { ...state, selectionMode: action.mode, hasRunCompare: false };
 
     case 'set-view-mode':
-      return { ...state, viewMode: action.mode };
+      return { ...state, viewMode: action.mode, hasRunCompare: false };
 
     case 'toggle-selector-collapsed':
       return { ...state, selectorCollapsed: !state.selectorCollapsed };
+
+    case 'run-compare':
+      return { ...state, hasRunCompare: true, selectorCollapsed: true };
 
     case 'clear':
       return { ...initialConditionalState, subjectMode: state.subjectMode };
@@ -388,6 +398,8 @@ export function conditionalReducer(
         mustIncludeIds: ids.filter((id) => id !== (action.anchorId ?? ids[0] ?? null)),
         mayIncludeIds: [],
         anchorId: action.anchorId ?? ids[0] ?? null,
+        selectorCollapsed: false,
+        hasRunCompare: false,
       };
     }
 

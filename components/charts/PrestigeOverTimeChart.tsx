@@ -27,7 +27,6 @@ type Props = Readonly<{
   subtitle?: string;
   compare?: "all" | "top5" | "selectedOnly";
   selectedPlayerIds?: string[];
-  maxPlayers?: number;
 }>;
 
 const CHART_TITLE = "Prestige Over Time";
@@ -42,7 +41,6 @@ function PrestigeOverTimeChart({
   subtitle = CHART_SUBTITLE,
   compare = "all",
   selectedPlayerIds,
-  maxPlayers = 12,
 }: Props) {
   return (
     <LineChart
@@ -53,10 +51,6 @@ function PrestigeOverTimeChart({
       subtitle={subtitle}
       compare={compare}
       selectedPlayerIds={selectedPlayerIds}
-      maxPlayers={maxPlayers}
-      emptyTitle="No prestige data yet"
-      emptySubtitle="Add tracked games or round snapshots to render prestige trend history."
-      emptyBehavior="empty-chart"
     />
   );
 }

@@ -1,15 +1,15 @@
-export { default as EloChart } from './index.tsx';
-export { default as EloChartPlot } from './EloChartPlot';
+export { default as EloChart } from "./EloChart";
+export { default as EloChartPlot } from "./EloChartPlot";
 
 export {
   MODE_OPTIONS,
   buildAnalytics,
   formatValue,
   getModeValues,
-} from './eloChartUtils';
+} from "./eloChartUtils";
 
 export type {
   EloMode,
   Game,
   Player,
-} from './eloChartUtils';
+} from "./eloChartUtils";

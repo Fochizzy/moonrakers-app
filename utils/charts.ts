@@ -49,6 +49,7 @@ export type PlayerTotals = {
   objectivePrestige?: number;
   objectiveCount?: number;
   assists?: number;
+  assistCountBySource?: Record<string, number>;
   contracts?: number;
   failures?: number;
   turns?: number;
@@ -134,6 +135,10 @@ export type StackedRow = {
 
 export type Relationships = Record<string, Record<string, number>>;
 
+export type CommonOpponentOption = StorePlayer & {
+  gamesPlayed: number;
+};
+
 export type MetricOption = {
   key: SimpleMetricKey;
   label: string;
@@ -168,6 +173,23 @@ export const REPLAY_METRICS: ReplayMetricKey[] = [
   "failures",
 ];
 
+const REPLAY_CHART_KEYS = new Set(["replay_chart", "replay"]);
+const FULL_METRIC_CHART_KEYS = new Set([
+  "bar_chart",
+  "bar",
+  "bump_chart",
+  "consistency_band",
+  "heatmap",
+  "line_chart",
+  "line",
+  "multi_line_chart",
+  "multi-line-chart",
+  "multi-line",
+  "prestige_over_time",
+  "sparkline",
+]);
+const STACKED_METRIC_CHART_KEYS = new Set(["stacked_bar_chart"]);
+
 const STACKED_COLORS: Record<string, string> = {
   directPrestige: "#3B82F6",
   assistPrestigeReceived: "#A855F7",
@@ -197,6 +219,20 @@ function normalizeLooseName(value: unknown): string {
     .replace(/[_-]+/g, " ")
     .replace(/[^a-z0-9 ]+/g, "")
     .replace(/\s+/g, " ");
+}
+
+function normalizeLegacyAwareNameKey(value: unknown): string {
+  return normalizeLooseName(value)
+    .replace(/^(legacy|local)\s+/i, "")
+    .trim();
+}
+
+function normalizeId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeChartKey(chartKey?: string | null): string {
+  return String(chartKey ?? "").trim().toLowerCase();
 }
 
 function getInitials(player: any): string {
@@ -395,26 +431,174 @@ export function getPlayerById(players: StorePlayer[], id?: string | null) {
   return (players ?? []).find((player) => String(player.id) === String(id)) ?? null;
 }
 
+export function resolvePreferredChartPlayerId(args: {
+  availablePlayers: StorePlayer[];
+  routePlayerId?: string | null;
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+}) {
+  const {
+    availablePlayers,
+    routePlayerId,
+    authProfileId,
+    authSessionUserId,
+  } = args;
+
+  const availableIds = new Set(
+    (availablePlayers ?? [])
+      .map((player) => normalizeId(player?.id))
+      .filter(Boolean),
+  );
+
+  const explicitRouteId = normalizeId(routePlayerId);
+  if (explicitRouteId && availableIds.has(explicitRouteId)) {
+    return explicitRouteId;
+  }
+
+  const profileId = normalizeId(authProfileId);
+  if (profileId && availableIds.has(profileId)) {
+    return profileId;
+  }
+
+  const sessionUserId = normalizeId(authSessionUserId);
+  if (sessionUserId && availableIds.has(sessionUserId)) {
+    return sessionUserId;
+  }
+
+  return availablePlayers?.[0]?.id ? normalizeId(availablePlayers[0].id) : null;
+}
+
+export function buildCommonOpponentOptions(args: {
+  playerId?: string | null;
+  players: StorePlayer[];
+  games: NormalizedGame[];
+  limit?: number;
+}): CommonOpponentOption[] {
+  const { playerId, players, games, limit = 5 } = args;
+  const focusPlayerId = normalizeId(playerId);
+
+  if (!focusPlayerId) {
+    return [];
+  }
+
+  const playerMap = new Map<string, StorePlayer>();
+  for (const player of players ?? []) {
+    const normalizedId = normalizeId(player?.id);
+    if (!normalizedId) continue;
+    playerMap.set(normalizedId, player);
+  }
+
+  const opponentCounts = new Map<string, number>();
+
+  for (const game of games ?? []) {
+    const gamePlayerIds = new Set<string>();
+
+    for (const player of Array.isArray(game?.players) ? game.players : []) {
+      const normalizedId = normalizeId(player?.id);
+      if (normalizedId) {
+        gamePlayerIds.add(normalizedId);
+      }
+    }
+
+    for (const rawId of Object.keys(game?.totals ?? {})) {
+      const normalizedId = normalizeId(rawId);
+      if (normalizedId) {
+        gamePlayerIds.add(normalizedId);
+      }
+    }
+
+    if (!gamePlayerIds.has(focusPlayerId)) {
+      continue;
+    }
+
+    gamePlayerIds.delete(focusPlayerId);
+
+    for (const opponentId of gamePlayerIds) {
+      if (!playerMap.has(opponentId)) {
+        continue;
+      }
+
+      opponentCounts.set(
+        opponentId,
+        toNumber(opponentCounts.get(opponentId)) + 1,
+      );
+    }
+  }
+
+  return [...opponentCounts.entries()]
+    .map(([id, gamesPlayed]): CommonOpponentOption | null => {
+      const player = playerMap.get(id);
+      return player
+        ? {
+            id: String(player.id ?? id),
+            name: player.name,
+            color: player.color,
+            initials: player.initials,
+            assignedCardArtIndex:
+              typeof player.assignedCardArtIndex === "number" &&
+              Number.isFinite(player.assignedCardArtIndex)
+                ? player.assignedCardArtIndex
+                : null,
+            artIndex:
+              typeof player.artIndex === "number" &&
+              Number.isFinite(player.artIndex)
+                ? player.artIndex
+                : null,
+            gamesPlayed,
+          }
+        : null;
+    })
+    .filter((player): player is CommonOpponentOption => player !== null)
+    .sort((left, right) => {
+      if (right.gamesPlayed !== left.gamesPlayed) {
+        return right.gamesPlayed - left.gamesPlayed;
+      }
+
+      const leftName = String(left.name ?? left.id ?? "").trim();
+      const rightName = String(right.name ?? right.id ?? "").trim();
+      return leftName.localeCompare(rightName);
+    })
+    .slice(0, Math.max(0, limit));
+}
+
 function createPlayerMatcher(players: StorePlayer[]) {
   const byId = new Map<string, StorePlayer>();
   const byName = new Map<string, StorePlayer>();
+  const byLegacyAwareName = new Map<string, StorePlayer>();
 
   for (const player of players ?? []) {
     const id = String(player?.id ?? "").trim();
     const nameKey = normalizeLooseName(player?.name);
+    const legacyAwareNameKey = normalizeLegacyAwareNameKey(player?.name);
     if (id) byId.set(id, player);
     if (nameKey && !byName.has(nameKey)) byName.set(nameKey, player);
+    if (legacyAwareNameKey && !byLegacyAwareName.has(legacyAwareNameKey)) {
+      byLegacyAwareName.set(legacyAwareNameKey, player);
+    }
   }
 
   return {
     resolve(rawPlayer: any, totalsEntry?: any): StorePlayer | null {
       const rawId = String(rawPlayer?.id ?? rawPlayer?.playerId ?? "").trim();
       const rawNameKey = normalizeLooseName(rawPlayer?.name);
+      const rawLegacyAwareNameKey = normalizeLegacyAwareNameKey(rawPlayer?.name);
       const totalsNameKey = normalizeLooseName(totalsEntry?.name ?? totalsEntry?.playerName);
+      const totalsLegacyAwareNameKey = normalizeLegacyAwareNameKey(
+        totalsEntry?.name ?? totalsEntry?.playerName
+      );
 
       if (rawId && byId.has(rawId)) return byId.get(rawId)!;
       if (rawNameKey && byName.has(rawNameKey)) return byName.get(rawNameKey)!;
       if (totalsNameKey && byName.has(totalsNameKey)) return byName.get(totalsNameKey)!;
+      if (rawLegacyAwareNameKey && byLegacyAwareName.has(rawLegacyAwareNameKey)) {
+        return byLegacyAwareName.get(rawLegacyAwareNameKey)!;
+      }
+      if (
+        totalsLegacyAwareNameKey &&
+        byLegacyAwareName.has(totalsLegacyAwareNameKey)
+      ) {
+        return byLegacyAwareName.get(totalsLegacyAwareNameKey)!;
+      }
 
       return null;
     },
@@ -455,8 +639,10 @@ function normalizeTotalsEntry(
     entry?.assistPrestigeFromPlayers ??
     entry?.assistSources
   );
+  const assistCountMapRaw = normalizeAssistMap(entry?.assistCountBySource);
 
   const assistPrestigeBySource = mapAssistSourceKeys(assistMapRaw, idMap);
+  const assistCountBySource = mapAssistSourceKeys(assistCountMapRaw, idMap);
 
   return {
     ...entry,
@@ -485,6 +671,7 @@ function normalizeTotalsEntry(
     assistPrestigeByPlayer: assistPrestigeBySource,
     assistPrestigeFromPlayers: assistPrestigeBySource,
     assistSources: assistPrestigeBySource,
+    assistCountBySource,
     name: entry?.name,
     playerName: entry?.playerName,
     rawPlayerId,
@@ -549,6 +736,10 @@ function mergeTotalsEntry(existing: PlayerTotals | undefined, incoming: PlayerTo
       b.assistPrestigeFromPlayers
     ),
     assistSources: mergeAssistMaps(a.assistSources, b.assistSources),
+    assistCountBySource: mergeAssistMaps(
+      a.assistCountBySource,
+      b.assistCountBySource
+    ),
   };
 }
 
@@ -907,6 +1098,120 @@ export function buildUnifiedSnapshots(
   });
 }
 
+export function buildReplaySnapshotsFromGame(
+  game?: NormalizedGame | null
+): SnapshotPoint[] {
+  const replayRounds =
+    Array.isArray(game?.rounds) && game.rounds.length > 0
+      ? game.rounds
+      : Array.isArray(game?.timeline)
+        ? game.timeline
+        : [];
+
+  if (!replayRounds.length) return [];
+
+  const running: Record<string, Record<string, number | string>> = {};
+
+  return replayRounds.map((round, index) => {
+    const playerId = String(round?.playerId ?? "").trim();
+    if (!playerId) {
+      return {
+        round: index + 1,
+        gameIndex: index + 1,
+        label: `Round ${index + 1}`,
+        snapshot: { ...running },
+      };
+    }
+
+    const player = (game.players ?? []).find(
+      (candidate) => String(candidate?.id ?? "").trim() === playerId
+    );
+    const existing = running[playerId] ?? {
+      playerId,
+      playerName: String(player?.name ?? "Player"),
+      label: String(player?.name ?? "Player"),
+      color: String(player?.color ?? ""),
+      score: 0,
+      totalPrestige: 0,
+      prestige: 0,
+      directPrestige: 0,
+      assistPrestigeReceived: 0,
+      objectivePrestige: 0,
+      assists: 0,
+      contracts: 0,
+      failures: 0,
+      turns: 0,
+    };
+
+    const directPrestige = toNumber(round?.directPrestige ?? round?.prestige);
+    const assistPrestigeReceived = toNumber(round?.assistPrestigeReceived);
+    const objectivePrestige = toNumber(round?.objectivePrestige);
+    const totalPrestige =
+      directPrestige + assistPrestigeReceived + objectivePrestige;
+    const contracts = toNumber(round?.contracts);
+    const failures = toNumber(round?.failures);
+    const assists = toNumber(round?.assists);
+    const turns = toNumber(existing.turns) + 1;
+
+    running[playerId] = {
+      playerId,
+      playerName: String(player?.name ?? existing.playerName ?? "Player"),
+      label: String(player?.name ?? existing.label ?? "Player"),
+      color: String(player?.color ?? existing.color ?? ""),
+      score: toNumber(existing.score) + totalPrestige,
+      totalPrestige: toNumber(existing.totalPrestige) + totalPrestige,
+      prestige: toNumber(existing.prestige) + totalPrestige,
+      directPrestige: toNumber(existing.directPrestige) + directPrestige,
+      assistPrestigeReceived:
+        toNumber(existing.assistPrestigeReceived) + assistPrestigeReceived,
+      objectivePrestige:
+        toNumber(existing.objectivePrestige) + objectivePrestige,
+      assists: toNumber(existing.assists) + assists,
+      contracts: toNumber(existing.contracts) + contracts,
+      failures: toNumber(existing.failures) + failures,
+      turns,
+      efficiency: turns > 0 ? (toNumber(existing.score) + totalPrestige) / turns : 0,
+      assistEfficiency:
+        turns > 0
+          ? (toNumber(existing.assistPrestigeReceived) + assistPrestigeReceived) /
+            turns
+          : 0,
+      directEfficiency:
+        turns > 0
+          ? (toNumber(existing.directPrestige) + directPrestige) / turns
+          : 0,
+      contractSuccessRate:
+        toNumber(existing.contracts) + contracts + toNumber(existing.failures) + failures >
+        0
+          ? ((toNumber(existing.contracts) + contracts) /
+              (toNumber(existing.contracts) +
+                contracts +
+                toNumber(existing.failures) +
+                failures)) *
+            100
+          : 0,
+      netPrestige:
+        toNumber(existing.directPrestige) +
+        directPrestige +
+        toNumber(existing.assistPrestigeReceived) +
+        assistPrestigeReceived +
+        toNumber(existing.objectivePrestige) +
+        objectivePrestige,
+      supportBalance:
+        toNumber(existing.assistPrestigeReceived) +
+        assistPrestigeReceived -
+        (toNumber(existing.directPrestige) + directPrestige),
+    };
+
+    return {
+      round: index + 1,
+      gameIndex: index + 1,
+      label: `Round ${index + 1}`,
+      snapshot: JSON.parse(JSON.stringify(running)),
+    };
+  });
+}
+
 export function buildSparkSeries(
   snapshots: SnapshotPoint[],
   playerId?: string | null,
@@ -939,6 +1244,57 @@ export function normalizeReplayMetric(
     default:
       return "score";
   }
+}
+
+export function getSupportedMetricKeysForChart(chartKey?: string | null): SimpleMetricKey[] {
+  const normalized = normalizeChartKey(chartKey);
+
+  if (REPLAY_CHART_KEYS.has(normalized)) {
+    return [
+      "totalPrestige",
+      "directPrestige",
+      "assistPrestigeReceived",
+      "assists",
+      "contracts",
+      "failures",
+    ];
+  }
+
+  if (STACKED_METRIC_CHART_KEYS.has(normalized)) {
+    return ["totalPrestige", "score", "contracts", "assists", "failures"];
+  }
+
+  if (FULL_METRIC_CHART_KEYS.has(normalized)) {
+    return [...METRIC_OPTIONS];
+  }
+
+  return [];
+}
+
+export function normalizeMetricForChart(
+  chartKey?: string | null,
+  metricKey?: string | null
+): SimpleMetricKey | null {
+  const supported = getSupportedMetricKeysForChart(chartKey);
+  if (!supported.length) return null;
+
+  const rawMetric = String(metricKey ?? "").trim();
+  if (!rawMetric) return null;
+
+  if (supported.includes(rawMetric as SimpleMetricKey)) {
+    return rawMetric as SimpleMetricKey;
+  }
+
+  if (rawMetric === "prestige") {
+    return supported.includes("totalPrestige") ? "totalPrestige" : supported[0];
+  }
+
+  if (REPLAY_CHART_KEYS.has(normalizeChartKey(chartKey))) {
+    const replayMetric = normalizeReplayMetric(rawMetric as SimpleMetricKey);
+    return replayMetric === "score" ? "totalPrestige" : replayMetric;
+  }
+
+  return supported[0];
 }
 
 export function buildStackedMetricOptions(): MetricOption[] {

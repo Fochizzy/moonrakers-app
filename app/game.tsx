@@ -9,13 +9,27 @@ import {
   Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useStore } from '@/store/useStore';
+import AppStatusBanner from '@/components/status/AppStatusBanner';
+import {
+  useActiveGame,
+  usePatchActiveGame,
+  useClearActiveGame,
+  useHydrateCloudSnapshot,
+  useAuthSession,
+  usePlayers,
+  useGroups,
+} from '@/store/useStore';
 import StarryNight from '@/components/ui/StarryNight';
 import Text from '@/components/ui/Text';
+import {
+  buildEditRoundCandidate,
+  buildSubmitRoundCandidate,
+} from '@/lib/game-session/gameSessionController';
+import { useGameSessionController } from '@/lib/game-session/useGameSessionController';
 import { getFallbackPlayerColor, resolveStoredPlayerColor } from '@/utils/playerColor';
 import {
-  createRound,
   getNextTurnIndex,
   buildTotals,
   getLeaderboard,
@@ -28,11 +42,23 @@ import {
   getPlayerAccentColor,
   getPlayerBackgroundColor,
 } from '@/utils/turnTheme';
+import { APP_ROUTES } from '@/utils/appRoutes';
+import {
+  glowStyle,
+  makePlayerWash,
+  mixWithBlack,
+  withAlpha,
+} from '@/utils/gameScreenTheme';
+import { toNumber } from '@/utils/numbers';
+import { COLORS } from '@/utils/colors';
 
 type Player = {
   id: string;
   name: string;
+  displayName?: string;
+  initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
   startOrder?: number;
 };
 
@@ -69,109 +95,21 @@ const UI = {
   card: '#101722',
   cardSoft: '#0c121b',
   cardMuted: '#0b1018',
-  line: 'rgba(255,255,255,0.08)',
+  line: COLORS.border,
   lineStrong: 'rgba(255,255,255,0.14)',
   text: '#ffffff',
   textMuted: 'rgba(255,255,255,0.68)',
   textFaint: 'rgba(255,255,255,0.44)',
-  success: '#22c55e',
-  failure: '#ef4444',
+  success: COLORS.success,
+  failure: COLORS.danger,
   gold: '#facc15',
   silver: '#c0c0c0',
   pressedScale: 0.97,
-};
+} as const;
 
-function toNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
 
 function clampCount(value: unknown): number {
   return Math.max(0, Math.floor(toNumber(value)));
-}
-
-function parseColorToRgb(input: string) {
-  const color = input.trim();
-
-  if (color.startsWith('#')) {
-    const safe = color.replace('#', '');
-    const normalized =
-      safe.length === 3
-        ? safe.split('').map((c) => c + c).join('')
-        : safe.padEnd(6, '0').slice(0, 6);
-
-    const num = parseInt(normalized, 16);
-    return {
-      r: (num >> 16) & 255,
-      g: (num >> 8) & 255,
-      b: num & 255,
-    };
-  }
-
-  const rgbMatch = color.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
-  if (rgbMatch) {
-    return {
-      r: Math.max(0, Math.min(255, Number(rgbMatch[1]))),
-      g: Math.max(0, Math.min(255, Number(rgbMatch[2]))),
-      b: Math.max(0, Math.min(255, Number(rgbMatch[3]))),
-    };
-  }
-
-  return { r: 255, g: 255, b: 255 };
-}
-
-function withAlpha(color: string, alpha: number) {
-  const { r, g, b } = parseColorToRgb(color);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function mixWithBlack(color: string, amount = 0.7) {
-  const { r, g, b } = parseColorToRgb(color);
-  return `rgb(${Math.round(r * (1 - amount))}, ${Math.round(g * (1 - amount))}, ${Math.round(
-    b * (1 - amount)
-  )})`;
-}
-
-function makePlayerWash(accent: string, alpha = 0.05) {
-  return withAlpha(accent, alpha);
-}
-
-function glowStyle(color: string, opacity = 0.34, radius = 10, elevation = 8) {
-  return {
-    shadowColor: color,
-    shadowOpacity: opacity,
-    shadowRadius: radius,
-    shadowOffset: { width: 0, height: 0 },
-    elevation,
-  };
-}
-
-function createObjectiveBonusRounds(
-  linkedTurnId: string,
-  objectiveAwardsByPlayer: Record<string, number>
-): StoredRound[] {
-  const bonusRounds: StoredRound[] = [];
-
-  for (const [playerId, count] of Object.entries(objectiveAwardsByPlayer)) {
-    const objectiveCount = clampCount(count);
-    if (!playerId || objectiveCount <= 0) continue;
-
-    bonusRounds.push({
-      id: `${linkedTurnId}-obj-${playerId}`,
-      playerId,
-      prestige: 0,
-      contracts: 0,
-      failures: 0,
-      assistRecipients: {},
-      assistPrestigeRecipients: {},
-      objectiveCount,
-      objectivePrestige: objectiveCount,
-      createdAt: Date.now(),
-      metaType: 'bonusObjective',
-      linkedTurnId,
-    });
-  }
-
-  return bonusRounds;
 }
 
 function getDisplayRounds(rounds: StoredRound[]) {
@@ -804,10 +742,10 @@ function ObjectiveRow({
 
 function ObjectivesSection({
   currentAccent,
-  currentPlayerName,
+  currentPlayerId,
   currentObjectiveCount,
   onSetCurrentObjectiveCount,
-  otherPlayers,
+  playersInTurnOrder,
   objectiveAwardsByPlayer,
   onSetOtherPlayerObjective,
   collapsed,
@@ -815,18 +753,23 @@ function ObjectivesSection({
   onSelectNone,
 }: {
   currentAccent: string;
-  currentPlayerName: string;
+  currentPlayerId: string;
   currentObjectiveCount: number;
   onSetCurrentObjectiveCount: (next: number) => void;
-  otherPlayers: Player[];
+  playersInTurnOrder: Player[];
   objectiveAwardsByPlayer: Record<string, number>;
   onSetOtherPlayerObjective: (playerId: string, next: number) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onSelectNone: () => void;
 }) {
-  const totalAwarded =
-    currentObjectiveCount + otherPlayers.reduce((sum, p) => sum + clampCount(objectiveAwardsByPlayer[p.id]), 0);
+  const totalAwarded = playersInTurnOrder.reduce((sum, player) => {
+    const count =
+      player.id === currentPlayerId
+        ? clampCount(currentObjectiveCount)
+        : clampCount(objectiveAwardsByPlayer[player.id]);
+    return sum + count;
+  }, 0);
 
   return (
     <View style={[styles.sectionCard, { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: UI.card }, glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8)]}>
@@ -844,19 +787,25 @@ function ObjectivesSection({
 
       {!collapsed ? (
         <View style={styles.rowsStack}>
-          <ObjectiveRow
-            title={currentPlayerName}
-            value={clampCount(currentObjectiveCount)}
-            accent={currentAccent}
-            onChange={onSetCurrentObjectiveCount}
-          />
-          {otherPlayers.map((player, index) => (
+          {playersInTurnOrder.map((player, index) => (
             <ObjectiveRow
               key={player.id}
               title={player.name}
-              value={clampCount(objectiveAwardsByPlayer[player.id])}
-              accent={getPlayerAccentColor(resolveStoredPlayerColor(player.color, index))}
-              onChange={(next) => onSetOtherPlayerObjective(player.id, next)}
+              value={
+                player.id === currentPlayerId
+                  ? clampCount(currentObjectiveCount)
+                  : clampCount(objectiveAwardsByPlayer[player.id])
+              }
+              accent={
+                player.id === currentPlayerId
+                  ? currentAccent
+                  : getPlayerAccentColor(resolveStoredPlayerColor(player.color, index))
+              }
+              onChange={
+                player.id === currentPlayerId
+                  ? onSetCurrentObjectiveCount
+                  : (next) => onSetOtherPlayerObjective(player.id, next)
+              }
             />
           ))}
         </View>
@@ -866,6 +815,7 @@ function ObjectivesSection({
 }
 
 function ActionsSection({
+  bottomInset,
   editingRoundId,
   canSubmitTurn,
   canEditPreviousTurn,
@@ -876,6 +826,7 @@ function ActionsSection({
   onSaveOrAdvance,
   onFinishGame,
 }: {
+  bottomInset: number;
   editingRoundId: string | null;
   canSubmitTurn: boolean;
   canEditPreviousTurn: boolean;
@@ -887,7 +838,12 @@ function ActionsSection({
   onFinishGame: () => void;
 }) {
   return (
-    <View style={styles.actionsWrap}>
+    <View
+      style={[
+        styles.actionsWrap,
+        { paddingBottom: Math.max(bottomInset, 16) + 16 },
+      ]}
+    >
       <View style={styles.actionRow}>
         <ScaleButton
           disabled={!canEditPreviousTurn}
@@ -984,11 +940,15 @@ function PreviousRoundsSection({
 
 export default function Game() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  const activeGame = useStore((s: any) => s.activeGame);
-  const patchActiveGame = useStore((s: any) => s.patchActiveGame);
-  const clearActiveGame = useStore((s: any) => s.clearActiveGame);
-  const addGame = useStore((s: any) => s.addGame);
+  const activeGame = useActiveGame();
+  const patchActiveGame = usePatchActiveGame();
+  const clearActiveGame = useClearActiveGame();
+  const hydrateCloudSnapshot = useHydrateCloudSnapshot();
+  const authSession = useAuthSession();
+  const playerDirectory = usePlayers() ?? [];
+  const groupDirectory = useGroups() ?? [];
 
   const [contractChoice, setContractChoice] = useState<BinaryChoice>(0);
   const [failureChoice, setFailureChoice] = useState<BinaryChoice>(0);
@@ -1048,6 +1008,26 @@ export default function Game() {
     () => getLeaderboard(totals as any, players as any, rounds as any).map((entry) => entry.player as Player),
     [totals, players, rounds]
   );
+  const finishWinnerId = useMemo(
+    () => getLeaderboard(totals as any, players as any)[0]?.id ?? null,
+    [totals, players],
+  );
+  const {
+    currentStatus,
+    clearCurrentStatus,
+    commitFinishGame,
+  } = useGameSessionController({
+    activeGame: activeGame as Record<string, unknown> | null,
+    players: players as Array<Record<string, unknown>>,
+    rounds,
+    winnerId: finishWinnerId,
+    authSession,
+    playerDirectory: playerDirectory as Array<Record<string, unknown>>,
+    groupDirectory: groupDirectory as Array<Record<string, unknown>>,
+    clearActiveGame,
+    hydrateCloudSnapshot,
+    router,
+  });
 
   const currentAccent = getPlayerAccentColor(
     currentPlayer?.color ?? getFallbackPlayerColor(0)
@@ -1212,24 +1192,6 @@ export default function Game() {
     }));
   }
 
-  function sanitizeCurrentForRound(source: CurrentTurnStats): CurrentTurnStats {
-    const sanitizedAssistRecipients = Object.fromEntries(
-      Object.entries(source.assistRecipients ?? {}).filter(([, value]) => toNumber(value) > 0)
-    ) as Record<string, number>;
-
-    const sanitizedAssistPrestigeRecipients = Object.fromEntries(
-      Object.entries(source.assistPrestigeRecipients ?? {}).filter(
-        ([playerId]) => toNumber(sanitizedAssistRecipients[playerId]) > 0
-      )
-    ) as Record<string, number>;
-
-    return {
-      ...source,
-      assistRecipients: sanitizedAssistRecipients,
-      assistPrestigeRecipients: sanitizedAssistPrestigeRecipients,
-    };
-  }
-
   function clearObjectives() {
     const cleared: Record<string, number> = {};
     for (const player of otherPlayers) cleared[player.id] = 0;
@@ -1271,38 +1233,6 @@ export default function Game() {
     setHiddenAssistPlayers({});
     setCollapsingAssistPlayers({});
     preBaseSnapshotRef.current = null;
-  }
-
-  function buildCandidateRoundsForSubmit() {
-    const mainRound = {
-      ...(createRound(activeTurnPlayer.id, sanitizeCurrentForRound(current) as any) as StoredRound),
-      metaType: 'main' as const,
-    };
-    const linkedTurnId = mainRound.id;
-    const bonusRounds = createObjectiveBonusRounds(linkedTurnId, objectiveAwardsByPlayer);
-    return { mainRound, nextRounds: [...rounds, mainRound, ...bonusRounds] as any[] };
-  }
-
-  function buildCandidateRoundsForEdit() {
-    if (!editingRoundId) return null;
-    const originalMainRound = rounds.find((round) => round.id === editingRoundId);
-    if (!originalMainRound) return null;
-
-    const replacementMainRound: StoredRound = {
-      ...(createRound(originalMainRound.playerId, sanitizeCurrentForRound(current) as any) as StoredRound),
-      id: editingRoundId,
-      createdAt: originalMainRound.createdAt,
-      metaType: 'main',
-    };
-
-    const filteredRounds = rounds.filter(
-      (round) => round.id !== editingRoundId && round.linkedTurnId !== editingRoundId
-    );
-    const replacementBonusRounds = createObjectiveBonusRounds(editingRoundId, objectiveAwardsByPlayer);
-    const nextRounds = [...filteredRounds, replacementMainRound, ...replacementBonusRounds].sort(
-      (a, b) => a.createdAt - b.createdAt
-    ) as any[];
-    return { nextRounds };
   }
 
   function validateNoNegativeTotalPrestige(candidateRounds: any[]) {
@@ -1382,7 +1312,12 @@ export default function Game() {
         return;
       }
 
-      const candidate = buildCandidateRoundsForSubmit();
+      const candidate = buildSubmitRoundCandidate({
+        activeTurnPlayerId: activeTurnPlayer.id,
+        current,
+        existingRounds: rounds,
+        objectiveAwardsByPlayer,
+      });
       const nextTotals = validateNoNegativeTotalPrestige(candidate.nextRounds);
       if (!nextTotals) return;
 
@@ -1406,7 +1341,12 @@ export default function Game() {
   function saveEdit() {
     try {
       if (!editingRoundId) return;
-      const candidate = buildCandidateRoundsForEdit();
+      const candidate = buildEditRoundCandidate({
+        editingRoundId,
+        current,
+        existingRounds: rounds,
+        objectiveAwardsByPlayer,
+      });
       if (!candidate) return;
       const nextTotals = validateNoNegativeTotalPrestige(candidate.nextRounds);
       if (!nextTotals) return;
@@ -1472,49 +1412,21 @@ export default function Game() {
     setShowPreviousRounds((prev) => !prev);
   }
 
-  function commitFinishGame() {
-    try {
-      const finalTotals = buildTotals(rounds as any, players as any);
-      const leaderboard = getLeaderboard(finalTotals, players as any);
-      if (!leaderboard.length) {
-        Alert.alert('No turns saved', 'Save at least one turn before finishing.');
-        return;
-      }
-
-      const winnerId = leaderboard[0]?.id;
-      addGame({
-        id: activeGame.id,
-        players: players.map((player) => ({
-          ...player,
-          totalPrestige: getTotalPrestigeFromTotals(finalTotals[player.id] as PlayerTotals),
-          directPrestige: finalTotals[player.id]?.directPrestige ?? 0,
-          objectivePrestige: finalTotals[player.id]?.objectivePrestige ?? 0,
-          score: finalTotals[player.id]?.score ?? 0,
-        })),
-        winnerId,
-        selectedWinnerId: activeGame.selectedWinnerId ?? undefined,
-        totals: finalTotals,
-        rounds,
-        timeline: rounds,
-        roundCount: rounds.length,
-        createdAt: activeGame.createdAt,
-        groupId: activeGame.groupId,
-        groupName: activeGame.groupName,
-        objectiveStatsEligible: true,
-      });
-
-      clearActiveGame();
-      router.replace('/');
-    } catch (error) {
-      console.error('Finish Game failed:', error);
-      Alert.alert('Error', 'Something went wrong finishing the game.');
-    }
-  }
-
   function confirmFinishGame() {
+    if (!rounds.length || !finishWinnerId) {
+      Alert.alert('No turns saved', 'Save at least one turn before finishing.');
+      return;
+    }
+
     Alert.alert('Finish Game?', 'Are you sure you want to end the game?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Finish Game', style: 'destructive', onPress: commitFinishGame },
+      {
+        text: 'Finish Game',
+        style: 'destructive',
+        onPress: () => {
+          void commitFinishGame();
+        },
+      },
     ]);
   }
 
@@ -1542,7 +1454,15 @@ export default function Game() {
         ]}
       />
 
-      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
+      <View
+        style={[
+          styles.heroStickyShell,
+          {
+            paddingTop: 10 + insets.top,
+            backgroundColor: appBackground,
+          },
+        ]}
+      >
         <View
           style={[
             styles.heroCard,
@@ -1552,40 +1472,70 @@ export default function Game() {
             },
           ]}
         >
-          {editingRoundId ? (
-            <Text style={styles.heroEyebrow}>Editing Previous Turn</Text>
-          ) : null}
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroHeaderSpacer} />
 
-          <View style={styles.heroIdentityRow}>
-            <View
-              style={[
-                styles.nameBadge,
-                {
-                  backgroundColor: currentDark,
-                  borderColor: withAlpha(currentAccent, 0.34),
-                },
-              ]}
-            >
-              <Text style={styles.nameBadgeText}>{currentPlayer.name}</Text>
+            <View style={styles.heroHeaderCopy}>
+              {editingRoundId ? (
+                <Text style={styles.heroEyebrow}>Editing Previous Turn</Text>
+              ) : null}
+
+              <View style={styles.heroIdentityRow}>
+                <View
+                  style={[
+                    styles.nameBadge,
+                    {
+                      backgroundColor: currentDark,
+                      borderColor: withAlpha(currentAccent, 0.34),
+                    },
+                  ]}
+                >
+                  <Text style={styles.nameBadgeText}>{currentPlayer.name}</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.roundBadge,
+                    {
+                      backgroundColor: currentDarker,
+                      borderColor: withAlpha(currentAccent, 0.22),
+                    },
+                  ]}
+                >
+                  <Text style={styles.roundBadgeText}>
+                    Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
+                  </Text>
+                </View>
+              </View>
             </View>
 
-            <View
-              style={[
-                styles.roundBadge,
-                {
-                  backgroundColor: currentDarker,
-                  borderColor: withAlpha(currentAccent, 0.22),
-                },
-              ]}
+            <Pressable
+              style={styles.commandButton}
+              onPress={() => router.push(APP_ROUTES.home)}
             >
-              <Text style={styles.roundBadgeText}>
-                Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
-              </Text>
-            </View>
+              <Text style={styles.commandButtonText}>Back to Command</Text>
+            </Pressable>
           </View>
         </View>
+      </View>
 
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingTop: 0,
+            paddingBottom: 14 + insets.bottom,
+          },
+        ]}
+      >
         <CompactPlayerStrip players={leaderboardPlayers} activePlayerId={currentPlayer.id} totals={totals} />
+
+        <AppStatusBanner
+          status={currentStatus}
+          onDismiss={currentStatus ? clearCurrentStatus : null}
+        />
 
         <DirectPrestigeSection
           currentDirectPrestige={toNumber(current.prestige)}
@@ -1618,10 +1568,10 @@ export default function Game() {
 
         <ObjectivesSection
           currentAccent={currentAccent}
-          currentPlayerName={currentPlayer.name}
+          currentPlayerId={currentPlayer.id}
           currentObjectiveCount={clampCount(current.objectiveCount)}
           onSetCurrentObjectiveCount={(next) => updateCurrent({ objectiveCount: next })}
-          otherPlayers={otherPlayers}
+          playersInTurnOrder={players}
           objectiveAwardsByPlayer={objectiveAwardsByPlayer}
           onSetOtherPlayerObjective={setOtherPlayerObjective}
           collapsed={objectivesCollapsed}
@@ -1639,6 +1589,7 @@ export default function Game() {
         ) : null}
 
         <ActionsSection
+          bottomInset={insets.bottom}
           editingRoundId={editingRoundId}
           canSubmitTurn={canSubmitTurn}
           canEditPreviousTurn={!!latestDisplayRound}
@@ -1671,10 +1622,30 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 8,
   },
+  heroStickyShell: {
+    zIndex: 4,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
   heroCard: {
     borderRadius: 10,
     borderWidth: 1,
     padding: 10,
+    gap: 6,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  heroHeaderSpacer: {
+    width: 128,
+  },
+  heroHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
     gap: 6,
   },
   heroEyebrow: {
@@ -1710,6 +1681,24 @@ const styles = StyleSheet.create({
     color: UI.text,
     fontSize: 11,
     fontWeight: '700',
+  },
+  commandButton: {
+    minWidth: 128,
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: withAlpha(UI.text, 0.16),
+    backgroundColor: UI.cardMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commandButtonText: {
+    color: UI.text,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   playerStripRow: {
     gap: 4,
@@ -1859,6 +1848,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 6,
   },
+  sectionTitle: {
+    color: UI.text,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
   headerTapZone: {
     flex: 1,
     borderRadius: 8,
@@ -1867,6 +1862,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  chevron: {
+    color: UI.textMuted,
+    fontSize: 14,
+    fontWeight: '700',
   },
   assistHeaderTitleRow: {
     flexDirection: 'row',
@@ -2153,5 +2153,3 @@ noneChip: {
     fontWeight: '800',
   },
 });
-
-

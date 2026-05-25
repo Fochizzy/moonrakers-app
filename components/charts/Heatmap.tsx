@@ -1,10 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 
 import Text from "@/components/ui/Text";
-import HeatmapGrid from "./HeatmapGrid";
-import { HeatmapMode, MatrixRow, SelectedCell } from "./heatmapUtils";
 import { getMetricOrFallback } from "@/utils/metricMap";
+import { resolveStoredPlayerColor } from "@/utils/playerColor";
+import { getPlayerAccentColor } from "@/utils/turnTheme";
+import { CHART_COLORS } from "./chartVisualSystem";
+import ChartFocusCard from "./ChartFocusCard";
+import ChartStage from "./ChartStage";
+import ChartUnderlineTabs from "./ChartUnderlineTabs";
+import HeatmapGrid from "./HeatmapGrid";
+import type { HeatmapMode, MatrixRow, SelectedCell } from "./heatmapUtils";
 
 type SortMode =
   | "default"
@@ -35,27 +41,10 @@ type Props = {
   initialMode?: HeatmapMode;
   allowedModes?: HeatmapMode[];
   emptyBehavior?: "empty-chart" | "hide";
+  showHeader?: boolean;
 };
 
-const COLORS = {
-  bg: "#081120",
-  card: "rgba(12,18,38,0.92)",
-  cardAlt: "rgba(16,24,48,0.95)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  muted: "#64748B",
-  accent: "#A855F7",
-  accentSoft: "rgba(168,85,247,0.18)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  red: "#EF4444",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-};
+const COLORS = CHART_COLORS;
 
 const MODE_OPTIONS: readonly { key: HeatmapMode; label: string }[] = [
   { key: "raw", label: "Raw" },
@@ -65,6 +54,15 @@ const MODE_OPTIONS: readonly { key: HeatmapMode; label: string }[] = [
   { key: "swing", label: "Swing" },
 ] as const;
 
+const SORT_OPTIONS: readonly { key: SortMode; label: string }[] = [
+  { key: "default", label: "Default" },
+  { key: "highestAvg", label: "Hottest" },
+  { key: "lowestAvg", label: "Coldest" },
+  { key: "highestPeak", label: "Peak" },
+  { key: "consistency", label: "Stable" },
+  { key: "latest", label: "Latest" },
+] as const;
+
 function n(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -72,7 +70,9 @@ function n(value: unknown): number {
 
 function average(values: number[]): number {
   const clean = values.filter(Number.isFinite);
-  return clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
+  return clean.length
+    ? clean.reduce((sum, value) => sum + value, 0) / clean.length
+    : 0;
 }
 
 function stdDev(values: number[]): number {
@@ -87,29 +87,15 @@ function safeDivide(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-function withAlpha(hex: string, alpha: string) {
-  if (!hex?.startsWith("#") || hex.length !== 7) return hex;
-  return `${hex}${alpha}`;
-}
-
 function getPlayerColor(color?: string, index = 0): string {
-  if (typeof color === "string" && color.trim()) return color.trim();
-
-  const fallback = [
-    "#A855F7",
-    "#3B82F6",
-    "#22C55E",
-    "#3B82F6",
-    "#EF4444",
-    "#14B8A6",
-    "#E879F9",
-    "#F97316",
-  ];
-
-  return fallback[index % fallback.length];
+  return getPlayerAccentColor(resolveStoredPlayerColor(color, index));
 }
 
-function formatDisplayValue(value: number, mode: HeatmapMode, metricKey: string): string {
+function formatDisplayValue(
+  value: number,
+  mode: HeatmapMode,
+  metricKey: string
+): string {
   if (mode === "rank") return `#${Math.round(value)}`;
 
   const metric = getMetricOrFallback(metricKey);
@@ -207,12 +193,10 @@ function resolveMetricValue(
     n(record?.assistIn);
 
   const assistPrestigeSent =
-    n(record?.assistPrestigeSent) ||
-    n(record?.assistsSent);
+    n(record?.assistPrestigeSent) || n(record?.assistsSent);
 
   const objectivePrestige =
-    n(record?.objectivePrestige) ||
-    n(record?.objectiveCount);
+    n(record?.objectivePrestige) || n(record?.objectiveCount);
 
   const contracts =
     n(record?.contracts) ||
@@ -398,8 +382,8 @@ function buildMatrixRow(
         mode === "rank"
           ? "#E2E8F0"
           : Math.abs(displayValue) > 6
-          ? "#F8FAFC"
-          : "#E2E8F0",
+            ? "#F8FAFC"
+            : "#E2E8F0",
     };
   });
 
@@ -448,6 +432,7 @@ export default function Heatmap({
   initialMode = "raw",
   allowedModes = ["raw", "relativeToLobby", "relativeToPlayerAverage", "rank", "swing"],
   emptyBehavior = "empty-chart",
+  showHeader = true,
 }: Props) {
   const safeData = Array.isArray(data) ? data : [];
   const safePlayers = Array.isArray(players) ? players : [];
@@ -460,14 +445,16 @@ export default function Heatmap({
   }, [safePlayers, scopedPlayerIds]);
 
   const resolvedAllowedModes = useMemo(() => {
-    const valid = (Array.isArray(allowedModes) ? allowedModes : []).filter(Boolean);
+    const valid = (Array.isArray(allowedModes) ? allowedModes : [])
+      .filter(Boolean)
+      .map((mode) => mode);
     return valid.length ? valid : (["raw"] as HeatmapMode[]);
   }, [allowedModes]);
 
   const [selectedMode, setSelectedMode] = useState<HeatmapMode>(
     resolvedAllowedModes.includes(initialMode) ? initialMode : resolvedAllowedModes[0]
   );
-  const [sortMode] = useState<SortMode>("default");
+  const [sortMode, setSortMode] = useState<SortMode>("default");
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
 
   useEffect(() => {
@@ -478,7 +465,7 @@ export default function Heatmap({
 
   useEffect(() => {
     setSelectedCell(null);
-  }, [statKey, selectedMode, scopedPlayerIds?.join("|")]);
+  }, [statKey, selectedMode, sortMode, scopedPlayerIds?.join("|")]);
 
   const matrix = useMemo(() => {
     const baseRows = visiblePlayers.map((player, index) =>
@@ -489,6 +476,8 @@ export default function Heatmap({
 
   const resolvedTitle = title ?? `${metric.label} Heatmap`;
   const resolvedSubtitle = subtitle ?? buildSub(statKey, selectedMode);
+  const selectedModeLabel =
+    MODE_OPTIONS.find((option) => option.key === selectedMode)?.label ?? "Raw";
 
   const insight = useMemo(() => {
     if (!matrix.length) return null;
@@ -501,6 +490,57 @@ export default function Heatmap({
 
     return { topAverage, topPeak, mostStable };
   }, [matrix]);
+
+  const selectedRow = selectedCell
+    ? matrix.find((row) => row.id === selectedCell.playerId) ?? null
+    : null;
+
+  const focusTitle = selectedCell
+    ? selectedCell.playerName
+    : insight?.topAverage?.label ?? "Heatmap Lead";
+  const focusValue = selectedCell
+    ? selectedCell.text ??
+      formatDisplayValue(selectedCell.displayValue, selectedMode, statKey)
+    : insight
+      ? formatDisplayValue(insight.topAverage?.summary.average ?? 0, "raw", statKey)
+      : undefined;
+  const focusHelper = selectedCell
+    ? `Round ${selectedCell.round} · Raw ${formatDisplayValue(
+        selectedCell.rawValue,
+        "raw",
+        statKey
+      )}`
+    : insight
+      ? `${focusTitle} is running ${formatDisplayValue(
+          insight.topAverage?.summary.average ?? 0,
+          "raw",
+          statKey
+        )} on average.`
+      : undefined;
+  const focusStory = selectedCell
+    ? selectedRow
+      ? `Peak ${formatDisplayValue(
+          selectedRow.summary.peak,
+          "raw",
+          statKey
+        )} | Latest ${formatDisplayValue(
+          selectedRow.summary.latest,
+          "raw",
+          statKey
+        )} | ${selectedModeLabel}`
+      : `Viewing ${selectedModeLabel.toLowerCase()} heat at this exact round.`
+    : insight
+      ? `Peak ${formatDisplayValue(
+          insight.topPeak?.summary.peak ?? 0,
+          "raw",
+          statKey
+        )} | Steadiest ${insight.mostStable?.label ?? "-"}`
+      : undefined;
+  const focusAccentColor =
+    selectedCell?.color ??
+    selectedRow?.color ??
+    insight?.topAverage?.color ??
+    COLORS.accent;
 
   if (!safeData.length || !visiblePlayers.length) {
     if (emptyBehavior === "hide") return null;
@@ -517,52 +557,31 @@ export default function Heatmap({
 
   return (
     <View style={styles.container}>
-      <View style={styles.sectionCompact}>
-        <SectionHeader title={resolvedTitle} sub={resolvedSubtitle} />
-
-        <View style={styles.metricGridDense}>
-          <View style={[styles.metricCardDense, { backgroundColor: COLORS.accentSoft }]}>
-            <Text style={styles.metricLabelCompact}>Metric</Text>
-            <Text style={[styles.metricValueCompact, { color: COLORS.accent }]}>
-              {metric.label}
-            </Text>
-          </View>
-
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Players</Text>
-            <Text style={styles.metricValueCompact}>{String(matrix.length)}</Text>
-          </View>
-
-          <View style={styles.metricCardDense}>
-            <Text style={styles.metricLabelCompact}>Rounds</Text>
-            <Text style={styles.metricValueCompact}>{String(safeData.length)}</Text>
-          </View>
+      {showHeader ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>{resolvedTitle}</Text>
+          <Text style={styles.subtitle}>{metric.description || resolvedSubtitle}</Text>
         </View>
+      ) : null}
 
-        <Text style={styles.subtitle}>
-          {metric.description || resolvedSubtitle}
-        </Text>
+      {insight ? (
+        <ChartFocusCard
+          title={focusTitle}
+          value={focusValue}
+          helper={focusHelper}
+          story={focusStory}
+          tone="comparison"
+          accentColor={focusAccentColor}
+          compact
+        />
+      ) : null}
 
-        <View style={styles.modeRow}>
-          {resolvedAllowedModes.map((mode) => {
-            const active = selectedMode === mode;
-            return (
-              <TouchableOpacity
-                key={mode}
-                style={[styles.modeChip, active && styles.modeChipActive]}
-                onPress={() => setSelectedMode(mode)}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.modeChipText, active && styles.modeChipTextActive]}>
-                  {titleCase(mode)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.sectionCompact}>
+      <ChartStage
+        tone="comparison"
+        style={styles.gridStage}
+        plotStyle={styles.gridStagePlot}
+        header={<SectionHeader title="Grid" sub={resolvedSubtitle} />}
+      >
         <HeatmapGrid
           dataLength={safeData.length}
           matrix={matrix}
@@ -570,44 +589,80 @@ export default function Heatmap({
           selectedMode={selectedMode}
           onSelectCell={setSelectedCell}
         />
+      </ChartStage>
+
+      <View style={styles.sectionCompact}>
+        <Text style={styles.detailTitle}>Cell</Text>
+
+        <View style={styles.controlGroup}>
+          <Text style={styles.controlLabel}>Sort</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.underlineScroll}
+          >
+            <ChartUnderlineTabs
+              items={SORT_OPTIONS.map((option) => ({
+                key: option.key,
+                label: option.label,
+              }))}
+              activeKey={sortMode}
+              onChange={(nextKey) => setSortMode(nextKey as SortMode)}
+            />
+          </ScrollView>
+        </View>
+
+        <View style={styles.controlGroup}>
+          <Text style={styles.controlLabel}>Color Mode</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.underlineScroll}
+          >
+            <ChartUnderlineTabs
+              items={MODE_OPTIONS.filter((option) =>
+                resolvedAllowedModes.includes(option.key)
+              ).map((option) => ({
+                key: option.key,
+                label: option.label,
+              }))}
+              activeKey={selectedMode}
+              onChange={(nextKey) => setSelectedMode(nextKey as HeatmapMode)}
+            />
+          </ScrollView>
+        </View>
+
+        {selectedCell ? (
+          <View style={styles.selectedCellCard}>
+            <Text style={styles.detailTitle}>
+              {selectedCell.playerName} · Round {selectedCell.round}
+            </Text>
+            <Text style={styles.detailValue}>{selectedCell.text}</Text>
+            <Text style={styles.detailSub}>
+              Raw: {formatDisplayValue(selectedCell.rawValue, "raw", statKey)}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.detailSub}>
+            Tap a cell for the exact raw value and the current {selectedModeLabel.toLowerCase()} view.
+          </Text>
+        )}
       </View>
-
-      {selectedCell ? (
-        <View style={styles.sectionCompact}>
-          <Text style={styles.detailTitle}>
-            {selectedCell.playerName} · Round {selectedCell.round}
-          </Text>
-          <Text style={styles.detailValue}>{selectedCell.text}</Text>
-          <Text style={styles.detailSub}>
-            Raw: {formatDisplayValue(selectedCell.rawValue, "raw", statKey)}
-          </Text>
-        </View>
-      ) : null}
-
-      {insight ? (
-        <View style={styles.sectionCompact}>
-          <Text style={styles.detailTitle}>Heatmap Readout</Text>
-          <Text style={styles.detailSub}>
-            Best average: {insight.topAverage?.label ?? "—"} ·{" "}
-            {formatDisplayValue(insight.topAverage?.summary.average ?? 0, "raw", statKey)}
-          </Text>
-          <Text style={styles.detailSub}>
-            Highest peak: {insight.topPeak?.label ?? "—"} ·{" "}
-            {formatDisplayValue(insight.topPeak?.summary.peak ?? 0, "raw", statKey)}
-          </Text>
-          <Text style={styles.detailSub}>
-            Most stable: {insight.mostStable?.label ?? "—"} · σ{" "}
-            {(insight.mostStable?.summary.consistency ?? 0).toFixed(2)}
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: 6,
+    gap: 10,
+  },
+  header: {
+    gap: 2,
+  },
+  title: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
   },
   sectionCompact: {
     backgroundColor: COLORS.card,
@@ -616,6 +671,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: 6,
+  },
+  gridStage: {
+    marginBottom: 6,
+  },
+  gridStagePlot: {
+    padding: 0,
   },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -638,9 +699,16 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: COLORS.sub,
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 6,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  readoutTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 10,
+    marginBottom: 6,
   },
   emptyTitle: {
     color: COLORS.text,
@@ -658,19 +726,27 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metricCardDense: {
-    width: "32%",
+    minWidth: "31%",
+    flexGrow: 1,
     borderRadius: 10,
     paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingVertical: 7,
     minHeight: 52,
     justifyContent: "center",
     backgroundColor: COLORS.whiteSoft,
+  },
+  metricCardHot: {
+    backgroundColor: COLORS.accentSoft,
+  },
+  legendCardDense: {
+    minWidth: "48%",
   },
   metricLabelCompact: {
     color: COLORS.sub,
     fontSize: 10,
     lineHeight: 12,
     marginBottom: 4,
+    textTransform: "uppercase",
   },
   metricValueCompact: {
     color: COLORS.text,
@@ -678,31 +754,24 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 16,
   },
-  modeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  metricHelperCompact: {
+    color: COLORS.sub,
+    fontSize: 9,
+    lineHeight: 12,
+    marginTop: 2,
+  },
+  controlGroup: {
     gap: 6,
     marginTop: 8,
   },
-  modeChip: {
-    backgroundColor: COLORS.whiteSoft,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  underlineScroll: {
+    paddingRight: 8,
   },
-  modeChipActive: {
-    backgroundColor: COLORS.accentSoft,
-    borderColor: COLORS.accent,
-  },
-  modeChipText: {
+  controlLabel: {
     color: COLORS.sub,
     fontSize: 10,
-    fontWeight: "700",
-  },
-  modeChipTextActive: {
-    color: COLORS.accent,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
   detailTitle: {
     color: COLORS.text,
@@ -720,5 +789,14 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 11,
     lineHeight: 15,
+  },
+  selectedCellCard: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    padding: 10,
+    gap: 4,
   },
 });

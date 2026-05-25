@@ -1,152 +1,99 @@
-import React, { useMemo } from "react";
-import RelationshipGraph from "@/components/charts/RelationshipGraph";
+import React from "react";
+import { StyleSheet, View } from "react-native";
 
-type Player = {
-  id: string;
-  name?: string;
-  color?: string;
+import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import Text from "@/components/ui/Text";
+
+const COLORS = {
+  text: "#E2E8F0",
+  sub: "#94A3B8",
+  border: "rgba(255,255,255,0.08)",
+  whiteSoft: "rgba(255,255,255,0.06)",
 };
-
-type SnapshotValue =
-  | number
-  | string
-  | boolean
-  | null
-  | undefined
-  | Record<string, unknown>;
-
-type SnapshotPoint = {
-  round?: number;
-  gameIndex?: number;
-  label?: string;
-  snapshot?: Record<string, SnapshotValue>;
-};
-
-type Relationships = Record<string, Record<string, number>>;
 
 type Props = {
-  data?: SnapshotPoint[];
-  players?: Player[];
-  relationships?: Relationships;
-  title?: string;
-  subtitle?: string;
+  hubName: string;
+  netGiverName: string;
+  netReceiverName: string;
+  topLinkLabel: string;
+  topLinkValue: string;
+  story: string;
 };
 
-function toNumber(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getSnapshotEntry(
-  point: SnapshotPoint | undefined,
-  playerId: string
-): Record<string, unknown> | undefined {
-  const snapshot = point?.snapshot;
-  if (!snapshot || typeof snapshot !== "object") return undefined;
-
-  const direct = snapshot[playerId];
-  if (direct && typeof direct === "object" && !Array.isArray(direct)) {
-    return direct as Record<string, unknown>;
-  }
-
-  const nestedPlayers = (snapshot as Record<string, unknown>).players;
-  if (
-    nestedPlayers &&
-    typeof nestedPlayers === "object" &&
-    !Array.isArray(nestedPlayers)
-  ) {
-    const nested = (nestedPlayers as Record<string, unknown>)[playerId];
-    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-      return nested as Record<string, unknown>;
-    }
-  }
-
-  return undefined;
-}
-
-function getAssistOutMap(entry?: Record<string, unknown>): Record<string, number> {
-  const candidates = [
-    entry?.assistPrestigeByTarget,
-    entry?.assistPrestigeByRecipient,
-    entry?.assistByTarget,
-    entry?.assistCountByTarget,
-    entry?.assistRecipients,
-    entry?.assistCountByRecipient,
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
-      const result: Record<string, number> = {};
-      Object.entries(candidate).forEach(([key, value]) => {
-        result[key] = toNumber(value);
-      });
-      return result;
-    }
-  }
-
-  return {};
-}
-
-function buildRelationshipsFromSnapshots(
-  data: SnapshotPoint[],
-  players: Player[]
-): Relationships {
-  const relationships: Relationships = {};
-
-  for (const player of players) {
-    relationships[player.id] = {};
-  }
-
-  for (const point of data) {
-    for (const player of players) {
-      const entry = getSnapshotEntry(point, player.id);
-      if (!entry) continue;
-
-      const outMap = getAssistOutMap(entry);
-
-      for (const [targetId, rawValue] of Object.entries(outMap)) {
-        if (!targetId || targetId === player.id) continue;
-
-        const value = toNumber(rawValue);
-        if (value <= 0) continue;
-
-        if (!relationships[player.id]) {
-          relationships[player.id] = {};
-        }
-
-        relationships[player.id][targetId] =
-          toNumber(relationships[player.id][targetId]) + value;
-      }
-    }
-  }
-
-  return relationships;
-}
-
-export default function AssistNetworkOverview({
-  data = [],
-  players = [],
-  relationships,
-  title = "Assist Network",
-  subtitle = "Toggleable network view on the unified relationship graph.",
+export default function AssistNetworkDetailsCard({
+  hubName,
+  netGiverName,
+  netReceiverName,
+  topLinkLabel,
+  topLinkValue,
+  story,
 }: Props) {
-  const safePlayers = Array.isArray(players) ? players : [];
-
-  const safeRelationships = useMemo(() => {
-    if (relationships && typeof relationships === "object") {
-      return relationships;
-    }
-    return buildRelationshipsFromSnapshots(Array.isArray(data) ? data : [], safePlayers);
-  }, [relationships, data, safePlayers]);
-
   return (
-    <RelationshipGraph
-      players={safePlayers as any}
-      relationships={safeRelationships}
-      initialView="network"
-      initialTopEdgesPerNode={3}
-      title={title}
-      subtitle={subtitle}
-    />
+    <View style={styles.wrap}>
+      <ChartFocusCard
+        title={hubName}
+        value="Assist Hub"
+        helper="Current exact-table hub"
+        story={story}
+        tone="comparison"
+      />
+
+      <View style={styles.grid}>
+        <View style={styles.card}>
+          <Text style={styles.label}>Net Giver</Text>
+          <Text style={styles.value}>{netGiverName}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Net Receiver</Text>
+          <Text style={styles.value}>{netReceiverName}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Strongest Link</Text>
+          <Text style={styles.value}>{topLinkLabel}</Text>
+          <Text style={styles.helper}>
+            {`${topLinkValue} across the exact filtered table`}
+          </Text>
+        </View>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  wrap: {
+    gap: 8,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  card: {
+    minWidth: "31%",
+    flexGrow: 1,
+    borderRadius: 12,
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 10,
+    gap: 4,
+  },
+  label: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  value: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  helper: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+});

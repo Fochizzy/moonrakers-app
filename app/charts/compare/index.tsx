@@ -2,19 +2,22 @@ import React, { useEffect, useMemo, useReducer, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
-  SafeAreaView,
+  Pressable,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
+import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
-import StarryNight from "@/components/ui/StarryNight";
 import { useStore } from "@/store/useStore";
 
+import ChartInsightStrip from "@/components/charts/ChartInsightStrip";
+import ChartMetricChip from "@/components/charts/ChartMetricChip";
+import ChartSurface from "@/components/charts/ChartSurface";
 import CompareSelectionCard from "@/components/charts/compare/CompareSelectionCard";
 import CompareTelemetryRow from "@/components/charts/compare/CompareTelemetryRow";
 import CompareMatrixCard from "@/components/charts/compare/CompareMatrixCard";
@@ -25,6 +28,7 @@ import MetricInfoModal from "@/components/charts/compare/MetricInfoModal";
 import CompareFocusBar from "@/components/charts/compare/CompareFocusBar";
 
 import { METRICS, METRIC_GROUPS } from "@/utils/compareMetrics";
+import { APP_ROUTES } from "@/utils/appRoutes";
 import {
   buildConditionalAnalysis,
   conditionalReducer,
@@ -48,6 +52,7 @@ import {
   SortDirection,
   StoredGame,
 } from "@/utils/compareTypes";
+import { COLORS } from "@/utils/colors";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -55,26 +60,20 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 const MAX_COMPARE_PLAYERS = 5;
 
-const COLORS = {
-  bg: "#081120",
-  card: "rgba(12,18,38,0.92)",
-  cardAlt: "rgba(16,24,48,0.95)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  muted: "#64748B",
-  accent: "#A855F7",
-  accentSoft: "rgba(168,85,247,0.18)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-};
 
 type FlexibleStore = CompareStoreShape & Record<string, unknown>;
+
+type AuthSessionLike = {
+  user?: {
+    id?: string | null;
+  } | null;
+} | null;
+
+type AuthProfileLike = {
+  id?: string | null;
+  player_name?: string | null;
+  display_name?: string | null;
+} | null;
 
 type FocusGroup =
   | "outcomes"
@@ -173,6 +172,137 @@ function getFocusAliases(group: FocusGroup): string[] {
   }
 }
 
+function normalizeComparePlayerId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeComparePlayerName(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function resolveConditionalQuickSelectAuthPlayerId(args: {
+  players: Player[];
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+  authPlayerName?: string | null;
+  authDisplayName?: string | null;
+}) {
+  const {
+    players,
+    authProfileId,
+    authSessionUserId,
+    authPlayerName,
+    authDisplayName,
+  } = args;
+
+  for (const candidateId of [authProfileId, authSessionUserId]) {
+    const normalizedCandidateId = normalizeComparePlayerId(candidateId);
+    if (!normalizedCandidateId) continue;
+
+    const matchedPlayer = players.find(
+      (player) => normalizeComparePlayerId(player?.id) === normalizedCandidateId
+    );
+    if (matchedPlayer) {
+      return normalizeComparePlayerId(matchedPlayer.id);
+    }
+  }
+
+  const normalizedCandidateNames = [authPlayerName, authDisplayName]
+    .map((value) => normalizeComparePlayerName(value).toLowerCase())
+    .filter(Boolean);
+
+  for (const candidateName of normalizedCandidateNames) {
+    const matchedPlayer = players.find(
+      (player) => normalizeComparePlayerName(player?.name).toLowerCase() === candidateName
+    );
+    if (matchedPlayer) {
+      return normalizeComparePlayerId(matchedPlayer.id);
+    }
+  }
+
+  return null;
+}
+
+function buildConditionalQuickSelectPlayerIds(args: {
+  players: Player[];
+  games: StoredGame[];
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+  authPlayerName?: string | null;
+  authDisplayName?: string | null;
+}) {
+  const {
+    players,
+    games,
+    authProfileId,
+    authSessionUserId,
+    authPlayerName,
+    authDisplayName,
+  } = args;
+
+  const validPlayers = players
+    .map((player) => ({
+      id: normalizeComparePlayerId(player?.id),
+      name: normalizeComparePlayerName(player?.name),
+    }))
+    .filter((player) => player.id && player.name);
+
+  const validPlayerIds = new Set(validPlayers.map((player) => player.id));
+  const appearanceCounts = new Map(validPlayers.map((player) => [player.id, 0]));
+
+  for (const game of games) {
+    const seenGamePlayerIds = new Set<string>();
+    for (const gamePlayer of Array.isArray(game?.players) ? game.players : []) {
+      const normalizedId = normalizeComparePlayerId(gamePlayer?.id);
+      if (!normalizedId || !validPlayerIds.has(normalizedId) || seenGamePlayerIds.has(normalizedId)) {
+        continue;
+      }
+      seenGamePlayerIds.add(normalizedId);
+      appearanceCounts.set(normalizedId, (appearanceCounts.get(normalizedId) ?? 0) + 1);
+    }
+  }
+
+  const loggedInPlayerId = resolveConditionalQuickSelectAuthPlayerId({
+    players,
+    authProfileId,
+    authSessionUserId,
+    authPlayerName,
+    authDisplayName,
+  });
+
+  const rankedPlayerIds = [...validPlayers]
+    .sort((left, right) => {
+      const countDelta =
+        (appearanceCounts.get(right.id) ?? 0) - (appearanceCounts.get(left.id) ?? 0);
+      if (countDelta !== 0) {
+        return countDelta;
+      }
+      return left.name.localeCompare(right.name);
+    })
+    .map((player) => player.id);
+
+  const quickSelectIds: string[] = [];
+
+  if (loggedInPlayerId) {
+    quickSelectIds.push(loggedInPlayerId);
+  }
+
+  for (const playerId of rankedPlayerIds) {
+    if (quickSelectIds.includes(playerId)) {
+      continue;
+    }
+    if ((appearanceCounts.get(playerId) ?? 0) <= 0) {
+      continue;
+    }
+    quickSelectIds.push(playerId);
+    if (quickSelectIds.length >= (loggedInPlayerId ? 6 : 5)) {
+      break;
+    }
+  }
+
+  return quickSelectIds;
+}
+
 export default function IndexScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string | string[]; ids?: string | string[] }>();
@@ -184,9 +314,11 @@ export default function IndexScreen() {
 
   const initialIds = (
     typeof params.ids === "string"
-      ? params.ids.split(",").filter(Boolean)
+      ? params.ids.split(",").map((value) => value.trim()).filter(Boolean)
       : Array.isArray(params.ids)
-        ? params.ids.flatMap((value) => value.split(",")).filter(Boolean)
+        ? params.ids
+            .flatMap((value) => value.split(",").map((part) => part.trim()))
+            .filter(Boolean)
         : []
   ).slice(0, MAX_COMPARE_PLAYERS);
 
@@ -213,6 +345,8 @@ export default function IndexScreen() {
   });
   const [selectedMetricInfo, setSelectedMetricInfo] = useState<MetricDescriptor | null>(null);
   const [activeFocusGroup, setActiveFocusGroup] = useState<FocusGroup>("outcomes");
+  const [compareSetupCollapsed, setCompareSetupCollapsed] = useState(false);
+  const [hasRunCohesionAnalyze, setHasRunCohesionAnalyze] = useState(false);
 
   const [conditionalState, dispatchConditional] = useReducer(conditionalReducer, {
     ...initialConditionalState,
@@ -220,10 +354,31 @@ export default function IndexScreen() {
   });
 
   const store = useStore() as FlexibleStore;
+  const authSession = store.authSession as AuthSessionLike;
+  const authProfile = store.authProfile as AuthProfileLike;
 
   const players: Player[] = Array.isArray(store.players) ? store.players : [];
   const groups: Group[] = Array.isArray(store.groups) ? store.groups : [];
   const games: StoredGame[] = useMemo(() => collectGamesFromStore(store), [store]);
+  const conditionalQuickSelectPlayerIds = useMemo(
+    () =>
+      buildConditionalQuickSelectPlayerIds({
+        players,
+        games,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+        authPlayerName: authProfile?.player_name,
+        authDisplayName: authProfile?.display_name,
+      }),
+    [
+      players,
+      games,
+      authProfile?.display_name,
+      authProfile?.id,
+      authProfile?.player_name,
+      authSession?.user?.id,
+    ]
+  );
 
   const playerMap = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
@@ -281,9 +436,20 @@ export default function IndexScreen() {
 
   const globalTurnOrderInsight = useMemo(() => buildGlobalTurnOrderInsight(games), [games]);
 
+  const conditionalSelectionIds = useMemo(
+    () => Array.from(new Set([...conditionalState.mustIncludeIds, ...conditionalState.mayIncludeIds])),
+    [conditionalState.mayIncludeIds, conditionalState.mustIncludeIds]
+  );
+  const hasConditionalSelection =
+    Boolean(conditionalState.anchorId) && conditionalSelectionIds.length > 0;
+
   const conditionalAnalysis = useMemo(
-    () =>
-      buildConditionalAnalysis({
+    () => {
+      if (!conditionalState.hasRunCompare || !hasConditionalSelection) {
+        return null;
+      }
+
+      return buildConditionalAnalysis({
         subjectMode: conditionalState.subjectMode,
         anchorId: conditionalState.anchorId,
         mustIncludeIds: conditionalState.mustIncludeIds,
@@ -292,13 +458,16 @@ export default function IndexScreen() {
         playerMap,
         groupMap,
         games,
-      }),
+      });
+    },
     [
+      conditionalState.hasRunCompare,
       conditionalState.subjectMode,
       conditionalState.anchorId,
       conditionalState.mustIncludeIds,
       conditionalState.mayIncludeIds,
       conditionalState.viewMode,
+      hasConditionalSelection,
       playerMap,
       groupMap,
       games,
@@ -331,8 +500,16 @@ export default function IndexScreen() {
   const layout = useMemo(() => createMatrixLayout(density), [density]);
 
   const currentSelectionIds = mode === "players" ? selectedPlayerIds : selectedGroupIds;
+  const currentSelectionNames = useMemo(() => {
+    return currentSelectionIds
+      .map((id) =>
+        mode === "players" ? playerMap.get(id)?.name ?? null : groupMap.get(id)?.name ?? null
+      )
+      .filter((value): value is string => Boolean(value));
+  }, [currentSelectionIds, groupMap, mode, playerMap]);
   const hasSelection = currentSelectionIds.length > 0;
-  const hasAnalyzed = hasSelection && rows.length > 0;
+  const hasAnalyzed = hasRunCohesionAnalyze && hasSelection && rows.length > 0;
+  const showCompareSetupSummary = compareSetupCollapsed && hasAnalyzed;
 
   useEffect(() => {
     LayoutAnimation.configureNext({
@@ -355,6 +532,8 @@ export default function IndexScreen() {
   ]);
 
   function setModeAndSync(nextMode: CompareMode) {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     setMode(nextMode);
     dispatchConditional({ type: "set-subject-mode", mode: nextMode === "groups" ? "groups" : "players" });
 
@@ -366,6 +545,8 @@ export default function IndexScreen() {
   }
 
   function togglePlayer(id: string): void {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     setSelectedPlayerIds((prev) => {
       if (prev.includes(id)) return prev.filter((value) => value !== id);
       if (prev.length >= MAX_COMPARE_PLAYERS) return prev;
@@ -374,6 +555,8 @@ export default function IndexScreen() {
   }
 
   function toggleGroup(id: string): void {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     setSelectedGroupIds((prev) => {
       if (prev.includes(id)) return prev.filter((value) => value !== id);
       if (prev.length >= MAX_COMPARE_PLAYERS) return prev;
@@ -382,6 +565,8 @@ export default function IndexScreen() {
   }
 
   function clearSelection(): void {
+    setCompareSetupCollapsed(false);
+    setHasRunCohesionAnalyze(false);
     if (mode === "players") {
       setSelectedPlayerIds([]);
       return;
@@ -411,12 +596,26 @@ export default function IndexScreen() {
       return;
     }
 
-    const ids = mode === "players" ? selectedPlayerIds.slice(0, 5) : [];
+    const ids =
+      mode === "players" ? selectedPlayerIds.slice(0, MAX_COMPARE_PLAYERS) : selectedGroupIds.slice(0, MAX_COMPARE_PLAYERS);
     dispatchConditional({ type: "apply-preset", ids, anchorId: ids[0] ?? null });
+  }
+
+  function handleRunConditionalCompare() {
+    if (!hasConditionalSelection) return;
+    dispatchConditional({ type: "run-compare" });
+  }
+
+  function handleAnalyzeSelection() {
+    if (!hasSelection || rows.length === 0) return;
+    setHasRunCohesionAnalyze(true);
+    setCompareSetupCollapsed(true);
   }
 
   const selectionLabel =
     rows.length === 1 ? rows[0]?.label ?? "Selection" : `${rows.length} ${mode}`;
+  const selectionSummaryLabel =
+    currentSelectionNames.length > 0 ? currentSelectionNames.join(" • ") : selectionLabel;
 
   const liveSentenceSubtitle =
     mode === "players"
@@ -426,22 +625,30 @@ export default function IndexScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.backgroundLayer}>
-        <StarryNight />
+        <ScreenBackground preset="analytics" />
         <View style={styles.backgroundDim} />
       </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.navRow}>
-          <TouchableOpacity style={styles.navPill} onPress={() => router.replace("/")} activeOpacity={0.9}>
-            <Text style={styles.navPillText}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navPill} onPress={() => router.push("/stats")} activeOpacity={0.9}>
+          <Pressable
+            style={({ pressed }) => [styles.navPill, pressed && { opacity: 0.9 }]}
+            onPress={() => router.push(APP_ROUTES.home)}
+          >
+            <Text style={styles.navPillText}>Back to Command</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.navPill, pressed && { opacity: 0.9 }]}
+            onPress={() => router.push("/stats")}
+          >
             <Text style={styles.navPillText}>Stats</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         <View style={styles.tabGrid}>
@@ -452,17 +659,16 @@ export default function IndexScreen() {
             ].map((tab) => {
               const active = tab.key === activeTab;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={tab.key}
-                  style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
+                  style={({ pressed }) => [styles.underlineMainTab, styles.underlineMainTabTwoCol, pressed && { opacity: 0.9 }]}
                   onPress={() => setActiveTab(tab.key)}
-                  activeOpacity={0.9}
                 >
                   <Text style={[styles.underlineMainTabText, active && styles.underlineMainTabTextActive]}>
                     {tab.label}
                   </Text>
                   <View style={[styles.underlineMainTabLine, active && styles.underlineMainTabLineActive]} />
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -485,17 +691,16 @@ export default function IndexScreen() {
               const active = mode === value;
               const label = value === "players" ? "Players" : "Group";
               return (
-                <TouchableOpacity
+                <Pressable
                   key={value}
-                  style={styles.underlineTabButton}
+                  style={({ pressed }) => [styles.underlineTabButton, pressed && { opacity: 0.9 }]}
                   onPress={() => setModeAndSync(value)}
-                  activeOpacity={0.9}
                 >
                   <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
                     {label}
                   </Text>
                   <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -515,17 +720,16 @@ export default function IndexScreen() {
               description=""
               players={players}
               groups={groups}
+              quickSelectIds={mode === "players" ? conditionalQuickSelectPlayerIds : []}
               subjectMode={mode === "groups" ? "groups" : "players"}
-              conditionalState={conditionalState as any}
-              conditionalAnalysis={conditionalAnalysis as any}
-              sortedConditionalPlayers={sortedConditionalPlayers as any}
+              conditionalState={conditionalState}
+              conditionalAnalysis={conditionalAnalysis}
+              sortedConditionalPlayers={sortedConditionalPlayers}
               onToggleEntity={(id) => dispatchConditional({ type: "toggle-entity", id })}
               onRemoveEntity={(id) => dispatchConditional({ type: "remove-entity", id })}
               onSetAnchor={(id) => dispatchConditional({ type: "set-anchor", id })}
               onClear={() => dispatchConditional({ type: "clear" })}
-              onApplyCurrentCompare={() => applyPreset("current_compare")}
-              onApplyTopSynergy={() => {}}
-              onApplyTopWins={() => {}}
+              onRunCompare={handleRunConditionalCompare}
               onSetSelectionMode={(nextMode) =>
                 dispatchConditional({ type: "set-selection-mode", mode: nextMode })
               }
@@ -538,53 +742,82 @@ export default function IndexScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.sectionCompact}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Cohesion Selection</Text>
-                <Text style={styles.sectionSub}>Pick the players or groups to compare</Text>
-              </View>
+            {showCompareSetupSummary ? (
+              <View style={styles.insightCardCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <View style={styles.summaryHeaderCopy}>
+                    <Text style={styles.sectionTitle}>Analyzed lineup</Text>
+                    <Text style={styles.summarySubtext}>{selectionSummaryLabel}</Text>
+                  </View>
 
-              <CompareSelectionCard
-                title="Cohesion Affect"
-                subtitle=""
-                mode={mode}
-                density={density}
-                players={players}
-                groups={groups}
-                games={games}
-                playerMap={playerMap}
-                selectedPlayerIds={selectedPlayerIds}
-                selectedGroupIds={selectedGroupIds}
-                onTogglePlayer={togglePlayer}
-                onToggleGroup={toggleGroup}
-                onSetDensity={setDensity}
-                onClear={clearSelection}
-                onAnalyze={() => {}}
-              />
-            </View>
+                  <Pressable
+                    style={({ pressed }) => [styles.summaryActionButton, pressed && { opacity: 0.9 }]}
+                    onPress={() => setCompareSetupCollapsed(false)}
+                  >
+                    <Text style={styles.summaryActionText}>Edit lineup</Text>
+                  </Pressable>
+                </View>
+
+                <CompareSummaryStrip rows={rows} />
+              </View>
+            ) : (
+              <View style={styles.sectionCompact}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Cohesion Selection</Text>
+                  <Text style={styles.sectionSub}>Pick the players or groups to compare</Text>
+                </View>
+
+                <CompareSelectionCard
+                  title="Cohesion Affect"
+                  subtitle=""
+                  mode={mode}
+                  density={density}
+                  players={players}
+                  groups={groups}
+                  games={games}
+                  playerMap={playerMap}
+                  selectedPlayerIds={selectedPlayerIds}
+                  selectedGroupIds={selectedGroupIds}
+                  onTogglePlayer={togglePlayer}
+                  onToggleGroup={toggleGroup}
+                  onSetDensity={setDensity}
+                  onClear={clearSelection}
+                  onAnalyze={handleAnalyzeSelection}
+                />
+              </View>
+            )}
 
             {hasAnalyzed ? (
               <>
-                <View style={styles.sectionCompact}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitle}>Cohesion Summary</Text>
-                    <Text style={styles.sectionSub}>{selectionLabel}</Text>
+                {!showCompareSetupSummary ? (
+                  <View style={styles.sectionCompact}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionTitle}>Cohesion Summary</Text>
+                      <Text style={styles.sectionSub}>{selectionLabel}</Text>
+                    </View>
+                    <CompareSummaryStrip rows={rows} />
                   </View>
-                  <CompareSummaryStrip rows={rows} />
-                </View>
+                ) : null}
 
-                <View style={styles.insightCardCompact}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitle}>Live Summary</Text>
-                    <Text style={styles.insightChip}>{mode.toUpperCase()}</Text>
+                <ChartSurface
+                  eyebrow="Live Summary"
+                  title="Cohesion affect"
+                  subtitle={`Selection: ${selectionLabel}`}
+                  style={styles.chartSurfaceCard}
+                >
+                  <View style={styles.surfaceChipRow}>
+                    <ChartMetricChip label={mode.toUpperCase()} />
+                    <ChartMetricChip label={`Rows ${rows.length}`} />
+                    <ChartMetricChip label={`Focus ${activeFocusGroup}`} />
                   </View>
+                  <ChartInsightStrip label="Analyzed lineup" value={selectionLabel} />
                   <CompareInsightBar
                     rows={rows}
                     activeFocusGroup={activeFocusGroup}
                     modeLabel={mode}
                     selectionLabel={selectionLabel}
                   />
-                </View>
+                </ChartSurface>
 
                 <View style={styles.sectionCompact}>
                   <View style={styles.sectionHeaderRow}>
@@ -638,7 +871,9 @@ export default function IndexScreen() {
             ) : (
               <View style={styles.sectionCompact}>
                 <Text style={styles.emptyText}>
-                  Select at least one {mode === "players" ? "player" : "group"} to populate cohesion affect.
+                  {hasSelection
+                    ? `Tap Analyze to view cohesion affect for this ${mode === "players" ? "lineup" : "group set"}.`
+                    : `Select at least one ${mode === "players" ? "player" : "group"} to populate cohesion affect.`}
                 </Text>
               </View>
             )}
@@ -766,6 +1001,10 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 4,
   },
+  summaryHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
   sectionTitle: {
     color: COLORS.text,
     fontSize: 13,
@@ -778,6 +1017,10 @@ const styles = StyleSheet.create({
     textAlign: "right",
     flexShrink: 1,
   },
+  summarySubtext: {
+    color: COLORS.sub,
+    fontSize: 10,
+  },
   emptyText: {
     color: COLORS.sub,
     fontSize: 11,
@@ -786,6 +1029,27 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 10,
     marginTop: 4,
+  },
+  chartSurfaceCard: {
+    marginBottom: 4,
+  },
+  surfaceChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  summaryActionButton: {
+    backgroundColor: COLORS.accentSoft,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  summaryActionText: {
+    color: COLORS.accent,
+    fontSize: 10,
+    fontWeight: "800",
   },
 
   underlineSelectorRow: {
@@ -851,15 +1115,4 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
 
-  insightChip: {
-    backgroundColor: COLORS.blueSoft,
-    color: COLORS.blue,
-    borderRadius: 999,
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    fontSize: 9,
-    fontWeight: "800",
-  },
 });
-

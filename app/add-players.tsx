@@ -1,40 +1,60 @@
-
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
-import { useStore } from "@/store/useStore";
-import StarryNight from "@/components/ui/StarryNight";
-import Text from "@/components/ui/Text";
+import ProfileAppearancePicker from "@/components/player/ProfileAppearancePicker";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+import ActionButton from "@/components/ui/ActionButton";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
+import Text from "@/components/ui/Text";
+import { buildSavedAuthProfile } from "@/lib/auth/registerFlow";
+import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
+import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
+import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
+import { deleteOwnProfile } from "@/lib/cloud/deleteOwnProfile";
+import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
+import { createSharedGroup, deleteSharedGroup } from "@/lib/cloud/sharedGroups";
+import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
+import { useStore } from "@/store/useStore";
+import { APP_ROUTES } from "@/utils/appRoutes";
+import { type CardColor } from "@/utils/cardAssignment";
 import {
-  getPlayerAccentColor,
-  getPlayerTintColor,
-} from "@/utils/turnTheme";
+  filterGroupsByQuery,
+  formatGroupUsageHint,
+  rankGroupsWithUsage,
+  type GroupSortMode,
+} from "@/utils/groupUsageRanking";
 import {
-  getCardsByColor,
-  getCardByArtIndex,
-  type CardColor,
-} from "@/utils/playerCardCartalog";
+  canonicalizeSelectablePlayers,
+  isLikelyRegisteredProfileId,
+  mergeRegisteredProfilesIntoPlayers,
+} from "@/utils/registeredProfilePlayer";
+import {
+  buildProfileAppearanceSavePayload,
+  normalizePreferredProfileColor,
+  resolveAssignedCardArtIndexForProfile,
+} from "@/utils/profileAppearance";
+import { getPlayerAccentColor } from "@/utils/turnTheme";
 
-type UiColor = "Green" | "Purple" | "Blue" | "Orange" | "Yellow";
 type TabKey = "players" | "groups";
 
 type PlayerLike = {
   id: string;
   name: string;
   color?: string;
+  displayName?: string;
+  hasSavedGames?: boolean;
   assignedCardArtIndex?: number | null;
-  initials?: string;
 };
 
 type GroupLike = {
@@ -42,647 +62,922 @@ type GroupLike = {
   name: string;
   playerIds: string[];
   createdAt?: number;
+  inferredUseCount?: number;
+  inferredRecentAt?: number;
 };
 
-const UI_COLORS: UiColor[] = ["Green", "Purple", "Blue", "Orange", "Yellow"];
+type GameLike = {
+  groupId?: string;
+  createdAt?: number;
+  players?: Array<
+    | string
+    | {
+        id?: string;
+        playerId?: string;
+      }
+  >;
+  totals?: Record<string, unknown>;
+};
 
-function toCatalogColor(color?: string): CardColor {
-  switch (String(color ?? "").trim().toLowerCase()) {
-    case "green":
-      return "green";
-    case "purple":
-      return "purple";
-    case "orange":
-      return "orange";
-    case "yellow":
-      return "yellow";
-    case "blue":
-    default:
-      return "blue";
+type AddPlayersRouteParams = {
+  profileSetup?: string | string[];
+  tab?: string | string[];
+};
+
+const HISTORY_REPLACEMENT_NAME = "Mx. Doe";
+
+function getRouteParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeTabParam(value?: string | string[]): TabKey {
+  return String(getRouteParam(value) ?? "").trim().toLowerCase() === "groups"
+    ? "groups"
+    : "players";
+}
+
+function isTruthyRouteParam(value?: string | string[]) {
+  const normalized = String(getRouteParam(value) ?? "")
+    .trim()
+    .toLowerCase();
+
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function asArray<T>(value: T[] | Record<string, T> | null | undefined): T[] {
+  if (Array.isArray(value)) {
+    return value;
   }
-}
 
-function normalizeColor(color?: string): UiColor {
-  switch (String(color ?? "").trim().toLowerCase()) {
-    case "green":
-      return "Green";
-    case "purple":
-      return "Purple";
-    case "orange":
-      return "Orange";
-    case "yellow":
-      return "Yellow";
-    case "blue":
-    default:
-      return "Blue";
+  if (value && typeof value === "object") {
+    return Object.values(value);
   }
+
+  return [];
 }
 
-function uniqueId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function normalizeId(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function getInitials(name: string) {
-  const parts = String(name).trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+function normalizeGame(raw: any): GameLike | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const createdAt =
+    typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
+      ? raw.createdAt
+      : undefined;
+
+  return {
+    groupId: normalizeId(raw.groupId) || undefined,
+    createdAt,
+    players: Array.isArray(raw.players)
+      ? raw.players.map((player: any) =>
+          typeof player === "string"
+            ? normalizeId(player)
+            : {
+                id: normalizeId(player?.id) || undefined,
+                playerId: normalizeId(player?.playerId) || undefined,
+              }
+        )
+      : undefined,
+    totals:
+      raw.totals && typeof raw.totals === "object"
+        ? (raw.totals as Record<string, unknown>)
+        : undefined,
+  };
+}
+
+function MetricPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <View style={styles.metricPill}>
+      <Text variant="metricLabel">{label}</Text>
+      <Text variant="metricValue">{value}</Text>
+    </View>
+  );
 }
 
 export default function AddPlayersScreen() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams<AddPlayersRouteParams>();
 
-  const players = (useStore((s: any) => s.players ?? []) as PlayerLike[]).slice();
-  const groups = (useStore((s: any) => s.groups ?? []) as GroupLike[]).slice();
+  const players = useStore((state: any) => state.players ?? []) as PlayerLike[];
+  const groups = useStore((state: any) => state.groups ?? []) as GroupLike[];
+  const rawGames = useStore((state: any) => state.games ?? []);
+  const authSession = useStore((state: any) => state.authSession);
+  const authProfile = useStore((state: any) => state.authProfile);
+  const setAuthProfile = useStore((state: any) => state.setAuthProfile);
+  const hydrateCloudSnapshot = useStore((state: any) => state.hydrateCloudSnapshot);
+  const upsertRegisteredProfile = useStore(
+    (state: any) => state.upsertRegisteredProfile,
+  );
+  const resetStore = useStore((state: any) => state.resetStore);
 
-  const addPlayer = useStore((s: any) => s.addPlayer);
-  const updatePlayer = useStore((s: any) => s.updatePlayer);
-  const assignPlayerCard = useStore((s: any) => s.assignPlayerCard);
-  const deletePlayer = useStore((s: any) => s.deletePlayer ?? s.removePlayer);
+  const requestedTab = useMemo(
+    () => normalizeTabParam(routeParams.tab),
+    [routeParams.tab],
+  );
+  const profileSetupHandoff = useMemo(
+    () => isTruthyRouteParam(routeParams.profileSetup),
+    [routeParams.profileSetup],
+  );
 
-  const addGroup = useStore((s: any) => s.addGroup);
-  const deleteGroup = useStore((s: any) => s.deleteGroup ?? s.removeGroup);
-
-  const [tab, setTab] = useState<TabKey>("players");
-
-  const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState<UiColor>("Blue");
-  const [newCardArtIndex, setNewCardArtIndex] = useState<number | null>(null);
-
-  const [editingPlayer, setEditingPlayer] = useState<PlayerLike | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editColor, setEditColor] = useState<UiColor>("Blue");
-  const [editCardArtIndex, setEditCardArtIndex] = useState<number | null>(null);
-  const [needsNewCard, setNeedsNewCard] = useState(false);
-
+  const [tab, setTab] = useState<TabKey>(requestedTab);
+  const [showProfileSetupCallout, setShowProfileSetupCallout] = useState(
+    profileSetupHandoff,
+  );
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [deletingProfile, setDeletingProfile] = useState(false);
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [groupName, setGroupName] = useState("");
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [groupSortMode, setGroupSortMode] = useState<GroupSortMode>("most-played");
   const [selectedGroupPlayerIds, setSelectedGroupPlayerIds] = useState<string[]>([]);
 
+  const currentFavoriteColor = useMemo(
+    () => normalizePreferredProfileColor(authProfile?.favorite_color),
+    [authProfile?.favorite_color],
+  );
+
+  const currentAssignedCardArtIndex = useMemo(
+    () =>
+      resolveAssignedCardArtIndexForProfile({
+        favoriteColor: currentFavoriteColor,
+        assignedCardArtIndex: authProfile?.assigned_card_art_index ?? null,
+      }),
+    [authProfile?.assigned_card_art_index, currentFavoriteColor],
+  );
+
+  const [favoriteColor, setFavoriteColor] = useState<CardColor | null>(currentFavoriteColor);
+  const [assignedCardArtIndex, setAssignedCardArtIndex] = useState<number | null>(
+    currentAssignedCardArtIndex,
+  );
+
+  useEffect(() => {
+    setFavoriteColor(currentFavoriteColor);
+    setAssignedCardArtIndex(currentAssignedCardArtIndex);
+  }, [currentAssignedCardArtIndex, currentFavoriteColor]);
+
+  useEffect(() => {
+    setShowProfileSetupCallout(profileSetupHandoff);
+    if (profileSetupHandoff) {
+      setTab("players");
+      return;
+    }
+
+    setTab(requestedTab);
+  }, [profileSetupHandoff, requestedTab]);
+
   const sortedPlayers = useMemo(
-    () => [...players].sort((a, b) => a.name.localeCompare(b.name)),
-    [players]
+    () => [...players].sort((left, right) => left.name.localeCompare(right.name)),
+    [players],
   );
 
-  const sortedGroups = useMemo(
-    () => [...groups].sort((a, b) => a.name.localeCompare(b.name)),
-    [groups]
+  const games = useMemo(
+    () =>
+      asArray(rawGames)
+        .map((game) => normalizeGame(game))
+        .filter((game: GameLike | null): game is GameLike => Boolean(game)),
+    [rawGames],
   );
 
-  const newColorCards = useMemo(
-    () => getCardsByColor(toCatalogColor(newColor)),
-    [newColor]
+  const playersById = useMemo(
+    () => new Map(sortedPlayers.map((player) => [player.id, player] as const)),
+    [sortedPlayers],
   );
 
-  const editColorCards = useMemo(
-    () => getCardsByColor(toCatalogColor(editColor)),
-    [editColor]
+  const selectableDirectory = useMemo(
+    () => canonicalizeSelectablePlayers(players, groups),
+    [groups, players],
   );
 
-  const openEditPlayer = (player: PlayerLike) => {
-    setEditingPlayer(player);
-    setEditName(player.name ?? "");
-    setEditColor(normalizeColor(player.color));
-    setEditCardArtIndex(
-      typeof player.assignedCardArtIndex === "number" ? player.assignedCardArtIndex : null
+  const playerIdAliases = selectableDirectory.aliases;
+
+  const rankedGroups = useMemo(
+    () =>
+      rankGroupsWithUsage(groups, games, {
+        normalizePlayerId: (playerId) => normalizeId(playerIdAliases[playerId] ?? playerId),
+      }),
+    [games, groups, playerIdAliases],
+  );
+
+  const visibleGroups = useMemo(() => {
+    const filteredGroups = filterGroupsByQuery(
+      rankedGroups,
+      groupSearchQuery,
+      playersById,
     );
-    setNeedsNewCard(false);
-  };
 
-  const closeEditPlayer = () => {
-    setEditingPlayer(null);
-    setEditName("");
-    setEditColor("Blue");
-    setEditCardArtIndex(null);
-    setNeedsNewCard(false);
-  };
-
-  const onNewColorChange = (nextColor: UiColor) => {
-    setNewColor(nextColor);
-    if (
-      newCardArtIndex != null &&
-      getCardByArtIndex(newCardArtIndex)?.color !== toCatalogColor(nextColor)
-    ) {
-      setNewCardArtIndex(null);
+    if (groupSortMode === "recent") {
+      return [...filteredGroups].sort((left, right) => {
+        if ((right.inferredRecentAt ?? 0) !== (left.inferredRecentAt ?? 0)) {
+          return (right.inferredRecentAt ?? 0) - (left.inferredRecentAt ?? 0);
+        }
+        if ((right.inferredUseCount ?? 0) !== (left.inferredUseCount ?? 0)) {
+          return (right.inferredUseCount ?? 0) - (left.inferredUseCount ?? 0);
+        }
+        return left.name.localeCompare(right.name);
+      });
     }
-  };
 
-  const onEditColorChange = (nextColor: UiColor) => {
-    const prevColor = editingPlayer ? normalizeColor(editingPlayer.color) : editColor;
-    setEditColor(nextColor);
+    if (groupSortMode === "az") {
+      return [...filteredGroups].sort((left, right) => left.name.localeCompare(right.name));
+    }
 
-    const currentCardColor =
-      editCardArtIndex != null ? getCardByArtIndex(editCardArtIndex)?.color : null;
+    return filteredGroups;
+  }, [groupSearchQuery, groupSortMode, playersById, rankedGroups]);
 
-    if (prevColor !== nextColor && currentCardColor !== toCatalogColor(nextColor)) {
-      setEditCardArtIndex(null);
-      setNeedsNewCard(true);
-      Alert.alert(
-        "Pick a new card",
-        "Changing a player's color requires picking a new card from that color's catalog."
+  const hasSavedGroups = groups.length > 0;
+  const hasGroupSearchQuery = groupSearchQuery.trim().length > 0;
+
+  useEffect(() => {
+    const validPlayerIds = new Set(sortedPlayers.map((player) => player.id));
+    setSelectedGroupPlayerIds((current) =>
+      current.filter((playerId) => validPlayerIds.has(playerId)).slice(0, 5),
+    );
+  }, [sortedPlayers]);
+
+  const signedInUserId = String(authSession?.user?.id ?? "").trim();
+  const profileReady = Boolean(signedInUserId && authProfile?.player_name);
+  const profileName =
+    String(authProfile?.player_name ?? "").trim() ||
+    String(authProfile?.display_name ?? "").trim() ||
+    "Signed-in player";
+  const profileAccent = getPlayerAccentColor(favoriteColor ?? currentFavoriteColor ?? "blue");
+  const existingProfilePlayer = players.find((player) => player.id === signedInUserId) ?? null;
+  const unregisteredSelectedPlayers = useMemo(
+    () =>
+      sortedPlayers.filter(
+        (player) =>
+          selectedGroupPlayerIds.includes(player.id) &&
+          !isLikelyRegisteredProfileId(player.id),
+      ),
+    [selectedGroupPlayerIds, sortedPlayers],
+  );
+
+  const hasProfileChanges =
+    favoriteColor !== currentFavoriteColor ||
+    assignedCardArtIndex !== currentAssignedCardArtIndex;
+  const canSaveProfile =
+    profileReady &&
+    Boolean(favoriteColor) &&
+    assignedCardArtIndex != null &&
+    hasProfileChanges &&
+    !savingProfile &&
+    !deletingProfile;
+
+  function handleFavoriteColorChange(nextColor: CardColor) {
+    setFavoriteColor(nextColor);
+    setAssignedCardArtIndex((current) =>
+      resolveAssignedCardArtIndexForProfile({
+        favoriteColor: nextColor,
+        assignedCardArtIndex: current,
+      }),
+    );
+  }
+
+  async function refreshCloudGroupState() {
+    if (!signedInUserId || !authSession?.user?.id) {
+      return;
+    }
+
+    const [snapshot, registeredProfiles] = await Promise.all([
+      loadCloudSnapshot(signedInUserId),
+      loadRegisteredProfiles().catch(() => []),
+    ]);
+    const statsSnapshot = await loadStatsSnapshot({
+      profileId: signedInUserId,
+      groups: snapshot.groups,
+      games: snapshot.games,
+    });
+
+    hydrateCloudSnapshot({
+      session: authSession,
+      snapshot: {
+        ...snapshot,
+        players: mergeRegisteredProfilesIntoPlayers(
+          snapshot.players,
+          registeredProfiles,
+        ),
+      },
+      statsSnapshot,
+    });
+  }
+
+  function ensureSharedGroupAccess() {
+    if (!signedInUserId) {
+      Alert.alert("Login required", "Log in before managing shared groups.");
+      router.push(APP_ROUTES.login as any);
+      return false;
+    }
+
+    if (!profileReady) {
+      Alert.alert("Finish profile", "Finish profile setup before managing shared groups.");
+      router.push(APP_ROUTES.register as any);
+      return false;
+    }
+
+    return true;
+  }
+
+  async function handleSaveProfile() {
+    if (!canSaveProfile || !favoriteColor || assignedCardArtIndex == null || !signedInUserId) {
+      return;
+    }
+
+    setSavingProfile(true);
+
+    try {
+      const payload = buildProfileAppearanceSavePayload({
+        playerName: profileName,
+        displayName: String(authProfile?.display_name ?? ""),
+        favoriteColor,
+        assignedCardArtIndex,
+      });
+
+      let { error } = await supabase.from("profiles").upsert(
+        {
+          id: signedInUserId,
+          deleted_at: null,
+          ...payload,
+        },
+        {
+          onConflict: "id",
+        },
       );
-    }
-  };
 
-  const handleAddPlayer = () => {
-    const trimmed = newName.trim();
-    if (!trimmed) {
-      Alert.alert("Player name required", "Enter a player name first.");
+      if (isDeletedAtColumnMissingError(error)) {
+        ({ error } = await supabase.from("profiles").upsert(
+          {
+            id: signedInUserId,
+            ...payload,
+          },
+          {
+            onConflict: "id",
+          },
+        ));
+      }
+
+      if (error) {
+        throw error;
+      }
+
+      setAuthProfile(
+        buildSavedAuthProfile(
+          signedInUserId,
+          payload.player_name,
+          payload.display_name ?? "",
+          payload.favorite_color,
+          payload.assigned_card_art_index,
+        ),
+      );
+
+      upsertRegisteredProfile?.({
+        id: signedInUserId,
+        name: payload.player_name,
+        displayName: payload.display_name ?? undefined,
+        color: payload.favorite_color ?? undefined,
+        assignedCardArtIndex: payload.assigned_card_art_index ?? null,
+        hasSavedGames: Boolean(existingProfilePlayer?.hasSavedGames),
+      });
+
+      setShowProfileSetupCallout(false);
+      Alert.alert("Profile updated", "Your color and player card were saved.");
+    } catch (error) {
+      Alert.alert("Couldn't save profile", formatSupabaseConfigError(error));
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function confirmDeleteProfile() {
+    if (!signedInUserId || deletingProfile) {
       return;
     }
 
-    if (newCardArtIndex == null) {
-      Alert.alert("Choose a card", "Pick a card for this player before saving.");
+    setDeletingProfile(true);
+
+    try {
+      await deleteOwnProfile();
+      resetStore?.();
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) {
+        throw signOutError;
+      }
+      router.replace(APP_ROUTES.login as any);
+    } catch (error) {
+      Alert.alert("Couldn't delete profile", formatSupabaseConfigError(error));
+    } finally {
+      setDeletingProfile(false);
+    }
+  }
+
+  function handleDeleteProfile() {
+    if (!signedInUserId || deletingProfile) {
       return;
     }
 
-    addPlayer?.({
-      id: uniqueId("player"),
-      name: trimmed,
-      initials: getInitials(trimmed),
-      color: newColor,
-      assignedCardArtIndex: newCardArtIndex,
-    });
-
-    setNewName("");
-    setNewColor("Blue");
-    setNewCardArtIndex(null);
-  };
-
-  const handleSavePlayer = () => {
-    if (!editingPlayer) return;
-
-    const trimmed = editName.trim();
-    if (!trimmed) {
-      Alert.alert("Player name required", "Enter a player name first.");
-      return;
-    }
-
-    if (!updatePlayer) {
-      Alert.alert("Missing store action", "updatePlayer is not available in your store.");
-      return;
-    }
-
-    if (editCardArtIndex == null) {
-      Alert.alert("Choose a card", "Pick a card before saving this player.");
-      return;
-    }
-
-    updatePlayer(editingPlayer.id, {
-      name: trimmed,
-      initials: getInitials(trimmed),
-      color: editColor,
-      assignedCardArtIndex: editCardArtIndex,
-    });
-
-    if (assignPlayerCard) {
-      assignPlayerCard(editingPlayer.id, editCardArtIndex);
-    }
-
-    closeEditPlayer();
-  };
-
-  const handleDeletePlayer = () => {
-    if (!editingPlayer || !deletePlayer) return;
     Alert.alert(
-      "Delete player",
-      `Delete ${editingPlayer.name}?`,
+      "Delete your profile",
+      `${profileName} will be removed from the active roster, replaced with ${HISTORY_REPLACEMENT_NAME} in saved game history, and signed out on this device.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
+          text: "Delete profile",
           style: "destructive",
           onPress: () => {
-            deletePlayer(editingPlayer.id);
-            closeEditPlayer();
+            void confirmDeleteProfile();
           },
         },
-      ]
+      ],
     );
-  };
+  }
 
-  const toggleGroupPlayer = (playerId: string) => {
+  function toggleGroupPlayer(playerId: string) {
     setSelectedGroupPlayerIds((current) =>
       current.includes(playerId)
         ? current.filter((id) => id !== playerId)
         : current.length >= 5
           ? current
-          : [...current, playerId]
+          : [...current, playerId],
     );
-  };
+  }
 
-  const handleCreateGroup = () => {
+  async function handleCreateGroup() {
     const trimmed = groupName.trim();
     if (!trimmed) {
       Alert.alert("Group name required", "Enter a group name first.");
       return;
     }
+
     if (selectedGroupPlayerIds.length < 2) {
       Alert.alert("More players needed", "Select at least 2 players for a group.");
       return;
     }
 
-    addGroup?.({
-      id: uniqueId("group"),
-      name: trimmed,
-      playerIds: selectedGroupPlayerIds,
-      createdAt: Date.now(),
-    });
+    if (unregisteredSelectedPlayers.length > 0) {
+      Alert.alert(
+        "Registered players only",
+        `${unregisteredSelectedPlayers
+          .map((player) => player.name)
+          .join(", ")} need an account before they can be added to a shared group.`,
+      );
+      return;
+    }
 
-    setGroupName("");
-    setSelectedGroupPlayerIds([]);
-  };
+    if (!ensureSharedGroupAccess()) {
+      return;
+    }
 
-  const renderColorPill = (
-    color: UiColor,
-    active: boolean,
-    onPress: () => void
-  ) => {
-    const accent = getPlayerAccentColor(color);
-    const tint = getPlayerTintColor(color);
+    setSavingGroup(true);
 
-    return (
-      <Pressable
-        key={color}
-        onPress={onPress}
-        style={[
-          styles.colorPill,
-          { backgroundColor: tint, borderColor: active ? accent : "transparent" },
-        ]}
-      >
-        <Text style={[styles.colorPillText, active && { color: "#FFFFFF" }]}>{color}</Text>
-      </Pressable>
-    );
-  };
+    try {
+      await createSharedGroup({
+        createdBy: signedInUserId,
+        name: trimmed,
+        playerIds: selectedGroupPlayerIds,
+      });
+      setGroupName("");
+      setSelectedGroupPlayerIds([]);
 
-  const renderCardChoice = (
-    artIndex: number | null,
-    active: boolean,
-    onPress: () => void,
-    color?: string
-  ) => {
-    const accent = getPlayerAccentColor(color ?? "Blue");
-    const previewPlayer = {
-      id: "preview",
-      name: "Preview",
-      color: color ?? "Blue",
-      assignedCardArtIndex: artIndex,
-    };
+      try {
+        await refreshCloudGroupState();
+      } catch {
+        Alert.alert("Group saved", "Saved, but couldn't refresh yet.");
+      }
+    } catch (error) {
+      Alert.alert("Couldn't save group", formatSupabaseConfigError(error));
+    } finally {
+      setSavingGroup(false);
+    }
+  }
 
-    return (
-      <Pressable
-        key={String(artIndex)}
-        onPress={onPress}
-        style={[
-          styles.cardChoice,
-          active && {
-            borderColor: accent,
-            backgroundColor: `${accent}18`,
-            shadowColor: accent,
-            shadowOpacity: 0.28,
-            shadowRadius: 10,
-          },
-        ]}
-      >
-        <PlayerCardIcon
-          player={previewPlayer as any}
-          size={116}
-          borderRadius={18}
-          showInitial={false}
-        />
-      </Pressable>
-    );
-  };
+  async function handleDeleteGroup(group: GroupLike) {
+    if (!group?.id) {
+      return;
+    }
+
+    if (!ensureSharedGroupAccess()) {
+      return;
+    }
+
+    if (
+      !isLikelyRegisteredProfileId(group.id) ||
+      !group.playerIds.includes(signedInUserId)
+    ) {
+      Alert.alert("Can't delete group", "Only players in this group can delete it.");
+      return;
+    }
+
+    setDeletingGroupId(group.id);
+
+    try {
+      await deleteSharedGroup(group.id);
+
+      try {
+        await refreshCloudGroupState();
+      } catch {
+        Alert.alert("Group deleted", "Deleted, but couldn't refresh yet.");
+      }
+    } catch (error) {
+      Alert.alert("Couldn't delete group", formatSupabaseConfigError(error));
+    } finally {
+      setDeletingGroupId((current) => (current === group.id ? null : current));
+    }
+  }
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-      <View style={StyleSheet.absoluteFillObject}>
-        <StarryNight count={100} />
-        <View style={styles.overlay} />
+    <PageShell preset="quiet" density="compact" scroll={false}>
+      <HeroCard
+        eyebrow="Players & Groups"
+        title="Roster Command"
+        subtitle="Customize your player card and save tables for game setup."
+        size="compact"
+        variant="stat"
+        actions={
+          <ActionButton
+            title="Back to Command"
+            variant="secondary"
+            onPress={() => router.push(APP_ROUTES.home)}
+          />
+        }
+      >
+        <View style={styles.heroMetaRow}>
+          <MetricPill label="Players" value={players.length} />
+          <MetricPill label="Groups" value={groups.length} />
+          <MetricPill label="Profile" value={profileReady ? "Ready" : "Setup"} />
+        </View>
+      </HeroCard>
+
+      <View style={styles.tabRow}>
+        <Pressable
+          onPress={() => setTab("players")}
+          style={[styles.tabBtn, tab === "players" && styles.tabBtnActive]}
+        >
+          <Text style={[styles.tabText, tab === "players" && styles.tabTextActive]}>
+            Players
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setTab("groups")}
+          style={[styles.tabBtn, tab === "groups" && styles.tabBtnActive]}
+        >
+          <Text style={[styles.tabText, tab === "groups" && styles.tabTextActive]}>
+            Saved Groups
+          </Text>
+        </Pressable>
       </View>
 
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>←</Text>
-          </Pressable>
-
-          <View style={styles.headerTextWrap}>
-            <Text style={styles.title}>Players & Groups</Text>
-            <Text style={styles.subtitle}>
-              Manage player profiles, saved cards, and saved groups.
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.tabRow}>
-          <Pressable
-            onPress={() => setTab("players")}
-            style={[styles.tabBtn, tab === "players" && styles.tabBtnActive]}
+      {tab === "players" ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <SectionCard
+            style={styles.panel}
+            title="Your player card"
+            subtitle="Only the signed-in captain can change this profile."
           >
-            <Text style={[styles.tabText, tab === "players" && styles.tabTextActive]}>
-              Players
-            </Text>
-          </Pressable>
+            {profileReady ? (
+              <>
+                {showProfileSetupCallout ? (
+                  <View style={styles.profileSetupCallout}>
+                    <Text style={styles.profileSetupCalloutEyebrow}>Next Step</Text>
+                    <Text style={styles.profileSetupCalloutTitle}>
+                      Choose your matching player card
+                    </Text>
+                    <Text style={styles.profileSetupCalloutText}>
+                      Pick one of the matching card styles for your selected color, then
+                      save changes.
+                    </Text>
+                  </View>
+                ) : null}
 
-          <Pressable
-            onPress={() => setTab("groups")}
-            style={[styles.tabBtn, tab === "groups" && styles.tabBtnActive]}
+                <View
+                  style={[
+                    styles.previewHeroCard,
+                    {
+                      borderColor: `${profileAccent}44`,
+                      backgroundColor: `${profileAccent}14`,
+                    },
+                  ]}
+                >
+                  <PlayerCardIcon
+                    player={{
+                      id: signedInUserId,
+                      name: profileName,
+                      color: favoriteColor ?? currentFavoriteColor ?? "blue",
+                      assignedCardArtIndex,
+                    }}
+                    size={124}
+                    borderRadius={18}
+                    showInitial={false}
+                  />
+
+                  <View style={styles.previewHeroCopy}>
+                    <Text style={styles.previewHeroEyebrow}>Signed In</Text>
+                    <Text style={styles.previewHeroTitle}>{profileName}</Text>
+                    <Text style={styles.previewHeroSubtitle}>
+                      Choose the color and card art tied to your account everywhere it
+                      appears.
+                    </Text>
+                  </View>
+                </View>
+
+                <ProfileAppearancePicker
+                  title={showProfileSetupCallout ? "Choose your player card" : "Appearance"}
+                  subtitle={
+                    showProfileSetupCallout
+                      ? "Pick one of the matching card styles for your selected color, then save changes."
+                      : "Pick the color and player card image that represent your account."
+                  }
+                  favoriteColor={favoriteColor}
+                  assignedCardArtIndex={assignedCardArtIndex}
+                  onSelectFavoriteColor={handleFavoriteColorChange}
+                  onSelectAssignedCardArtIndex={setAssignedCardArtIndex}
+                  allowCardSelection
+                />
+
+                <Pressable
+                  onPress={() => {
+                    void handleSaveProfile();
+                  }}
+                  disabled={!canSaveProfile}
+                  style={[
+                    styles.primaryBtn,
+                    !canSaveProfile && styles.buttonDisabled,
+                  ]}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator color="#020814" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Save changes</Text>
+                  )}
+                </Pressable>
+
+                <Text style={styles.deleteHint}>
+                  Deleting your profile removes the sign-in account and replaces you with{" "}
+                  {HISTORY_REPLACEMENT_NAME} in saved game history.
+                </Text>
+
+                <Pressable
+                  onPress={handleDeleteProfile}
+                  disabled={deletingProfile || savingProfile}
+                  style={[
+                    styles.deleteBtn,
+                    (deletingProfile || savingProfile) && styles.buttonDisabled,
+                  ]}
+                >
+                  {deletingProfile ? (
+                    <ActivityIndicator color="#FDE2E2" />
+                  ) : (
+                    <Text style={styles.deleteBtnText}>Delete your profile</Text>
+                  )}
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyText}>
+                  Finish account setup before editing the signed-in player card here.
+                </Text>
+
+                <Pressable
+                  onPress={() => router.push(APP_ROUTES.register as any)}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>Finish profile setup</Text>
+                </Pressable>
+              </>
+            )}
+          </SectionCard>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <SectionCard
+            style={styles.panel}
+            title="Create saved group"
+            subtitle="Build a five-seat table you can reuse from game setup."
           >
-            <Text style={[styles.tabText, tab === "groups" && styles.tabTextActive]}>
-              Saved Groups
-            </Text>
-          </Pressable>
-        </View>
+            <TextInput
+              value={groupName}
+              onChangeText={setGroupName}
+              placeholder="Group name"
+              placeholderTextColor="#6E87AE"
+              style={styles.input}
+            />
 
-        {tab === "players" ? (
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Create player</Text>
-
-              <TextInput
-                value={newName}
-                onChangeText={setNewName}
-                placeholder="Player name"
-                placeholderTextColor="#6E87AE"
-                style={styles.input}
-              />
-
-              <Text style={styles.smallLabel}>Choose color</Text>
-              <View style={styles.colorRow}>
-                {UI_COLORS.map((color) =>
-                  renderColorPill(color, newColor === color, () => onNewColorChange(color))
-                )}
-              </View>
-
-              <Text style={styles.smallLabel}>Choose card</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.cardRow}
-              >
-                {newColorCards.map((card) =>
-                  renderCardChoice(
-                    card.artIndex,
-                    newCardArtIndex === card.artIndex,
-                    () => setNewCardArtIndex(card.artIndex),
-                    newColor
-                  )
-                )}
-              </ScrollView>
-
-              <Pressable onPress={handleAddPlayer} style={styles.primaryBtn}>
-                <Text style={styles.primaryBtnText}>Save Player</Text>
-              </Pressable>
+            <View style={styles.groupSelectionSummary}>
+              <Text style={styles.groupSelectionSummaryTitle}>
+                {selectedGroupPlayerIds.length === 0
+                  ? "No players selected yet"
+                  : `${selectedGroupPlayerIds.length} players ready`}
+              </Text>
+              <Text style={styles.groupSelectionSummaryText}>
+                {selectedGroupPlayerIds.length === 0
+                  ? "Pick a table first, then save the group when the five seats feel right."
+                  : sortedPlayers
+                      .filter((player) => selectedGroupPlayerIds.includes(player.id))
+                      .map((player) => player.name)
+                      .join(" / ")}
+              </Text>
             </View>
 
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Players</Text>
-              <Text style={styles.helperText}>Tap player to edit or delete</Text>
+            <Text style={styles.smallLabel}>
+              Select players ({selectedGroupPlayerIds.length}/5)
+            </Text>
 
-              <View style={styles.playerGrid}>
-                {sortedPlayers.map((player) => (
+            <View style={styles.groupPlayerGrid}>
+              {sortedPlayers.map((player) => {
+                const active = selectedGroupPlayerIds.includes(player.id);
+                const accent = getPlayerAccentColor(player.color ?? "blue");
+
+                return (
                   <Pressable
                     key={player.id}
-                    onPress={() => openEditPlayer(player)}
-                    style={styles.playerTile}
+                    onPress={() => toggleGroupPlayer(player.id)}
+                    style={[
+                      styles.groupPlayerTile,
+                      active && {
+                        borderColor: accent,
+                        backgroundColor: `${accent}18`,
+                      },
+                    ]}
                   >
                     <PlayerCardIcon
                       player={player as any}
-                      size={86}
-                      borderRadius={16}
+                      size={72}
+                      borderRadius={14}
                       showInitial={false}
                     />
-                    <Text style={styles.playerTileName} numberOfLines={1}>
+                    <Text style={styles.groupPlayerName} numberOfLines={1}>
                       {player.name}
                     </Text>
                   </Pressable>
-                ))}
-              </View>
+                );
+              })}
             </View>
-          </ScrollView>
-        ) : (
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+
+            <Pressable
+              onPress={() => {
+                void handleCreateGroup();
+              }}
+              disabled={savingGroup}
+              style={[styles.primaryBtn, savingGroup && styles.buttonDisabled]}
+            >
+              {savingGroup ? (
+                <ActivityIndicator color="#020814" />
+              ) : (
+                <Text style={styles.primaryBtnText}>Save Group</Text>
+              )}
+            </Pressable>
+          </SectionCard>
+
+          <SectionCard
+            style={styles.panel}
+            title="Saved groups"
+            subtitle={hasSavedGroups ? `${visibleGroups.length} visible` : "No saved groups yet"}
           >
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Create saved group</Text>
+            <TextInput
+              value={groupSearchQuery}
+              onChangeText={setGroupSearchQuery}
+              placeholder="Search groups"
+              placeholderTextColor="#6E87AE"
+              style={styles.groupSearchInput}
+            />
 
-              <TextInput
-                value={groupName}
-                onChangeText={setGroupName}
-                placeholder="Group name"
-                placeholderTextColor="#6E87AE"
-                style={styles.input}
-              />
+            <View style={styles.groupSortRow}>
+              {[
+                { key: "most-played" as GroupSortMode, label: "Most Played" },
+                { key: "recent" as GroupSortMode, label: "Recent" },
+                { key: "az" as GroupSortMode, label: "A-Z" },
+              ].map((option) => {
+                const active = groupSortMode === option.key;
 
-              <Text style={styles.smallLabel}>
-                Select players ({selectedGroupPlayerIds.length}/5)
-              </Text>
-
-              <View style={styles.groupPlayerGrid}>
-                {sortedPlayers.map((player) => {
-                  const active = selectedGroupPlayerIds.includes(player.id);
-                  const accent = getPlayerAccentColor(player.color);
-
-                  return (
-                    <Pressable
-                      key={player.id}
-                      onPress={() => toggleGroupPlayer(player.id)}
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() => setGroupSortMode(option.key)}
+                    style={[
+                      styles.groupSortChip,
+                      active && styles.groupSortChipActive,
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.groupPlayerTile,
-                        active && {
-                          borderColor: accent,
-                          backgroundColor: `${accent}18`,
-                        },
+                        styles.groupSortChipText,
+                        active && styles.groupSortChipTextActive,
                       ]}
                     >
-                      <PlayerCardIcon
-                        player={player as any}
-                        size={72}
-                        borderRadius={14}
-                        showInitial={false}
-                      />
-                      <Text style={styles.groupPlayerName} numberOfLines={1}>
-                        {player.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Pressable onPress={handleCreateGroup} style={styles.primaryBtn}>
-                <Text style={styles.primaryBtnText}>Save Group</Text>
-              </Pressable>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Saved groups</Text>
+            {visibleGroups.length === 0 ? (
+              <Text style={styles.emptyText}>
+                {hasSavedGroups && hasGroupSearchQuery
+                  ? "No saved groups match your search."
+                  : "No saved groups yet."}
+              </Text>
+            ) : (
+              <View style={styles.groupList}>
+                {visibleGroups.map((group) => (
+                  <View key={group.id} style={styles.groupCard}>
+                    <View style={styles.groupCardTop}>
+                      <View style={styles.flexGrow}>
+                        <Text style={styles.groupName}>{group.name}</Text>
+                        <Text style={styles.groupMeta}>{formatGroupUsageHint(group)}</Text>
+                      </View>
 
-              {sortedGroups.length === 0 ? (
-                <Text style={styles.emptyText}>No saved groups yet.</Text>
-              ) : (
-                <View style={styles.groupList}>
-                  {sortedGroups.map((group) => (
-                    <View key={group.id} style={styles.groupCard}>
-                      <View style={styles.groupCardTop}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.groupName}>{group.name}</Text>
-                          <Text style={styles.groupMeta}>
-                            {group.playerIds.length} players
-                          </Text>
-                        </View>
-
+                      {profileReady &&
+                      signedInUserId &&
+                      isLikelyRegisteredProfileId(group.id) &&
+                      group.playerIds.includes(signedInUserId) ? (
                         <Pressable
                           onPress={() => {
-                            if (!deleteGroup) return;
                             Alert.alert(
-                              "Delete group",
-                              `Delete ${group.name}?`,
+                              "Delete shared group",
+                              `Delete ${group.name} for every member?`,
                               [
                                 { text: "Cancel", style: "cancel" },
                                 {
                                   text: "Delete",
                                   style: "destructive",
-                                  onPress: () => deleteGroup(group.id),
+                                  onPress: () => {
+                                    void handleDeleteGroup(group);
+                                  },
                                 },
-                              ]
+                              ],
                             );
                           }}
+                          disabled={deletingGroupId === group.id}
                           style={styles.deleteSmallBtn}
                         >
-                          <Text style={styles.deleteSmallBtnText}>Delete</Text>
+                          {deletingGroupId === group.id ? (
+                            <ActivityIndicator color="#FDE2E2" />
+                          ) : (
+                            <Text style={styles.deleteSmallBtnText}>Delete</Text>
+                          )}
                         </Pressable>
-                      </View>
-
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.groupCardPlayers}
-                      >
-                        {group.playerIds.map((id) => {
-                          const player = players.find((p) => p.id === id);
-                          if (!player) return null;
-
-                          return (
-                            <View key={id} style={styles.groupCardPlayer}>
-                              <PlayerCardIcon
-                                player={player as any}
-                                size={54}
-                                borderRadius={12}
-                                showInitial={false}
-                              />
-                              <Text style={styles.groupCardPlayerName} numberOfLines={1}>
-                                {player.name}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </ScrollView>
+                      ) : null}
                     </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        )}
-      </View>
 
-      <Modal
-        transparent
-        animationType="fade"
-        visible={!!editingPlayer}
-        onRequestClose={closeEditPlayer}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit player</Text>
-              <Pressable onPress={closeEditPlayer}>
-                <Text style={styles.modalClose}>Close</Text>
-              </Pressable>
-            </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.groupCardPlayers}
+                    >
+                      {group.playerIds.map((id) => {
+                        const player = playersById.get(id);
+                        if (!player) {
+                          return null;
+                        }
 
-            <ScrollView
-              style={styles.modalScroll}
-              contentContainerStyle={styles.modalScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.editPreviewWrap}>
-                <PlayerCardIcon
-                  player={{
-                    id: editingPlayer?.id ?? "preview",
-                    name: editName || editingPlayer?.name || "Player",
-                    color: editColor,
-                    assignedCardArtIndex: editCardArtIndex,
-                  } as any}
-                  size={116}
-                  borderRadius={18}
-                  showInitial={false}
-                />
+                        return (
+                          <View key={id} style={styles.groupCardPlayer}>
+                            <PlayerCardIcon
+                              player={player as any}
+                              size={54}
+                              borderRadius={12}
+                              showInitial={false}
+                            />
+                            <Text style={styles.groupCardPlayerName} numberOfLines={1}>
+                              {player.name}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                ))}
               </View>
-
-              <TextInput
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Player name"
-                placeholderTextColor="#6E87AE"
-                style={styles.input}
-              />
-
-              <Text style={styles.smallLabel}>Choose color</Text>
-              <View style={styles.colorRow}>
-                {UI_COLORS.map((color) =>
-                  renderColorPill(color, editColor === color, () => onEditColorChange(color))
-                )}
-              </View>
-
-              <Text style={styles.smallLabel}>Choose card</Text>
-              {needsNewCard ? (
-                <Text style={styles.warningText}>
-                  Color changed. Pick a new card from this color before saving.
-                </Text>
-              ) : null}
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.cardRow}
-              >
-                {editColorCards.map((card) =>
-                  renderCardChoice(
-                    card.artIndex,
-                    editCardArtIndex === card.artIndex,
-                    () => {
-                      setEditCardArtIndex(card.artIndex);
-                      setNeedsNewCard(false);
-                    },
-                    editColor
-                  )
-                )}
-              </ScrollView>
-
-              <View style={styles.modalActions}>
-                <Pressable onPress={handleSavePlayer} style={styles.primaryBtnHalf}>
-                  <Text style={styles.primaryBtnText}>Save Player</Text>
-                </Pressable>
-
-                <Pressable onPress={handleDeletePlayer} style={styles.deleteBtnHalf}>
-                  <Text style={styles.deleteBtnText}>Delete Player</Text>
-                </Pressable>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+            )}
+          </SectionCard>
+        </ScrollView>
+      )}
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
+  creationStepList: {
+    gap: 8,
+  },
   screen: {
     flex: 1,
     backgroundColor: "#030712",
@@ -728,41 +1023,57 @@ const styles = StyleSheet.create({
   },
   tabRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
   },
   tabBtn: {
     flex: 1,
-    minHeight: 54,
-    borderRadius: 18,
+    minHeight: 68,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(67,117,183,0.18)",
+    backgroundColor: "rgba(4,13,30,0.82)",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(7,15,31,0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(67,117,183,0.24)",
+    paddingHorizontal: 12,
   },
   tabBtnActive: {
-    backgroundColor: "rgba(11,23,48,0.96)",
-    borderColor: "rgba(57,148,255,0.55)",
+    backgroundColor: "rgba(37,99,235,0.2)",
+    borderColor: "rgba(96,165,250,0.52)",
   },
   tabText: {
-    color: "#AFC6E9",
+    color: "#E5EEF9",
     fontSize: 16,
     fontWeight: "900",
   },
   tabTextActive: {
     color: "#FFFFFF",
   },
+  heroMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  metricPill: {
+    minWidth: 86,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(5,14,31,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.22)",
+    gap: 3,
+  },
   scrollContent: {
     paddingBottom: 24,
-    gap: 12,
+    gap: 14,
   },
   panel: {
-    backgroundColor: "rgba(5,12,28,0.94)",
-    borderRadius: 22,
+    borderRadius: 26,
+    padding: 16,
+    gap: 14,
+    backgroundColor: "rgba(5,14,31,0.9)",
     borderWidth: 1,
-    borderColor: "rgba(50,104,180,0.18)",
-    padding: 14,
-    gap: 12,
+    borderColor: "rgba(67,117,183,0.16)",
   },
   sectionTitle: {
     color: "#FFFFFF",
@@ -771,8 +1082,113 @@ const styles = StyleSheet.create({
   },
   helperText: {
     color: "#7D9BC4",
-    fontSize: 11,
+    fontSize: 12,
     marginTop: -4,
+  },
+  profileSetupCallout: {
+    borderRadius: 20,
+    padding: 14,
+    gap: 6,
+    backgroundColor: "rgba(96,165,250,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(125,211,252,0.3)",
+  },
+  profileSetupCalloutEyebrow: {
+    color: "#67E8F9",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  profileSetupCalloutTitle: {
+    color: "#F8FBFF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  profileSetupCalloutText: {
+    color: "#D7E7FF",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700",
+  },
+  previewHeroCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 14,
+  },
+  previewHeroCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  previewHeroEyebrow: {
+    color: "#93C5FD",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  previewHeroTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  previewHeroSubtitle: {
+    color: "#C6D8F6",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  primaryBtn: {
+    minHeight: 52,
+    borderRadius: 18,
+    backgroundColor: "#F4F7FB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryBtnText: {
+    color: "#020814",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  secondaryBtn: {
+    minHeight: 52,
+    borderRadius: 18,
+    backgroundColor: "rgba(37,99,235,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.36)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryBtnText: {
+    color: "#EAF2FF",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  buttonDisabled: {
+    opacity: 0.55,
+  },
+  deleteHint: {
+    color: "#F6C4C4",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+  deleteBtn: {
+    minHeight: 52,
+    borderRadius: 18,
+    backgroundColor: "rgba(87,12,21,0.76)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteBtnText: {
+    color: "#FDE2E2",
+    fontSize: 16,
+    fontWeight: "900",
   },
   smallLabel: {
     color: "#E8F1FF",
@@ -789,70 +1205,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  colorRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  colorPill: {
-    minWidth: 76,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  colorPillText: {
-    color: "#F3F7FF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  cardRow: {
-    gap: 12,
-    paddingRight: 8,
-  },
-  cardChoice: {
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.03)",
-    padding: 8,
-  },
-  primaryBtn: {
-    minHeight: 50,
+  groupSelectionSummary: {
     borderRadius: 18,
-    backgroundColor: "#F4F7FB",
-    alignItems: "center",
-    justifyContent: "center",
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 6,
   },
-  primaryBtnText: {
-    color: "#020814",
-    fontSize: 17,
+  groupSelectionSummaryTitle: {
+    color: "#F8FBFF",
+    fontSize: 14,
     fontWeight: "900",
   },
-  playerGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  playerTile: {
-    width: "22.8%",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    backgroundColor: "rgba(255,255,255,0.02)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
-  playerTileName: {
-    color: "#F3F7FF",
-    fontSize: 11,
-    fontWeight: "800",
-    width: "100%",
-    textAlign: "center",
+  groupSelectionSummaryText: {
+    color: "#C6D8F6",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
   },
   groupPlayerGrid: {
     flexDirection: "row",
@@ -880,6 +1250,41 @@ const styles = StyleSheet.create({
   groupList: {
     gap: 10,
   },
+  groupSearchInput: {
+    backgroundColor: "#081426",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(67,117,183,0.18)",
+    color: "#FFFFFF",
+    fontSize: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  groupSortRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  groupSortChip: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  groupSortChipActive: {
+    backgroundColor: "rgba(37,99,235,0.22)",
+    borderColor: "rgba(96,165,250,0.42)",
+  },
+  groupSortChipText: {
+    color: "#BFD3F4",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  groupSortChipTextActive: {
+    color: "#FFFFFF",
+  },
   groupCard: {
     borderRadius: 18,
     padding: 12,
@@ -892,6 +1297,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  flexGrow: {
+    flex: 1,
   },
   groupName: {
     color: "#FFFFFF",
@@ -935,79 +1343,6 @@ const styles = StyleSheet.create({
   emptyText: {
     color: "#8FAED7",
     fontSize: 14,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    padding: 14,
-  },
-  modalCard: {
-    maxHeight: "88%",
-    backgroundColor: "#030C1D",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(67,117,183,0.26)",
-    padding: 14,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  modalTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  modalClose: {
-    color: "#B8CCEA",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  modalScroll: {
-    flexGrow: 0,
-  },
-  modalScrollContent: {
-    gap: 12,
-    paddingBottom: 4,
-  },
-  editPreviewWrap: {
-    alignItems: "flex-start",
-  },
-  warningText: {
-    color: "#FACC15",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: -4,
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  primaryBtnHalf: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 18,
-    backgroundColor: "#F4F7FB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deleteBtnHalf: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 18,
-    backgroundColor: "rgba(87,12,21,0.72)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.28)",
-  },
-  deleteBtnText: {
-    color: "#EAB1B1",
-    fontSize: 17,
-    fontWeight: "900",
+    lineHeight: 20,
   },
 });
-

@@ -9,12 +9,15 @@ import {
 import { useRouter } from 'expo-router';
 
 import StarryNight from '@/components/ui/StarryNight';
-import { useStore } from '@/store/useStore';
+import { useGames, usePlayers } from '@/store/useStore';
 import CorrelationStats from '@/components/CorrelationStats';
 import InsightList from '@/components/InsightList';
-import PrestigeOverTimeChart from '@/components/charts/PrestigeOverTimeChart';
-import EfficiencyFailureScatter from '@/components/charts/EfficiencyFailureScatter';
 import AssistNetworkOverview from '@/components/charts/AssistNetworkOverview';
+import {
+  buildRelationships,
+  canonicalizeGames,
+  collectUnifiedGames,
+} from '@/utils/charts';
 
 type PlayerLike = {
   id: string;
@@ -150,15 +153,21 @@ function MetricCard({
 export default function InsightsScreen() {
   const router = useRouter();
 
-  const players = useStore((s: any) =>
-    Array.isArray(s.players) ? s.players : [],
-  ) as PlayerLike[];
+  const players = (usePlayers() ?? []) as PlayerLike[];
+  const games = (useGames() ?? []) as StoredGame[];
+  const unifiedGames = useMemo(
+    () =>
+      canonicalizeGames(
+        collectUnifiedGames({ games } as any),
+        players as any,
+      ),
+    [games, players],
+  );
 
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : [],
-  ) as StoredGame[];
-
-  const relationships = useStore((s: any) => s.relationships ?? {});
+  const relationships = useMemo(
+    () => buildRelationships(players as any, unifiedGames as any),
+    [players, unifiedGames],
+  );
 
   const globalStats = useMemo(() => {
     let totalPrestige = 0;
@@ -221,17 +230,25 @@ export default function InsightsScreen() {
           <Text style={styles.eyebrow}>Moonrakers</Text>
           <Text style={styles.title}>Insights Hub</Text>
           <Text style={styles.subtitle}>
-            Global meta, trend charts, scatter analysis, assist network, and ranked signals.
+            Global meta, ranked signals, and synergy clues.
           </Text>
 
           <View style={styles.linkRow}>
-            <Pressable style={styles.linkButton} onPress={() => router.push('/compare')}>
+            <Pressable style={styles.linkButton} onPress={() => router.push('/charts/compare')}>
               <Text style={styles.linkButtonText}>Compare</Text>
             </Pressable>
             <Pressable style={styles.linkButton} onPress={() => router.push('/stats')}>
               <Text style={styles.linkButtonText}>Stats</Text>
             </Pressable>
-            <Pressable style={styles.linkButton} onPress={() => router.push('/elo')}>
+            <Pressable
+              style={styles.linkButton}
+              onPress={() =>
+                router.push({
+                  pathname: '/charts/[chartKey]',
+                  params: { chartKey: 'elo' },
+                } as any)
+              }
+            >
               <Text style={styles.linkButtonText}>Elo</Text>
             </Pressable>
           </View>
@@ -253,18 +270,8 @@ export default function InsightsScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Prestige Over Time</Text>
-          <PrestigeOverTimeChart games={games} players={players} />
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Efficiency vs Failure</Text>
-          <EfficiencyFailureScatter games={games} players={players} />
-        </View>
-
-        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Assist Network</Text>
-          <AssistNetworkOverview players={players} relationships={relationships} />
+          <AssistNetworkOverview players={players} games={unifiedGames as any} />
         </View>
 
         <View style={styles.sectionCard}>
@@ -274,7 +281,11 @@ export default function InsightsScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Correlations & Synergy</Text>
-          <CorrelationStats />
+          <CorrelationStats
+            games={unifiedGames}
+            players={players}
+            relationships={relationships}
+          />
         </View>
       </ScrollView>
     </View>

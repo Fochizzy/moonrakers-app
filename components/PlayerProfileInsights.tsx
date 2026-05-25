@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
 
-import { useStore } from '@/store/useStore';
+import { useStore, useGames, usePlayers } from '@/store/useStore';
 import Text from '@/components/ui/Text';
 import { buildPlayerInsights } from '@/utils/playerInsights';
 
@@ -10,8 +10,8 @@ type Props = {
 };
 
 export default function PlayerProfileInsights({ playerId }: Props) {
-  const games = useStore((s: any) => s.games);
-  const players = useStore((s: any) => s.players);
+  const games = useGames();
+  const players = usePlayers();
   const relationships = useStore((s: any) => s.relationships);
 
   const insights = useMemo(() => {

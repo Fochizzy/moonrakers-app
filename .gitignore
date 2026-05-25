@@ -3,3 +3,28 @@ node_modules/
 dist/
 build/
 *.log
+.env
+.env.local
+/android
+/ios
+
+# Gradle build cache
+.gradle-home/
+
+# Local worktree and verification output
+.worktrees/
+.expo-export-smoke/
+.expo-export-smoke-home/
+.expo-export-smoke-header/
+backups/
+recovered-session-screens/
+supabase/.temp/
+tmp/
+tmp-aab-cert/
+tmp-aab-manifest/
+tmp-*.png
+tmp-*.xml
+tmp-*.txt
+recovered-*.xml
+*.aab
+*-upload-cert.pem

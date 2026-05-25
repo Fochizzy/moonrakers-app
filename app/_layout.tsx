@@ -1,15 +1,33 @@
-import 'react-native-gesture-handler';
+import "react-native-gesture-handler";
 
-import React from 'react';
-import { StyleSheet, View, Dimensions } from 'react-native';
-import { Stack } from 'expo-router';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
+import React, { useEffect } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import * as Linking from "expo-linking";
+import { Stack, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { ThemeProvider, useTheme } from '@/theme';
+import Text from "@/components/ui/Text";
+import { supabase } from "@/lib/supabase";
+import {
+  hasAuthCallbackPayload,
+  isAuthCallbackUrl,
+} from "@/lib/auth/handleAuthCallback";
+import { useSharedCloudBootstrap } from "@/lib/auth/useSharedCloudBootstrap";
+import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
+import { useStore } from "@/store/useStore";
+import { ThemeProvider, useTheme } from "@/theme";
+import { APP_ROUTES } from "@/utils/appRoutes";
+import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 const STAR_POSITIONS = [
   { top: 28, left: 24, size: 2, opacity: 0.55 },
@@ -54,69 +72,6 @@ const STAR_POSITIONS = [
   { top: 1072, left: 182, size: 2, opacity: 0.9 },
 ];
 
-function GlobalHeaderTitle() {
-  return (
-    <View style={styles.headerTitleWrap}>
-      <View style={styles.headerMoon}>
-        <View style={styles.moonRing} />
-        <View style={styles.headerMoonCut} />
-      </View>
-      <View>
-        <View style={styles.headerTextWrap}>
-          <View />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function GlobalHeaderCenter() {
-  return (
-    <View style={styles.headerCenter}>
-      <View style={styles.headerMoonWrap}>
-        <View style={styles.headerMoonGlow} />
-        <View style={styles.headerMoon}>
-          <View style={styles.moonRing} />
-          <View style={styles.headerMoonCut} />
-        </View>
-      </View>
-      <View style={styles.headerTitleBlock}>
-        <HeaderTitleText />
-      </View>
-    </View>
-  );
-}
-
-function HeaderTitleText() {
-  return (
-    <View style={styles.headerTitleTextContainer}>
-      <HeaderWord />
-    </View>
-  );
-}
-
-function HeaderWord() {
-  return (
-    <View>
-      <HeaderText />
-    </View>
-  );
-}
-
-function HeaderText() {
-  return (
-    <View>
-      <TextShim />
-    </View>
-  );
-}
-
-function TextShim() {
-  const ReactNative = require('react-native');
-  const Text = ReactNative.Text;
-  return <Text style={styles.headerTitleText}>Moonraker&apos;s</Text>;
-}
-
 function StarField() {
   return (
     <View style={styles.starField} pointerEvents="none">
@@ -157,14 +112,84 @@ function AppBackground() {
   );
 }
 
+function LoadingOverlay({
+  message,
+  showAction,
+  onAction,
+}: {
+  message: string;
+  showAction: boolean;
+  onAction: () => void | Promise<void>;
+}) {
+  return (
+    <View style={styles.overlayBackdrop}>
+      <View style={styles.overlayCard}>
+        <ActivityIndicator color="#60A5FA" size="large" />
+        <Text style={styles.overlayTitle}>Loading account</Text>
+        <Text style={styles.overlayMessage}>{message}</Text>
+        {showAction ? (
+          <Pressable onPress={onAction} style={styles.overlayButton}>
+            <Text style={styles.overlayButtonText}>Go to login</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function AppNavigator() {
-  const t = useTheme();
+  const theme = useTheme();
+  const router = useRouter();
+  const { authError, authBootstrapStatus, handleOverlayEscape, showBlockingOverlay } =
+    useSharedCloudBootstrap();
+  const setPlayers = useStore((state) => state.setPlayers);
+
+  useEffect(() => {
+    if (authBootstrapStatus !== "ready") return;
+    let active = true;
+    loadRegisteredProfiles().then((profiles) => {
+      if (!active) return;
+      const current = useStore.getState().players;
+      setPlayers(mergeRegisteredProfilesIntoPlayers(current, profiles) as any);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [authBootstrapStatus, setPlayers]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function routeAuthUrl(url: string | null) {
+      if (!active || !url) {
+        return;
+      }
+
+      if (!isAuthCallbackUrl(url) || !hasAuthCallbackPayload(url)) {
+        return;
+      }
+
+      router.replace({
+        pathname: APP_ROUTES.authCallback,
+        params: { confirmation_url: url },
+      } as any);
+    }
+
+    void Linking.getInitialURL().then(routeAuthUrl);
+
+    const subscription = Linking.addEventListener("url", (event) => {
+      void routeAuthUrl(event.url);
+    });
+
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [router]);
 
   return (
     <View
       style={[
         styles.appShell,
-        { backgroundColor: t.colors.background.primary },
+        { backgroundColor: theme.colors.background.primary },
       ]}
     >
       <AppBackground />
@@ -173,22 +198,31 @@ function AppNavigator() {
 
       <Stack
         screenOptions={{
-          headerShown: true,
-          animation: 'fade',
+          headerShown: false,
+          animation: "fade",
           contentStyle: {
-            backgroundColor: 'transparent',
+            backgroundColor: "transparent",
           },
-          headerTransparent: false,
-          headerShadowVisible: false,
-          headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: '#030617',
-          },
-          headerTitle: () => <GlobalHeaderCenter />,
-          headerTintColor: '#E2E8F0',
-          headerBackTitleVisible: false,
         }}
-      />
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="reset-password" />
+      </Stack>
+
+      {showBlockingOverlay ? (
+        <LoadingOverlay
+          message={
+            authError
+              ? authError
+              : "Restoring your Moonrakers session and profile."
+          }
+          showAction
+          onAction={handleOverlayEscape}
+        />
+      ) : null}
     </View>
   );
 }
@@ -208,196 +242,144 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#02030A',
+    backgroundColor: "#02030A",
   },
-
   appShell: {
     flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
   },
-
   baseBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#02030A',
+    backgroundColor: "#02030A",
   },
-
   starField: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.32,
   },
-
   star: {
-    position: 'absolute',
-    backgroundColor: '#FFFFFF',
+    position: "absolute",
+    backgroundColor: "#FFFFFF",
   },
-
   nebulaPurple: {
-    position: 'absolute',
+    position: "absolute",
     top: SCREEN_HEIGHT * 0.12,
     left: SCREEN_WIDTH * 0.08,
     width: 280,
     height: 280,
     borderRadius: 180,
-    backgroundColor: 'rgba(168, 85, 247, 0.13)',
-    transform: [{ scaleX: 1.08 }, { rotate: '8deg' }],
+    backgroundColor: "rgba(168, 85, 247, 0.13)",
+    transform: [{ scaleX: 1.08 }, { rotate: "8deg" }],
   },
-
   nebulaBlue: {
-    position: 'absolute',
+    position: "absolute",
     top: SCREEN_HEIGHT * 0.48,
     right: -40,
     width: 240,
     height: 240,
     borderRadius: 160,
-    backgroundColor: 'rgba(0, 191, 255, 0.10)',
-    transform: [{ scaleX: 1.18 }, { rotate: '-12deg' }],
+    backgroundColor: "rgba(0, 191, 255, 0.10)",
+    transform: [{ scaleX: 1.18 }, { rotate: "-12deg" }],
   },
-
   topGlow: {
-    position: 'absolute',
+    position: "absolute",
     top: -140,
     left: -60,
     right: -60,
     height: 320,
     borderRadius: 999,
-    backgroundColor: 'rgba(0, 191, 255, 0.18)',
-    transform: [{ scaleX: 1.3 }, { rotate: '2deg' }],
+    backgroundColor: "rgba(0, 191, 255, 0.18)",
+    transform: [{ scaleX: 1.3 }, { rotate: "2deg" }],
   },
-
   sideGlow: {
-    position: 'absolute',
+    position: "absolute",
     right: -120,
-    top: '25%',
+    top: "25%",
     width: 260,
     height: 260,
     borderRadius: 999,
-    backgroundColor: 'rgba(168, 85, 247, 0.22)',
+    backgroundColor: "rgba(168, 85, 247, 0.22)",
   },
-
   bottomGlow: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -140,
     left: -40,
     right: -40,
     height: 280,
     borderRadius: 999,
-    backgroundColor: 'rgba(168, 85, 247, 0.16)',
+    backgroundColor: "rgba(168, 85, 247, 0.16)",
   },
-
   orbitRing: {
-    position: 'absolute',
+    position: "absolute",
     width: 500,
     height: 500,
     borderRadius: 250,
     borderWidth: 1,
-    borderColor: 'rgba(0,191,255,0.16)',
+    borderColor: "rgba(0,191,255,0.16)",
     top: SCREEN_HEIGHT * 0.2,
     left: -150,
-    transform: [{ rotate: '25deg' }],
+    transform: [{ rotate: "25deg" }],
   },
-
   orbitRingSecondary: {
-    position: 'absolute',
+    position: "absolute",
     width: 340,
     height: 340,
     borderRadius: 170,
     borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.14)',
+    borderColor: "rgba(192,132,252,0.14)",
     bottom: SCREEN_HEIGHT * 0.08,
     right: -90,
-    transform: [{ rotate: '-18deg' }],
+    transform: [{ rotate: "-18deg" }],
   },
-
   gridFade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.015)',
+    backgroundColor: "rgba(255,255,255,0.015)",
   },
-
-  headerCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  overlayBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(2, 4, 12, 0.72)",
+  },
+  overlayCard: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.28)",
+    backgroundColor: "rgba(6,10,22,0.96)",
+    paddingHorizontal: 22,
+    paddingVertical: 24,
+    alignItems: "center",
     gap: 12,
   },
-
-  headerMoonWrap: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+  overlayTitle: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
   },
-
-  headerMoonGlow: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(0,191,255,0.28)',
+  overlayMessage: {
+    color: "#DCE8FF",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
   },
-
-  headerTitleBlock: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  headerTitleTextContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  headerTitleText: {
-    color: '#C084FC',
-    fontSize: 24,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    textShadowColor: 'rgba(168,85,247,0.9)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-
-  headerMoon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#00BFFF',
-    overflow: 'hidden',
-    position: 'relative',
-    shadowColor: '#00BFFF',
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
-  },
-
-  moonRing: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  overlayButton: {
+    marginTop: 6,
+    minHeight: 52,
+    width: "100%",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(168,85,247,0.28)",
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.4)',
-    top: -3,
-    left: -3,
+    borderColor: "rgba(96,165,250,0.34)",
   },
-
-  headerMoonCut: {
-    position: 'absolute',
-    right: -6,
-    top: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#02030A',
-  },
-
-  headerTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  headerTextWrap: {
-    justifyContent: 'center',
+  overlayButtonText: {
+    color: "#F8FBFF",
+    fontSize: 16,
+    fontWeight: "900",
   },
 });

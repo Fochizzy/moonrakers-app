@@ -440,6 +440,10 @@ function sanitizeBackupPayload(data: unknown): BackupPayload {
   };
 }
 
+export function parseBackupPayload(data: unknown): BackupPayload {
+  return sanitizeBackupPayload(data);
+}
+
 export function getBackupFileUri() {
   const base = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? null;
   if (!base) {

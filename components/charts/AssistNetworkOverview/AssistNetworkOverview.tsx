@@ -1,55 +1,185 @@
 import React, { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+
 import RelationshipGraph from "@/components/charts/RelationshipGraph";
+import { buildRelationshipInsightModel } from "@/components/charts/relationshipGraphModel";
+import Text from "@/components/ui/Text";
+import type { NormalizedGame } from "@/utils/charts";
+import AssistNetworkDetailsCard from "./AssistNetworkDetailsCard";
+import AssistNetworkImpactSection from "./AssistNetworkImpactSection";
+import buildAssistNetworkDataset from "./buildAssistNetworkDataset";
+import buildAssistNetworkImpact from "./buildAssistNetworkImpact";
+import buildAssistNetworkLayout from "./buildAssistNetworkLayout";
 
 type Player = { id: string; name?: string; color?: string };
-type SnapshotValue = number | string | boolean | null | undefined | Record<string, unknown>;
-type SnapshotPoint = { round?: number; gameIndex?: number; label?: string; snapshot?: Record<string, SnapshotValue> };
-type Relationships = Record<string, Record<string, number>>;
-type Props = { data?: SnapshotPoint[]; players?: Player[]; relationships?: Relationships; scopedPlayerIds?: string[]; mode?: "flow" | "network"; title?: string; subtitle?: string };
-function toNumber(value: unknown): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
-function getSnapshotEntry(point: SnapshotPoint | undefined, playerId: string): Record<string, unknown> | undefined {
-  const snapshot = point?.snapshot;
-  if (!snapshot || typeof snapshot !== "object") return undefined;
-  const direct = snapshot[playerId];
-  if (direct && typeof direct === "object" && !Array.isArray(direct)) return direct as Record<string, unknown>;
-  const nestedPlayers = (snapshot as Record<string, unknown>).players;
-  if (nestedPlayers && typeof nestedPlayers === "object" && !Array.isArray(nestedPlayers)) {
-    const nested = (nestedPlayers as Record<string, unknown>)[playerId];
-    if (nested && typeof nested === "object" && !Array.isArray(nested)) return nested as Record<string, unknown>;
+type Props = {
+  games?: NormalizedGame[];
+  players?: Player[];
+  scopedPlayerIds?: string[];
+  exactScopePlayerIds?: string[];
+  mode?: "flow" | "network";
+  title?: string;
+  subtitle?: string;
+};
+
+type WeightedRelationships = Record<string, Record<string, number>>;
+
+function buildWeightedRelationships(
+  links: Array<{ source: string; target: string; value: number }>
+): WeightedRelationships {
+  const next: WeightedRelationships = {};
+
+  for (const link of links) {
+    if (!Number.isFinite(link.value) || link.value <= 0) continue;
+    if (!next[link.source]) next[link.source] = {};
+    next[link.source][link.target] = link.value;
   }
-  return undefined;
-}
-function getAssistOutMap(entry?: Record<string, unknown>): Record<string, number> {
-  const candidates = [entry?.assistPrestigeByTarget, entry?.assistPrestigeByRecipient, entry?.assistByTarget, entry?.assistCountByTarget, entry?.assistRecipients, entry?.assistCountByRecipient];
-  for (const candidate of candidates) {
-    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
-      const result: Record<string, number> = {};
-      Object.entries(candidate).forEach(([key, value]) => { result[key] = toNumber(value); });
-      return result;
-    }
-  }
-  return {};
-}
-function buildRelationshipsFromSnapshots(data: SnapshotPoint[], players: Player[]): Relationships {
-  const relationships: Relationships = {};
-  for (const player of players) relationships[player.id] = {};
-  for (const point of data) {
-    for (const player of players) {
-      const entry = getSnapshotEntry(point, player.id); if (!entry) continue;
-      const outMap = getAssistOutMap(entry);
-      for (const [targetId, rawValue] of Object.entries(outMap)) {
-        if (!targetId || targetId === player.id) continue;
-        const value = toNumber(rawValue); if (value <= 0) continue;
-        if (!relationships[player.id]) relationships[player.id] = {};
-        relationships[player.id][targetId] = toNumber(relationships[player.id][targetId]) + value;
-      }
-    }
-  }
-  return relationships;
-}
-export default function AssistNetworkOverview({ data = [], players = [], relationships, scopedPlayerIds, mode = "network", title = "Assist Network", subtitle = "Metric-driven support network on the unified relationship graph." }: Props) {
-  const safePlayers = Array.isArray(players) ? players : [];
-  const safeRelationships = useMemo(() => relationships && typeof relationships === "object" ? relationships : buildRelationshipsFromSnapshots(Array.isArray(data) ? data : [], safePlayers), [relationships, data, safePlayers]);
-  return <RelationshipGraph players={safePlayers as any} relationships={safeRelationships} scopedPlayerIds={scopedPlayerIds} variant="assist_network" mode={mode} title={title} subtitle={subtitle} />;
+
+  return next;
 }
 
+export default function AssistNetworkOverview({
+  games = [],
+  players = [],
+  scopedPlayerIds,
+  exactScopePlayerIds,
+  mode = "network",
+  title = "Assist Network",
+  subtitle = "Directed assist flow across the filtered sample.",
+}: Props) {
+  const safeGames = Array.isArray(games) ? games : [];
+  const safePlayers = Array.isArray(players) ? players : [];
+  const visiblePlayers = useMemo(() => {
+    if (!scopedPlayerIds?.length) return safePlayers;
+    const allowed = new Set(scopedPlayerIds.map(String));
+    return safePlayers.filter((player) => allowed.has(String(player.id)));
+  }, [safePlayers, scopedPlayerIds]);
+
+  const dataset = useMemo(
+    () =>
+      buildAssistNetworkDataset({
+        games: safeGames,
+        scopedPlayerIds,
+        exactScopePlayerIds,
+      }),
+    [exactScopePlayerIds, safeGames, scopedPlayerIds]
+  );
+  const layout = useMemo(
+    () => buildAssistNetworkLayout(dataset.edges, visiblePlayers),
+    [dataset.edges, visiblePlayers]
+  );
+  const weightedRelationships = useMemo(
+    () => buildWeightedRelationships(layout.links),
+    [layout.links]
+  );
+  const insight = useMemo(
+    () => buildRelationshipInsightModel(visiblePlayers, weightedRelationships),
+    [visiblePlayers, weightedRelationships]
+  );
+  const impact = useMemo(
+    () =>
+      buildAssistNetworkImpact({
+        games: safeGames,
+        exactScopePlayerIds,
+      }),
+    [exactScopePlayerIds, safeGames]
+  );
+
+  const topLink = layout.links[0] ?? null;
+  const hubName = layout.nodes[0]?.label ?? insight.hub?.player.name ?? "No hub yet";
+  const netGiverName = insight.netGiver?.player.name ?? "None";
+  const netReceiverName = insight.netReceiver?.player.name ?? "None";
+  const hasRecordedLinks = dataset.edges.length > 0;
+  const showZeroLinkState =
+    dataset.exactScopeApplied && dataset.gameCount > 0 && !hasRecordedLinks;
+  const zeroLinkTitle = dataset.hasAggregateAssistActivityWithoutDirection
+    ? "Legacy Assist Data"
+    : "No Assist Links Yet";
+  const zeroLinkBody = dataset.hasAggregateAssistActivityWithoutDirection
+    ? "These older exact-match games only saved aggregate assist totals, not which teammate gave each assist on the turn. Because the directional source links are missing, arrows, labels, and size changes cannot be shown for this table."
+    : "These exact-match games do not have any saved directional assist links yet, so arrows, labels, and size changes cannot be shown for this table.";
+  const topLinkLabel = topLink
+    ? `${topLink.sourceLabel} -> ${topLink.targetLabel}`
+    : "No visible link";
+  const topLinkValue = topLink ? topLink.labelText : "0.0/game";
+  const story = topLink
+    ? `${hubName} is the current hub, and ${topLinkLabel} leads at ${topLinkValue}.`
+    : `${hubName} is the current hub in the exact filtered table.`;
+
+  if (dataset.exactScopeApplied && dataset.gameCount === 0) {
+    return (
+      <View style={styles.wrap}>
+        <Text style={styles.emptyText}>
+          No exact-match games found for this table.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.wrap}>
+      {showZeroLinkState ? (
+        <View style={styles.warningCard}>
+          <Text style={styles.warningTitle}>{zeroLinkTitle}</Text>
+          <Text style={styles.warningBody}>{zeroLinkBody}</Text>
+        </View>
+      ) : (
+        <>
+          <AssistNetworkDetailsCard
+            hubName={hubName}
+            netGiverName={netGiverName}
+            netReceiverName={netReceiverName}
+            topLinkLabel={topLinkLabel}
+            topLinkValue={topLinkValue}
+            story={story}
+          />
+
+          <RelationshipGraph
+            players={visiblePlayers as any}
+            relationships={dataset.edges as any}
+            scopedPlayerIds={scopedPlayerIds}
+            variant="assist_network"
+            mode={mode}
+            title={title}
+            subtitle={subtitle}
+            showReadoutCards={false}
+          />
+        </>
+      )}
+
+      <AssistNetworkImpactSection
+        cards={impact.cards}
+        sampleGameCount={impact.sampleGameCount}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    gap: 12,
+  },
+  emptyText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  warningCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(249,115,22,0.34)",
+    backgroundColor: "rgba(127,29,29,0.18)",
+    padding: 12,
+    gap: 6,
+  },
+  warningTitle: {
+    color: "#FDBA74",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  warningBody: {
+    color: "#E2E8F0",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+});
