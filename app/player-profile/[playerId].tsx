@@ -787,6 +787,7 @@ export default function PlayerProfileDetailScreen() {
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const [opponentSearchQuery, setOpponentSearchQuery] = useState("");
   const [recentGamesAnchorY, setRecentGamesAnchorY] = useState(0);
+  const [stickyShellHeight, setStickyShellHeight] = useState(0);
   const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
   const deferredOpponentSearchQuery = useDeferredValue(opponentSearchQuery);
 
@@ -826,7 +827,7 @@ export default function PlayerProfileDetailScreen() {
 
   const jumpToRecentGames = () => {
     scrollViewRef.current?.scrollTo({
-      y: Math.max(recentGamesAnchorY - 12, 0),
+      y: Math.max(recentGamesAnchorY - stickyShellHeight - 12, 0),
       animated: true,
     });
   };
@@ -1192,7 +1193,10 @@ export default function PlayerProfileDetailScreen() {
           </View>
         </View>
 
-        <View style={styles.stickyProfileTabShell}>
+        <View
+          style={styles.stickyProfileTabShell}
+          onLayout={(event) => setStickyShellHeight(event.nativeEvent.layout.height)}
+        >
           <View style={styles.sectionCompact}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Profile Tabs</Text>

@@ -146,8 +146,26 @@ assert.match(
 
 assert.match(
   source,
+  /const \[stickyShellHeight,\s*setStickyShellHeight\] = useState\(0\);/,
+  "expected the player-profile screen to track sticky header height for the Recent games jump",
+);
+
+assert.match(
+  source,
+  /<View\s+style=\{styles\.stickyProfileTabShell\}\s+onLayout=\{\(event\) => setStickyShellHeight\(event\.nativeEvent\.layout\.height\)\}/s,
+  "expected the sticky profile tab shell wrapper to capture its rendered height",
+);
+
+assert.match(
+  source,
   /onLayout=\{\(event\) => setRecentGamesAnchorY\(event\.nativeEvent\.layout\.y\)\}/,
   "expected the Recent Games section to capture its on-screen anchor position",
+);
+
+assert.match(
+  source,
+  /y:\s*Math\.max\(recentGamesAnchorY\s*-\s*stickyShellHeight\s*-\s*\d+,\s*0\)/,
+  "expected the Recent games jump to subtract the sticky header height plus a padding offset",
 );
 
 assert.match(
