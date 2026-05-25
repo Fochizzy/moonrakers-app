@@ -641,6 +641,10 @@ export default function StatsScreen() {
       return <EmptyCard title="Playstyle unavailable" body={error} />;
     }
 
+    if (overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games") {
+      return renderSharedRecoveryCard(overviewRecoveryState.kind);
+    }
+
     return (
       <View style={styles.card}>
         <SectionTitle
@@ -689,6 +693,10 @@ export default function StatsScreen() {
       return <EmptyCard title="Correlations unavailable" body={error} />;
     }
 
+    if (overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games") {
+      return renderSharedRecoveryCard(overviewRecoveryState.kind);
+    }
+
     return (
       <View style={styles.card}>
         <SectionTitle
@@ -735,6 +743,10 @@ export default function StatsScreen() {
 
     if (error) {
       return <EmptyCard title="Game analytics unavailable" body={error} />;
+    }
+
+    if (overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games") {
+      return renderSharedRecoveryCard(overviewRecoveryState.kind);
     }
 
     return (

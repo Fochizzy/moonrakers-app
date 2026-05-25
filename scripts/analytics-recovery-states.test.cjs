@@ -148,8 +148,44 @@ assert.match(
 
 assert.match(
   analyticsSource,
+  /Open roster[\s\S]*APP_ROUTES\.roster/s,
+  "expected the analytics hub no-players primary action to open the roster route",
+);
+
+assert.match(
+  analyticsSource,
+  /Profiles[\s\S]*APP_ROUTES\.playerDirectory/s,
+  "expected the analytics hub no-players secondary action to open the player directory route",
+);
+
+assert.match(
+  analyticsSource,
   /Start tracked game[\s\S]*Import backup/s,
   "expected the analytics hub recovery actions to cover the no-games state",
+);
+
+assert.match(
+  analyticsSource,
+  /Start tracked game[\s\S]*buildHomeRoute\("game"\)/s,
+  "expected the analytics hub no-games primary action to use the shared game home route",
+);
+
+assert.match(
+  analyticsSource,
+  /Import backup[\s\S]*buildHistoryRoute\(\{\s*intent:\s*"import"\s*\}\)/s,
+  "expected the analytics hub no-games secondary action to use the History import route",
+);
+
+assert.match(
+  statsSource,
+  /Start tracked game[\s\S]*buildHomeRoute\("game"\)/s,
+  "expected the stats shared no-games primary action to use the shared game home route",
+);
+
+assert.match(
+  statsSource,
+  /Import backup[\s\S]*buildHistoryRoute\(\{\s*intent:\s*"import"\s*\}\)/s,
+  "expected the stats shared no-games secondary action to use the History import route",
 );
 
 assert.match(
@@ -162,6 +198,30 @@ assert.match(
   statsSource,
   /Open charts/,
   "expected the stats route to offer Open charts for player-specific empty states",
+);
+
+assert.match(
+  statsSource,
+  /Open charts[\s\S]*buildChartsRoute\(\)/s,
+  "expected the stats player-empty secondary action to use the shared charts route builder",
+);
+
+assert.match(
+  statsSource,
+  /function renderPlaystyleTab\(\)[\s\S]*overviewRecoveryState\.kind === "no-players" \|\| overviewRecoveryState\.kind === "no-games"[\s\S]*renderSharedRecoveryCard\(overviewRecoveryState\.kind\)/s,
+  "expected the playstyle tab to reuse the shared no-players and no-games recovery handling",
+);
+
+assert.match(
+  statsSource,
+  /function renderCorrelationsTab\(\)[\s\S]*overviewRecoveryState\.kind === "no-players" \|\| overviewRecoveryState\.kind === "no-games"[\s\S]*renderSharedRecoveryCard\(overviewRecoveryState\.kind\)/s,
+  "expected the correlations tab to reuse the shared no-players and no-games recovery handling",
+);
+
+assert.match(
+  statsSource,
+  /function renderGamesTab\(\)[\s\S]*overviewRecoveryState\.kind === "no-players" \|\| overviewRecoveryState\.kind === "no-games"[\s\S]*renderSharedRecoveryCard\(overviewRecoveryState\.kind\)/s,
+  "expected the games tab to reuse the shared no-players and no-games recovery handling",
 );
 
 console.log("analytics-recovery-states.test.cjs passed");
