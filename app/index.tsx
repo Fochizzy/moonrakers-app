@@ -3,6 +3,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -12,6 +13,7 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
 import ActionButton from "@/components/ui/ActionButton";
 import AppHeader from "@/components/ui/AppHeader";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HubTileCard from "@/components/ui/HubTileCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
@@ -55,6 +57,10 @@ import { HomeLeaderboardTab } from "@/components/home/HomeLeaderboardTab";
 import { PlayerSelectionCard } from "@/components/home/PlayerSelectionCard";
 import { AnimatedSelectedNamePill } from "@/components/home/SelectedNamePill";
 import type { PlayerLike, GroupLike, GameLike } from "@/components/home/homeTypes";
+import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+import RankBadge from "@/components/RankBadge";
+import { canResumeDraft, resolveDraftResumeRoute } from "@/lib/game-draft/phase";
+import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 
 type Tab = "game" | "leaderboard" | "hubs";
 import {
@@ -66,6 +72,42 @@ import {
   sameOrderedIds,
   tabLabel,
 } from "@/components/home/homeUtils";
+
+type EloLeader = {
+  id: string;
+  name: string;
+  color?: string;
+  assignedCardArtIndex?: number | null;
+  elo: number;
+};
+
+function CompactEloStrip({
+  leaders,
+  onPress,
+}: {
+  leaders: EloLeader[];
+  onPress: (id: string) => void;
+}) {
+  if (!leaders.length) return null;
+  return (
+    <View style={styles.eloStripRow}>
+      {leaders.map((leader, index) => (
+        <Pressable
+          key={leader.id}
+          onPress={() => onPress(leader.id)}
+          style={({ pressed }) => [styles.eloStripCard, pressed && styles.eloStripCardPressed]}
+        >
+          <PlayerCardIcon player={leader as any} size={28} borderRadius={7} />
+          <View style={styles.eloStripInfo}>
+            <Text numberOfLines={1} style={styles.eloStripName}>{leader.name}</Text>
+            <Text style={styles.eloStripElo}>{Math.round(leader.elo)} ELO</Text>
+          </View>
+          <RankBadge rating={leader.elo} size="sm" />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -82,6 +124,14 @@ export default function HomeScreen() {
   const rawGames = useGames() ?? [];
   const activeGame = useActiveGame();
   const clearActiveGame = useClearActiveGame();
+  const {
+    gameDraft,
+    replaceDraft,
+    discardDraft,
+    syncState: draftSyncState,
+  } = useSyncedGameDraft();
+
+  const [eloLeaders, setEloLeaders] = useState<EloLeader[]>([]);
 
   const bridgeDestinations = useMemo(() => getBridgeDestinations(), []);
   const compactBridgeDestinations = useMemo(
@@ -261,6 +311,29 @@ export default function HomeScreen() {
   const canStart = selectedPlayers.length >= 2 && selectedPlayers.length <= 5;
 
   useEffect(() => {
+    const profileId = String(authSession?.user?.id ?? "").trim();
+    if (!profileId) return;
+    let cancelled = false;
+    getEloScreen({ profileId, focusPlayerId: null, opponentId: null, sortKey: "elo" })
+      .then((payload) => {
+        if (cancelled) return;
+        const rows = Array.isArray(payload?.leaderboardRows) ? payload.leaderboardRows : [];
+        setEloLeaders(
+          rows.slice(0, 3).map((row: any) => ({
+            id: String(row?.playerId ?? row?.id ?? ""),
+            name: String(row?.name ?? "Unknown"),
+            color: row?.color ?? undefined,
+            assignedCardArtIndex:
+              typeof row?.assignedCardArtIndex === "number" ? row.assignedCardArtIndex : null,
+            elo: typeof row?.currentElo === "number" ? row.currentElo : 1000,
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [authSession?.user?.id]);
+
+  useEffect(() => {
     setSelectedIds((current) => {
       const remapped = ensureRequiredPlayerSelection(
         Array.from(
@@ -291,6 +364,29 @@ export default function HomeScreen() {
         : nextGroup;
     });
   }, [visibleGroups]);
+
+  useEffect(() => {
+    if (!gameDraft?.selectedPlayerIds?.length) {
+      return;
+    }
+
+    setSelectedIds((current) => {
+      const next = ensureRequiredPlayerSelection(
+        gameDraft.selectedPlayerIds,
+        signedInPlayerId,
+      );
+      return sameOrderedIds(current, next) ? current : next;
+    });
+
+    if (!gameDraft.selectedGroupId) {
+      setSelectedGroup(null);
+      return;
+    }
+
+    const restoredGroup =
+      visibleGroups.find((group) => group.id === gameDraft.selectedGroupId) ?? null;
+    setSelectedGroup(restoredGroup);
+  }, [gameDraft, signedInPlayerId, visibleGroups]);
 
   useEffect(() => {
     if (canStart && !prevCanStart.current) {
@@ -468,8 +564,10 @@ export default function HomeScreen() {
     );
   };
 
-  const startGame = () => {
-    if (!canStart) return;
+  const launchSeededDraft = async () => {
+    if (!canStart || !authSession?.user?.id) {
+      return;
+    }
 
     const effectiveGroup = selectedGroup
       ? {
@@ -477,44 +575,74 @@ export default function HomeScreen() {
           playerIds: ensureRequiredPlayerSelection(selectedIds, signedInPlayerId),
         }
       : null;
-    const selectedPlayerNamesOnly = rankedPlayers
-      .filter((player) => selectedIds.includes(player.id))
-      .map((player) => ({
-        id: player.id,
-        name: player.name ?? "Unknown",
-        color: player.color,
-        initials: player.initials,
-        assignedCardArtIndex: player.assignedCardArtIndex ?? null,
-      }));
+    const selectedPlayerIds = effectiveGroup ? effectiveGroup.playerIds : selectedIds;
+    const timestamp = Date.now();
 
-    router.push({
-      pathname: "/game-setup",
-      params: {
-        mode: effectiveGroup ? "group" : "players",
-        selectedPlayers: JSON.stringify(effectiveGroup ? [] : selectedPlayerNamesOnly),
-        selectedGroups: JSON.stringify(
-          effectiveGroup
-            ? [{ id: effectiveGroup.id, name: effectiveGroup.name, playerIds: effectiveGroup.playerIds }]
-            : []
-        ),
-        players: JSON.stringify(
-          rankedPlayers.map((player) => ({
-            id: player.id,
-            name: player.name ?? "Unknown",
-            color: player.color,
-            initials: player.initials,
-            assignedCardArtIndex: player.assignedCardArtIndex ?? null,
-          }))
-        ),
-        groups: JSON.stringify(
-          rankedGroups.map((group) => ({
-            id: group.id,
-            name: group.name,
-            playerIds: group.playerIds,
-          }))
-        ),
-      },
+    await replaceDraft({
+      profileId: authSession.user.id,
+      draftId: gameDraft?.draftId ?? `${timestamp}`,
+      phase: "setup",
+      revision: gameDraft?.revision ?? 0,
+      updatedAt: timestamp,
+      deviceUpdatedAt: timestamp,
+      selectedPlayerIds,
+      selectedGroupId: effectiveGroup?.id ?? null,
+      selectedGroupName: effectiveGroup?.name ?? null,
+      turnOrder: selectedPlayerIds,
+      playerSnapshots: rankedPlayers
+        .filter((player) => selectedPlayerIds.includes(player.id))
+        .map((player) => ({
+          id: player.id,
+          name: player.name ?? "Unknown",
+          color: player.color,
+          initials: player.initials,
+          assignedCardArtIndex: player.assignedCardArtIndex ?? null,
+        })),
+      gameplay: null,
     });
+
+    router.push(APP_ROUTES.gameSetup as any);
+  };
+
+  const promptForExistingDraft = (onStartOver?: () => void | Promise<void>) => {
+    if (!gameDraft || !canResumeDraft(gameDraft)) {
+      return;
+    }
+
+    Alert.alert("Unfinished Draft", "You already have an unfinished game draft.", [
+      {
+        text: "Resume",
+        onPress: () => router.push(resolveDraftResumeRoute(gameDraft.phase) as any),
+      },
+      {
+        text: "Discard",
+        style: "destructive",
+        onPress: () => {
+          void discardDraft(gameDraft.profileId);
+        },
+      },
+      {
+        text: "Start over",
+        onPress: () => {
+          void (async () => {
+            await discardDraft(gameDraft.profileId);
+            await onStartOver?.();
+          })();
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const startGame = () => {
+    if (!canStart) return;
+
+    if (gameDraft && canResumeDraft(gameDraft)) {
+      promptForExistingDraft(() => launchSeededDraft());
+      return;
+    }
+
+    void launchSeededDraft();
   };
 
   const headerTitle =
@@ -580,6 +708,46 @@ export default function HomeScreen() {
                 </SectionCard>
               ) : null}
 
+              {gameDraft && canResumeDraft(gameDraft) ? (
+                <SectionCard
+                  eyebrow="Unfinished Draft"
+                  title="Resume where you left off"
+                  subtitle={
+                    draftSyncState.dirty
+                      ? "Local changes are still pending sync for this signed-in captain."
+                      : "This draft is linked to your signed-in captain."
+                  }
+                >
+                  <View style={styles.commandActionRow}>
+                    <ActionButton
+                      title="Resume"
+                      onPress={() =>
+                        router.push(resolveDraftResumeRoute(gameDraft.phase) as any)
+                      }
+                      style={styles.commandHalfButton}
+                    />
+                    <ActionButton
+                      title="Discard"
+                      variant="danger"
+                      onPress={() => {
+                        void discardDraft(gameDraft.profileId);
+                      }}
+                      style={styles.commandHalfButton}
+                    />
+                  </View>
+                  <ActionButton
+                    title="Start over"
+                    variant="secondary"
+                    onPress={() => {
+                      void (async () => {
+                        await discardDraft(gameDraft.profileId);
+                        await launchSeededDraft();
+                      })();
+                    }}
+                  />
+                </SectionCard>
+              ) : null}
+
               <Animated.View
                 style={[styles.primaryActions, { transform: [{ scale: startPulse }] }]}
               >
@@ -590,6 +758,15 @@ export default function HomeScreen() {
                   style={styles.startGameButton}
                 />
               </Animated.View>
+
+              {eloLeaders.length > 0 ? (
+                <SectionCard eyebrow="Live Ranking" title="ELO Leaders">
+                  <CompactEloStrip
+                    leaders={eloLeaders}
+                    onPress={(id) => router.push(buildPlayerProfileRoute(id))}
+                  />
+                </SectionCard>
+              ) : null}
 
               <SectionCard title="Quick Launch">
                 <View style={styles.quickLaunchGrid}>
@@ -622,9 +799,12 @@ export default function HomeScreen() {
 
               <SectionCard title="Players">
                 {rankedPlayers.length === 0 ? (
-                  <View style={styles.emptyPanel}>
-                    <Text style={styles.emptyPanelText}>No player profiles found.</Text>
-                  </View>
+                  <EmptyStateCard
+                    message="No player profiles found."
+                    hint="Create profiles in the Roster to get started."
+                    actionLabel="Open Roster"
+                    onAction={() => router.push(APP_ROUTES.roster)}
+                  />
                 ) : (
                   <View style={styles.commandPlayerPicker}>
                     <TextInput
@@ -649,11 +829,7 @@ export default function HomeScreen() {
                         contentContainerStyle={styles.commandPlayerViewportContent}
                       >
                         {filteredPlayers.length === 0 ? (
-                          <View style={styles.emptyPanel}>
-                            <Text style={styles.emptyPanelText}>
-                              No players match that search yet.
-                            </Text>
-                          </View>
+                          <EmptyStateCard message="No players match that search." />
                         ) : (
                           <Animated.View
                             style={[
@@ -690,9 +866,12 @@ export default function HomeScreen() {
 
               <SectionCard eyebrow="Saved Tables" title="Groups">
                 {visibleGroups.length === 0 ? (
-                  <View style={styles.emptyPanel}>
-                    <Text style={styles.emptyPanelText}>No saved groups found.</Text>
-                  </View>
+                  <EmptyStateCard
+                    message="No saved groups found."
+                    hint="Create a group in the Roster to quickly load your regular crew."
+                    actionLabel="Open Roster"
+                    onAction={() => router.push(APP_ROUTES.roster)}
+                  />
                 ) : (
                   <View style={styles.groupListCompact}>
                     {visibleGroups.map((group) => (
@@ -841,6 +1020,40 @@ const styles = StyleSheet.create({
   emptyPanelText: {
     color: "#93C5FD",
     fontSize: 12,
+    fontWeight: "700",
+  },
+
+  eloStripRow: {
+    gap: 6,
+  },
+  eloStripCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.2)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  eloStripCardPressed: {
+    backgroundColor: "rgba(96,165,250,0.1)",
+    borderColor: "rgba(96,165,250,0.38)",
+  },
+  eloStripInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  eloStripName: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  eloStripElo: {
+    color: "#60A5FA",
+    fontSize: 10,
     fontWeight: "700",
   },
 

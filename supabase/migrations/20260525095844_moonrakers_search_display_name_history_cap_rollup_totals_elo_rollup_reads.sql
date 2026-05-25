@@ -1,4 +1,3 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
 -- #3: search display_name too
 create or replace function public.search_profiles_by_player_name(query text)
@@ -519,4 +518,4 @@ begin
   return jsonb_build_object('generatedAt',now(),'sortKey',coalesce(sort_key,'elo'),'playerOptions',player_options,'selectedPlayerId',effective_selected_player_id,'selectedOpponentId',effective_selected_opponent_id,'leaderboardRows',leaderboard_rows,'summary',selected_summary,'topCards',top_cards,'sections',sections,'insights',insights,'emptyState',empty_state);
 end;
 $$;
-
+;

@@ -1,25 +1,19 @@
 create schema if not exists private;
-
 revoke all on schema private from public;
 revoke all on schema private from anon;
 revoke all on schema private from authenticated;
-
 create table if not exists public.personal_stats_rollups (
   profile_id uuid primary key references public.profiles(id) on delete cascade,
   payload jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
-
 alter table public.personal_stats_rollups enable row level security;
-
 drop policy if exists "personal_stats_rollups_select_owner" on public.personal_stats_rollups;
-
 create policy "personal_stats_rollups_select_owner"
 on public.personal_stats_rollups
 for select
 to authenticated
 using (profile_id = (select auth.uid()));
-
 create or replace function private.refresh_server_authored_analytics(target_profile_id uuid)
 returns jsonb
 language plpgsql
@@ -639,11 +633,9 @@ begin
   );
 end;
 $$;
-
 revoke all on function private.refresh_server_authored_analytics(uuid) from public;
 revoke all on function private.refresh_server_authored_analytics(uuid) from anon;
 revoke all on function private.refresh_server_authored_analytics(uuid) from authenticated;
-
 create or replace function public.refresh_server_authored_analytics(target_profile_id uuid default auth.uid())
 returns jsonb
 language sql
@@ -652,7 +644,6 @@ set search_path = ''
 as $$
   select private.refresh_server_authored_analytics(target_profile_id);
 $$;
-
 create or replace function public.get_analytics_home(profile_id uuid default auth.uid())
 returns jsonb
 language plpgsql
@@ -667,10 +658,10 @@ begin
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select rollup.payload
+  select public.personal_stats_rollups.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = get_analytics_home.profile_id;
+  where rollup.profile_id = profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'analyticsHome' then
     return rollup_payload->'analyticsHome';
@@ -687,7 +678,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.get_stats_screen(profile_id uuid default auth.uid())
 returns jsonb
 language plpgsql
@@ -702,10 +692,10 @@ begin
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select rollup.payload
+  select public.personal_stats_rollups.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = get_stats_screen.profile_id;
+  where rollup.profile_id = profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'statsScreen' then
     return rollup_payload->'statsScreen';
@@ -760,7 +750,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.get_insights_screen(profile_id uuid default auth.uid())
 returns jsonb
 language plpgsql
@@ -775,10 +764,10 @@ begin
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select rollup.payload
+  select public.personal_stats_rollups.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = get_insights_screen.profile_id;
+  where rollup.profile_id = profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'insightsScreen' then
     return rollup_payload->'insightsScreen';
@@ -803,7 +792,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.get_chart_setup(
   chart_key text,
   profile_id uuid default auth.uid()
@@ -1035,7 +1023,6 @@ begin
   );
 end;
 $$;
-
 create or replace function public.get_chart_dataset(
   chart_key text,
   profile_id uuid default auth.uid(),
@@ -1111,10 +1098,10 @@ begin
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select rollup.payload
+  select public.personal_stats_rollups.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = get_chart_dataset.profile_id;
+  where rollup.profile_id = profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'charts' then
     stored_chart := rollup_payload->'charts'->normalized_chart_key;
@@ -1456,7 +1443,6 @@ begin
   );
 end;
 $$;
-
 revoke all on function public.refresh_server_authored_analytics(uuid) from public;
 revoke all on function public.refresh_server_authored_analytics(uuid) from anon;
 revoke all on function public.get_analytics_home(uuid) from public;
@@ -1469,7 +1455,6 @@ revoke all on function public.get_chart_setup(text, uuid) from public;
 revoke all on function public.get_chart_setup(text, uuid) from anon;
 revoke all on function public.get_chart_dataset(text, uuid, uuid, uuid, uuid[], uuid, text, text, text, uuid) from public;
 revoke all on function public.get_chart_dataset(text, uuid, uuid, uuid, uuid[], uuid, text, text, text, uuid) from anon;
-
 grant execute on function public.refresh_server_authored_analytics(uuid) to authenticated;
 grant execute on function public.get_analytics_home(uuid) to authenticated;
 grant execute on function public.get_stats_screen(uuid) to authenticated;

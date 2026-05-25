@@ -1,4 +1,3 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
 -- #3: Remove dead RLS SELECT policies.
 -- Each table has both _select_authenticated (qual=true) and _select_participants
@@ -507,4 +506,4 @@ begin
   end loop;
 end;
 $$;
-
+;

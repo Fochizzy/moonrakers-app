@@ -30,11 +30,9 @@ begin
   return coalesce(rollup_payload, '{}'::jsonb);
 end;
 $$;
-
 revoke all on function private.get_or_refresh_personal_stats_rollup(uuid) from public;
 revoke all on function private.get_or_refresh_personal_stats_rollup(uuid) from anon;
 revoke all on function private.get_or_refresh_personal_stats_rollup(uuid) from authenticated;
-
 do $$
 declare
   target jsonb;

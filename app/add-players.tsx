@@ -9,15 +9,20 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import ProfileAppearancePicker from "@/components/player/ProfileAppearancePicker";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import ActionButton from "@/components/ui/ActionButton";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
 import { buildSavedAuthProfile } from "@/lib/auth/registerFlow";
+import { resolveDraftResumeRoute } from "@/lib/game-draft/phase";
+import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
 import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
@@ -85,6 +90,11 @@ type AddPlayersRouteParams = {
 };
 
 const HISTORY_REPLACEMENT_NAME = "Mx. Doe";
+
+const TAB_ITEMS = [
+  { key: "players" as TabKey, label: "Players" },
+  { key: "groups" as TabKey, label: "Saved Groups" },
+] as const;
 
 function getRouteParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -179,7 +189,9 @@ export default function AddPlayersScreen() {
   const upsertRegisteredProfile = useStore(
     (state: any) => state.upsertRegisteredProfile,
   );
+  const setPlayers = useStore((state: any) => state.setPlayers);
   const resetStore = useStore((state: any) => state.resetStore);
+  const { gameDraft } = useSyncedGameDraft();
 
   const requestedTab = useMemo(
     () => normalizeTabParam(routeParams.tab),
@@ -307,6 +319,7 @@ export default function AddPlayersScreen() {
   }, [sortedPlayers]);
 
   const signedInUserId = String(authSession?.user?.id ?? "").trim();
+  const activePlayerId = signedInUserId;
   const profileReady = Boolean(signedInUserId && authProfile?.player_name);
   const profileName =
     String(authProfile?.player_name ?? "").trim() ||
@@ -322,6 +335,10 @@ export default function AddPlayersScreen() {
           !isLikelyRegisteredProfileId(player.id),
       ),
     [selectedGroupPlayerIds, sortedPlayers],
+  );
+  const draftedPlayerIds = useMemo(
+    () => new Set(gameDraft?.selectedPlayerIds ?? []),
+    [gameDraft],
   );
 
   const hasProfileChanges =
@@ -468,6 +485,7 @@ export default function AddPlayersScreen() {
 
     try {
       await deleteOwnProfile();
+      setPlayers(players.filter((player) => player.id !== activePlayerId));
       resetStore?.();
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) {
@@ -486,13 +504,21 @@ export default function AddPlayersScreen() {
       return;
     }
 
+    if (draftedPlayerIds.has(signedInUserId)) {
+      Alert.alert(
+        "Player used in unfinished draft",
+        "Discard or finish the unfinished draft before deleting this player.",
+      );
+      return;
+    }
+
     Alert.alert(
-      "Delete your profile",
+      "Delete My Profile",
       `${profileName} will be removed from the active roster, replaced with ${HISTORY_REPLACEMENT_NAME} in saved game history, and signed out on this device.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete profile",
+          text: "Delete My Profile",
           style: "destructive",
           onPress: () => {
             void confirmDeleteProfile();
@@ -566,6 +592,14 @@ export default function AddPlayersScreen() {
       return;
     }
 
+    if (gameDraft?.selectedGroupId === group.id) {
+      Alert.alert(
+        "Group used in unfinished draft",
+        "Discard or finish the unfinished draft before deleting this group.",
+      );
+      return;
+    }
+
     if (!ensureSharedGroupAccess()) {
       return;
     }
@@ -596,6 +630,7 @@ export default function AddPlayersScreen() {
   }
 
   return (
+    <SafeAreaView edges={["top", "bottom"]} style={{ flex: 1 }}>
     <PageShell preset="quiet" density="compact" scroll={false}>
       <HeroCard
         eyebrow="Players & Groups"
@@ -618,25 +653,22 @@ export default function AddPlayersScreen() {
         </View>
       </HeroCard>
 
-      <View style={styles.tabRow}>
-        <Pressable
-          onPress={() => setTab("players")}
-          style={[styles.tabBtn, tab === "players" && styles.tabBtnActive]}
-        >
-          <Text style={[styles.tabText, tab === "players" && styles.tabTextActive]}>
-            Players
-          </Text>
-        </Pressable>
+      <SegmentedControl items={TAB_ITEMS} value={tab} onChange={(next) => setTab(next)} />
 
-        <Pressable
-          onPress={() => setTab("groups")}
-          style={[styles.tabBtn, tab === "groups" && styles.tabBtnActive]}
+      {gameDraft ? (
+        <SectionCard
+          style={styles.panel}
+          eyebrow="Unfinished Draft"
+          title="Resume your in-progress setup"
+          subtitle="Roster edits are still available, but the current unfinished draft can be resumed at any time."
         >
-          <Text style={[styles.tabText, tab === "groups" && styles.tabTextActive]}>
-            Saved Groups
-          </Text>
-        </Pressable>
-      </View>
+          <ActionButton
+            title="Resume draft"
+            variant="secondary"
+            onPress={() => router.push(resolveDraftResumeRoute(gameDraft.phase) as any)}
+          />
+        </SectionCard>
+      ) : null}
 
       {tab === "players" ? (
         <ScrollView
@@ -708,55 +740,42 @@ export default function AddPlayersScreen() {
                   allowCardSelection
                 />
 
-                <Pressable
-                  onPress={() => {
-                    void handleSaveProfile();
-                  }}
+                <ActionButton
+                  title={savingProfile ? "Saving..." : "Save changes"}
                   disabled={!canSaveProfile}
-                  style={[
-                    styles.primaryBtn,
-                    !canSaveProfile && styles.buttonDisabled,
-                  ]}
-                >
-                  {savingProfile ? (
-                    <ActivityIndicator color="#020814" />
-                  ) : (
-                    <Text style={styles.primaryBtnText}>Save changes</Text>
-                  )}
-                </Pressable>
+                  onPress={() => { void handleSaveProfile(); }}
+                  style={hasProfileChanges && canSaveProfile ? styles.saveButtonPending : undefined}
+                />
+
+                <ActionButton
+                  title="Assign card art to other players"
+                  variant="secondary"
+                  onPress={() => router.push(APP_ROUTES.playerCards as any)}
+                />
 
                 <Text style={styles.deleteHint}>
-                  Deleting your profile removes the sign-in account and replaces you with{" "}
+                  Delete your profile — removes the sign-in account and replaces you with{" "}
                   {HISTORY_REPLACEMENT_NAME} in saved game history.
                 </Text>
 
-                <Pressable
-                  onPress={handleDeleteProfile}
+                <ActionButton
+                  title={deletingProfile ? "Deleting..." : "Delete My Profile"}
+                  variant="danger"
                   disabled={deletingProfile || savingProfile}
-                  style={[
-                    styles.deleteBtn,
-                    (deletingProfile || savingProfile) && styles.buttonDisabled,
-                  ]}
-                >
-                  {deletingProfile ? (
-                    <ActivityIndicator color="#FDE2E2" />
-                  ) : (
-                    <Text style={styles.deleteBtnText}>Delete your profile</Text>
-                  )}
-                </Pressable>
+                  onPress={handleDeleteProfile}
+                />
               </>
             ) : (
               <>
-                <Text style={styles.emptyText}>
-                  Finish account setup before editing the signed-in player card here.
-                </Text>
-
-                <Pressable
+                <EmptyStateCard
+                  message="Finish account setup before editing the signed-in player card here."
+                  hint="Register or sign in first, then return to configure your card."
+                />
+                <ActionButton
+                  title="Finish profile setup"
+                  variant="secondary"
                   onPress={() => router.push(APP_ROUTES.register as any)}
-                  style={styles.secondaryBtn}
-                >
-                  <Text style={styles.secondaryBtnText}>Finish profile setup</Text>
-                </Pressable>
+                />
               </>
             )}
           </SectionCard>
@@ -830,19 +849,11 @@ export default function AddPlayersScreen() {
               })}
             </View>
 
-            <Pressable
-              onPress={() => {
-                void handleCreateGroup();
-              }}
+            <ActionButton
+              title={savingGroup ? "Saving..." : "Save Group"}
               disabled={savingGroup}
-              style={[styles.primaryBtn, savingGroup && styles.buttonDisabled]}
-            >
-              {savingGroup ? (
-                <ActivityIndicator color="#020814" />
-              ) : (
-                <Text style={styles.primaryBtnText}>Save Group</Text>
-              )}
-            </Pressable>
+              onPress={() => { void handleCreateGroup(); }}
+            />
           </SectionCard>
 
           <SectionCard
@@ -889,11 +900,10 @@ export default function AddPlayersScreen() {
             </View>
 
             {visibleGroups.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {hasSavedGroups && hasGroupSearchQuery
-                  ? "No saved groups match your search."
-                  : "No saved groups yet."}
-              </Text>
+              <EmptyStateCard
+                message={hasSavedGroups && hasGroupSearchQuery ? "No saved groups match your search." : "No saved groups yet."}
+                hint={hasSavedGroups && hasGroupSearchQuery ? undefined : "Select 2–5 players above and give your group a name to save it."}
+              />
             ) : (
               <View style={styles.groupList}>
                 {visibleGroups.map((group) => (
@@ -902,6 +912,10 @@ export default function AddPlayersScreen() {
                       <View style={styles.flexGrow}>
                         <Text style={styles.groupName}>{group.name}</Text>
                         <Text style={styles.groupMeta}>{formatGroupUsageHint(group)}</Text>
+                      </View>
+
+                      <View style={styles.groupCountBadge}>
+                        <Text style={styles.groupCountText}>{group.playerIds.length}</Text>
                       </View>
 
                       {profileReady &&
@@ -971,6 +985,7 @@ export default function AddPlayersScreen() {
         </ScrollView>
       )}
     </PageShell>
+    </SafeAreaView>
   );
 }
 
@@ -1020,33 +1035,6 @@ const styles = StyleSheet.create({
     color: "#8FAED7",
     fontSize: 13,
     marginTop: 2,
-  },
-  tabRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  tabBtn: {
-    flex: 1,
-    minHeight: 68,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(67,117,183,0.18)",
-    backgroundColor: "rgba(4,13,30,0.82)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-  },
-  tabBtnActive: {
-    backgroundColor: "rgba(37,99,235,0.2)",
-    borderColor: "rgba(96,165,250,0.52)",
-  },
-  tabText: {
-    color: "#E5EEF9",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  tabTextActive: {
-    color: "#FFFFFF",
   },
   heroMetaRow: {
     flexDirection: "row",
@@ -1141,54 +1129,19 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "600",
   },
-  primaryBtn: {
-    minHeight: 52,
-    borderRadius: 18,
-    backgroundColor: "#F4F7FB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryBtnText: {
-    color: "#020814",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  secondaryBtn: {
-    minHeight: 52,
-    borderRadius: 18,
-    backgroundColor: "rgba(37,99,235,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(96,165,250,0.36)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryBtnText: {
-    color: "#EAF2FF",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  buttonDisabled: {
-    opacity: 0.55,
+  saveButtonPending: {
+    shadowColor: "#A78BFA",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
+    borderColor: "rgba(167,139,250,0.55)",
   },
   deleteHint: {
     color: "#F6C4C4",
     fontSize: 12,
     lineHeight: 18,
     fontWeight: "700",
-  },
-  deleteBtn: {
-    minHeight: 52,
-    borderRadius: 18,
-    backgroundColor: "rgba(87,12,21,0.76)",
-    borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deleteBtnText: {
-    color: "#FDE2E2",
-    fontSize: 16,
-    fontWeight: "900",
   },
   smallLabel: {
     color: "#E8F1FF",
@@ -1298,6 +1251,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  groupCountBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    backgroundColor: "rgba(96,165,250,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.24)",
+  },
+  groupCountText: {
+    color: "#93C5FD",
+    fontSize: 11,
+    fontWeight: "900",
+  },
   flexGrow: {
     flex: 1,
   },
@@ -1339,10 +1308,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     width: "100%",
     textAlign: "center",
-  },
-  emptyText: {
-    color: "#8FAED7",
-    fontSize: 14,
-    lineHeight: 20,
   },
 });

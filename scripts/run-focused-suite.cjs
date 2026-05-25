@@ -9,9 +9,12 @@ const suites = {
     "scripts/player-card-elo-helper.test.cjs",
   ],
   ui: [
+    "scripts/action-button-hierarchy.test.cjs",
+    "scripts/analytics-control-rail.test.cjs",
     "scripts/game-trends-visual-system.test.cjs",
     "scripts/player-directory-visual-system.test.cjs",
     "scripts/game-flow-shell-upgrades.test.cjs",
+    "scripts/visual-system-outliers.test.cjs",
     "scripts/legacy-cleanup-guards.test.cjs",
     "scripts/chart-guided-rail-model.test.cjs",
     "scripts/chart-guided-rail-structure.test.cjs",

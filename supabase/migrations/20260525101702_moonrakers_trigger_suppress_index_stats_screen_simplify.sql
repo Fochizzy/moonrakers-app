@@ -1,6 +1,5 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
--- #1a: Trigger checks session variable ? skips wasted incomplete refresh during save_completed_game
+-- #1a: Trigger checks session variable — skips wasted incomplete refresh during save_completed_game
 create or replace function private.trigger_refresh_participant_rollup()
 returns trigger
 language plpgsql
@@ -10,7 +9,7 @@ as $$
 begin
   -- save_completed_game sets app.skip_rollup_trigger = 'true' (LOCAL to its transaction)
   -- then calls admin_refresh_analytics for all participants after rounds are fully inserted.
-  -- Without this check, each participant INSERT fires a rollup with 0 round data ? wasted work.
+  -- Without this check, each participant INSERT fires a rollup with 0 round data — wasted work.
   if current_setting('app.skip_rollup_trigger', true) = 'true' then
     return new;
   end if;
@@ -156,7 +155,7 @@ create index if not exists games_finished_created_at_idx
   where status = 'finished';
 
 
--- #4: get_stats_screen ? remove permanently dead live-compute fallback.
+-- #4: get_stats_screen — remove permanently dead live-compute fallback.
 -- All rollups have playstyle.label; the fallback (9KB) never ran and omits
 -- newer fields (sessionProfile, totalScore, totalPrestige, totalCount, etc.).
 -- New shape: pure rollup read with a minimal empty state for new profiles.
@@ -194,4 +193,4 @@ begin
   );
 end;
 $$;
-
+;

@@ -79,8 +79,8 @@ function InsightCard({ insight, playerName }: Props) {
         <Text style={styles.value}>{value}</Text>
 
         {!!playerName && (
-          <View style={styles.footer}>
-            <Text style={styles.footerLabel}>Player</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaLabel}>Player</Text>
             <Text style={styles.player}>{playerName}</Text>
           </View>
         )}
@@ -98,12 +98,12 @@ const styles = StyleSheet.create({
   card: {
     position: 'relative',
     borderRadius: 16,
-    padding: 14,
+    padding: 12,
     backgroundColor: '#08101f',
     borderWidth: 1,
     overflow: 'hidden',
-    gap: 10,
-    minHeight: 120,
+    gap: 8,
+    minHeight: 92,
   },
   glow: {
     position: 'absolute',
@@ -142,13 +142,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#ffffff',
   },
-  footer: {
-    marginTop: 'auto',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(148,163,184,0.15)',
-    paddingTop: 8,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  footerLabel: {
+  metaLabel: {
     fontSize: 10,
     color: '#94a3b8',
     fontWeight: '700',

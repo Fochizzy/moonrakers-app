@@ -43,9 +43,7 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists profiles_enforce_unique_display_name on public.profiles;
-
 create trigger profiles_enforce_unique_display_name
 before insert or update on public.profiles
 for each row

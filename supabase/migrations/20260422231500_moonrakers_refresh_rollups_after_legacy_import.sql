@@ -93,4 +93,4 @@ as $$
   select private.refresh_rollups_after_legacy_import(target_profile_id);
 $$;
 
-grant execute on function public.refresh_rollups_after_legacy_import(uuid) to authenticated;
+grant execute on function public.refresh_rollups_after_legacy_import(uuid) to authenticated;;

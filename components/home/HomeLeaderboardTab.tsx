@@ -10,12 +10,8 @@ import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefre
 import type { EloScreenParams, EloScreenPayload } from "@/lib/cloud/analytics/types";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
-import {
-  buildHistoryRoute,
-  buildHomeRoute,
-  buildPlayerProfileRoute,
-} from "@/utils/appRoutes";
-import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
+import { buildPlayerProfileRoute } from "@/utils/appRoutes";
+import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 import { getInitials, n, normalizeId, normalizeName, sortLabel } from "./homeUtils";
 import type { EnrichedPlayer, SortMetric } from "./homeTypes";
 
@@ -56,11 +52,18 @@ export function HomeLeaderboardTab({
   const [sorted, setSorted] = useState<EnrichedPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const recoveryState = resolveAnalyticsRecoveryState({
+  const {
+    recoveryState,
+    messageTitle: leaderboardMessageTitle,
+    messageBody: leaderboardMessageBody,
+    primaryAction: leaderboardPrimaryAction,
+    secondaryAction: leaderboardSecondaryAction,
+  } = useAnalyticsRecovery({
     loading,
     error,
     playersCount: players.length,
     gamesCount: games.length,
+    context: "leaderboard",
   });
   const leaderboardState =
     loading
@@ -69,38 +72,7 @@ export function HomeLeaderboardTab({
         ? "error"
         : recoveryState.kind === "no-players" || recoveryState.kind === "no-games" || !sorted.length
           ? "empty"
-          : "ready";
-  const leaderboardMessageTitle =
-    recoveryState.kind === "no-players"
-      ? "No tracked players yet"
-      : recoveryState.kind === "no-games"
-        ? "No tracked games yet"
-        : error
-          ? "Leaderboard unavailable"
-          : "No leaderboard data yet";
-  const leaderboardMessageBody =
-    recoveryState.kind === "no-players"
-      ? "Set up your roster first so the published ELO leaderboard has real players to rank."
-      : recoveryState.kind === "no-games"
-        ? "Track a few games before expecting the shared ELO leaderboard to populate."
-        : error
-          ? error
-          : "Supabase has not published any leaderboard rows for this account yet.";
-  const leaderboardPrimaryAction =
-    recoveryState.kind === "no-games"
-      ? {
-          label: "Start tracked game",
-          onPress: () => router.push(buildHomeRoute("game")),
-        }
-      : null;
-  const leaderboardSecondaryAction =
-    recoveryState.kind === "no-games"
-      ? {
-          label: "Import backup",
-          onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
-          variant: "secondary" as const,
-        }
-      : null;
+          : ("ready" as const);
 
   useEffect(() => {
     let cancelled = false;

@@ -152,4 +152,4 @@ on public.profile_migrations
 for all
 to authenticated
 using (profile_id = (select auth.uid()))
-with check (profile_id = (select auth.uid()));
+with check (profile_id = (select auth.uid()));;

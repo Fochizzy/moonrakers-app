@@ -61,6 +61,17 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
   },
 ];
 
+export const PROFILE_MANAGEMENT_CARD: HubCard = {
+  key: "profile-management",
+  title: "Profile Management",
+  description: "Profile Picture",
+  route: APP_ROUTES.roster,
+  iconKey: "billBendo",
+  eyebrow: "Account",
+  layout: "graphic-horizontal",
+  fullWidth: true,
+};
+
 const PLAYERS_HUB_CARDS: HubCard[] = [
   {
     key: "roster",

@@ -1,4 +1,3 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
 -- get_stats_screen: return rollup directly when comprehensive (playstyle.label presence
 -- indicates admin_refresh_analytics has populated all sections). Live computation is now
@@ -496,4 +495,4 @@ begin
   return response_payload;
 end;
 $$;
-
+;

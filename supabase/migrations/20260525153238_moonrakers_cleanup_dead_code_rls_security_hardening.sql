@@ -1,16 +1,15 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
 -- #1: Drop get_chart_dataset and get_chart_setup.
 -- Both read rollup.payload->'charts' which was removed in round 3 (50% payload reduction).
 -- Every rollup has has_charts_key=0 so these functions always return empty fallback data.
--- They have 0 RLS refs and 0 function refs ? permanently broken dead code.
+-- They have 0 RLS refs and 0 function refs — permanently broken dead code.
 drop function if exists public.get_chart_dataset(
   text, uuid, uuid, uuid, uuid[], uuid, text, text, text, uuid
 );
 drop function if exists public.get_chart_setup(text, uuid);
 
 
--- #2: Drop can_read_game ? 0 RLS refs, 0 function refs.
+-- #2: Drop can_read_game — 0 RLS refs, 0 function refs.
 -- Was the original game read-gate before policies were replaced with qual=true.
 -- Sitting in public schema as SECURITY DEFINER with no callers.
 drop function if exists public.can_read_game(uuid);
@@ -45,4 +44,4 @@ set search_path = 'public'
 as $$
   select private.delete_completed_game(target_game_id);
 $$;
-
+;

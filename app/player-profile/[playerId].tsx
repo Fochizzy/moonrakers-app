@@ -8,13 +8,16 @@ import {
   Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import AnalyticsSourceBadge from "@/components/analytics/AnalyticsSourceBadge";
+import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
 import MoonrakersIntelSection from "@/components/player/MoonrakersIntelSection";
 import PlayerProfileMetricTabs from "@/components/player-profile/PlayerProfileMetricTabs";
 import PlayerProfileRecentGames from "@/components/player-profile/PlayerProfileRecentGames";
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { getPlayerProfileScreen } from "@/lib/cloud/analytics/getPlayerProfileScreen";
@@ -448,7 +451,7 @@ export default function PlayerProfileDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[3]}
+        stickyHeaderIndices={[4]}
       >
         <View style={styles.headerCard}>
           <View style={styles.headerTextWrap}>
@@ -479,19 +482,6 @@ export default function PlayerProfileDetailScreen() {
               </Text>
             </View>
 
-            <PlayerSearchPicker
-              query={playerSearchQuery}
-              onQueryChange={setPlayerSearchQuery}
-              placeholder="Search User"
-              items={filteredPlayerOptions.map((player) => ({
-                id: String(player.id),
-                label: player.name || "Player",
-              }))}
-              selectedIds={playerId ? [String(playerId)] : []}
-              onSelect={handleSelectPlayer}
-              variant="rail"
-            />
-
             <View style={styles.headerMetaRow}>
               <AnalyticsSourceBadge kind={sourceKind} label={sourceLabel} />
               <Text style={styles.headerMetaText}>
@@ -509,6 +499,25 @@ export default function PlayerProfileDetailScreen() {
             <Text style={styles.headerBadgeText}>Back to Command</Text>
           </Pressable>
         </View>
+
+        <AnalyticsControlRail
+          title="Player Search"
+          subtitle="Swap the focus player without leaving this full profile breakdown."
+          search={{
+            query: playerSearchQuery,
+            onQueryChange: setPlayerSearchQuery,
+            placeholder: "Search User",
+            items: filteredPlayerOptions.map((player) => ({
+              id: String(player.id),
+              label: player.name || "Player",
+            })),
+            selectedIds: playerId ? [String(playerId)] : [],
+            onSelect: handleSelectPlayer,
+            helperText:
+              "Pick another player to reuse the same analytics layout with a different focus.",
+            variant: "rail",
+          }}
+        />
 
         <View style={styles.metricGridTop}>
           <View style={[styles.metricCardTop, { backgroundColor: COLORS.accentSoft }]}>
@@ -608,70 +617,14 @@ export default function PlayerProfileDetailScreen() {
           style={styles.stickyProfileTabShell}
           onLayout={(event) => setStickyShellHeight(event.nativeEvent.layout.height)}
         >
-          <View style={styles.sectionCompact}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Profile Tabs</Text>
-              <Text style={styles.sectionSub}>Custom player breakdown</Text>
-            </View>
-
-            <View style={styles.tabGrid}>
-              <View style={styles.tabGridRowTwo}>
-                {(["Leaderboard", "Momentum"] as EloMetricTab[]).map((tab) => {
-                  const active = tab === activeTab;
-                  return (
-                    <Pressable
-                      key={tab}
-                      style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
-                      onPress={() => setActiveTab(tab)}
-                    >
-                      <Text
-                        style={[
-                          styles.underlineMainTabText,
-                          active && styles.underlineMainTabTextActive,
-                        ]}
-                      >
-                        {tab}
-                      </Text>
-                      <View
-                        style={[
-                          styles.underlineMainTabLine,
-                          active && styles.underlineMainTabLineActive,
-                        ]}
-                      />
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View style={styles.tabGridRowThree}>
-                {(["Skills", "Context", "Projection"] as EloMetricTab[]).map((tab) => {
-                  const active = tab === activeTab;
-                  return (
-                    <Pressable
-                      key={tab}
-                      style={[styles.underlineMainTab, styles.underlineMainTabThreeCol]}
-                      onPress={() => setActiveTab(tab)}
-                    >
-                      <Text
-                        style={[
-                          styles.underlineMainTabText,
-                          active && styles.underlineMainTabTextActive,
-                        ]}
-                      >
-                        {tab}
-                      </Text>
-                      <View
-                        style={[
-                          styles.underlineMainTabLine,
-                          active && styles.underlineMainTabLineActive,
-                        ]}
-                      />
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
+          <AnalyticsControlRail
+            title="Profile Tabs"
+            subtitle="Custom player breakdown"
+            tabs={PROFILE_TABS.map((tab) => ({ key: tab, label: tab }))}
+            activeTabKey={activeTab}
+            onTabChange={(key) => setActiveTab(key as EloMetricTab)}
+            style={styles.profileTabsRail}
+          />
 
           <View style={styles.profileSummaryCards}>
             <View style={styles.profileSummaryCard}>
@@ -792,9 +745,10 @@ export default function PlayerProfileDetailScreen() {
             sectionCards={sectionCards}
           />
         ) : (
-          <View style={styles.sectionCompact}>
-            <Text style={styles.emptyText}>No server-authored profile analytics are available yet.</Text>
-          </View>
+          <EmptyStateCard
+            message="No profile analytics available yet."
+            hint="Finish or import more games to unlock server-authored stats for this player."
+          />
         )}
 
         <MoonrakersIntelSection profile={moonrakersIntel} />
@@ -1152,6 +1106,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  profileTabsRail: {
+    marginBottom: 8,
   },
   quickActionCard: {
     minWidth: "31%",

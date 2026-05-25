@@ -66,6 +66,7 @@ type Props = {
   subtitle?: string;
   showHeader?: boolean;
   showReadoutCards?: boolean;
+  showAssistMetricControl?: boolean;
 };
 
 type SuperNode = {
@@ -521,6 +522,7 @@ export default function RelationshipGraph({
   subtitle,
   showHeader = true,
   showReadoutCards = true,
+  showAssistMetricControl = true,
 }: Props) {
   const resolvedMode = initialView ?? mode;
 

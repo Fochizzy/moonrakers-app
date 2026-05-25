@@ -8,9 +8,11 @@ import {
   loadHydratedSharedSnapshot,
   normalizeAuthSession,
 } from "@/lib/auth/bootstrapSharedCloudState";
+import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
+import { remove } from "@/utils/storage/storage";
 
 const PUBLIC_AUTH_ROUTES = new Set<string>([
   APP_ROUTES.login,
@@ -22,6 +24,7 @@ const PUBLIC_AUTH_ROUTES = new Set<string>([
 export function useSharedCloudBootstrap() {
   const router = useRouter();
   const pathname = usePathname();
+  const { restoreDraftForSession, clearGameDraft } = useSyncedGameDraft();
 
   const authSession = useStore((state) => state.authSession);
   const authProfile = useStore((state) => state.authProfile);
@@ -76,6 +79,8 @@ export function useSharedCloudBootstrap() {
             : normalizeAuthSession((await supabase.auth.getSession()).data.session);
 
         if (!session?.user?.id) {
+          clearGameDraft();
+          await remove("gameDraft");
           clearAuthState();
           setPlayers([] as any);
           setGroups([] as any);
@@ -107,6 +112,7 @@ export function useSharedCloudBootstrap() {
         }
 
         hydrateCloudSnapshot(hydratedSnapshot);
+        await restoreDraftForSession(session.user.id);
         setPasswordRecoveryPending(pendingIntent === "recovery-ready");
       } catch (error) {
         if (!active || requestId !== bootstrapIdRef.current) {
@@ -132,6 +138,7 @@ export function useSharedCloudBootstrap() {
     };
   }, [
     clearAuthState,
+    clearGameDraft,
     hydrateAuthBootstrap,
     hydrateCloudSnapshot,
     setAuthBootstrapStatus,
@@ -262,6 +269,8 @@ export function useSharedCloudBootstrap() {
     } catch {
       // Best effort. We still want to clear local auth routing state.
     } finally {
+      clearGameDraft();
+      await remove("gameDraft");
       await clearPendingAuthIntent();
       setPasswordRecoveryPending(false);
       setAuthSession(null);

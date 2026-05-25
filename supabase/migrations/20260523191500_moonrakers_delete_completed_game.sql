@@ -117,4 +117,4 @@ $$;
 revoke all on function public.delete_completed_game(uuid) from public;
 revoke all on function public.delete_completed_game(uuid) from anon;
 
-grant execute on function public.delete_completed_game(uuid) to authenticated;
+grant execute on function public.delete_completed_game(uuid) to authenticated;;

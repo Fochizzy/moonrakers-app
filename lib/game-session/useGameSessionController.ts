@@ -31,6 +31,7 @@ type HookArgs = {
   playerDirectory: Array<Record<string, unknown>>;
   groupDirectory: Array<Record<string, unknown>>;
   clearActiveGame: () => void;
+  onDraftFinished?: () => Promise<void> | void;
   hydrateCloudSnapshot: (input: {
     session: AuthSessionLike;
     snapshot: unknown;
@@ -122,6 +123,7 @@ export function useGameSessionController(args: HookArgs) {
         winnerId: cloudSave.winnerId,
       });
 
+      await args.onDraftFinished?.();
       args.clearActiveGame();
 
       try {

@@ -1,6 +1,5 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
--- #1: delete_completed_game ? refresh ALL registered participants, not just the host.
+-- #1: delete_completed_game — refresh ALL registered participants, not just the host.
 -- Captures participant IDs before deletion (CASCADE removes rows), then calls
 -- admin_refresh_analytics for each. SECURITY DEFINER allows calling admin_refresh_analytics
 -- for profiles other than the caller.
@@ -87,7 +86,7 @@ end;
 $$;
 
 
--- #2a: delete_my_profile ? stop nullifying winner_profile_id.
+-- #2a: delete_my_profile — stop nullifying winner_profile_id.
 -- Nullifying it turns historical wins into draws in the ELO replay for all other players,
 -- silently corrupting their ratings. The UUID can remain as a tombstone reference.
 -- The ELO replay (updated in the next migration) detects winner-not-in-participants
@@ -116,7 +115,7 @@ begin
   delete from public.group_members where group_members.profile_id = current_profile_id;
   delete from public.groups       where groups.created_by          = current_profile_id;
 
-  -- Anonymise participant rows. Setting profile_id ? null means the ELO replay
+  -- Anonymise participant rows. Setting profile_id → null means the ELO replay
   -- excludes this player from future recalculations while preserving game structure.
   update public.game_participants
   set profile_id                    = null,
@@ -150,4 +149,4 @@ begin
     'deleted_auth_user_id', current_profile_id);
 end;
 $$;
-
+;

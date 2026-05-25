@@ -4,7 +4,8 @@ export type AppStatusScope =
   | "analytics_refresh"
   | "history_import"
   | "history_delete"
-  | "migration_health";
+  | "migration_health"
+  | "game_draft";
 
 export type AppStatusState =
   | "idle"

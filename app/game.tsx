@@ -14,15 +14,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppStatusBanner from '@/components/status/AppStatusBanner';
 import {
   useActiveGame,
-  usePatchActiveGame,
   useClearActiveGame,
   useHydrateCloudSnapshot,
   useAuthSession,
   usePlayers,
   useGroups,
 } from '@/store/useStore';
-import StarryNight from '@/components/ui/StarryNight';
+import ScreenBackground from '@/components/ui/ScreenBackground';
 import Text from '@/components/ui/Text';
+import { useSyncedGameDraft } from '@/lib/game-draft/useSyncedGameDraft';
 import {
   buildEditRoundCandidate,
   buildSubmitRoundCandidate,
@@ -42,6 +42,10 @@ import {
   getPlayerAccentColor,
   getPlayerBackgroundColor,
 } from '@/utils/turnTheme';
+import { loadCloudSnapshot } from '@/lib/cloud/loadCloudSnapshot';
+import { loadRegisteredProfiles } from '@/lib/cloud/loadRegisteredProfiles';
+import { loadStatsSnapshot } from '@/lib/cloud/loadStatsSnapshot';
+import { mergeRegisteredProfilesIntoPlayers } from '@/utils/registeredProfilePlayer';
 import { APP_ROUTES } from '@/utils/appRoutes';
 import {
   glowStyle,
@@ -51,6 +55,7 @@ import {
 } from '@/utils/gameScreenTheme';
 import { toNumber } from '@/utils/numbers';
 import { COLORS } from '@/utils/colors';
+import { remove } from '@/utils/storage/storage';
 
 type Player = {
   id: string;
@@ -231,10 +236,10 @@ function AnimatedLeaderboardPill({
 
         <View style={styles.playerPillMetrics}>
           <View style={styles.metricChip}>
-            <Text style={styles.metricChipText}>P {totalPrestige}</Text>
+            <Text style={styles.metricChipText}>Pts {totalPrestige}</Text>
           </View>
           <View style={styles.metricChip}>
-            <Text style={styles.metricChipText}>S {direct}</Text>
+            <Text style={styles.metricChipText}>Src {direct}</Text>
           </View>
         </View>
       </View>
@@ -943,12 +948,18 @@ export default function Game() {
   const insets = useSafeAreaInsets();
 
   const activeGame = useActiveGame();
-  const patchActiveGame = usePatchActiveGame();
   const clearActiveGame = useClearActiveGame();
   const hydrateCloudSnapshot = useHydrateCloudSnapshot();
   const authSession = useAuthSession();
   const playerDirectory = usePlayers() ?? [];
   const groupDirectory = useGroups() ?? [];
+  const {
+    gameDraft,
+    updateGameplay,
+    hydrateGameDraft,
+    deleteUserGameDraft,
+    clearGameDraft,
+  } = useSyncedGameDraft();
 
   const [contractChoice, setContractChoice] = useState<BinaryChoice>(0);
   const [failureChoice, setFailureChoice] = useState<BinaryChoice>(0);
@@ -988,6 +999,16 @@ export default function Game() {
   const current = (activeGame?.current ?? initialCurrentState) as CurrentTurnStats;
   const displayRounds = useMemo(() => getDisplayRounds(rounds), [rounds]);
 
+  useEffect(() => {
+    if (
+      !activeGame &&
+      gameDraft &&
+      (gameDraft.phase === 'in_progress' || gameDraft.phase === 'ready_to_finish')
+    ) {
+      hydrateGameDraft({ draft: gameDraft });
+    }
+  }, [activeGame, gameDraft, hydrateGameDraft]);
+
   const editingRound = useMemo(
     () => rounds.find((round) => round.id === editingRoundId) ?? null,
     [rounds, editingRoundId]
@@ -1025,6 +1046,15 @@ export default function Game() {
     playerDirectory: playerDirectory as Array<Record<string, unknown>>,
     groupDirectory: groupDirectory as Array<Record<string, unknown>>,
     clearActiveGame,
+    onDraftFinished: async () => {
+      if (!gameDraft?.profileId) {
+        return;
+      }
+
+      await deleteUserGameDraft(gameDraft.profileId);
+      clearGameDraft();
+      await remove('gameDraft');
+    },
     hydrateCloudSnapshot,
     router,
   });
@@ -1074,13 +1104,40 @@ export default function Game() {
     );
   }
 
-  function updateCurrent(patch: Partial<CurrentTurnStats>) {
-    patchActiveGame({
-      current: {
-        ...current,
-        ...patch,
+  function commitGameplayPatch(
+    patch: Partial<{
+      current: Partial<CurrentTurnStats>;
+      rounds: StoredRound[];
+      totals: Record<string, unknown>;
+      turnIndex: number;
+      roundCount: number;
+      selectedWinnerId: string | null;
+    }>,
+    phase: 'in_progress' | 'ready_to_finish' = 'in_progress',
+  ) {
+    if (!activeGame) {
+      return;
+    }
+
+    void updateGameplay(
+      {
+        turnIndex: patch.turnIndex ?? activeGame.turnIndex,
+        rounds: patch.rounds ?? rounds,
+        totals: (patch.totals ?? totals) as any,
+        current: {
+          ...current,
+          ...(patch.current ?? {}),
+        },
+        roundCount: patch.roundCount ?? activeGame.roundCount,
+        selectedWinnerId:
+          patch.selectedWinnerId ?? activeGame.selectedWinnerId ?? null,
       },
-    });
+      phase,
+    );
+  }
+
+  function updateCurrent(patch: Partial<CurrentTurnStats>) {
+    commitGameplayPatch({ current: patch });
   }
 
   function applyContractChoice(next: 0 | 1) {
@@ -1252,7 +1309,7 @@ export default function Game() {
         setCollapsedAssistPlayers(snapshot.collapsedAssistPlayers);
         setHiddenAssistPlayers(snapshot.hiddenAssistPlayers);
 
-        patchActiveGame({
+        commitGameplayPatch({
           current: {
             ...snapshot.current,
             assistRecipients: { ...(snapshot.current.assistRecipients ?? {}) },
@@ -1263,9 +1320,8 @@ export default function Game() {
         setContractChoice(0);
         setFailureChoice(0);
         setAssistsCollapsed(false);
-        patchActiveGame({
+        commitGameplayPatch({
           current: {
-            ...current,
             contracts: 0,
             failures: 0,
           },
@@ -1293,7 +1349,7 @@ export default function Game() {
     setFailureChoice(0);
     setAssistsCollapsed(true);
 
-    patchActiveGame({
+    commitGameplayPatch({
       current: {
         prestige: current.prestige ?? 0,
         contracts: 0,
@@ -1322,12 +1378,11 @@ export default function Game() {
       if (!nextTotals) return;
 
       const leaders = getLeadingPlayerIds(nextTotals, players as any);
-      patchActiveGame({
+      commitGameplayPatch({
         rounds: candidate.nextRounds,
         current: { ...initialCurrentState },
         turnIndex: getNextTurnIndex(activeGame.turnIndex, players.length),
         totals: nextTotals,
-        showTieBreaker: leaders.length > 1,
         roundCount: candidate.nextRounds.length,
       });
 
@@ -1351,7 +1406,7 @@ export default function Game() {
       const nextTotals = validateNoNegativeTotalPrestige(candidate.nextRounds);
       if (!nextTotals) return;
 
-      patchActiveGame({
+      commitGameplayPatch({
         rounds: candidate.nextRounds,
         totals: nextTotals,
         current: { ...initialCurrentState },
@@ -1391,7 +1446,7 @@ export default function Game() {
       setCollapsingAssistPlayers({});
       preBaseSnapshotRef.current = null;
 
-      patchActiveGame({
+      commitGameplayPatch({
         current: {
           ...editState.current,
           assistRecipients: { ...(editState.current.assistRecipients ?? {}) },
@@ -1418,13 +1473,36 @@ export default function Game() {
       return;
     }
 
-    Alert.alert('Finish Game?', 'Are you sure you want to end the game?', [
+    Alert.alert('Finish Game?', 'This will permanently record the results and close the session. You cannot undo this.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Finish Game',
+        text: 'Submit Results',
         style: 'destructive',
         onPress: () => {
-          void commitFinishGame();
+          void (async () => {
+            await commitFinishGame();
+            if (authSession?.user?.id) {
+              try {
+                const [snapshot, registeredProfiles] = await Promise.all([
+                  loadCloudSnapshot(authSession.user.id),
+                  loadRegisteredProfiles().catch(() => []),
+                ]);
+                const statsSnapshot = await loadStatsSnapshot({
+                  profileId: authSession.user.id,
+                  groups: snapshot.groups,
+                  games: snapshot.games,
+                });
+                hydrateCloudSnapshot({
+                  session: authSession,
+                  snapshot: {
+                    ...snapshot,
+                    players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
+                  },
+                  statsSnapshot,
+                });
+              } catch {}
+            }
+          })();
         },
       },
     ]);
@@ -1432,7 +1510,7 @@ export default function Game() {
 
   return (
     <View style={[styles.screen, { backgroundColor: appBackground }]}>
-      <StarryNight />
+      <ScreenBackground preset="tactical" />
 
       <View
         pointerEvents="none"

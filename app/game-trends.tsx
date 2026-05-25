@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import ActionButton from "@/components/ui/ActionButton";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
@@ -12,6 +13,7 @@ import {
   APP_ROUTES,
   buildHistoryRoute,
   buildPlayerProfileRoute,
+  buildSummaryRoute,
 } from "@/utils/appRoutes";
 import { formatDate } from "@/utils/formatters";
 import { toNumber } from "@/utils/numbers";
@@ -357,6 +359,12 @@ export default function GameTrendsScreen() {
               onPress={() => scrollToSection("prediction")}
             />
             <NavButton label="Player Cards" onPress={() => scrollToSection("playerCards")} />
+            {gameId ? (
+              <NavButton
+                label="View Summary"
+                onPress={() => router.push(buildSummaryRoute(gameId) as any)}
+              />
+            ) : null}
           </View>
         </SectionCard>
 
@@ -371,7 +379,7 @@ export default function GameTrendsScreen() {
             subtitle="Running prestige after each recorded round."
           >
             {prestigeTrendRows.length === 0 ? (
-              <Text style={styles.emptyText}>No rounds recorded for this game.</Text>
+              <EmptyStateCard message="No rounds recorded for this game." />
             ) : (
               prestigeTrendRows.map((row) => (
                 <View key={`prestige-${row.round}`} style={styles.rowCard}>
@@ -486,7 +494,7 @@ export default function GameTrendsScreen() {
             subtitle="How early the pace of play pointed at the final winner."
           >
             {winnerPredictionRows.length === 0 ? (
-              <Text style={styles.emptyText}>No rounds recorded for this game.</Text>
+              <EmptyStateCard message="No rounds recorded for this game." />
             ) : (
               winnerPredictionRows.map((row) => (
                 <View key={`prediction-${row.round}`} style={styles.rowCard}>
