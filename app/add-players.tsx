@@ -33,6 +33,7 @@ import {
   type GroupSortMode,
 } from "@/utils/groupUsageRanking";
 import {
+  canonicalizeSelectablePlayers,
   isLikelyRegisteredProfileId,
   mergeRegisteredProfilesIntoPlayers,
 } from "@/utils/registeredProfilePlayer";
@@ -237,7 +238,20 @@ export default function AddPlayersScreen() {
     [sortedPlayers],
   );
 
-  const rankedGroups = useMemo(() => rankGroupsWithUsage(groups, games), [groups, games]);
+  const selectableDirectory = useMemo(
+    () => canonicalizeSelectablePlayers(players, groups),
+    [groups, players],
+  );
+
+  const playerIdAliases = selectableDirectory.aliases;
+
+  const rankedGroups = useMemo(
+    () =>
+      rankGroupsWithUsage(groups, games, {
+        normalizePlayerId: (playerId) => normalizeId(playerIdAliases[playerId] ?? playerId),
+      }),
+    [games, groups, playerIdAliases],
+  );
 
   const visibleGroups = useMemo(() => {
     const filteredGroups = filterGroupsByQuery(
@@ -264,6 +278,9 @@ export default function AddPlayersScreen() {
 
     return filteredGroups;
   }, [groupSearchQuery, groupSortMode, playersById, rankedGroups]);
+
+  const hasSavedGroups = groups.length > 0;
+  const hasGroupSearchQuery = groupSearchQuery.trim().length > 0;
 
   useEffect(() => {
     const validPlayerIds = new Set(sortedPlayers.map((player) => player.id));
@@ -853,7 +870,11 @@ export default function AddPlayersScreen() {
               </View>
 
               {visibleGroups.length === 0 ? (
-                <Text style={styles.emptyText}>No saved groups yet.</Text>
+                <Text style={styles.emptyText}>
+                  {hasSavedGroups && hasGroupSearchQuery
+                    ? "No saved groups match your search."
+                    : "No saved groups yet."}
+                </Text>
               ) : (
                 <View style={styles.groupList}>
                   {visibleGroups.map((group) => (

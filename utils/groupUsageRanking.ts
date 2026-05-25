@@ -192,7 +192,7 @@ export function formatGroupUsageHint(group: GroupUsageGroup): string {
   const recentAt = group.inferredRecentAt ?? 0;
 
   if (missionCount > 0 && recentAt > 0) {
-    return `${missionCount} mission${missionCount === 1 ? "" : "s"} • ${formatRelativeTime(recentAt)}`;
+    return `${missionCount} mission${missionCount === 1 ? "" : "s"} / ${formatRelativeTime(recentAt)}`;
   }
 
   if (missionCount > 0) {
