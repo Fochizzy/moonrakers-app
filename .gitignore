@@ -1,5 +1,7 @@
 node_modules/
 .expo/
+.npm-cache/
+.superpowers/
 dist/
 build/
 *.log
@@ -22,6 +24,9 @@ supabase/.temp/
 tmp/
 tmp-aab-cert/
 tmp-aab-manifest/
+tmp-*.sql
+tmp-*.json
+tmp-codex-*.txt
 tmp-*.png
 tmp-*.xml
 tmp-*.txt
