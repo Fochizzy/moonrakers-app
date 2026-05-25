@@ -27,7 +27,12 @@ import { buildPlaystyleSamples } from "@/utils/playstyleEngine";
 import { buildMoonrakersIntelProfile } from "@/utils/playerProfileMoonrakers";
 import { resolveAssignedCardArtIndexForProfile } from "@/utils/profileAppearance";
 import { isValidPlayerCardArtIndex } from "@/utils/playerCards";
-import { APP_ROUTES, buildPlayerProfileRoute } from "@/utils/appRoutes";
+import {
+  APP_ROUTES,
+  buildChartsRoute,
+  buildCompareRoute,
+  buildPlayerProfileRoute,
+} from "@/utils/appRoutes";
 import { buildCommonOpponentOptions } from "@/utils/charts";
 
 const SHEET = require("@/assets/images/player-card-sheet.png");
@@ -771,6 +776,7 @@ function getPlayerNameById(players: StorePlayer[], playerId?: string | null): st
 export default function PlayerProfileDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ playerId?: string | string[] }>();
+  const scrollViewRef = React.useRef<ScrollView | null>(null);
 
   const games = useStore((s: any) => s.games || []);
   const players = useStore((s: any) => s.players || []);
@@ -780,6 +786,7 @@ export default function PlayerProfileDetailScreen() {
   const [activeTab, setActiveTab] = useState<EloMetricTab>(getDefaultMetricTab());
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const [opponentSearchQuery, setOpponentSearchQuery] = useState("");
+  const [recentGamesAnchorY, setRecentGamesAnchorY] = useState(0);
   const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
   const deferredOpponentSearchQuery = useDeferredValue(opponentSearchQuery);
 
@@ -802,6 +809,26 @@ export default function PlayerProfileDetailScreen() {
   const handleSelectPlayer = (nextPlayerId: string) => {
     if (String(nextPlayerId) === String(playerId)) return;
     router.replace(buildPlayerProfileRoute(String(nextPlayerId)));
+  };
+
+  const openCompareLaunchpad = () => {
+    if (!playerId) return;
+    router.push(buildCompareRoute({ mode: "players", ids: [String(playerId)] }));
+  };
+
+  const openChartsLaunchpad = () => {
+    if (!playerId) return;
+    router.push(buildChartsRoute({
+      playerId: String(playerId),
+      setup: true,
+    }));
+  };
+
+  const jumpToRecentGames = () => {
+    scrollViewRef.current?.scrollTo({
+      y: Math.max(recentGamesAnchorY - 12, 0),
+      animated: true,
+    });
   };
 
   const selectedPlayer = useMemo(
@@ -987,10 +1014,11 @@ export default function PlayerProfileDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[2]}
+        stickyHeaderIndices={[3]}
       >
         
         
@@ -1131,6 +1159,36 @@ export default function PlayerProfileDetailScreen() {
             <Text style={styles.metricSub}>
               {totalWins} wins / {totalGames} games
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <Text style={styles.sectionSub}>Jump into the next player workflow</Text>
+          </View>
+
+          <View style={styles.quickActionsGrid}>
+            <Pressable style={styles.quickActionCard} onPress={openCompareLaunchpad}>
+              <Text style={styles.quickActionTitle}>Compare with...</Text>
+              <Text style={styles.quickActionLabel}>
+                Lock {selectedPlayer.name || "this player"} and pick the rival on the compare screen.
+              </Text>
+            </Pressable>
+
+            <Pressable style={styles.quickActionCard} onPress={openChartsLaunchpad}>
+              <Text style={styles.quickActionTitle}>Open charts</Text>
+              <Text style={styles.quickActionLabel}>
+                Carry this player into chart setup and choose the view there.
+              </Text>
+            </Pressable>
+
+            <Pressable style={styles.quickActionCard} onPress={jumpToRecentGames}>
+              <Text style={styles.quickActionTitle}>Recent games</Text>
+              <Text style={styles.quickActionLabel}>
+                Jump straight to the existing history section lower on this profile.
+              </Text>
+            </Pressable>
           </View>
         </View>
 
@@ -1432,7 +1490,10 @@ export default function PlayerProfileDetailScreen() {
 
         <MoonrakersIntelSection profile={moonrakersIntel} />
 
-        <View style={styles.sectionCompact}>
+        <View
+          style={styles.sectionCompact}
+          onLayout={(event) => setRecentGamesAnchorY(event.nativeEvent.layout.y)}
+        >
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Recent Games</Text>
               <Text style={styles.sectionSub}>
@@ -1820,6 +1881,32 @@ const styles = StyleSheet.create({
   tabGrid: {
     gap: 8,
   },
+  quickActionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  quickActionCard: {
+    minWidth: "31%",
+    flexGrow: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: COLORS.whiteSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+  },
+  quickActionTitle: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  quickActionLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 14,
+  },
   tabGridRowTwo: {
     flexDirection: "row",
     gap: 10,
@@ -2055,4 +2142,3 @@ const styles = StyleSheet.create({
     height: 8,
   },
 });
-
