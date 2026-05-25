@@ -13,6 +13,10 @@ const homeSource = fs.readFileSync(
   path.join(projectRoot, "app", "index.tsx"),
   "utf8",
 );
+const compareSource = fs.readFileSync(
+  path.join(projectRoot, "app", "charts", "compare", "index.tsx"),
+  "utf8",
+);
 const originalResolveFilename = Module._resolveFilename;
 
 Module._resolveFilename = function patchedResolveFilename(
@@ -106,12 +110,12 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
-  buildHistoryRoute({ intent: "import" }),
+  buildHistoryRoute(),
   {
     pathname: APP_ROUTES.history,
-    params: { intent: "import" },
+    params: undefined,
   },
-  "expected the history route builder to preserve the import intent param",
+  "expected the history route builder to return the base History route for Task 1 shortcuts",
 );
 
 assert.match(
@@ -124,6 +128,24 @@ assert.match(
   homeSource,
   /title="Compare"[\s\S]*title="Charts"[\s\S]*title="Profiles"[\s\S]*title="History"/s,
   "expected the Quick Launch block to render Compare, Charts, Profiles, and History buttons",
+);
+
+assert.match(
+  homeSource,
+  /<SectionCard[\s\S]*title="Quick Launch"[\s\S]*<SectionCard title="Players">/s,
+  "expected the Quick Launch section to appear before the Players section",
+);
+
+assert.match(
+  homeSource,
+  /quickLaunchGrid:\s*\{[\s\S]*flexDirection:\s*"row"[\s\S]*flexWrap:\s*"wrap"[\s\S]*\}/s,
+  "expected the Home styles to define quickLaunchGrid",
+);
+
+assert.match(
+  homeSource,
+  /quickLaunchButton:\s*\{[\s\S]*flexBasis:\s*"48%"[\s\S]*flexGrow:\s*1[\s\S]*\}/s,
+  "expected the Home styles to define quickLaunchButton",
 );
 
 assert.match(
@@ -148,6 +170,18 @@ assert.match(
   homeSource,
   /router\.push\(buildHistoryRoute\(\)\)/,
   "expected the History shortcut to use the shared History route builder",
+);
+
+assert.match(
+  compareSource,
+  /typeof params\.ids === "string"[\s\S]*params\.ids\.split\(","\)\.map\(\(value\) => value\.trim\(\)\)\.filter\(Boolean\)/s,
+  "expected the compare screen to trim comma-split ids from string params before filtering",
+);
+
+assert.match(
+  compareSource,
+  /Array\.isArray\(params\.ids\)[\s\S]*params\.ids[\s\S]*flatMap\(\(value\) => value\.split\(","\)\.map\(\(part\) => part\.trim\(\)\)\)[\s\S]*filter\(Boolean\)/s,
+  "expected the compare screen to trim comma-split ids from array params before filtering",
 );
 
 console.log("home-quick-launch.test.cjs passed");

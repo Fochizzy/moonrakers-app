@@ -328,9 +328,11 @@ export default function IndexScreen() {
 
   const initialIds = (
     typeof params.ids === "string"
-      ? params.ids.split(",").filter(Boolean)
+      ? params.ids.split(",").map((value) => value.trim()).filter(Boolean)
       : Array.isArray(params.ids)
-        ? params.ids.flatMap((value) => value.split(",")).filter(Boolean)
+        ? params.ids
+            .flatMap((value) => value.split(",").map((part) => part.trim()))
+            .filter(Boolean)
         : []
   ).slice(0, MAX_COMPARE_PLAYERS);
 
