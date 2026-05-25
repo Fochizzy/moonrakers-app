@@ -27,6 +27,12 @@ import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import { type CardColor } from "@/utils/cardAssignment";
 import {
+  filterGroupsByQuery,
+  formatGroupUsageHint,
+  rankGroupsWithUsage,
+  type GroupSortMode,
+} from "@/utils/groupUsageRanking";
+import {
   isLikelyRegisteredProfileId,
   mergeRegisteredProfilesIntoPlayers,
 } from "@/utils/registeredProfilePlayer";
@@ -53,6 +59,21 @@ type GroupLike = {
   name: string;
   playerIds: string[];
   createdAt?: number;
+  inferredUseCount?: number;
+  inferredRecentAt?: number;
+};
+
+type GameLike = {
+  groupId?: string;
+  createdAt?: number;
+  players?: Array<
+    | string
+    | {
+        id?: string;
+        playerId?: string;
+      }
+  >;
+  totals?: Record<string, unknown>;
 };
 
 type AddPlayersRouteParams = {
@@ -80,12 +101,59 @@ function isTruthyRouteParam(value?: string | string[]) {
   return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
+function asArray<T>(value: T[] | Record<string, T> | null | undefined): T[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.values(value);
+  }
+
+  return [];
+}
+
+function normalizeId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeGame(raw: any): GameLike | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const createdAt =
+    typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
+      ? raw.createdAt
+      : undefined;
+
+  return {
+    groupId: normalizeId(raw.groupId) || undefined,
+    createdAt,
+    players: Array.isArray(raw.players)
+      ? raw.players.map((player: any) =>
+          typeof player === "string"
+            ? normalizeId(player)
+            : {
+                id: normalizeId(player?.id) || undefined,
+                playerId: normalizeId(player?.playerId) || undefined,
+              }
+        )
+      : undefined,
+    totals:
+      raw.totals && typeof raw.totals === "object"
+        ? (raw.totals as Record<string, unknown>)
+        : undefined,
+  };
+}
+
 export default function AddPlayersScreen() {
   const router = useRouter();
   const routeParams = useLocalSearchParams<AddPlayersRouteParams>();
 
   const players = useStore((state: any) => state.players ?? []) as PlayerLike[];
   const groups = useStore((state: any) => state.groups ?? []) as GroupLike[];
+  const rawGames = useStore((state: any) => state.games ?? []);
   const authSession = useStore((state: any) => state.authSession);
   const authProfile = useStore((state: any) => state.authProfile);
   const setAuthProfile = useStore((state: any) => state.setAuthProfile);
@@ -113,6 +181,8 @@ export default function AddPlayersScreen() {
   const [savingGroup, setSavingGroup] = useState(false);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [groupName, setGroupName] = useState("");
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [groupSortMode, setGroupSortMode] = useState<GroupSortMode>("most-played");
   const [selectedGroupPlayerIds, setSelectedGroupPlayerIds] = useState<string[]>([]);
 
   const currentFavoriteColor = useMemo(
@@ -154,10 +224,46 @@ export default function AddPlayersScreen() {
     [players],
   );
 
-  const sortedGroups = useMemo(
-    () => [...groups].sort((left, right) => left.name.localeCompare(right.name)),
-    [groups],
+  const games = useMemo(
+    () =>
+      asArray(rawGames)
+        .map((game) => normalizeGame(game))
+        .filter((game: GameLike | null): game is GameLike => Boolean(game)),
+    [rawGames],
   );
+
+  const playersById = useMemo(
+    () => new Map(sortedPlayers.map((player) => [player.id, player] as const)),
+    [sortedPlayers],
+  );
+
+  const rankedGroups = useMemo(() => rankGroupsWithUsage(groups, games), [groups, games]);
+
+  const visibleGroups = useMemo(() => {
+    const filteredGroups = filterGroupsByQuery(
+      rankedGroups,
+      groupSearchQuery,
+      playersById,
+    );
+
+    if (groupSortMode === "recent") {
+      return [...filteredGroups].sort((left, right) => {
+        if ((right.inferredRecentAt ?? 0) !== (left.inferredRecentAt ?? 0)) {
+          return (right.inferredRecentAt ?? 0) - (left.inferredRecentAt ?? 0);
+        }
+        if ((right.inferredUseCount ?? 0) !== (left.inferredUseCount ?? 0)) {
+          return (right.inferredUseCount ?? 0) - (left.inferredUseCount ?? 0);
+        }
+        return left.name.localeCompare(right.name);
+      });
+    }
+
+    if (groupSortMode === "az") {
+      return [...filteredGroups].sort((left, right) => left.name.localeCompare(right.name));
+    }
+
+    return filteredGroups;
+  }, [groupSearchQuery, groupSortMode, playersById, rankedGroups]);
 
   useEffect(() => {
     const validPlayerIds = new Set(sortedPlayers.map((player) => player.id));
@@ -708,16 +814,54 @@ export default function AddPlayersScreen() {
             <View style={styles.panel}>
               <Text style={styles.sectionTitle}>Saved groups</Text>
 
-              {sortedGroups.length === 0 ? (
+              <TextInput
+                value={groupSearchQuery}
+                onChangeText={setGroupSearchQuery}
+                placeholder="Search groups"
+                placeholderTextColor="#6E87AE"
+                style={styles.groupSearchInput}
+              />
+
+              <View style={styles.groupSortRow}>
+                {[
+                  { key: "most-played" as GroupSortMode, label: "Most Played" },
+                  { key: "recent" as GroupSortMode, label: "Recent" },
+                  { key: "az" as GroupSortMode, label: "A-Z" },
+                ].map((option) => {
+                  const active = groupSortMode === option.key;
+
+                  return (
+                    <Pressable
+                      key={option.key}
+                      onPress={() => setGroupSortMode(option.key)}
+                      style={[
+                        styles.groupSortChip,
+                        active && styles.groupSortChipActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.groupSortChipText,
+                          active && styles.groupSortChipTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {visibleGroups.length === 0 ? (
                 <Text style={styles.emptyText}>No saved groups yet.</Text>
               ) : (
                 <View style={styles.groupList}>
-                  {sortedGroups.map((group) => (
+                  {visibleGroups.map((group) => (
                     <View key={group.id} style={styles.groupCard}>
                       <View style={styles.groupCardTop}>
                         <View style={styles.flexGrow}>
                           <Text style={styles.groupName}>{group.name}</Text>
-                          <Text style={styles.groupMeta}>{group.playerIds.length} players</Text>
+                          <Text style={styles.groupMeta}>{formatGroupUsageHint(group)}</Text>
                         </View>
 
                         {profileReady &&
@@ -759,7 +903,7 @@ export default function AddPlayersScreen() {
                         contentContainerStyle={styles.groupCardPlayers}
                       >
                         {group.playerIds.map((id) => {
-                          const player = players.find((candidate) => candidate.id === id);
+                          const player = playersById.get(id);
                           if (!player) {
                             return null;
                           }
@@ -1048,6 +1192,41 @@ const styles = StyleSheet.create({
   },
   groupList: {
     gap: 10,
+  },
+  groupSearchInput: {
+    backgroundColor: "#081426",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(67,117,183,0.18)",
+    color: "#FFFFFF",
+    fontSize: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  groupSortRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  groupSortChip: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  groupSortChipActive: {
+    backgroundColor: "rgba(37,99,235,0.22)",
+    borderColor: "rgba(96,165,250,0.42)",
+  },
+  groupSortChipText: {
+    color: "#BFD3F4",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  groupSortChipTextActive: {
+    color: "#FFFFFF",
   },
   groupCard: {
     borderRadius: 18,

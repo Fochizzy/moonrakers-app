@@ -33,6 +33,7 @@ import {
   normalizeHomeTab,
 } from "@/utils/appRoutes";
 import { calculateElo } from "@/utils/elo";
+import { rankGroupsWithUsage } from "@/utils/groupUsageRanking";
 import {
   ensureRequiredPlayerSelection,
   filterGroupsForSignedInPlayer,
@@ -1011,31 +1012,11 @@ export default function HomeScreen() {
   }, [commandPlayers, usage]);
 
   const rankedGroups = useMemo(() => {
-    return [...commandGroups]
-      .map((group) => {
-        const directUseCount = usage.groupUseCount[group.id] ?? 0;
-        const directRecentAt = usage.groupRecentAt[group.id] ?? 0;
-
-        const comboKey = [...group.playerIds].sort().join("|");
-        const comboUseCount = usage.comboUseCount[comboKey] ?? 0;
-        const comboRecentAt = usage.comboRecentAt[comboKey] ?? 0;
-
-        return {
-          ...group,
-          inferredUseCount: Math.max(directUseCount, comboUseCount),
-          inferredRecentAt: Math.max(directRecentAt, comboRecentAt),
-        };
-      })
-      .sort((a, b) => {
-        if ((b.inferredUseCount ?? 0) !== (a.inferredUseCount ?? 0)) {
-          return (b.inferredUseCount ?? 0) - (a.inferredUseCount ?? 0);
-        }
-        if ((b.inferredRecentAt ?? 0) !== (a.inferredRecentAt ?? 0)) {
-          return (b.inferredRecentAt ?? 0) - (a.inferredRecentAt ?? 0);
-        }
-        return a.name.localeCompare(b.name);
-      });
-  }, [commandGroups, usage]);
+    return rankGroupsWithUsage(commandGroups, games, {
+      normalizePlayerId: (playerId) =>
+        normalizeId(playerIdAliases[playerId] ?? playerId),
+    });
+  }, [commandGroups, games, playerIdAliases]);
 
   const signedInPlayerId = useMemo(() => {
     const candidates = [
