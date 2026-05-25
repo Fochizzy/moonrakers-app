@@ -9,14 +9,16 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
 import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
 import { getStatsScreen } from "@/lib/cloud/analytics/getStatsScreen";
 import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
+import { buildChartsRoute, buildHistoryRoute, buildHomeRoute, APP_ROUTES } from "@/utils/appRoutes";
+import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
 import { formatDate } from "@/utils/formatters";
-import { APP_ROUTES } from "@/utils/appRoutes";
 
 type StatsTab = "overview" | "players" | "playstyle" | "correlations" | "games";
 
@@ -243,6 +245,8 @@ export default function StatsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const authSession = useStore((state: any) => state.authSession);
+  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
   const analyticsRefreshTick = useAnalyticsRefreshTick();
   const [activeTab, setActiveTab] = useState<StatsTab>("overview");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -358,6 +362,72 @@ export default function StatsScreen() {
   ];
   const gamesItems = toArray(gamesSection.items);
   const detailStats = normalizeStatsList(selectedPlayerDetail.stats);
+  const hasLeagueData =
+    overviewCards.length > 0 ||
+    topSignals.length > 0 ||
+    playstyleHighlights.length > 0 ||
+    correlationItems.length > 0 ||
+    gamesItems.length > 0 ||
+    toNumberValue(hero.games) > 0;
+  const overviewRecoveryState = useMemo(
+    () =>
+      resolveAnalyticsRecoveryState({
+        loading,
+        error,
+        playersCount: players.length,
+        gamesCount: games.length,
+      }),
+    [error, games.length, loading, players.length],
+  );
+  const playerRecoveryState = useMemo(
+    () =>
+      resolveAnalyticsRecoveryState({
+        loading,
+        error,
+        playersCount: players.length,
+        gamesCount: games.length,
+        playerOptionsCount: playerOptions.length,
+        hasLeagueData,
+        selectedPlayerHasDetail: detailStats.length > 0,
+      }),
+    [detailStats.length, error, games.length, hasLeagueData, loading, playerOptions.length, players.length],
+  );
+
+  function renderSharedRecoveryCard(kind: "no-players" | "no-games") {
+    if (kind === "no-players") {
+      return (
+        <AnalyticsRecoveryCard
+          title="No tracked players yet"
+          body="Set up your roster first so the analytics surfaces have real commanders to work with."
+          primaryAction={{
+            label: "Open roster",
+            onPress: () => router.push(APP_ROUTES.roster),
+          }}
+          secondaryAction={{
+            label: "Profiles",
+            onPress: () => router.push(APP_ROUTES.playerDirectory),
+            variant: "secondary",
+          }}
+        />
+      );
+    }
+
+    return (
+      <AnalyticsRecoveryCard
+        title="No tracked games yet"
+        body="Your roster is ready, but you need mission history before the analytics hub can populate."
+        primaryAction={{
+          label: "Start tracked game",
+          onPress: () => router.push(buildHomeRoute("game")),
+        }}
+        secondaryAction={{
+          label: "Import backup",
+          onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
+          variant: "secondary",
+        }}
+      />
+    );
+  }
 
   function renderOverviewTab() {
     if (loading) {
@@ -371,6 +441,10 @@ export default function StatsScreen() {
 
     if (error) {
       return <EmptyCard title="Stats unavailable" body={error} />;
+    }
+
+    if (overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games") {
+      return renderSharedRecoveryCard(overviewRecoveryState.kind);
     }
 
     return (
@@ -439,6 +513,37 @@ export default function StatsScreen() {
 
     if (error) {
       return <EmptyCard title="Player analytics unavailable" body={error} />;
+    }
+
+    if (playerRecoveryState.kind === "no-players" || playerRecoveryState.kind === "no-games") {
+      return renderSharedRecoveryCard(playerRecoveryState.kind);
+    }
+
+    if (playerRecoveryState.kind === "player-empty") {
+      return (
+        <AnalyticsRecoveryCard
+          title="No player-specific detail yet"
+          body="League data exists, but the current player does not have a full detail payload on this screen yet."
+          primaryAction={{
+            label: "Choose another player",
+            onPress: () => {
+              const fallbackPlayer =
+                filteredPlayerOptions.find((player) => player.id !== selectedPlayerId) ??
+                playerOptions.find((player) => player.id !== selectedPlayerId) ??
+                filteredPlayerOptions[0] ??
+                playerOptions[0];
+              if (fallbackPlayer?.id) {
+                setSelectedPlayerId(fallbackPlayer.id);
+              }
+            },
+          }}
+          secondaryAction={{
+            label: "Open charts",
+            onPress: () => router.push(buildChartsRoute()),
+            variant: "secondary",
+          }}
+        />
+      );
     }
 
     if (!playerOptions.length) {

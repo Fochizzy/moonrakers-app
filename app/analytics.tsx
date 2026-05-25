@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
@@ -10,7 +11,8 @@ import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefre
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { getAnalyticsHubCards } from "@/utils/appHubs";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { APP_ROUTES, buildHistoryRoute, buildHomeRoute } from "@/utils/appRoutes";
+import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
 import { APP_ICONS } from "@/utils/iconAccess";
 
 const CARD_TONES: Record<
@@ -156,6 +158,8 @@ function AnalyticsCard({
 export default function AnalyticsScreen() {
   const router = useRouter();
   const authSession = useStore((state: any) => state.authSession);
+  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
   const analyticsRefreshTick = useAnalyticsRefreshTick();
   const cards = useMemo(() => getAnalyticsHubCards(), []);
   const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
@@ -209,6 +213,12 @@ export default function AnalyticsScreen() {
   const hero = toRecord(payload?.hero);
   const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
+  const recoveryState = resolveAnalyticsRecoveryState({
+    loading,
+    error,
+    playersCount: players.length,
+    gamesCount: games.length,
+  });
   const heroMessage = error
     ? error
     : loading
@@ -243,6 +253,38 @@ export default function AnalyticsScreen() {
         </View>
         <Text style={styles.heroMeta}>{heroMessage}</Text>
       </HeroCard>
+
+      {recoveryState.kind === "no-players" ? (
+        <AnalyticsRecoveryCard
+          title="No tracked players yet"
+          body="Set up your roster first so the analytics surfaces have real commanders to work with."
+          primaryAction={{
+            label: "Open roster",
+            onPress: () => router.push(APP_ROUTES.roster),
+          }}
+          secondaryAction={{
+            label: "Profiles",
+            onPress: () => router.push(APP_ROUTES.playerDirectory),
+            variant: "secondary",
+          }}
+        />
+      ) : null}
+
+      {recoveryState.kind === "no-games" ? (
+        <AnalyticsRecoveryCard
+          title="No tracked games yet"
+          body="Your roster is ready, but you need mission history before the analytics hub can populate."
+          primaryAction={{
+            label: "Start tracked game",
+            onPress: () => router.push(buildHomeRoute("game")),
+          }}
+          secondaryAction={{
+            label: "Import backup",
+            onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
+            variant: "secondary",
+          }}
+        />
+      ) : null}
 
       <View style={styles.grid}>
         {standardCards.map((card) => {
