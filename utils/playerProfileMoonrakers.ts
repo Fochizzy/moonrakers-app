@@ -1,3 +1,7 @@
+import {
+  buildAssistContextEvents,
+  buildAssistContextGameSamples,
+} from "@/utils/assistContextMetrics";
 import type { PlaystyleSample } from "@/utils/playstyleEngine";
 import type { Game, Player } from "@/utils/statsEngine";
 
@@ -76,6 +80,21 @@ export type MoonrakersSupportProfileSummary = {
   supportStyle: "Giver" | "Receiver" | "Balanced";
 };
 
+export type MoonrakersAssistContextSummary = {
+  assistGapToTargetLabel: string | null;
+  assistGapToLeaderLabel: string | null;
+  assistsAtSixPlusLabel: string | null;
+  assistsOverFiveBehindLeaderLabel: string | null;
+  assistPrestigeGainedLabel: string | null;
+  assistPrestigePerAssistLabel: string | null;
+  importHealthLabel: "Exact assist timing" | "Partial assist inference" | "No assist context";
+  importHealthTone: "green" | "gold" | "red";
+  importHealthSubLabel: string;
+  assistEventsLabel: string;
+  timedAssistEventsLabel: string;
+  trackedGamesLabel: string;
+};
+
 export type MoonrakersIntelProfile =
   | {
       hasData: false;
@@ -90,6 +109,7 @@ export type MoonrakersIntelProfile =
       baseDiscipline: MoonrakersBaseDisciplineSummary;
       objectiveProfile: MoonrakersObjectiveProfileSummary;
       supportProfile: MoonrakersSupportProfileSummary;
+      assistContext: MoonrakersAssistContextSummary;
     };
 
 export type BuildMoonrakersIntelProfileInput = {
@@ -143,6 +163,61 @@ function formatPercent(value: number) {
 
 function formatRecord(count: number, total: number) {
   return `${count}/${total}`;
+}
+
+function formatCountLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatCountShareLabel(count: number, total: number) {
+  if (total <= 0) {
+    return null;
+  }
+
+  return `${count} (${formatPercent(count / total)})`;
+}
+
+function getAssistImportHealthSummary({
+  timedAssistCount,
+  totalAssistCount,
+  trackedGameCount,
+}: {
+  timedAssistCount: number;
+  totalAssistCount: number;
+  trackedGameCount: number;
+}) {
+  if (totalAssistCount <= 0) {
+    return {
+      importHealthLabel: "No assist context" as const,
+      importHealthTone: "red" as const,
+      importHealthSubLabel: "No tracked or inferred assist data for this profile.",
+    };
+  }
+
+  if (timedAssistCount > 0 && totalAssistCount === timedAssistCount) {
+    return {
+      importHealthLabel: "Exact assist timing" as const,
+      importHealthTone: "green" as const,
+      importHealthSubLabel: `${formatCountLabel(timedAssistCount, "timed assist")} across ${formatCountLabel(trackedGameCount, "tracked game")}.`,
+    };
+  }
+
+  if (timedAssistCount > 0) {
+    return {
+      importHealthLabel: "Partial assist inference" as const,
+      importHealthTone: "gold" as const,
+      importHealthSubLabel: `${formatCountLabel(timedAssistCount, "timed assist")} plus ${formatCountLabel(
+        Math.max(totalAssistCount - timedAssistCount, 0),
+        "inferred assist",
+      )} from saved totals.`,
+    };
+  }
+
+  return {
+    importHealthLabel: "Partial assist inference" as const,
+    importHealthTone: "gold" as const,
+    importHealthSubLabel: `${formatCountLabel(totalAssistCount, "inferred assist")} reconstructed from saved totals.`,
+  };
 }
 
 function buildEmptyProfile(): MoonrakersIntelProfile {
@@ -647,6 +722,81 @@ function buildSupportProfileSummary({
   };
 }
 
+function buildAssistContextSummary({
+  playerId,
+  games,
+  playerSamples,
+}: {
+  playerId: string;
+  games: Game[];
+  playerSamples: PlaystyleSample[];
+}): MoonrakersAssistContextSummary {
+  const gameIds = new Set(playerSamples.map((sample) => sample.gameId));
+  const relevantGames = games.filter((game) => gameIds.has(String(game?.id ?? "")));
+  const playerEvents = buildAssistContextEvents(relevantGames).filter(
+    (event) => event.assisterId === playerId,
+  );
+  const playerGameSamples = buildAssistContextGameSamples(relevantGames).filter(
+    (sample) => sample.playerId === playerId,
+  );
+  const trackedAssistGames = playerGameSamples.filter(
+    (sample) => sample.hasTrackedAssistContext,
+  );
+  const timedAssistCount = playerEvents.length;
+  const totalAssistCount = playerGameSamples.reduce(
+    (sum, sample) => sum + sample.assistCount,
+    0,
+  );
+  const totalAssistPrestigeGained = playerGameSamples.reduce(
+    (sum, sample) => sum + sample.totalAssistPrestigeGained,
+    0,
+  );
+  const assistImportHealth = getAssistImportHealthSummary({
+    timedAssistCount,
+    totalAssistCount,
+    trackedGameCount: trackedAssistGames.length,
+  });
+
+  return {
+    assistGapToTargetLabel: timedAssistCount
+      ? formatNumber(average(playerEvents.map((event) => event.gapToTarget)))
+      : null,
+    assistGapToLeaderLabel: timedAssistCount
+      ? formatNumber(average(playerEvents.map((event) => event.gapToLeader)))
+      : null,
+    assistsAtSixPlusLabel: timedAssistCount
+      ? formatCountShareLabel(
+          trackedAssistGames.reduce(
+            (sum, sample) => sum + sample.assistsAtSixPlus,
+            0,
+          ),
+          timedAssistCount,
+        )
+      : null,
+    assistsOverFiveBehindLeaderLabel: timedAssistCount
+      ? formatCountShareLabel(
+          trackedAssistGames.reduce(
+            (sum, sample) => sum + sample.assistsWhileFiveBehindLeader,
+            0,
+          ),
+          timedAssistCount,
+        )
+      : null,
+    assistPrestigeGainedLabel: totalAssistCount > 0 || totalAssistPrestigeGained > 0
+      ? formatNumber(totalAssistPrestigeGained)
+      : null,
+    assistPrestigePerAssistLabel: totalAssistCount > 0
+      ? formatNumber(totalAssistPrestigeGained / totalAssistCount)
+      : null,
+    importHealthLabel: assistImportHealth.importHealthLabel,
+    importHealthTone: assistImportHealth.importHealthTone,
+    importHealthSubLabel: assistImportHealth.importHealthSubLabel,
+    assistEventsLabel: formatCountLabel(totalAssistCount, "assist"),
+    timedAssistEventsLabel: formatCountLabel(timedAssistCount, "timed assist"),
+    trackedGamesLabel: formatCountLabel(trackedAssistGames.length, "tracked game"),
+  };
+}
+
 export function buildMoonrakersIntelProfile({
   playerId,
   players,
@@ -680,6 +830,11 @@ export function buildMoonrakersIntelProfile({
     supportProfile: buildSupportProfileSummary({
       playerId: normalizedPlayerId,
       players,
+      games,
+      playerSamples,
+    }),
+    assistContext: buildAssistContextSummary({
+      playerId: normalizedPlayerId,
       games,
       playerSamples,
     }),

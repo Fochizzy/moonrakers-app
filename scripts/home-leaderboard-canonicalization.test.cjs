@@ -8,42 +8,43 @@ function read(relPath) {
   return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
 }
 
-const source = read(path.join("app", "index.tsx"));
+const homeSource = read(path.join("app", "index.tsx"));
+const leaderboardTabSource = read(path.join("components", "home", "HomeLeaderboardTab.tsx"));
 
 assert.match(
-  source,
-  /function\s+HomeLeaderboardTab\(\{\s*players,\s*games,\s*playerIdAliases,/,
-  "expected HomeLeaderboardTab to accept the canonical playerIdAliases map",
+  homeSource,
+  /lib\/cloud\/analytics\/getEloScreen/,
+  "expected app/index.tsx to import the server-authored getEloScreen wrapper for the leaderboard tab",
 );
 
 assert.match(
-  source,
-  /const\s+canonicalGames\s*=\s*useMemo\(/,
-  "expected the leaderboard to derive a canonicalGames view before calculating ELO or rows",
+  leaderboardTabSource,
+  /fetchEloScreen/,
+  "expected HomeLeaderboardTab to accept a fetchEloScreen prop for dependency injection",
 );
 
 assert.match(
-  source,
-  /calculateElo\(canonicalGames as any\)/,
-  "expected leaderboard ELO to come from canonicalized game ids rather than raw game ids",
+  leaderboardTabSource,
+  /fetchEloScreen\(\{/,
+  "expected HomeLeaderboardTab to call the injected fetchEloScreen to load leaderboard data",
 );
 
 assert.match(
-  source,
-  /playerIdAliases\[normalizeId\(player\.id\)\]\s*\?\?\s*normalizeId\(player\.id\)/,
-  "expected leaderboard player seeding to remap raw player ids through playerIdAliases",
+  homeSource,
+  /fetchEloScreen=\{getEloScreen\}/,
+  "expected the home screen to wire getEloScreen into HomeLeaderboardTab via the fetchEloScreen prop",
 );
 
-assert.match(
-  source,
-  /\.filter\(\(player\)\s*=>\s*!!normalizeId\(player\.id\)\s*&&\s*player\.gamesPlayed\s*>\s*0\)/,
-  "expected leaderboard rows to exclude players with zero games",
+assert.doesNotMatch(
+  homeSource,
+  /calculateElo\s*\(/,
+  "expected the home leaderboard to stop deriving ELO locally in favour of the server-authored source",
 );
 
-assert.match(
-  source,
-  /<HomeLeaderboardTab\s+players=\{players\}\s+games=\{games\}\s+playerIdAliases=\{playerIdAliases\}\s*\/>/,
-  "expected the home screen to pass playerIdAliases into HomeLeaderboardTab",
+assert.doesNotMatch(
+  leaderboardTabSource,
+  /calculateElo\s*\(/,
+  "expected HomeLeaderboardTab to stop deriving ELO locally in favour of the server-authored source",
 );
 
 console.log("home-leaderboard-canonicalization.test.cjs passed");

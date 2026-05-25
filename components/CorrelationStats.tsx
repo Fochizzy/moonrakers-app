@@ -424,6 +424,20 @@ export default function CorrelationStats({
   const { width } = useWindowDimensions();
   const showOverviewChrome = view === 'all';
   const isTwoColumn = width >= 360 && (view === 'pairing' || view === 'macro');
+  const serverPersonalCorrelations = useMemo(() => {
+    const personal = Array.isArray(serverData?.personal) ? serverData.personal : [];
+
+    return personal
+      .filter((item: any) => item && typeof item === 'object')
+      .map((item: any) => ({
+        label: String(item.label ?? item.title ?? "Personal").trim() || "Personal",
+        value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
+        strength:
+          typeof item.strength === 'string' && item.strength.trim()
+            ? item.strength.trim()
+            : undefined,
+      }));
+  }, [serverData?.personal]);
   const serverPairingCorrelations = useMemo(() => {
     const pairing = Array.isArray(serverData?.pairing)
       ? serverData.pairing
@@ -470,12 +484,22 @@ export default function CorrelationStats({
       }));
   }, [serverData?.synergyPairs]);
   const correlations = useMemo(() => {
-    if (serverOnly || serverPairingCorrelations.length > 0) {
-      return serverPairingCorrelations;
+    if (
+      serverOnly ||
+      serverPersonalCorrelations.length > 0 ||
+      serverPairingCorrelations.length > 0
+    ) {
+      return [...serverPersonalCorrelations, ...serverPairingCorrelations];
     }
 
     return buildCorrelationResults(games, relationships);
-  }, [games, relationships, serverOnly, serverPairingCorrelations]);
+  }, [
+    games,
+    relationships,
+    serverOnly,
+    serverPairingCorrelations,
+    serverPersonalCorrelations,
+  ]);
 
   const globalMetaCorrelations = useMemo(() => {
     if (serverOnly || serverMacroCorrelations.length > 0) {

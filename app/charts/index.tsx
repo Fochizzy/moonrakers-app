@@ -1,16 +1,16 @@
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
+  Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
-  TouchableOpacity,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
@@ -37,8 +37,7 @@ import {
   type ChartTone,
 } from "@/components/charts/chartVisualSystem";
 import { getChartSetup } from "@/lib/cloud/analytics/getChartSetup";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
-import { formatSupabaseConfigError } from "@/lib/supabase";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import {
@@ -256,10 +255,9 @@ function ScopeTab({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity
-      style={styles.scopeTab}
+    <Pressable
+      style={({ pressed }) => [styles.scopeTab, pressed && { opacity: 0.9 }]}
       onPress={onPress}
-      activeOpacity={0.9}
     >
       <Text
         numberOfLines={1}
@@ -273,7 +271,7 @@ function ScopeTab({
           active && styles.scopeTabUnderlineActive,
         ]}
       />
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -289,16 +287,16 @@ function MetricButton({
   const quiet = getQuietChipStyle(active ? "green" : "neutral");
 
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      style={({ pressed }) => [
         styles.metricButton,
         {
           backgroundColor: quiet.backgroundColor,
           borderColor: quiet.borderColor,
         },
+        pressed && { opacity: 0.9 },
       ]}
       onPress={onPress}
-      activeOpacity={0.9}
     >
       <View
         style={[
@@ -313,7 +311,7 @@ function MetricButton({
       <Text style={[styles.metricButtonText, { color: quiet.textColor }]}>
         {label}
       </Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -334,8 +332,8 @@ function UtilityButton({
   const toneStyle = getChartToneStyles(tone);
   const prominent = size === "prominent";
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      style={({ pressed }) => [
         styles.utilityButton,
         prominent && styles.utilityButtonProminent,
         {
@@ -347,9 +345,9 @@ function UtilityButton({
             : quiet.borderColor,
           shadowColor: prominent ? toneStyle.value : undefined,
         },
+        pressed && { opacity: 0.9 },
       ]}
       onPress={onPress}
-      activeOpacity={0.9}
     >
       <View style={prominent && styles.utilityButtonCopy}>
         <Text
@@ -376,19 +374,18 @@ function UtilityButton({
           </Text>
         ) : null}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 function SetupBackButton({ onPress }: { onPress: () => void; }) {
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      style={styles.setupBackButton}
-      activeOpacity={0.9}
+      style={({ pressed }) => [styles.setupBackButton, pressed && { opacity: 0.9 }]}
     >
       <Text style={styles.setupBackButtonText}>Close setup</Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -400,7 +397,7 @@ function StarButton({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
       style={styles.starButton}
       hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
@@ -408,7 +405,7 @@ function StarButton({
       <Text style={[styles.starText, active && styles.starTextActive]}>
         {active ? "★" : "☆"}
       </Text>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -433,10 +430,9 @@ function ChartCard({
         },
       ]}
     >
-      <TouchableOpacity
-        style={styles.chartCardPressable}
+      <Pressable
+        style={({ pressed }) => [styles.chartCardPressable, pressed && { opacity: 0.92 }]}
         onPress={onPress}
-        activeOpacity={0.92}
       >
         <View style={styles.chartCardHeader}>
           <View style={styles.chartCardPillRow}>
@@ -489,7 +485,7 @@ function ChartCard({
             <ChartHubPreview kind={chart.preview} tone={chart.tone} />
           </View>
         </View>
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 }
@@ -536,7 +532,7 @@ export default function ChartsIndexScreen() {
   const players = useStore((state: any) => state?.players ?? []);
   const games = useStore((state: any) => state?.games ?? []);
   const groups = useStore((state: any) => state?.groups ?? []);
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
+  const profileId = String(authProfile?.id ?? authSession?.user?.id ?? "").trim();
 
   const routeChartKey = normalizeChartHubSelection(
     getParam(params.chartKey)
@@ -575,15 +571,31 @@ export default function ChartsIndexScreen() {
     routeOpponentId ?? null
   );
   const [focusPlayerSearch, setFocusPlayerSearch] = useState("");
+  const [scopePlayerSearch, setScopePlayerSearch] = useState("");
   const [setupOpen, setSetupOpen] = useState(routeSetupOpen);
-  const [setupPayload, setSetupPayload] = useState<Record<string, unknown> | null>(null);
-  const [setupLoading, setSetupLoading] = useState(true);
-  const [setupError, setSetupError] = useState<string | null>(null);
   const deferredFocusPlayerSearch = useDeferredValue(focusPlayerSearch);
+  const deferredScopePlayerSearch = useDeferredValue(scopePlayerSearch);
   const selectedChart = useMemo(
     () => resolveChartCatalogEntry(selectedChartKey),
     [selectedChartKey]
   );
+  const chartSetupQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(profileId),
+    queryKey: `chart-setup:${profileId || "anon"}:${selectedChart.key}`,
+    load: () =>
+      getChartSetup({
+        chartKey: selectedChart.key,
+        profileId,
+      }),
+  });
+  const setupPayload =
+    chartSetupQuery.payload && typeof chartSetupQuery.payload === "object"
+      ? (chartSetupQuery.payload as Record<string, unknown>)
+      : null;
+  const setupLoading = chartSetupQuery.loading;
+  const setupError = chartSetupQuery.error;
+  const setupIsStale = chartSetupQuery.isStale;
+  const setupStaleMessage = chartSetupQuery.staleMessage;
   const focusPlayerOptions = useMemo(
     () => toSetupOptions(setupPayload?.focusPlayerOptions),
     [setupPayload?.focusPlayerOptions]
@@ -651,6 +663,29 @@ export default function ChartsIndexScreen() {
       };
     });
   }, [analyticsDirectory.players, focusPlayerOptions]);
+  const scopePlayerDirectoryPlayers = useMemo(() => {
+    const playerById = new Map(
+      analyticsDirectory.players.map((player) => [String(player.id), player])
+    );
+
+    return scopePlayerOptions.map((option) => {
+      const matched = playerById.get(String(option.key));
+      return {
+        id: String(option.key),
+        name: option.label || matched?.name || "Player",
+        color: matched?.color,
+        initials: matched?.initials,
+        assignedCardArtIndex:
+          typeof matched?.assignedCardArtIndex === "number"
+            ? matched.assignedCardArtIndex
+            : null,
+        artIndex:
+          typeof matched?.artIndex === "number"
+            ? matched.artIndex
+            : null,
+      };
+    });
+  }, [analyticsDirectory.players, scopePlayerOptions]);
   const preferredFocusPlayerId = useMemo(
     () =>
       resolvePreferredChartPlayerId({
@@ -670,6 +705,26 @@ export default function ChartsIndexScreen() {
         limit: 3,
       }),
     [preferredFocusPlayerId, focusPlayerDirectoryPlayers, analyticsDirectory.games]
+  );
+  const preferredScopePlayerId = useMemo(
+    () =>
+      resolvePreferredChartPlayerId({
+        availablePlayers: scopePlayerDirectoryPlayers,
+        routePlayerId: null,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+      }),
+    [scopePlayerDirectoryPlayers, authProfile?.id, authSession?.user?.id]
+  );
+  const topCommonScopePlayers = useMemo(
+    () =>
+      buildCommonOpponentOptions({
+        playerId: preferredScopePlayerId,
+        players: scopePlayerDirectoryPlayers,
+        games: analyticsDirectory.games,
+        limit: 4,
+      }),
+    [preferredScopePlayerId, scopePlayerDirectoryPlayers, analyticsDirectory.games]
   );
   const quickFocusPlayerOptions = useMemo(() => {
     const optionByKey = new Map(
@@ -694,6 +749,29 @@ export default function ChartsIndexScreen() {
 
     return ordered;
   }, [focusPlayerOptions, preferredFocusPlayerId, topCommonFocusPlayers]);
+  const quickScopePlayerOptions = useMemo(() => {
+    const optionByKey = new Map(
+      scopePlayerOptions.map((option) => [String(option.key), option])
+    );
+    const seen = new Set<string>();
+    const ordered: SetupOption[] = [];
+
+    const pushOption = (optionKey?: string | null) => {
+      const normalizedKey = String(optionKey ?? "").trim();
+      if (!normalizedKey || seen.has(normalizedKey)) return;
+
+      const match = optionByKey.get(normalizedKey);
+      if (!match) return;
+
+      seen.add(normalizedKey);
+      ordered.push(match);
+    };
+
+    pushOption(preferredScopePlayerId);
+    topCommonScopePlayers.forEach((player) => pushOption(String(player.id)));
+
+    return ordered;
+  }, [scopePlayerOptions, preferredScopePlayerId, topCommonScopePlayers]);
   const filteredFocusPlayerOptions = useMemo(() => {
     const normalizedQuery = deferredFocusPlayerSearch.trim().toLowerCase();
     if (!normalizedQuery) return [];
@@ -702,57 +780,18 @@ export default function ChartsIndexScreen() {
       String(option.label ?? "").toLowerCase().includes(normalizedQuery)
     );
   }, [focusPlayerOptions, deferredFocusPlayerSearch]);
+  const filteredScopePlayerOptions = useMemo(() => {
+    const normalizedQuery = deferredScopePlayerSearch.trim().toLowerCase();
+    if (!normalizedQuery) return [];
+
+    return scopePlayerOptions.filter((option) =>
+      String(option.label ?? "").toLowerCase().includes(normalizedQuery)
+    );
+  }, [scopePlayerOptions, deferredScopePlayerSearch]);
 
   useEffect(() => {
     setSelectedChartKey(routeChartKey);
   }, [routeChartKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSetup() {
-      const profileId = String(authSession?.user?.id ?? "").trim();
-      if (!profileId) {
-        if (!cancelled) {
-          setSetupPayload(null);
-          setSetupError(null);
-          setSetupLoading(false);
-        }
-        return;
-      }
-
-      setSetupLoading(true);
-      setSetupError(null);
-
-      try {
-        const nextPayload = await getChartSetup({
-          chartKey: selectedChart.key,
-          profileId,
-        });
-
-        if (!cancelled) {
-          setSetupPayload(nextPayload as unknown as Record<string, unknown>);
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setSetupPayload(null);
-          setSetupError(
-            formatSupabaseConfigError(nextError) || "Failed to load chart setup.",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setSetupLoading(false);
-        }
-      }
-    }
-
-    void loadSetup();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authSession?.user?.id, selectedChart.key, analyticsRefreshTick]);
 
   useEffect(() => {
     if (getParam(params.setup) != null) {
@@ -1059,6 +1098,7 @@ export default function ChartsIndexScreen() {
 
   function previewChart(chartKey: ChartCatalogKey) {
     const nextChart = resolveChartCatalogEntry(chartKey);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
     setSelectedChartKey(nextChart.key);
     setChartSetupOpen(false, nextChart);
   }
@@ -1164,6 +1204,11 @@ export default function ChartsIndexScreen() {
                 <Text style={styles.emptyText}>{setupError}</Text>
               ) : (
                 <>
+                  {setupIsStale ? (
+                    <Text style={styles.emptyText}>
+                      Showing the last successful chart-setup payload because the latest refresh failed{setupStaleMessage ? `: ${setupStaleMessage}` : "."}
+                    </Text>
+                  ) : null}
                   <SetupSection
                     title="Focus player"
                     subtitle="You first, then your most-played tablemates."
@@ -1177,22 +1222,31 @@ export default function ChartsIndexScreen() {
                       />
                     ) : null}
 
-                    <TextInput
-                      value={focusPlayerSearch}
-                      onChangeText={setFocusPlayerSearch}
+                    <PlayerSearchPicker
+                      query={focusPlayerSearch}
+                      onQueryChange={setFocusPlayerSearch}
                       placeholder="Search for Player"
-                      placeholderTextColor={CHART_COLORS.sub}
-                      style={styles.setupSearchInput}
-                      autoCapitalize="words"
-                      autoCorrect={false}
+                      items={[]}
+                      selectedIds={selectedPlayer ? [String(selectedPlayer.key)] : []}
+                      onSelect={setSelectedPlayerId}
+                      variant="rail"
+                      hideResults
                     />
 
                     {focusPlayerSearch.trim() ? (
                       filteredFocusPlayerOptions.length ? (
-                        <SetupTabs
-                          items={filteredFocusPlayerOptions}
-                          value={selectedPlayer ? String(selectedPlayer.key) : ""}
-                          onChange={setSelectedPlayerId}
+                        <PlayerSearchPicker
+                          query={focusPlayerSearch}
+                          onQueryChange={setFocusPlayerSearch}
+                          placeholder="Search for Player"
+                          items={filteredFocusPlayerOptions.map((player) => ({
+                            id: String(player.key),
+                            label: player.label || "Unknown",
+                          }))}
+                          selectedIds={selectedPlayer ? [String(selectedPlayer.key)] : []}
+                          onSelect={setSelectedPlayerId}
+                          variant="rail"
+                          showResultsOnlyWhenQuery
                         />
                       ) : (
                         <Text style={styles.emptyText}>No players match that search yet.</Text>
@@ -1259,23 +1313,59 @@ export default function ChartsIndexScreen() {
                   {scopePlayerOptions.length > 0 ? (
                     <SetupSection
                       title="Players in scope"
+                      subtitle="Logged-in player first, then your most-played tablemates."
                       contentStyle={styles.scopeTabSectionContent}
                     >
-                      <ScrollView
-                        horizontal
-                        nestedScrollEnabled
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.scopeTabRail}
-                      >
-                        {scopePlayerOptions.map((player) => (
-                          <ScopeTab
-                            key={`scope-${player.key}`}
-                            label={player.label || "Unknown"}
-                            active={selectedGroupIds.includes(String(player.key))}
-                            onPress={() => toggleGroupPlayer(String(player.key))}
+                      {quickScopePlayerOptions.length ? (
+                        <ScrollView
+                          horizontal
+                          nestedScrollEnabled
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.scopeTabRail}
+                        >
+                          {quickScopePlayerOptions.map((player) => (
+                            <ScopeTab
+                              key={`scope-quick-${player.key}`}
+                              label={player.label || "Unknown"}
+                              active={selectedGroupIds.includes(String(player.key))}
+                              onPress={() => toggleGroupPlayer(String(player.key))}
+                            />
+                          ))}
+                        </ScrollView>
+                      ) : null}
+
+                      <PlayerSearchPicker
+                        query={scopePlayerSearch}
+                        onQueryChange={setScopePlayerSearch}
+                        placeholder="Player Search"
+                        items={[]}
+                        selectedIds={selectedGroupIds}
+                        onSelect={(playerId) => toggleGroupPlayer(String(playerId))}
+                        variant="rail"
+                        selectionMode="multiple"
+                        hideResults
+                      />
+
+                      {scopePlayerSearch.trim() ? (
+                        filteredScopePlayerOptions.length ? (
+                          <PlayerSearchPicker
+                            query={scopePlayerSearch}
+                            onQueryChange={setScopePlayerSearch}
+                            placeholder="Player Search"
+                            items={filteredScopePlayerOptions.map((player) => ({
+                              id: String(player.key),
+                              label: player.label || "Unknown",
+                            }))}
+                            selectedIds={selectedGroupIds}
+                            onSelect={(playerId) => toggleGroupPlayer(String(playerId))}
+                            variant="rail"
+                            selectionMode="multiple"
+                            showResultsOnlyWhenQuery
                           />
-                        ))}
-                      </ScrollView>
+                        ) : (
+                          <Text style={styles.emptyText}>No players match that search yet.</Text>
+                        )
+                      ) : null}
                     </SetupSection>
                   ) : null}
                 </>
@@ -1598,8 +1688,7 @@ const styles = StyleSheet.create({
   },
   scopeTabSectionContent: {
     width: "100%",
-    flexWrap: "nowrap",
-    gap: 0,
+    gap: 8,
   },
   setupSegmentedControl: {
     width: "100%",

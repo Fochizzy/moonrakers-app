@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
+import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { getAnalyticsHome } from "@/lib/cloud/analytics/getAnalyticsHome";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
+import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { getAnalyticsHubCards } from "@/utils/appHubs";
@@ -15,7 +17,7 @@ import { APP_ROUTES, buildHistoryRoute, buildHomeRoute } from "@/utils/appRoutes
 import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
 import { APP_ICONS } from "@/utils/iconAccess";
 
-const CARD_TONES: Record<
+const ANALYTICS_CARD_TONES: Record<
   string,
   {
     accent: string;
@@ -114,7 +116,7 @@ function AnalyticsCard({
   card: ReturnType<typeof getAnalyticsHubCards>[number];
   fullWidth?: boolean;
   onPress: () => void;
-  tone: (typeof CARD_TONES)[string];
+  tone: (typeof ANALYTICS_CARD_TONES)[string];
 }) {
   return (
     <Pressable
@@ -160,55 +162,30 @@ export default function AnalyticsScreen() {
   const authSession = useStore((state: any) => state.authSession);
   const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
   const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const cards = useMemo(() => getAnalyticsHubCards(), []);
-  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const profileId = String(authSession?.user?.id ?? "").trim();
+  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const [error, setError] = useState<string | null>(null);
-
+  const analyticsQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(profileId),
+    queryKey: `analytics-home:${profileId || "anon"}`,
+    load: () =>
+      getAnalyticsHome({
+        profileId,
+      }),
+  });
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      const profileId = String(authSession?.user?.id ?? "").trim();
-      if (!profileId) {
-        if (!cancelled) {
-          setPayload(null);
-          setError(null);
-          setLoading(false);
-        }
-        return;
-      }
-
-      setLoading(true);
+    const nextError = analyticsQuery.error;
+    if (nextError !== null) {
+      setError(formatSupabaseConfigError(nextError) || "Failed to load analytics.");
+    } else {
       setError(null);
-
-      try {
-        const nextPayload = await getAnalyticsHome({
-          profileId,
-        });
-
-        if (!cancelled) {
-          setPayload(toRecord(nextPayload));
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(formatSupabaseConfigError(nextError) || "Failed to load analytics.");
-          setPayload(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
     }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authSession?.user?.id, analyticsRefreshTick]);
+  }, [analyticsQuery.error]);
+  const payload = toRecord(analyticsQuery.payload);
+  const loading = analyticsQuery.loading;
+  const isStale = analyticsQuery.isStale;
+  const staleMessage = analyticsQuery.staleMessage;
 
   const hero = toRecord(payload?.hero);
   const standardCards = cards.filter((card) => card.key !== "insights");
@@ -223,14 +200,62 @@ export default function AnalyticsScreen() {
     ? error
     : loading
       ? "Syncing Supabase-authored analytics."
+      : isStale
+        ? `Showing the last successful server payload because the latest refresh failed${staleMessage ? `: ${staleMessage}` : "."}`
       : "Counts on this screen come from Supabase analytics payloads.";
+  const analyticsSectionState =
+    loading
+      ? "loading"
+      : error
+        ? "error"
+        : recoveryState.kind === "no-players" || recoveryState.kind === "no-games"
+          ? "empty"
+          : "ready";
+  const analyticsSectionTitle =
+    recoveryState.kind === "no-players"
+      ? "No tracked players yet"
+      : recoveryState.kind === "no-games"
+        ? "No tracked games yet"
+        : error
+          ? "Analytics unavailable"
+          : "Analytics Destinations";
+  const analyticsSectionBody =
+    recoveryState.kind === "no-players"
+      ? "Set up your roster first so the analytics surfaces have real commanders to work with."
+      : recoveryState.kind === "no-games"
+        ? "Your roster is ready, but you need mission history before the analytics hub can populate."
+        : error
+          ? error
+          : "Syncing the analytics hub surface from the published Supabase payload.";
+  const analyticsPrimaryAction =
+    recoveryState.kind === "no-players"
+      ? {
+          label: "Open roster",
+          onPress: () => router.push(APP_ROUTES.roster),
+        }
+      : recoveryState.kind === "no-games"
+        ? {
+            label: "Start tracked game",
+            onPress: () => router.push(buildHomeRoute("game")),
+          }
+        : null;
+  const analyticsSecondaryAction =
+    recoveryState.kind === "no-players"
+      ? {
+          label: "Profiles",
+          onPress: () => router.push(APP_ROUTES.playerDirectory),
+          variant: "secondary" as const,
+        }
+      : recoveryState.kind === "no-games"
+        ? {
+            label: "Import backup",
+            onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
+            variant: "secondary" as const,
+          }
+        : null;
 
   return (
-    <PageShell
-      preset="analytics"
-      density="compact"
-      contentContainerStyle={styles.pageContent}
-    >
+    <PageShell preset="analytics" density="compact" contentContainerStyle={styles.pageContent}>
       <HeroCard
         eyebrow="Data Center"
         headerAction={
@@ -254,63 +279,61 @@ export default function AnalyticsScreen() {
         <Text style={styles.heroMeta}>{heroMessage}</Text>
       </HeroCard>
 
-      {recoveryState.kind === "no-players" ? (
+      {recoveryState.kind !== "none" && !loading && !error ? (
         <AnalyticsRecoveryCard
-          title="No tracked players yet"
-          body="Set up your roster first so the analytics surfaces have real commanders to work with."
-          primaryAction={{
-            label: "Open roster",
-            onPress: () => router.push(APP_ROUTES.roster),
-          }}
-          secondaryAction={{
-            label: "Profiles",
-            onPress: () => router.push(APP_ROUTES.playerDirectory),
-            variant: "secondary",
-          }}
+          eyebrow="Setup required"
+          title={analyticsSectionTitle}
+          body={analyticsSectionBody}
+          tone="warning"
+          primaryAction={analyticsPrimaryAction ?? undefined}
+          secondaryAction={analyticsSecondaryAction ?? undefined}
         />
       ) : null}
 
-      {recoveryState.kind === "no-games" ? (
-        <AnalyticsRecoveryCard
-          title="No tracked games yet"
-          body="Your roster is ready, but you need mission history before the analytics hub can populate."
-          primaryAction={{
-            label: "Start tracked game",
-            onPress: () => router.push(buildHomeRoute("game")),
-          }}
-          secondaryAction={{
-            label: "Import backup",
-            onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
-            variant: "secondary",
-          }}
-        />
-      ) : null}
+      <AnalyticsStateSection
+        eyebrow="Directory"
+        title="Analytics Destinations"
+        subtitle="Open the published Moonrakers analytics surfaces from one shared command deck."
+        state={analyticsSectionState}
+        sourceKind={isStale ? "server-stale" : "server"}
+        sourceLabel={isStale ? "Stale server data" : "Server data"}
+        sourceCaption={
+          isStale
+            ? `Counts above and readiness for this destination deck are showing the last successful Supabase payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
+            : "Counts above and readiness for this destination deck come from the shared Supabase analytics payload."
+        }
+        messageTitle={analyticsSectionTitle}
+        messageBody={analyticsSectionBody}
+        primaryAction={analyticsPrimaryAction}
+        secondaryAction={analyticsSecondaryAction}
+        tone={error ? "danger" : recoveryState.kind === "none" ? "info" : "warning"}
+      >
+        <View style={styles.grid}>
+          {standardCards.map((card) => {
+            const tone = ANALYTICS_CARD_TONES[card.key] ?? ANALYTICS_CARD_TONES.charts;
 
-      <View style={styles.grid}>
-        {standardCards.map((card) => {
-          const tone = CARD_TONES[card.key] ?? CARD_TONES.charts;
+            return (
+              <AnalyticsCard
+                key={card.key}
+                accent={tone.accent}
+                card={card}
+                onPress={() => router.push(card.route as any)}
+                tone={tone}
+              />
+            );
+          })}
 
-          return (
+          {insightsCard ? (
             <AnalyticsCard
-              key={card.key}
-              accent={tone.accent}
-              card={card}
-              onPress={() => router.push(card.route as any)}
-              tone={tone}
+              accent={ANALYTICS_CARD_TONES.insights.accent}
+              card={insightsCard}
+              fullWidth
+              onPress={() => router.push(insightsCard.route as any)}
+              tone={ANALYTICS_CARD_TONES.insights}
             />
-          );
-        })}
-
-        {insightsCard ? (
-          <AnalyticsCard
-            accent={CARD_TONES.insights.accent}
-            card={insightsCard}
-            fullWidth
-            onPress={() => router.push(insightsCard.route as any)}
-            tone={CARD_TONES.insights}
-          />
-        ) : null}
-      </View>
+          ) : null}
+        </View>
+      </AnalyticsStateSection>
     </PageShell>
   );
 }

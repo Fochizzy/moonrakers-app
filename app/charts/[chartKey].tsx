@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Pressable,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
+import ChartInsightStrip from "@/components/charts/ChartInsightStrip";
+import ChartMetricChip from "@/components/charts/ChartMetricChip";
+import ChartSurface from "@/components/charts/ChartSurface";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
@@ -13,6 +17,7 @@ import Text from "@/components/ui/Text";
 import AssistNetworkOverview from "@/components/charts/AssistNetworkOverview";
 import BarChart from "@/components/charts/BarChart";
 import BumpChart from "@/components/charts/BumpChart";
+import { resolveChartDetailProvenance } from "@/lib/charts/chartDetailProvenance";
 import {
   CHART_COLORS,
   CHART_LAYOUT,
@@ -35,11 +40,11 @@ import Sparkline from "@/components/charts/Sparkline";
 import StackedBarChart from "@/components/charts/StackedBarChart";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { getChartDataset } from "@/lib/cloud/analytics/getChartDataset";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
-import { formatSupabaseConfigError } from "@/lib/supabase";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import { buildLocalChartDetailState } from "@/utils/chartDetailLocalData";
+import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
 
 type PayloadRecord = Record<string, unknown>;
 type CloudFallbackSnapshot = Awaited<ReturnType<typeof loadCloudSnapshot>>;
@@ -97,25 +102,6 @@ function toArray(value: unknown): PayloadRecord[] {
     : [];
 }
 
-function toStringValue(value: unknown, fallback = "") {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-
-function toNumberValue(value: unknown, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function toDisplayValue(value: unknown, fallback = "0") {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Number.isInteger(value) ? String(value) : value.toFixed(2);
-  }
-
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
-  }
-
-  return fallback;
-}
 
 function titleCase(value: string) {
   return value
@@ -205,7 +191,6 @@ function DatasetStat({
 
 export default function ChartKeyScreen() {
   const router = useRouter();
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const authSession = useStore((state: any) => state.authSession);
   const rawPlayers = useStore((state: any) => state.players);
   const rawGames = useStore((state: any) => state.games);
@@ -260,77 +245,44 @@ export default function ChartKeyScreen() {
       routeSelectedGameId,
     ],
   );
-  const [dataset, setDataset] = useState<PayloadRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [cloudFallbackSnapshot, setCloudFallbackSnapshot] =
     useState<CloudFallbackSnapshot | null>(null);
   const [cloudFallbackLoading, setCloudFallbackLoading] = useState(false);
   const [cloudFallbackAttempted, setCloudFallbackAttempted] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      if (!profileId) {
-        if (!cancelled) {
-          setDataset(null);
-          setError(null);
-          setLoading(false);
-        }
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const nextDataset = await getChartDataset({
-          chartKey,
-          profileId,
-          focusPlayerId: routePlayerId ?? null,
-          comparePlayerId: routeCompareId ?? null,
-          scopedPlayerIds: routeIds.length ? routeIds : null,
-          selectedGameId: routeSelectedGameId ?? null,
-          metricKey: routeMetric ?? null,
-          lineMode: routeLineMode ?? null,
-          graphMode: routeMode ?? null,
-          opponentId: routeOpponentId ?? null,
-        });
-
-        if (!cancelled) {
-          setDataset(toRecord(nextDataset));
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(formatSupabaseConfigError(nextError) || "Failed to load chart.");
-          setDataset(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authSession?.user?.id,
-    analyticsRefreshTick,
-    chartKey,
-    routeCompareId,
-    routeIdsKey,
-    routeLineMode,
-    routeMetric,
-    routeMode,
-    routeOpponentId,
-    routePlayerId,
-    routeSelectedGameId,
-  ]);
+  const datasetQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(profileId),
+    queryKey: [
+      "chart-dataset",
+      profileId || "anon",
+      chartKey,
+      routePlayerId || "none",
+      routeCompareId || "none",
+      routeIdsKey || "all",
+      routeSelectedGameId || "none",
+      routeMetric || "none",
+      routeLineMode || "raw",
+      routeMode || "flow",
+      routeOpponentId || "none",
+    ].join(":"),
+    load: () =>
+      getChartDataset({
+        chartKey,
+        profileId,
+        focusPlayerId: routePlayerId ?? null,
+        comparePlayerId: routeCompareId ?? null,
+        scopedPlayerIds: routeIds.length ? routeIds : null,
+        selectedGameId: routeSelectedGameId ?? null,
+        metricKey: routeMetric ?? null,
+        lineMode: routeLineMode ?? null,
+        graphMode: routeMode ?? null,
+        opponentId: routeOpponentId ?? null,
+      }),
+  });
+  const dataset = toRecord(datasetQuery.payload);
+  const loading = datasetQuery.loading;
+  const error = datasetQuery.error;
+  const isStale = datasetQuery.isStale;
+  const staleMessage = datasetQuery.staleMessage;
 
   useEffect(() => {
     setCloudFallbackSnapshot(null);
@@ -338,7 +290,7 @@ export default function ChartKeyScreen() {
     setCloudFallbackAttempted(false);
   }, [profileId]);
 
-  const datasetData = toRecord(dataset?.data);
+  const datasetData = toRecord(dataset.data);
   const datasetMeta = toRecord(datasetData.meta);
   const datasetPoints = toArray(datasetData.points);
   const datasetSeries = toArray(datasetData.series);
@@ -396,10 +348,20 @@ export default function ChartKeyScreen() {
     !cloudFallbackLoading &&
     !loading &&
     (Boolean(error) || !hasData);
+  const provenance = useMemo(
+    () =>
+      resolveChartDetailProvenance({
+        hasServerPayload: hasData && !shouldUseLocalChartFallback,
+        isStale,
+        usingCloudFallbackData,
+        staleMessage,
+      }),
+    [hasData, isStale, shouldUseLocalChartFallback, staleMessage, usingCloudFallbackData],
+  );
   const heroSubtitle = shouldUseLocalChartFallback
-    ? usingCloudFallbackData
-      ? "Published chart data is empty, so this view is using Supabase game history directly."
-      : "Published chart data is unavailable, so this view is using saved history on this device."
+    ? provenance.caption
+    : isStale
+      ? provenance.caption
     : toStringValue(dataset?.subtitle, buildSubheading(chartKey));
 
   useEffect(() => {
@@ -645,25 +607,57 @@ export default function ChartKeyScreen() {
       const localChart = renderLocalChartFallback();
       if (localChart) {
         return (
-          <View style={styles.datasetStack}>
-            <View style={styles.localFallbackCard}>
-              <Text style={styles.localFallbackTitle}>
-                {usingCloudFallbackData
+          <ChartSurface
+            eyebrow={provenance.label}
+            title={
+              usingCloudFallbackData
+                ? "Showing Supabase game history"
+                : "Showing saved history data"
+            }
+            subtitle={provenance.caption}
+          >
+            <AnalyticsRecoveryCard
+              title={
+                usingCloudFallbackData
                   ? "Showing Supabase game history"
-                  : "Showing saved history data"}
-              </Text>
-              <Text style={styles.localFallbackText}>
-                {error
+                  : "Showing saved history data"
+              }
+              body={
+                error
                   ? usingCloudFallbackData
                     ? "The published chart dataset is unavailable right now, so this view is using Supabase game history directly."
                     : "The published chart dataset is unavailable right now, so this view is using the games saved on this device."
                   : usingCloudFallbackData
                     ? "The published chart dataset has no rows yet, so this view is using Supabase game history directly."
-                    : "The published chart dataset has no rows yet, so this view is using the games saved on this device."}
-              </Text>
-            </View>
+                    : "The published chart dataset has no rows yet, so this view is using the games saved on this device."
+              }
+              tone="warning"
+              sourceKind={usingCloudFallbackData ? "supabase-fallback" : "device-fallback"}
+              sourceLabel={usingCloudFallbackData ? "Supabase fallback" : "Device fallback"}
+              primaryAction={
+                canAdjustChartFromHub(chartKey)
+                  ? {
+                      label: "Adjust setup",
+                      onPress: openChartSetup,
+                    }
+                  : null
+              }
+              secondaryAction={{
+                label: "Command",
+                onPress: openCommandPage,
+                variant: "secondary",
+              }}
+            />
+            {summaryChips.length ? (
+              <View style={styles.surfaceChipRow}>
+                {summaryChips.map((chip) => (
+                  <ChartMetricChip key={chip} label={chip} />
+                ))}
+              </View>
+            ) : null}
+            <ChartInsightStrip label="Source" value={provenance.label} />
             {localChart}
-          </View>
+          </ChartSurface>
         );
       }
     }
@@ -682,25 +676,41 @@ export default function ChartKeyScreen() {
 
     if (!hasData) {
       return (
-        <View style={styles.compareBlock}>
-          <Text style={styles.compareTitle}>
-            {toStringValue(emptyState.title, "No chart data yet")}
-          </Text>
-          <Text style={styles.emptyText}>
-            {toStringValue(
-              emptyState.subtitle,
-              toStringValue(
-                emptyState.description,
-                "Supabase has not published any data for this chart yet.",
-              ),
-            )}
-          </Text>
-        </View>
+        <AnalyticsRecoveryCard
+          title={toStringValue(emptyState.title, "No chart data yet")}
+          body={toStringValue(
+            emptyState.subtitle,
+            toStringValue(
+              emptyState.description,
+              "Supabase has not published any data for this chart yet.",
+            ),
+          )}
+          tone="info"
+          sourceKind="server"
+          sourceLabel="Server data"
+          primaryAction={
+            canAdjustChartFromHub(chartKey)
+              ? {
+                  label: "Adjust setup",
+                  onPress: openChartSetup,
+                }
+              : null
+          }
+          secondaryAction={{
+            label: "Command",
+            onPress: openCommandPage,
+            variant: "secondary",
+          }}
+        />
       );
     }
 
     return (
-      <View style={styles.datasetStack}>
+      <ChartSurface
+        eyebrow={provenance.label}
+        title="Dataset summary"
+        subtitle={provenance.caption}
+      >
         <View style={styles.datasetSummaryRow}>
           <DatasetStat label="Points" value={pointCount} />
           <DatasetStat label="Series" value={datasetSeries.length} />
@@ -711,14 +721,20 @@ export default function ChartKeyScreen() {
         </View>
 
         {summaryChips.length ? (
-          <View style={styles.datasetChipRow}>
+          <View style={styles.surfaceChipRow}>
             {summaryChips.map((chip) => (
-              <View key={chip} style={styles.datasetChip}>
-                <Text style={styles.datasetChipText}>{chip}</Text>
-              </View>
+              <ChartMetricChip key={chip} label={chip} />
             ))}
           </View>
         ) : null}
+
+        <View style={styles.datasetInsightStack}>
+          <ChartInsightStrip label="Source" value={provenance.label} />
+          <ChartInsightStrip
+            label="Refresh state"
+            value={isStale ? "Stale" : "Live"}
+          />
+        </View>
 
         {datasetSeries.length > 0 ? (
           <View style={styles.seriesList}>
@@ -742,7 +758,7 @@ export default function ChartKeyScreen() {
                           key={`${toStringValue(series.key, `series-${index}`)}-${pointIndex}`}
                           style={styles.pointText}
                         >
-                          {toStringValue(point.label, `Point ${pointIndex + 1}`)} • {toDisplayValue(point.y)}
+                          {toStringValue(point.label, `Point ${pointIndex + 1}`)} • {toDisplayValue(point.y, "0")}
                         </Text>
                       ))}
                     </View>
@@ -760,13 +776,13 @@ export default function ChartKeyScreen() {
             <View style={styles.pointList}>
               {datasetPoints.slice(0, 8).map((point, index) => (
                 <Text key={`point-${index}`} style={styles.pointText}>
-                  {toStringValue(point.label, `Point ${index + 1}`)} • {toDisplayValue(point.y)}
+                  {toStringValue(point.label, `Point ${index + 1}`)} • {toDisplayValue(point.y, "0")}
                 </Text>
               ))}
             </View>
           </View>
         )}
-      </View>
+      </ChartSurface>
     );
   }
 
@@ -783,20 +799,18 @@ export default function ChartKeyScreen() {
         </Text>
         {setupChartKey ? (
           <View style={styles.heroActionRow}>
-            <TouchableOpacity
-              style={styles.primaryButton}
+            <Pressable
+              style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.9 }]}
               onPress={openChartSetup}
-              activeOpacity={0.9}
             >
               <Text style={styles.primaryButtonText}>Back to Adjust</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.secondaryButton}
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.9 }]}
               onPress={openCommandPage}
-              activeOpacity={0.9}
             >
               <Text style={styles.secondaryButtonText}>Back to Command</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         ) : null}
       </HeroCard>
@@ -879,24 +893,13 @@ const styles = StyleSheet.create({
   datasetStack: {
     gap: 10,
   },
-  localFallbackCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: CHART_COLORS.border,
-    backgroundColor: CHART_COLORS.cardAlt,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    gap: 4,
+  surfaceChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
   },
-  localFallbackTitle: {
-    color: CHART_COLORS.textStrong,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  localFallbackText: {
-    color: CHART_COLORS.sub,
-    fontSize: 10,
-    lineHeight: 15,
+  datasetInsightStack: {
+    gap: 0,
   },
   sparklineFallback: {
     gap: 8,

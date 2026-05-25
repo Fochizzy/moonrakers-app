@@ -25,8 +25,20 @@ assert.match(
 
 assert.match(
   correlationSource,
-  /if \(serverOnly \|\| serverPairingCorrelations.length > 0\)/,
-  "expected pairing correlations to avoid local fallback when serverOnly is enabled",
+  /const serverPersonalCorrelations = useMemo\(\(\) => \{/,
+  "expected CorrelationStats to normalize server-authored personal correlation rows",
+);
+
+assert.match(
+  correlationSource,
+  /serverData\?\.personal/,
+  "expected CorrelationStats to read the personal correlations payload from the server contract",
+);
+
+assert.match(
+  correlationSource,
+  /serverOnly\s*\|\|\s*serverPersonalCorrelations\.length > 0\s*\|\|\s*serverPairingCorrelations\.length > 0/,
+  "expected personal correlations to avoid local fallback when serverOnly is enabled",
 );
 
 assert.match(

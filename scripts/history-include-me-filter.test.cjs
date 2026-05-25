@@ -16,8 +16,13 @@ assert.match(
 
 assert.match(
   source,
-  /const authSession = useStore\(\(s: any\) => s\.authSession\);[\s\S]*const authProfile = useStore\(\(s: any\) => s\.authProfile\);/,
-  "expected history to read auth session and auth profile from the shared store"
+  /const authSession = useAuthSession\(\);/,
+  "expected history to read auth session from the shared store"
+);
+assert.match(
+  source,
+  /const authProfile = useAuthProfile\(\);/,
+  "expected history to read auth profile from the shared store"
 );
 
 assert.match(

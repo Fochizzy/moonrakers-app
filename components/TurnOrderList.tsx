@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 
-import { useStore } from '@/store/useStore';
+import { useGames, usePlayers } from '@/store/useStore';
 import Text from '@/components/ui/Text';
 import AnimatedCard from '@/components/ui/AnimatedCard';
 import ChartShell from './ChartShell';
@@ -79,8 +79,8 @@ function EmptyState() {
 }
 
 export default function PlayerProfileInsights({ playerId }: Props) {
-  const rawGames = useStore((s: any) => s.games);
-  const rawPlayers = useStore((s: any) => s.players);
+  const rawGames = useGames();
+  const rawPlayers = usePlayers();
 
   const games = Array.isArray(rawGames)
     ? (rawGames as StoredGame[])

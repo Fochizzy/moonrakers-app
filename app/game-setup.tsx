@@ -16,6 +16,7 @@ import DraggableFlatList, {
 } from "react-native-draggable-flatlist";
 
 import ActionButton from "@/components/ui/ActionButton";
+import AppHeader from "@/components/ui/AppHeader";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
@@ -104,7 +105,7 @@ function TurnOrderSummary({ players }: { players: PlayerLike[] }) {
         <Text variant="utilityLabel" style={styles.sectionLabel}>
           First Captain
         </Text>
-        <Text style={styles.summaryHint}>Top card goes first on the game screen.</Text>
+        <Text style={styles.summaryHint}>Set the first captain and lock the table order.</Text>
       </View>
 
       {startingPlayer ? (
@@ -578,6 +579,7 @@ export default function GameSetup() {
       edges={["top", "left", "right", "bottom"]}
       contentContainerStyle={styles.pageContent}
       >
+        <AppHeader title="Create Game" size="compact" />
         <Animated.View
           style={[
             styles.mainContentWrap,

@@ -43,26 +43,26 @@ assert.match(
 
 assert.match(
   appHubsSource,
-  /key:\s*"history"[\s\S]*?iconKey:\s*"missionHub"/,
-  "expected the history hub tile to use Mission art"
+  /key:\s*"history"[\s\S]*?iconKey:\s*"miss"/,
+  "expected the history bridge tile to use miss art"
 );
 
 assert.match(
   appHubsSource,
-  /key:\s*"analytics"[\s\S]*?iconKey:\s*"moneyHub"/,
-  "expected the analytics hub tile to use Money art"
+  /key:\s*"analytics"[\s\S]*?iconKey:\s*"shield"/,
+  "expected the analytics bridge tile to use shield art"
 );
 
 assert.match(
   appHubsSource,
-  /key:\s*"players"[\s\S]*?iconKey:\s*"prestigeHub"/,
-  "expected the players hub tile to use Prestige art"
+  /key:\s*"players"[\s\S]*?iconKey:\s*"orangePerson"/,
+  "expected the players bridge tile to use orangePerson art"
 );
 
 assert.match(
   appHubsSource,
-  /key:\s*"definitions"[\s\S]*?iconKey:\s*"objectiveHub"/,
-  "expected the definitions hub tile to use Objective art"
+  /key:\s*"definitions"[\s\S]*?iconKey:\s*"thruster"/,
+  "expected the definitions bridge tile to use thruster art"
 );
 
 const bridgeBlock = appHubsSource.match(

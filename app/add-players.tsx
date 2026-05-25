@@ -8,13 +8,15 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import ProfileAppearancePicker from "@/components/player/ProfileAppearancePicker";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+import ActionButton from "@/components/ui/ActionButton";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
-import StarryNight from "@/components/ui/StarryNight";
 import { buildSavedAuthProfile } from "@/lib/auth/registerFlow";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
@@ -146,6 +148,21 @@ function normalizeGame(raw: any): GameLike | null {
         ? (raw.totals as Record<string, unknown>)
         : undefined,
   };
+}
+
+function MetricPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <View style={styles.metricPill}>
+      <Text variant="metricLabel">{label}</Text>
+      <Text variant="metricValue">{value}</Text>
+    </View>
+  );
 }
 
 export default function AddPlayersScreen() {
@@ -579,384 +596,388 @@ export default function AddPlayersScreen() {
   }
 
   return (
-    <SafeAreaView
-      style={styles.screen}
-      edges={["top", "right", "bottom", "left"]}
-    >
-      <View style={StyleSheet.absoluteFillObject}>
-        <StarryNight />
-        <View style={styles.overlay} />
+    <PageShell preset="quiet" density="compact" scroll={false}>
+      <HeroCard
+        eyebrow="Players & Groups"
+        title="Roster Command"
+        subtitle="Customize your player card and save tables for game setup."
+        size="compact"
+        variant="stat"
+        actions={
+          <ActionButton
+            title="Back to Command"
+            variant="secondary"
+            onPress={() => router.push(APP_ROUTES.home)}
+          />
+        }
+      >
+        <View style={styles.heroMetaRow}>
+          <MetricPill label="Players" value={players.length} />
+          <MetricPill label="Groups" value={groups.length} />
+          <MetricPill label="Profile" value={profileReady ? "Ready" : "Setup"} />
+        </View>
+      </HeroCard>
+
+      <View style={styles.tabRow}>
+        <Pressable
+          onPress={() => setTab("players")}
+          style={[styles.tabBtn, tab === "players" && styles.tabBtnActive]}
+        >
+          <Text style={[styles.tabText, tab === "players" && styles.tabTextActive]}>
+            Players
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setTab("groups")}
+          style={[styles.tabBtn, tab === "groups" && styles.tabBtnActive]}
+        >
+          <Text style={[styles.tabText, tab === "groups" && styles.tabTextActive]}>
+            Saved Groups
+          </Text>
+        </Pressable>
       </View>
 
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>{"<"}</Text>
-          </Pressable>
-
-          <View style={styles.headerTextWrap}>
-            <Text style={styles.title}>Players & Groups</Text>
-            <Text style={styles.subtitle}>
-              Customize your player card and save groups for game setup.
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.tabRow}>
-          <Pressable
-            onPress={() => setTab("players")}
-            style={[styles.tabBtn, tab === "players" && styles.tabBtnActive]}
+      {tab === "players" ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <SectionCard
+            style={styles.panel}
+            title="Your player card"
+            subtitle="Only the signed-in captain can change this profile."
           >
-            <Text style={[styles.tabText, tab === "players" && styles.tabTextActive]}>
-              Players
-            </Text>
-          </Pressable>
+            {profileReady ? (
+              <>
+                {showProfileSetupCallout ? (
+                  <View style={styles.profileSetupCallout}>
+                    <Text style={styles.profileSetupCalloutEyebrow}>Next Step</Text>
+                    <Text style={styles.profileSetupCalloutTitle}>
+                      Choose your matching player card
+                    </Text>
+                    <Text style={styles.profileSetupCalloutText}>
+                      Pick one of the matching card styles for your selected color, then
+                      save changes.
+                    </Text>
+                  </View>
+                ) : null}
 
-          <Pressable
-            onPress={() => setTab("groups")}
-            style={[styles.tabBtn, tab === "groups" && styles.tabBtnActive]}
-          >
-            <Text style={[styles.tabText, tab === "groups" && styles.tabTextActive]}>
-              Saved Groups
-            </Text>
-          </Pressable>
-        </View>
+                <View
+                  style={[
+                    styles.previewHeroCard,
+                    {
+                      borderColor: `${profileAccent}44`,
+                      backgroundColor: `${profileAccent}14`,
+                    },
+                  ]}
+                >
+                  <PlayerCardIcon
+                    player={{
+                      id: signedInUserId,
+                      name: profileName,
+                      color: favoriteColor ?? currentFavoriteColor ?? "blue",
+                      assignedCardArtIndex,
+                    }}
+                    size={124}
+                    borderRadius={18}
+                    showInitial={false}
+                  />
 
-        {tab === "players" ? (
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+                  <View style={styles.previewHeroCopy}>
+                    <Text style={styles.previewHeroEyebrow}>Signed In</Text>
+                    <Text style={styles.previewHeroTitle}>{profileName}</Text>
+                    <Text style={styles.previewHeroSubtitle}>
+                      Choose the color and card art tied to your account everywhere it
+                      appears.
+                    </Text>
+                  </View>
+                </View>
+
+                <ProfileAppearancePicker
+                  title={showProfileSetupCallout ? "Choose your player card" : "Appearance"}
+                  subtitle={
+                    showProfileSetupCallout
+                      ? "Pick one of the matching card styles for your selected color, then save changes."
+                      : "Pick the color and player card image that represent your account."
+                  }
+                  favoriteColor={favoriteColor}
+                  assignedCardArtIndex={assignedCardArtIndex}
+                  onSelectFavoriteColor={handleFavoriteColorChange}
+                  onSelectAssignedCardArtIndex={setAssignedCardArtIndex}
+                  allowCardSelection
+                />
+
+                <Pressable
+                  onPress={() => {
+                    void handleSaveProfile();
+                  }}
+                  disabled={!canSaveProfile}
+                  style={[
+                    styles.primaryBtn,
+                    !canSaveProfile && styles.buttonDisabled,
+                  ]}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator color="#020814" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Save changes</Text>
+                  )}
+                </Pressable>
+
+                <Text style={styles.deleteHint}>
+                  Deleting your profile removes the sign-in account and replaces you with{" "}
+                  {HISTORY_REPLACEMENT_NAME} in saved game history.
+                </Text>
+
+                <Pressable
+                  onPress={handleDeleteProfile}
+                  disabled={deletingProfile || savingProfile}
+                  style={[
+                    styles.deleteBtn,
+                    (deletingProfile || savingProfile) && styles.buttonDisabled,
+                  ]}
+                >
+                  {deletingProfile ? (
+                    <ActivityIndicator color="#FDE2E2" />
+                  ) : (
+                    <Text style={styles.deleteBtnText}>Delete your profile</Text>
+                  )}
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyText}>
+                  Finish account setup before editing the signed-in player card here.
+                </Text>
+
+                <Pressable
+                  onPress={() => router.push(APP_ROUTES.register as any)}
+                  style={styles.secondaryBtn}
+                >
+                  <Text style={styles.secondaryBtnText}>Finish profile setup</Text>
+                </Pressable>
+              </>
+            )}
+          </SectionCard>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <SectionCard
+            style={styles.panel}
+            title="Create saved group"
+            subtitle="Build a five-seat table you can reuse from game setup."
           >
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Your player card</Text>
-              <Text style={styles.helperText}>
-                Only the signed-in captain can change this profile.
+            <TextInput
+              value={groupName}
+              onChangeText={setGroupName}
+              placeholder="Group name"
+              placeholderTextColor="#6E87AE"
+              style={styles.input}
+            />
+
+            <View style={styles.groupSelectionSummary}>
+              <Text style={styles.groupSelectionSummaryTitle}>
+                {selectedGroupPlayerIds.length === 0
+                  ? "No players selected yet"
+                  : `${selectedGroupPlayerIds.length} players ready`}
               </Text>
+              <Text style={styles.groupSelectionSummaryText}>
+                {selectedGroupPlayerIds.length === 0
+                  ? "Pick a table first, then save the group when the five seats feel right."
+                  : sortedPlayers
+                      .filter((player) => selectedGroupPlayerIds.includes(player.id))
+                      .map((player) => player.name)
+                      .join(" / ")}
+              </Text>
+            </View>
 
-              {profileReady ? (
-                <>
-                  {showProfileSetupCallout ? (
-                    <View style={styles.profileSetupCallout}>
-                      <Text style={styles.profileSetupCalloutEyebrow}>Next Step</Text>
-                      <Text style={styles.profileSetupCalloutTitle}>
-                        Choose your matching player card
-                      </Text>
-                      <Text style={styles.profileSetupCalloutText}>
-                        Pick one of the matching card styles for your selected color, then
-                        save changes.
-                      </Text>
-                    </View>
-                  ) : null}
+            <Text style={styles.smallLabel}>
+              Select players ({selectedGroupPlayerIds.length}/5)
+            </Text>
 
-                  <View
+            <View style={styles.groupPlayerGrid}>
+              {sortedPlayers.map((player) => {
+                const active = selectedGroupPlayerIds.includes(player.id);
+                const accent = getPlayerAccentColor(player.color ?? "blue");
+
+                return (
+                  <Pressable
+                    key={player.id}
+                    onPress={() => toggleGroupPlayer(player.id)}
                     style={[
-                      styles.previewHeroCard,
-                      {
-                        borderColor: `${profileAccent}44`,
-                        backgroundColor: `${profileAccent}14`,
+                      styles.groupPlayerTile,
+                      active && {
+                        borderColor: accent,
+                        backgroundColor: `${accent}18`,
                       },
                     ]}
                   >
                     <PlayerCardIcon
-                      player={{
-                        id: signedInUserId,
-                        name: profileName,
-                        color: favoriteColor ?? currentFavoriteColor ?? "blue",
-                        assignedCardArtIndex,
-                      }}
-                      size={124}
-                      borderRadius={18}
+                      player={player as any}
+                      size={72}
+                      borderRadius={14}
                       showInitial={false}
                     />
-
-                    <View style={styles.previewHeroCopy}>
-                      <Text style={styles.previewHeroEyebrow}>Signed In</Text>
-                      <Text style={styles.previewHeroTitle}>{profileName}</Text>
-                      <Text style={styles.previewHeroSubtitle}>
-                        Choose the color and card art tied to your account everywhere it
-                        appears.
-                      </Text>
-                    </View>
-                  </View>
-
-                  <ProfileAppearancePicker
-                    title={showProfileSetupCallout ? "Choose your player card" : "Appearance"}
-                    subtitle={
-                      showProfileSetupCallout
-                        ? "Pick one of the matching card styles for your selected color, then save changes."
-                        : "Pick the color and player card image that represent your account."
-                    }
-                    favoriteColor={favoriteColor}
-                    assignedCardArtIndex={assignedCardArtIndex}
-                    onSelectFavoriteColor={handleFavoriteColorChange}
-                    onSelectAssignedCardArtIndex={setAssignedCardArtIndex}
-                    allowCardSelection
-                  />
-
-                  <Pressable
-                    onPress={() => {
-                      void handleSaveProfile();
-                    }}
-                    disabled={!canSaveProfile}
-                    style={[
-                      styles.primaryBtn,
-                      !canSaveProfile && styles.buttonDisabled,
-                    ]}
-                  >
-                    {savingProfile ? (
-                      <ActivityIndicator color="#020814" />
-                    ) : (
-                      <Text style={styles.primaryBtnText}>Save changes</Text>
-                    )}
+                    <Text style={styles.groupPlayerName} numberOfLines={1}>
+                      {player.name}
+                    </Text>
                   </Pressable>
+                );
+              })}
+            </View>
 
-                  <Text style={styles.deleteHint}>
-                    Deleting your profile removes the sign-in account and replaces you with{" "}
-                    {HISTORY_REPLACEMENT_NAME} in saved game history.
-                  </Text>
-
-                  <Pressable
-                    onPress={handleDeleteProfile}
-                    disabled={deletingProfile || savingProfile}
-                    style={[
-                      styles.deleteBtn,
-                      (deletingProfile || savingProfile) && styles.buttonDisabled,
-                    ]}
-                  >
-                    {deletingProfile ? (
-                      <ActivityIndicator color="#FDE2E2" />
-                    ) : (
-                      <Text style={styles.deleteBtnText}>Delete your profile</Text>
-                    )}
-                  </Pressable>
-                </>
+            <Pressable
+              onPress={() => {
+                void handleCreateGroup();
+              }}
+              disabled={savingGroup}
+              style={[styles.primaryBtn, savingGroup && styles.buttonDisabled]}
+            >
+              {savingGroup ? (
+                <ActivityIndicator color="#020814" />
               ) : (
-                <>
-                  <Text style={styles.emptyText}>
-                    Finish account setup before editing the signed-in player card here.
-                  </Text>
-
-                  <Pressable
-                    onPress={() => router.push(APP_ROUTES.register as any)}
-                    style={styles.secondaryBtn}
-                  >
-                    <Text style={styles.secondaryBtnText}>Finish profile setup</Text>
-                  </Pressable>
-                </>
+                <Text style={styles.primaryBtnText}>Save Group</Text>
               )}
-            </View>
-          </ScrollView>
-        ) : (
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+            </Pressable>
+          </SectionCard>
+
+          <SectionCard
+            style={styles.panel}
+            title="Saved groups"
+            subtitle={hasSavedGroups ? `${visibleGroups.length} visible` : "No saved groups yet"}
           >
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Create saved group</Text>
+            <TextInput
+              value={groupSearchQuery}
+              onChangeText={setGroupSearchQuery}
+              placeholder="Search groups"
+              placeholderTextColor="#6E87AE"
+              style={styles.groupSearchInput}
+            />
 
-              <TextInput
-                value={groupName}
-                onChangeText={setGroupName}
-                placeholder="Group name"
-                placeholderTextColor="#6E87AE"
-                style={styles.input}
-              />
+            <View style={styles.groupSortRow}>
+              {[
+                { key: "most-played" as GroupSortMode, label: "Most Played" },
+                { key: "recent" as GroupSortMode, label: "Recent" },
+                { key: "az" as GroupSortMode, label: "A-Z" },
+              ].map((option) => {
+                const active = groupSortMode === option.key;
 
-              <View style={styles.groupSelectionSummary}>
-                <Text style={styles.groupSelectionSummaryTitle}>
-                  {selectedGroupPlayerIds.length === 0
-                    ? "No players selected yet"
-                    : `${selectedGroupPlayerIds.length} players ready`}
-                </Text>
-                <Text style={styles.groupSelectionSummaryText}>
-                  {selectedGroupPlayerIds.length === 0
-                    ? "Pick a table first, then save the group when the five seats feel right."
-                    : sortedPlayers
-                        .filter((player) => selectedGroupPlayerIds.includes(player.id))
-                        .map((player) => player.name)
-                        .join(" / ")}
-                </Text>
-              </View>
-
-              <Text style={styles.smallLabel}>
-                Select players ({selectedGroupPlayerIds.length}/5)
-              </Text>
-
-              <View style={styles.groupPlayerGrid}>
-                {sortedPlayers.map((player) => {
-                  const active = selectedGroupPlayerIds.includes(player.id);
-                  const accent = getPlayerAccentColor(player.color ?? "blue");
-
-                  return (
-                    <Pressable
-                      key={player.id}
-                      onPress={() => toggleGroupPlayer(player.id)}
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() => setGroupSortMode(option.key)}
+                    style={[
+                      styles.groupSortChip,
+                      active && styles.groupSortChipActive,
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.groupPlayerTile,
-                        active && {
-                          borderColor: accent,
-                          backgroundColor: `${accent}18`,
-                        },
+                        styles.groupSortChipText,
+                        active && styles.groupSortChipTextActive,
                       ]}
                     >
-                      <PlayerCardIcon
-                        player={player as any}
-                        size={72}
-                        borderRadius={14}
-                        showInitial={false}
-                      />
-                      <Text style={styles.groupPlayerName} numberOfLines={1}>
-                        {player.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Pressable
-                onPress={() => {
-                  void handleCreateGroup();
-                }}
-                disabled={savingGroup}
-                style={[styles.primaryBtn, savingGroup && styles.buttonDisabled]}
-              >
-                {savingGroup ? (
-                  <ActivityIndicator color="#020814" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>Save Group</Text>
-                )}
-              </Pressable>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <View style={styles.panel}>
-              <Text style={styles.sectionTitle}>Saved groups</Text>
-
-              <TextInput
-                value={groupSearchQuery}
-                onChangeText={setGroupSearchQuery}
-                placeholder="Search groups"
-                placeholderTextColor="#6E87AE"
-                style={styles.groupSearchInput}
-              />
-
-              <View style={styles.groupSortRow}>
-                {[
-                  { key: "most-played" as GroupSortMode, label: "Most Played" },
-                  { key: "recent" as GroupSortMode, label: "Recent" },
-                  { key: "az" as GroupSortMode, label: "A-Z" },
-                ].map((option) => {
-                  const active = groupSortMode === option.key;
-
-                  return (
-                    <Pressable
-                      key={option.key}
-                      onPress={() => setGroupSortMode(option.key)}
-                      style={[
-                        styles.groupSortChip,
-                        active && styles.groupSortChipActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.groupSortChipText,
-                          active && styles.groupSortChipTextActive,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {visibleGroups.length === 0 ? (
-                <Text style={styles.emptyText}>
-                  {hasSavedGroups && hasGroupSearchQuery
-                    ? "No saved groups match your search."
-                    : "No saved groups yet."}
-                </Text>
-              ) : (
-                <View style={styles.groupList}>
-                  {visibleGroups.map((group) => (
-                    <View key={group.id} style={styles.groupCard}>
-                      <View style={styles.groupCardTop}>
-                        <View style={styles.flexGrow}>
-                          <Text style={styles.groupName}>{group.name}</Text>
-                          <Text style={styles.groupMeta}>{formatGroupUsageHint(group)}</Text>
-                        </View>
-
-                        {profileReady &&
-                        signedInUserId &&
-                        isLikelyRegisteredProfileId(group.id) &&
-                        group.playerIds.includes(signedInUserId) ? (
-                          <Pressable
-                            onPress={() => {
-                              Alert.alert(
-                                "Delete shared group",
-                                `Delete ${group.name} for every member?`,
-                                [
-                                  { text: "Cancel", style: "cancel" },
-                                  {
-                                    text: "Delete",
-                                    style: "destructive",
-                                    onPress: () => {
-                                      void handleDeleteGroup(group);
-                                    },
-                                  },
-                                ],
-                              );
-                            }}
-                            disabled={deletingGroupId === group.id}
-                            style={styles.deleteSmallBtn}
-                          >
-                            {deletingGroupId === group.id ? (
-                              <ActivityIndicator color="#FDE2E2" />
-                            ) : (
-                              <Text style={styles.deleteSmallBtnText}>Delete</Text>
-                            )}
-                          </Pressable>
-                        ) : null}
+            {visibleGroups.length === 0 ? (
+              <Text style={styles.emptyText}>
+                {hasSavedGroups && hasGroupSearchQuery
+                  ? "No saved groups match your search."
+                  : "No saved groups yet."}
+              </Text>
+            ) : (
+              <View style={styles.groupList}>
+                {visibleGroups.map((group) => (
+                  <View key={group.id} style={styles.groupCard}>
+                    <View style={styles.groupCardTop}>
+                      <View style={styles.flexGrow}>
+                        <Text style={styles.groupName}>{group.name}</Text>
+                        <Text style={styles.groupMeta}>{formatGroupUsageHint(group)}</Text>
                       </View>
 
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.groupCardPlayers}
-                      >
-                        {group.playerIds.map((id) => {
-                          const player = playersById.get(id);
-                          if (!player) {
-                            return null;
-                          }
-
-                          return (
-                            <View key={id} style={styles.groupCardPlayer}>
-                              <PlayerCardIcon
-                                player={player as any}
-                                size={54}
-                                borderRadius={12}
-                                showInitial={false}
-                              />
-                              <Text style={styles.groupCardPlayerName} numberOfLines={1}>
-                                {player.name}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </ScrollView>
+                      {profileReady &&
+                      signedInUserId &&
+                      isLikelyRegisteredProfileId(group.id) &&
+                      group.playerIds.includes(signedInUserId) ? (
+                        <Pressable
+                          onPress={() => {
+                            Alert.alert(
+                              "Delete shared group",
+                              `Delete ${group.name} for every member?`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Delete",
+                                  style: "destructive",
+                                  onPress: () => {
+                                    void handleDeleteGroup(group);
+                                  },
+                                },
+                              ],
+                            );
+                          }}
+                          disabled={deletingGroupId === group.id}
+                          style={styles.deleteSmallBtn}
+                        >
+                          {deletingGroupId === group.id ? (
+                            <ActivityIndicator color="#FDE2E2" />
+                          ) : (
+                            <Text style={styles.deleteSmallBtnText}>Delete</Text>
+                          )}
+                        </Pressable>
+                      ) : null}
                     </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        )}
-      </View>
-    </SafeAreaView>
+
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.groupCardPlayers}
+                    >
+                      {group.playerIds.map((id) => {
+                        const player = playersById.get(id);
+                        if (!player) {
+                          return null;
+                        }
+
+                        return (
+                          <View key={id} style={styles.groupCardPlayer}>
+                            <PlayerCardIcon
+                              player={player as any}
+                              size={54}
+                              borderRadius={12}
+                              showInitial={false}
+                            />
+                            <Text style={styles.groupCardPlayerName} numberOfLines={1}>
+                              {player.name}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                ))}
+              </View>
+            )}
+          </SectionCard>
+        </ScrollView>
+      )}
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
+  creationStepList: {
+    gap: 8,
+  },
   screen: {
     flex: 1,
     backgroundColor: "#030712",
@@ -1026,6 +1047,21 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: "#FFFFFF",
+  },
+  heroMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  metricPill: {
+    minWidth: 86,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(5,14,31,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.22)",
+    gap: 3,
   },
   scrollContent: {
     paddingBottom: 24,

@@ -101,9 +101,30 @@ export function buildPlayerProfileRoute(playerId: string) {
   } as const;
 }
 
-export function buildDefinitionsRoute(metric: string) {
+export function buildDefinitionsRoute(metric: string);
+export function buildDefinitionsRoute(input: {
+  metric?: string | null;
+  category?: string | null;
+});
+export function buildDefinitionsRoute(
+  input: string | { metric?: string | null; category?: string | null }
+) {
+  if (typeof input === "string") {
+    const metric = input.trim();
+    return {
+      pathname: APP_ROUTES.definitions,
+      params: { metric },
+    } as const;
+  }
+
+  const metric = String(input?.metric ?? "").trim();
+  const category = String(input?.category ?? "").trim();
+
   return {
     pathname: APP_ROUTES.definitions,
-    params: { metric },
+    params: {
+      ...(metric ? { metric } : {}),
+      ...(category ? { category } : {}),
+    },
   } as const;
 }

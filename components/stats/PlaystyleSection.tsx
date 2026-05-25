@@ -13,7 +13,9 @@ import {
 } from "@/utils/playstyleCorrelationEngine";
 import { buildPlaystyleSamples, type PlaystyleSample } from "@/utils/playstyleEngine";
 import { buildPlaystyleInsights } from "@/utils/playstyleInsights";
+import { COLORS } from "@/utils/colors";
 import type { Game, Player } from "@/utils/statsEngine";
+import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 type LeaderboardPlayer = {
   id: string;
@@ -27,20 +29,6 @@ type Props = {
   leaderboard: LeaderboardPlayer[];
   selectedPlayerId: string | null;
   onSelectPlayer: (playerId: string) => void;
-};
-
-const COLORS = {
-  surface: "#0A1428",
-  surfaceAlt: "#0F172A",
-  textPrimary: "#F8FBFF",
-  textSecondary: "#C7D6F3",
-  textMuted: "#8EA6C8",
-  cyan: "#67E8F9",
-  purple: "#A855F7",
-  blue: "#60A5FA",
-  gold: "#FBBF24",
-  green: "#22C55E",
-  red: "#EF4444",
 };
 
 const PERSONAL_MIN_GAMES = 5;
@@ -70,10 +58,6 @@ function formatNumber(value: number, digits = 1) {
 function formatPercent(value: number) {
   if (!Number.isFinite(value)) return "--";
   return `${Math.round(value * 100)}%`;
-}
-
-function getPlayerColor(color?: string | null) {
-  return color || COLORS.purple;
 }
 
 function getMetricLabel(key: PlaystyleCorrelationKey) {
@@ -305,13 +289,13 @@ export default function PlaystyleSection({
 
     for (const player of players) {
       if (player?.id) {
-        map.set(player.id, getPlayerColor((player as any)?.color));
+        map.set(player.id, getPlayerAccentColor((player as any)?.color));
       }
     }
 
     for (const player of leaderboard) {
       if (player?.id && !map.has(player.id)) {
-        map.set(player.id, getPlayerColor(player.color));
+        map.set(player.id, getPlayerAccentColor(player.color));
       }
     }
 
@@ -388,7 +372,7 @@ export default function PlaystyleSection({
     );
   }
 
-  const accentColor = getPlayerColor(resolvedPlayer.color);
+  const accentColor = getPlayerAccentColor(resolvedPlayer.color);
 
   return (
     <View style={styles.card}>
@@ -406,7 +390,7 @@ export default function PlaystyleSection({
       >
         {leaderboard.map((player) => {
           const active = player.id === resolvedPlayer.id;
-          const playerAccent = getPlayerColor(player.color);
+          const playerAccent = getPlayerAccentColor(player.color);
 
           return (
             <Pressable
@@ -450,7 +434,7 @@ export default function PlaystyleSection({
           label="Prestige / Game"
           value={formatNumber(personalPrestige)}
           meta={`Global ${formatNumber(globalPrestige)}`}
-          accent={COLORS.blue}
+          accent={COLORS.blueGlow}
         />
         <SummaryCard
           label="Objective Points / Game"

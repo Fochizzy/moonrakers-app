@@ -2,32 +2,36 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Alert,
-  ScrollView,
   StyleSheet,
   Pressable,
   TextInput,
   Animated,
-  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 
-import { loadCloudSnapshot } from '@/lib/cloud/loadCloudSnapshot';
-import { loadRegisteredProfiles } from '@/lib/cloud/loadRegisteredProfiles';
-import { loadStatsSnapshot } from '@/lib/cloud/loadStatsSnapshot';
-import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
-import { importBackupFromPicker } from '@/lib/migration/importBackupFromPicker';
-import { formatSupabaseConfigError } from '@/lib/supabase';
-import { useStore } from '@/store/useStore';
+import AppStatusBanner from '@/components/status/AppStatusBanner';
+import {
+  useAuthSession,
+  useAuthProfile,
+  useGames,
+  usePlayers,
+  useHydrateCloudSnapshot,
+} from '@/store/useStore';
 import ActionButton from '@/components/ui/ActionButton';
+import HeroCard from '@/components/ui/HeroCard';
+import PageShell from '@/components/ui/PageShell';
+import SectionCard from '@/components/ui/SectionCard';
 import Text from '@/components/ui/Text';
+import { useHistoryDataManager } from '@/lib/history/useHistoryDataManager';
 import { APP_ROUTES } from '@/utils/appRoutes';
 
 import {
   getWinnerIdFromGame,
 } from '@/utils/gameTotals';
-import { mergeRegisteredProfilesIntoPlayers } from '@/utils/registeredProfilePlayer';
+import { COLORS } from '@/utils/colors';
+import { formatDate } from '@/utils/formatters';
 
 type Player = {
   id: string;
@@ -78,30 +82,7 @@ type HistorySort = 'newest' | 'oldest' | 'winner' | 'rounds';
 const SUMMARY_ROUTE = '/summary';
 const REPLAY_ROUTE = '/charts/replay';
 
-const COLORS = {
-  bg: '#081120',
-  card: 'rgba(12,18,38,0.92)',
-  cardAlt: 'rgba(16,24,48,0.95)',
-  text: '#E2E8F0',
-  sub: '#94A3B8',
-  muted: '#64748B',
-  accent: '#A855F7',
-  accentSoft: 'rgba(168,85,247,0.18)',
-  blue: '#3B82F6',
-  blueSoft: 'rgba(59,130,246,0.18)',
-  green: '#22C55E',
-  greenSoft: 'rgba(34,197,94,0.16)',
-  red: '#FB7185',
-  redSoft: 'rgba(251,113,133,0.18)',
-  border: 'rgba(255,255,255,0.08)',
-  whiteSoft: 'rgba(255,255,255,0.06)',
-  input: 'rgba(255,255,255,0.045)',
-};
 
-function formatDate(value?: number): string {
-  if (!value) return 'Unknown date';
-  return new Date(value).toLocaleString();
-}
 
 function normalizeHistoryId(value: unknown): string {
   return String(value ?? '').trim();
@@ -289,11 +270,11 @@ export default function HistoryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ intent?: string | string[] }>();
 
-  const authSession = useStore((s: any) => s.authSession);
-  const authProfile = useStore((s: any) => s.authProfile);
-  const rawPlayers = useStore((s: any) => s.players);
-  const rawGames = useStore((s: any) => s.games);
-  const hydrateCloudSnapshot = useStore((s: any) => s.hydrateCloudSnapshot);
+  const authSession = useAuthSession();
+  const authProfile = useAuthProfile();
+  const rawPlayers = usePlayers();
+  const rawGames = useGames();
+  const hydrateCloudSnapshot = useHydrateCloudSnapshot();
   const importIntent =
     String(Array.isArray(params.intent) ? params.intent[0] : params.intent ?? '')
       .trim()
@@ -325,8 +306,18 @@ export default function HistoryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
   const [searchFocused, setSearchFocused] = useState(false);
-  const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
-  const [importingBackup, setImportingBackup] = useState(false);
+  const {
+    importingBackup,
+    deletingGameId,
+    status: historyStatus,
+    clearStatus: clearHistoryStatus,
+    importBackup,
+    removeGame,
+  } = useHistoryDataManager({
+    authSession,
+    authProfile,
+    hydrateCloudSnapshot,
+  });
 
   const availableHistoryGroups = useMemo(() => {
     const names = games
@@ -421,92 +412,6 @@ export default function HistoryScreen() {
     }
   }, [displayedGames, selectedGameId]);
 
-  async function refreshCloudHistoryState(activeSession = authSession) {
-    if (!activeSession?.user?.id) {
-      return;
-    }
-
-    const [snapshot, registeredProfiles] = await Promise.all([
-      loadCloudSnapshot(activeSession.user.id),
-      loadRegisteredProfiles().catch(() => []),
-    ]);
-    const statsSnapshot = await loadStatsSnapshot({
-      profileId: activeSession.user.id,
-      groups: snapshot.groups,
-      games: snapshot.games,
-    });
-
-    hydrateCloudSnapshot({
-      session: activeSession,
-      snapshot: {
-        ...snapshot,
-        players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
-      },
-      statsSnapshot,
-    });
-  }
-
-  async function handleImportBackup() {
-    const signedInProfileId = String(authSession?.user?.id ?? '').trim();
-    const signedInPlayerName =
-      String(authProfile?.player_name ?? '').trim() ||
-      String(authProfile?.display_name ?? '').trim();
-
-    if (!signedInProfileId || !signedInPlayerName) {
-      Alert.alert('Profile required', 'Finish login and profile setup before importing a backup.');
-      return;
-    }
-
-    setImportingBackup(true);
-
-    try {
-      const registeredProfiles = await loadRegisteredProfiles().catch(() => []);
-      const resolvedProfilesByName = Object.fromEntries(
-        registeredProfiles.flatMap((profile: any) => {
-          const name = String(profile?.name ?? '').trim();
-          const displayName = String(profile?.displayName ?? '').trim();
-          const value = { id: String(profile?.id ?? '').trim(), player_name: name };
-
-          return [name, displayName]
-            .map((candidate) => candidate.trim().toLowerCase())
-            .filter(Boolean)
-            .map((candidate) => [candidate, value] as const);
-        }),
-      );
-
-      const result = await importBackupFromPicker({
-        signedInProfileId,
-        signedInPlayerName,
-        resolvedProfilesByName,
-      });
-
-      if (!result.imported) {
-        return;
-      }
-
-      try {
-        await refreshCloudHistoryState();
-        Alert.alert(
-          'Backup imported',
-          `Imported ${result.importedGroups} groups and ${result.importedGames} games.`,
-        );
-      } catch (refreshError) {
-        console.error('Backup imported, but cloud refresh failed:', refreshError);
-        Alert.alert(
-          'Backup imported',
-          `Imported ${result.importedGroups} groups and ${result.importedGames} games, but the local view could not refresh yet.`,
-        );
-      }
-    } catch (error) {
-      Alert.alert(
-        'Import failed',
-        formatSupabaseConfigError(error) || 'Something went wrong while importing that backup.',
-      );
-    } finally {
-      setImportingBackup(false);
-    }
-  }
-
   const handleDeleteGame = (game: StoredGame, index: number) => {
     const normalizedGameId = normalizeHistoryId(game?.id);
     const normalizedHostProfileId = normalizeHistoryId(game?.hostProfileId);
@@ -561,34 +466,19 @@ export default function HistoryScreen() {
             if (deletingGameId === normalizedGameId) return;
 
             void (async () => {
-              setDeletingGameId(normalizedGameId);
-
               try {
-                await deleteCompletedGame(normalizedGameId);
+                await removeGame(normalizedGameId, activeSession);
 
                 if (selectedGameId === normalizedGameId) {
                   setSelectedGameId(undefined);
-                }
-
-                try {
-                  await refreshCloudHistoryState(activeSession);
-                } catch (refreshError) {
-                  console.error('Game deleted, but cloud refresh failed:', refreshError);
-                  Alert.alert(
-                    'Game deleted',
-                    'The game was deleted from Supabase, but the local view could not refresh yet.'
-                  );
-                  return;
                 }
               } catch (error) {
                 console.error('Delete Game failed:', error);
                 Alert.alert(
                   "Couldn't delete game",
-                  formatSupabaseConfigError(error) || 'Something went wrong deleting the game.'
-                );
-              } finally {
-                setDeletingGameId((current) =>
-                  current === normalizedGameId ? null : current
+                  error instanceof Error
+                    ? error.message
+                    : 'Something went wrong deleting the game.'
                 );
               }
             })();
@@ -608,173 +498,156 @@ export default function HistoryScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.contentContainer}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionHeaderCopy}>
-              <Text style={styles.sectionTitle}>History</Text>
-              <Text style={styles.sectionSub}>Mission archive and game timeline</Text>
-            </View>
-            <Pressable
-              onPress={() => router.push(APP_ROUTES.home)}
-              style={styles.commandButton}
-            >
-              <Text style={styles.commandButtonText}>Back to Command</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={[styles.sectionCompact, importIntent && styles.sectionCompactHighlighted]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionHeaderCopy}>
-              <Text style={styles.sectionTitle}>Backup Center</Text>
-              <Text style={[styles.sectionSub, styles.sectionSubLeft]}>
-                Import older Moonrakers backups into this cloud profile
-              </Text>
-            </View>
-          </View>
-
+    <PageShell density="compact">
+      <HeroCard
+        eyebrow="History"
+        title="Mission Archive"
+        subtitle="Game timeline and mission logs"
+        size="compact"
+        headerAction={
           <ActionButton
-            title={importingBackup ? 'Importing...' : 'Import backup'}
-            subtitle="Merge a local JSON backup into this signed-in profile"
-            onPress={() => {
-              void handleImportBackup();
-            }}
-            disabled={importingBackup}
+            variant="ghost"
+            title="Back to Command"
+            onPress={() => router.push(APP_ROUTES.home)}
+            style={styles.backButton}
           />
+        }
+      />
 
-          <Text style={styles.backupCenterNote}>
-            Best for older local backup files you want reflected in History, Charts, and Stats.
-          </Text>
+      <AppStatusBanner
+        status={historyStatus}
+        onDismiss={historyStatus ? clearHistoryStatus : null}
+      />
+
+      <SectionCard
+        title="Backup Center"
+        subtitle="Import older Moonrakers backups into this cloud profile"
+        style={importIntent ? styles.sectionHighlighted : undefined}
+      >
+        <ActionButton
+          title={importingBackup ? 'Importing...' : 'Import backup'}
+          subtitle="Merge a local JSON backup into this signed-in profile"
+          onPress={() => {
+            void importBackup().catch((error) => {
+              Alert.alert(
+                'Import failed',
+                error instanceof Error
+                  ? error.message
+                  : 'Something went wrong while importing that backup.',
+              );
+            });
+          }}
+          disabled={importingBackup}
+        />
+        <Text style={styles.backupCenterNote}>
+          Best for older local backup files you want reflected in History, Charts, and Stats.
+        </Text>
+      </SectionCard>
+
+      <SectionCard title="Filter" subtitle={`${displayedGames.length} visible`}>
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
+          placeholder="Search by winner, group, or date"
+          placeholderTextColor={COLORS.sub}
+          style={[styles.input, searchFocused && styles.inputFocused]}
+        />
+
+        <View style={styles.historyTabRail}>
+          <HistoryTab
+            label="All"
+            active={historyFilter === 'all'}
+            onPress={() => setHistoryFilter('all')}
+          />
+          <HistoryTab
+            label="Groups"
+            active={historyFilter === 'group'}
+            onPress={() => setHistoryFilter('group')}
+          />
+          <HistoryTab
+            label="Include Me"
+            active={historyFilter === 'mine'}
+            onPress={() => setHistoryFilter('mine')}
+          />
         </View>
 
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Filter</Text>
-            <Text style={styles.sectionSub}>{displayedGames.length} visible</Text>
-          </View>
-
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            placeholder="Search by winner, group, or date"
-            placeholderTextColor={COLORS.sub}
-            style={[styles.input, searchFocused && styles.inputFocused]}
-          />
-
-          <View style={styles.historyTabRail}>
-            <HistoryTab
-              label="All"
-              active={historyFilter === 'all'}
-              onPress={() => setHistoryFilter('all')}
-            />
-            <HistoryTab
-              label="Groups"
-              active={historyFilter === 'group'}
-              onPress={() => setHistoryFilter('group')}
-            />
-            <HistoryTab
-              label="Include Me"
-              active={historyFilter === 'mine'}
-              onPress={() => setHistoryFilter('mine')}
-            />
-          </View>
-
-          {historyFilter === 'group' ? (
-            <View style={styles.groupFilterSection}>
-              <Text style={styles.groupFilterLabel}>Group</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.underlineSelectorRow}
+        {historyFilter === 'group' ? (
+          <View style={styles.groupFilterSection}>
+            <Text style={styles.groupFilterLabel}>Group</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.underlineSelectorRow}
+            >
+              <Pressable
+                style={({ pressed }) => [styles.underlineTabButton, pressed && { opacity: 0.9 }]}
+                onPress={() => setSelectedGroupName('all')}
               >
-                <TouchableOpacity
-                  style={styles.underlineTabButton}
-                  onPress={() => setSelectedGroupName('all')}
-                  activeOpacity={0.9}
+                <Text
+                  style={[
+                    styles.underlineTabText,
+                    selectedGroupName === 'all' && styles.underlineTabTextActive,
+                  ]}
                 >
-                  <Text
-                    style={[
-                      styles.underlineTabText,
-                      selectedGroupName === 'all' && styles.underlineTabTextActive,
-                    ]}
+                  All Groups
+                </Text>
+                <View
+                  style={[
+                    styles.underlineTabLine,
+                    selectedGroupName === 'all' && styles.underlineTabLineActive,
+                  ]}
+                />
+              </Pressable>
+
+              {availableHistoryGroups.map((groupName) => {
+                const active = selectedGroupName === groupName;
+                return (
+                  <Pressable
+                    key={groupName}
+                    style={({ pressed }) => [styles.underlineTabButton, pressed && { opacity: 0.9 }]}
+                    onPress={() => setSelectedGroupName(groupName)}
                   >
-                    All Groups
-                  </Text>
-                  <View
-                    style={[
-                      styles.underlineTabLine,
-                      selectedGroupName === 'all' && styles.underlineTabLineActive,
-                    ]}
-                  />
-                </TouchableOpacity>
+                    <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
+                      {groupName}
+                    </Text>
+                    <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+      </SectionCard>
 
-                {availableHistoryGroups.map((groupName) => {
-                  const active = selectedGroupName === groupName;
-                  return (
-                    <TouchableOpacity
-                      key={groupName}
-                      style={styles.underlineTabButton}
-                      onPress={() => setSelectedGroupName(groupName)}
-                      activeOpacity={0.9}
-                    >
-                      <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
-                        {groupName}
-                      </Text>
-                      <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          ) : null}
+      <SectionCard title="Sort By" subtitle="Reorder the archive without leaving the main lane">
+        <View style={styles.historyTabRail}>
+          <HistoryTab
+            label="Newest"
+            active={historySort === 'newest'}
+            onPress={() => setHistorySort('newest')}
+          />
+          <HistoryTab
+            label="Oldest"
+            active={historySort === 'oldest'}
+            onPress={() => setHistorySort('oldest')}
+          />
+          <HistoryTab
+            label="Winner"
+            active={historySort === 'winner'}
+            onPress={() => setHistorySort('winner')}
+          />
+          <HistoryTab
+            label="Most Rounds"
+            active={historySort === 'rounds'}
+            onPress={() => setHistorySort('rounds')}
+          />
         </View>
+      </SectionCard>
 
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Sort By</Text>
-            <Text style={styles.sectionSub}>Reorder the archive without leaving the main lane</Text>
-          </View>
-
-          <View style={styles.historyTabRail}>
-            <HistoryTab
-              label="Newest"
-              active={historySort === 'newest'}
-              onPress={() => setHistorySort('newest')}
-            />
-            <HistoryTab
-              label="Oldest"
-              active={historySort === 'oldest'}
-              onPress={() => setHistorySort('oldest')}
-            />
-            <HistoryTab
-              label="Winner"
-              active={historySort === 'winner'}
-              onPress={() => setHistorySort('winner')}
-            />
-            <HistoryTab
-              label="Most Rounds"
-              active={historySort === 'rounds'}
-              onPress={() => setHistorySort('rounds')}
-            />
-          </View>
-        </View>
-
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Game History</Text>
-            <Text style={styles.sectionSub}>Tap a card to expand actions</Text>
-          </View>
-
-          {displayedGames.length === 0 ? (
+      <SectionCard title="Game History" subtitle="Tap a card to expand actions">
+        {displayedGames.length === 0 ? (
             <Text style={styles.emptyText}>No matching mission logs. Try a different search or filter.</Text>
           ) : (
             <View style={styles.historyList}>
@@ -892,78 +765,17 @@ export default function HistoryScreen() {
               })}
             </View>
           )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </SectionCard>
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
+  backButton: {
+    alignSelf: 'flex-start',
   },
-  scroll: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 8,
-    paddingBottom: 12,
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  sectionCompact: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 6,
-  },
-  sectionCompactHighlighted: {
+  sectionHighlighted: {
     borderColor: 'rgba(168,85,247,0.48)',
-    backgroundColor: 'rgba(18,22,46,0.98)',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    gap: 12,
-    marginBottom: 6,
-  },
-  commandButton: {
-    minHeight: 34,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(96,165,250,0.26)',
-    backgroundColor: COLORS.blueSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  commandButtonText: {
-    color: '#EAF2FF',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '800',
-    flexShrink: 1,
-  },
-  sectionSub: {
-    color: COLORS.sub,
-    fontSize: 10,
-    textAlign: 'right',
-    flexShrink: 1,
-  },
-  sectionSubLeft: {
-    textAlign: 'left',
   },
   backupCenterNote: {
     color: COLORS.muted,

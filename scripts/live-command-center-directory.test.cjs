@@ -37,6 +37,6 @@ run("Command and player directory surfaces still read from the shared player sto
   const homeSource = read("app/index.tsx");
   const playerDirectorySource = read("app/player-profile/index.tsx");
 
-  expectIncludes(homeSource, "const rawPlayers = useStore", "home players selector");
-  expectIncludes(playerDirectorySource, "const rawPlayers = useStore", "player directory players selector");
+  expectIncludes(homeSource, "const rawPlayers = usePlayers()", "home players selector");
+  expectIncludes(playerDirectorySource, "const rawPlayers = usePlayers()", "player directory players selector");
 });

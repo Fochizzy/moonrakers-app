@@ -3,20 +3,32 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import CorrelationStats from "@/components/CorrelationStats";
-import ScreenBackground from "@/components/ui/ScreenBackground";
+import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
+import ActionButton from "@/components/ui/ActionButton";
+import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import Text from "@/components/ui/Text";
 import { getInsightsScreen } from "@/lib/cloud/analytics/getInsightsScreen";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import {
+  APP_ROUTES,
+  buildChartsRoute,
+  buildCompareRoute,
+  buildHistoryRoute,
+  buildHomeRoute,
+  buildPlayerProfileRoute,
+} from "@/utils/appRoutes";
+import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
 
 type PayloadRecord = Record<string, unknown>;
 
@@ -107,18 +119,15 @@ function SectionTabButton({
 
 export default function InsightsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const authSession = useStore((state: any) => state.authSession);
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
+  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
   const authProfileId = String(authSession?.user?.id ?? "").trim() || null;
   const [activeSectionTab, setActiveSectionTab] =
     useState<InsightSectionTab>("pairingCorrelations");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
-  const [payload, setPayload] = useState<PayloadRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authProfileId) {
@@ -130,53 +139,26 @@ export default function InsightsScreen() {
   }, [authProfileId]);
 
   const activeProfileId = String(selectedProfileId ?? authProfileId ?? "").trim();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      if (!activeProfileId) {
-        if (!cancelled) {
-          setPayload(null);
-          setError(null);
-          setLoading(false);
-        }
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const nextPayload = await getInsightsScreen({
-          profileId: activeProfileId,
-        });
-
-        if (!cancelled) {
-          setPayload(toRecord(nextPayload));
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(
-            formatSupabaseConfigError(nextError) || "Failed to load insights.",
-          );
-          setPayload(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeProfileId, analyticsRefreshTick]);
+  const insightsQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(activeProfileId),
+    queryKey: `insights-screen:${activeProfileId || "anon"}`,
+    load: () =>
+      getInsightsScreen({
+        profileId: activeProfileId,
+      }),
+  });
+  const payload = toRecord(insightsQuery.payload);
+  const loading = insightsQuery.loading;
+  const error = insightsQuery.error;
+  const isStale = insightsQuery.isStale;
+  const staleMessage = insightsQuery.staleMessage;
 
   const correlationPayload = toRecord(payload?.correlations);
+  const sourceKind = isStale ? "server-stale" : "server";
+  const sourceLabel = isStale ? "Stale server data" : "Server data";
+  const staleSourceCaption = isStale
+    ? `Showing the last successful Supabase insights payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
+    : null;
   const playerOptions = useMemo(() => {
     const source = toArray(correlationPayload.players).length
       ? toArray(correlationPayload.players)
@@ -231,6 +213,12 @@ export default function InsightsScreen() {
       playerOptions.find((player) => player.id === selectedProfileId) ?? null,
     [playerOptions, selectedProfileId],
   );
+  const activeSectionLabel = useMemo(
+    () =>
+      insightSectionTabs.find((tab) => tab.key === activeSectionTab)?.label ??
+      "Correlations",
+    [activeSectionTab],
+  );
 
   const correlationPlayers = useMemo(
     () =>
@@ -248,35 +236,123 @@ export default function InsightsScreen() {
       : selectedPlayer?.label
         ? `Server-authored correlation clues and synergy trends for ${selectedPlayer.label}.`
         : "Server-authored correlation clues and synergy trends.";
+  const hasPlayerAwareActions = Boolean(selectedPlayer && activeProfileId);
+  const recoveryState = resolveAnalyticsRecoveryState({
+    loading,
+    error,
+    playersCount: players.length,
+    gamesCount: games.length,
+  });
+  const insightsState =
+    loading
+      ? "loading"
+      : error
+        ? "error"
+        : recoveryState.kind === "no-players" ||
+            recoveryState.kind === "no-games" ||
+            !playerOptions.length
+          ? "empty"
+          : "ready";
+  const insightsMessageTitle =
+    recoveryState.kind === "no-players"
+      ? "No tracked players yet"
+      : recoveryState.kind === "no-games"
+        ? "No tracked games yet"
+        : error
+          ? "Insights unavailable"
+          : "No insight payload yet";
+  const insightsMessageBody =
+    recoveryState.kind === "no-players"
+      ? "Set up your roster first so the correlation hub has real Moonrakers players to compare."
+      : recoveryState.kind === "no-games"
+        ? "Track or import a few games before expecting the server-authored insights feed to populate."
+        : error
+          ? error
+          : "Supabase has not published any player-aware correlation options for this screen yet.";
+  const insightsPrimaryAction =
+    recoveryState.kind === "no-games"
+      ? {
+          label: "Start tracked game",
+          onPress: () => router.push(buildHomeRoute("game")),
+        }
+      : null;
+  const insightsSecondaryAction =
+    recoveryState.kind === "no-games"
+      ? {
+          label: "Import backup",
+          onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
+          variant: "secondary" as const,
+        }
+      : recoveryState.kind === "no-players"
+        ? {
+            label: "Profiles",
+            onPress: () => router.push(APP_ROUTES.playerDirectory),
+            variant: "secondary" as const,
+          }
+        : null;
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.backgroundLayer}>
-        <ScreenBackground preset="analytics" />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.container,
-          {
-            paddingTop: 14 + insets.top,
-            paddingBottom: 28 + insets.bottom,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
+    <PageShell preset="analytics">
+      <HeroCard
+        eyebrow="Analytics"
+        subtitle={heroSubtitle}
+        size="compact"
       >
-        <View style={styles.heroCard}>
-          <View style={styles.heroHeader}>
-            <Text style={styles.title}>Insights Hub</Text>
+        <View style={styles.heroHeader}>
+          <Text style={styles.title}>Insights Hub</Text>
+          <Pressable onPress={() => router.push(APP_ROUTES.home)} style={styles.backButton}>
+            <Text style={styles.backButtonText}>Back to Command</Text>
+          </Pressable>
+        </View>
+        {hasPlayerAwareActions ? (
+          <View style={styles.contextActionGrid}>
             <Pressable
-              style={styles.commandButton}
-              onPress={() => router.push(APP_ROUTES.home)}
+              style={styles.contextActionCard}
+              onPress={() =>
+                router.push(
+                  buildCompareRoute({
+                    mode: "players",
+                    ids: [activeProfileId],
+                  }),
+                )
+              }
             >
-              <Text style={styles.commandButtonText}>Back to Command</Text>
+              <Text style={styles.contextActionTitle}>
+                Open compare for this player
+              </Text>
+              <Text style={styles.contextActionBody}>
+                Lock {selectedPlayer?.label || "this player"} as the focus and pick the rival on the compare screen.
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.contextActionCard}
+              onPress={() =>
+                router.push(
+                  buildChartsRoute({
+                    playerId: activeProfileId,
+                    setup: true,
+                  }),
+                )
+              }
+            >
+              <Text style={styles.contextActionTitle}>Open scoped charts</Text>
+              <Text style={styles.contextActionBody}>
+                Open chart setup with {selectedPlayer?.label || "this player"} already scoped in.
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.contextActionCard}
+              onPress={() => router.push(buildPlayerProfileRoute(activeProfileId))}
+            >
+              <Text style={styles.contextActionTitle}>View profile</Text>
+              <Text style={styles.contextActionBody}>
+                Jump straight into {selectedPlayer?.label || "this player's"} full profile breakdown.
+              </Text>
             </Pressable>
           </View>
-          <Text style={styles.subtitle}>{heroSubtitle}</Text>
-
+        ) : (
           <View style={styles.linkRow}>
             <Pressable
               style={styles.linkButton}
@@ -304,170 +380,133 @@ export default function InsightsScreen() {
               <Text style={styles.linkButtonText}>Elo</Text>
             </Pressable>
           </View>
+        )}
 
-          <ScrollView
-            horizontal
-            contentContainerStyle={styles.sectionTabRail}
-            showsHorizontalScrollIndicator={false}
-          >
-            {insightSectionTabs.map((tab) => (
-              <SectionTabButton
-                key={tab.key}
-                label={tab.label}
-                active={activeSectionTab === tab.key}
-                onPress={() => setActiveSectionTab(tab.key)}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        {activeSectionTab === "pairingCorrelations" && (
-          <>
-            <View style={styles.playerSearchPanel}>
-              <Text style={styles.playerSearchLabel}>Correlation Player</Text>
-              <Text style={styles.playerSearchHint}>
-                {selectedPlayer?.id === authProfileId
-                  ? "Opened on your profile. Search to switch whose personal correlations you are viewing."
-                  : "Search and tap a player to switch whose personal correlations are shown here."}
-              </Text>
-              <TextInput
-                value={playerSearchQuery}
-                onChangeText={setPlayerSearchQuery}
-                placeholder="Search players"
-                placeholderTextColor="rgba(148,163,184,0.75)"
-                style={styles.playerSearchInput}
-              />
-              <ScrollView
-                style={styles.playerSearchResults}
-                nestedScrollEnabled
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.playerSearchResultsContent}>
-                  {filteredPlayerOptions.length > 0 ? (
-                    filteredPlayerOptions.map((player) => {
-                      const active = selectedProfileId === player.id;
-                      const meta =
-                        player.displayName ||
-                        player.playerName ||
-                        (player.id === authProfileId
-                          ? "Signed-in player"
-                          : "Shared-network player");
-
-                      return (
-                        <Pressable
-                          key={player.id}
-                          style={[
-                            styles.playerSearchResult,
-                            active && styles.playerSearchResultActive,
-                          ]}
-                          onPress={() => setSelectedProfileId(player.id)}
-                        >
-                          <View style={styles.playerSearchResultTextWrap}>
-                            <Text style={styles.playerSearchResultName}>
-                              {player.label}
-                            </Text>
-                            <Text style={styles.playerSearchResultMeta}>
-                              {meta}
-                            </Text>
-                          </View>
-                          <Text style={styles.playerSearchResultAction}>
-                            {active ? "Selected" : "View"}
-                          </Text>
-                        </Pressable>
-                      );
-                    })
-                  ) : (
-                    <Text style={styles.playerSearchEmpty}>
-                      No players match this search.
-                    </Text>
-                  )}
-                </View>
-              </ScrollView>
-            </View>
-
-            <CorrelationStats
-              players={correlationPlayers}
-              serverData={correlationPayload}
-              serverOnly
-              view="pairing"
+        <ScrollView
+          horizontal
+          contentContainerStyle={styles.sectionTabRail}
+          showsHorizontalScrollIndicator={false}
+        >
+          {insightSectionTabs.map((tab) => (
+            <SectionTabButton
+              key={tab.key}
+              label={tab.label}
+              active={activeSectionTab === tab.key}
+              onPress={() => setActiveSectionTab(tab.key)}
             />
-          </>
-        )}
+          ))}
+        </ScrollView>
+      </HeroCard>
 
-        {activeSectionTab === "macroCorrelations" && (
-          <CorrelationStats
-            players={correlationPlayers}
-            serverData={correlationPayload}
-            serverOnly
-            view="macro"
-          />
+      <AnalyticsStateSection
+        eyebrow="Insights"
+        title={activeSectionLabel}
+        actions={<DefinitionsJumpLink category="correlations" />}
+        helpCategory="correlations"
+        subtitle={
+          activeSectionTab === "pairingCorrelations"
+            ? "Choose the player whose personal correlations you want to inspect."
+            : "Published correlation trends and synergy reads from the shared insights payload."
+        }
+        state={insightsState}
+        sourceKind={sourceKind}
+        sourceLabel={sourceLabel}
+        sourceCaption={
+          staleSourceCaption ||
+          (selectedPlayer?.label
+            ? `Showing published insight context for ${selectedPlayer.label}.`
+            : "Published insights from Supabase.")
+        }
+        messageTitle={insightsMessageTitle}
+        messageBody={insightsMessageBody}
+        primaryAction={insightsPrimaryAction}
+        secondaryAction={insightsSecondaryAction}
+        tone={error ? "danger" : insightsState === "ready" ? "info" : "warning"}
+      >
+        {activeSectionTab === "pairingCorrelations" ? (
+          <View style={styles.selectorShell}>
+            <PlayerSearchPicker
+              helperText={
+                selectedPlayer?.id === authProfileId
+                  ? "Opened on your profile. Search to switch whose personal correlations you are viewing."
+                  : "Search and tap a player to switch whose personal correlations are shown here."
+              }
+              query={playerSearchQuery}
+              onQueryChange={setPlayerSearchQuery}
+              placeholder="Search players"
+              items={filteredPlayerOptions.map((player) => ({
+                id: player.id,
+                label: player.label,
+                meta:
+                  player.displayName ||
+                  player.playerName ||
+                  (player.id === authProfileId
+                    ? "Signed-in player"
+                    : "Shared-network player"),
+              }))}
+              selectedIds={selectedProfileId ? [selectedProfileId] : []}
+              onSelect={setSelectedProfileId}
+              emptyText="No players match this search."
+              nestedScrollEnabled
+            />
+          </View>
+        ) : (
+          <Text style={styles.sectionReadyHint}>
+            The correlation breakdown below is live and stays server-authored so the same trend language can be reused across analytics surfaces.
+          </Text>
         )}
+      </AnalyticsStateSection>
 
-        {activeSectionTab === "topSynergyPairs" && (
-          <CorrelationStats
-            players={correlationPlayers}
-            serverData={correlationPayload}
-            serverOnly
-            view="synergy"
-          />
-        )}
-      </ScrollView>
-    </View>
+      {insightsState === "ready" && activeSectionTab === "pairingCorrelations" ? (
+        <CorrelationStats
+          players={correlationPlayers}
+          serverData={correlationPayload}
+          serverOnly
+          view="pairing"
+        />
+      ) : null}
+
+      {insightsState === "ready" && activeSectionTab === "macroCorrelations" ? (
+        <CorrelationStats
+          players={correlationPlayers}
+          serverData={correlationPayload}
+          serverOnly
+          view="macro"
+        />
+      ) : null}
+
+      {insightsState === "ready" && activeSectionTab === "topSynergyPairs" ? (
+        <CorrelationStats
+          players={correlationPlayers}
+          serverData={correlationPayload}
+          serverOnly
+          view="synergy"
+        />
+      ) : null}
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#081120",
-  },
-  backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  container: {
-    padding: 14,
-    gap: 12,
-  },
-  heroCard: {
-    backgroundColor: "#162033",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#253247",
-    gap: 10,
-  },
   heroHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 10,
+    alignItems: "center",
+    marginBottom: 8,
   },
   title: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#f8fafc",
+    color: "#EAF2FF",
+    fontSize: 18,
+    fontWeight: "900",
     flex: 1,
   },
-  commandButton: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#334155",
-    backgroundColor: "#0f172a",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignItems: "center",
-    justifyContent: "center",
+  backButton: {
+    alignSelf: "flex-start",
   },
-  commandButtonText: {
-    color: "#e2e8f0",
-    fontSize: 11,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-  subtitle: {
+  backButtonText: {
+    color: "#7D9BC4",
     fontSize: 12,
-    lineHeight: 18,
-    color: "#cbd5e1",
+    fontWeight: "700",
   },
   linkRow: {
     flexDirection: "row",
@@ -488,6 +527,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     textAlign: "center",
+  },
+  contextActionGrid: {
+    gap: 8,
+  },
+  contextActionCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#334155",
+    backgroundColor: "#0f172a",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  contextActionTitle: {
+    color: "#f8fafc",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  contextActionBody: {
+    color: "#94a3b8",
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
   },
   sectionTabRail: {
     paddingTop: 4,
@@ -522,22 +584,15 @@ const styles = StyleSheet.create({
   sectionTabUnderlineActive: {
     backgroundColor: "#67e8f9",
   },
-  playerSearchPanel: {
-    gap: 6,
-    borderRadius: 14,
-    padding: 10,
-    backgroundColor: "rgba(12,20,36,0.94)",
-    borderWidth: 1,
-    borderColor: "#253247",
-  },
-  playerSearchLabel: {
-    color: "#67e8f9",
-    fontSize: 10,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
   playerSearchHint: {
+    color: "#94a3b8",
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  selectorShell: {
+    gap: 10,
+  },
+  sectionReadyHint: {
     color: "#94a3b8",
     fontSize: 11,
     lineHeight: 17,

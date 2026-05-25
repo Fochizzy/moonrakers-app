@@ -1,7 +1,9 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import type { MoonrakersIntelProfile } from "@/utils/playerProfileMoonrakers";
+import { buildDefinitionsRoute } from "@/utils/appRoutes";
 
 const COLORS = {
   panel: "rgba(10,20,40,0.92)",
@@ -49,16 +51,22 @@ function MetricCard({
   value,
   sub,
   tone = "default",
+  onPress,
+  ctaLabel,
 }: {
   label: string;
   value: string;
   sub: string;
   tone?: Tone;
+  onPress?: (() => void) | null;
+  ctaLabel?: string;
 }) {
   const toneStyles = getToneStyles(tone);
+  const Wrapper = onPress ? Pressable : View;
 
   return (
-    <View
+    <Wrapper
+      onPress={onPress ?? undefined}
       style={[
         styles.metricCard,
         {
@@ -67,23 +75,31 @@ function MetricCard({
         },
       ]}
     >
-      <Text style={styles.metricLabel}>{label}</Text>
+      <View style={styles.metricHeader}>
+        <Text style={styles.metricLabel}>{label}</Text>
+        {ctaLabel ? <Text style={styles.metricCta}>{ctaLabel}</Text> : null}
+      </View>
       <Text style={[styles.metricValue, { color: toneStyles.valueColor }]}>{value}</Text>
       <Text style={styles.metricSub}>{sub}</Text>
-    </View>
+    </Wrapper>
   );
 }
 
 function SectionBlock({
   title,
   children,
+  accessory,
 }: {
   title: string;
   children: React.ReactNode;
+  accessory?: React.ReactNode;
 }) {
   return (
     <View style={styles.subsection}>
-      <Text style={styles.subsectionTitle}>{title}</Text>
+      <View style={styles.subsectionHeader}>
+        <Text style={styles.subsectionTitle}>{title}</Text>
+        {accessory}
+      </View>
       <View style={styles.metricGrid}>{children}</View>
     </View>
   );
@@ -92,11 +108,49 @@ function SectionBlock({
 function EmptyMetric({
   label,
   sub,
+  onPress,
+  ctaLabel,
 }: {
   label: string;
   sub: string;
+  onPress?: (() => void) | null;
+  ctaLabel?: string;
 }) {
-  return <MetricCard label={label} value="Not enough games yet" sub={sub} tone="red" />;
+  return (
+    <MetricCard
+      label={label}
+      value="Not enough games yet"
+      sub={sub}
+      tone="red"
+      onPress={onPress}
+      ctaLabel={ctaLabel}
+    />
+  );
+}
+
+function StatusBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: Tone;
+}) {
+  const toneStyles = getToneStyles(tone);
+
+  return (
+    <View
+      style={[
+        styles.statusBadge,
+        {
+          borderColor: toneStyles.borderColor,
+          backgroundColor: toneStyles.backgroundColor,
+        },
+      ]}
+    >
+      <Text style={styles.statusBadgeTitle}>Import Health</Text>
+      <Text style={[styles.statusBadgeValue, { color: toneStyles.valueColor }]}>{label}</Text>
+    </View>
+  );
 }
 
 export default function MoonrakersIntelSection({
@@ -104,6 +158,12 @@ export default function MoonrakersIntelSection({
 }: {
   profile: MoonrakersIntelProfile;
 }) {
+  const router = useRouter();
+
+  function openDefinition(metricKey: string) {
+    router.push(buildDefinitionsRoute(metricKey));
+  }
+
   if (profile.hasData === false) {
     return (
       <View style={styles.container}>
@@ -151,18 +211,24 @@ export default function MoonrakersIntelSection({
           value={profile.playstyle.baseTurnsPerGameLabel}
           sub="Stay-at-base tempo"
           tone="green"
+          onPress={() => openDefinition("baseTurnsPerGame")}
+          ctaLabel="Definition"
         />
         <MetricCard
           label="Base Rate"
           value={profile.playstyle.baseRateLabel}
           sub="Share of playable turns"
           tone="green"
+          onPress={() => openDefinition("baseRate")}
+          ctaLabel="Definition"
         />
         <MetricCard
           label="Style Read"
           value={profile.playstyle.styleRead}
           sub="Profile fingerprint"
           tone="accent"
+          onPress={() => openDefinition("styleRead")}
+          ctaLabel="Definition"
         />
       </SectionBlock>
 
@@ -174,6 +240,8 @@ export default function MoonrakersIntelSection({
               value={profile.bestCondition.label}
               sub="Strongest supported split"
               tone="green"
+              onPress={() => openDefinition("bestCondition")}
+              ctaLabel="Definition"
             />
             <MetricCard
               label="Win Rate"
@@ -195,7 +263,12 @@ export default function MoonrakersIntelSection({
             />
           </>
         ) : (
-          <EmptyMetric label="Best Condition" sub="Need at least 3 games in one supported split." />
+          <EmptyMetric
+            label="Best Condition"
+            sub="Need at least 3 games in one supported split."
+            onPress={() => openDefinition("bestCondition")}
+            ctaLabel="Definition"
+          />
         )}
       </SectionBlock>
 
@@ -207,6 +280,8 @@ export default function MoonrakersIntelSection({
               value={profile.worstCondition.label}
               sub="Weakest supported split"
               tone="red"
+              onPress={() => openDefinition("worstCondition")}
+              ctaLabel="Definition"
             />
             <MetricCard
               label="Win Rate"
@@ -228,7 +303,12 @@ export default function MoonrakersIntelSection({
             />
           </>
         ) : (
-          <EmptyMetric label="Worst Condition" sub="Need at least 3 games in one supported split." />
+          <EmptyMetric
+            label="Worst Condition"
+            sub="Need at least 3 games in one supported split."
+            onPress={() => openDefinition("worstCondition")}
+            ctaLabel="Definition"
+          />
         )}
       </SectionBlock>
 
@@ -238,12 +318,16 @@ export default function MoonrakersIntelSection({
           value={profile.baseDiscipline.baseRateLabel}
           sub="Average stay-at-base share"
           tone="green"
+          onPress={() => openDefinition("baseRate")}
+          ctaLabel="Definition"
         />
         <MetricCard
           label="Base Turns / Game"
           value={profile.baseDiscipline.baseTurnsPerGameLabel}
           sub="Average base turns"
           tone="green"
+          onPress={() => openDefinition("baseTurnsPerGame")}
+          ctaLabel="Definition"
         />
         <MetricCard
           label="Win Rate With Base"
@@ -348,7 +432,109 @@ export default function MoonrakersIntelSection({
           value={profile.supportProfile.supportStyle}
           sub="Giving vs receiving profile"
           tone="accent"
+          onPress={() => openDefinition("supportStyle")}
+          ctaLabel="Definition"
         />
+      </SectionBlock>
+
+      <SectionBlock
+        title="Assist Context"
+        accessory={
+          <StatusBadge
+            label={profile.assistContext.importHealthLabel}
+            tone={profile.assistContext.importHealthTone}
+          />
+        }
+      >
+        {profile.assistContext.assistGapToTargetLabel ? (
+          <MetricCard
+            label="Assist Gap to Target"
+            value={profile.assistContext.assistGapToTargetLabel}
+            sub={`Avg pre-assist prestige gap | ${profile.assistContext.timedAssistEventsLabel}`}
+            tone="blue"
+            onPress={() => openDefinition("assistGapToTarget")}
+            ctaLabel="Definition"
+          />
+        ) : (
+          <EmptyMetric
+            label="Assist Gap to Target"
+            sub="Need tracked assist direction and at least one assist."
+            onPress={() => openDefinition("assistGapToTarget")}
+            ctaLabel="Definition"
+          />
+        )}
+        {profile.assistContext.assistGapToLeaderLabel ? (
+          <MetricCard
+            label="Assist Gap to Leader"
+            value={profile.assistContext.assistGapToLeaderLabel}
+            sub={`Avg gap to current leader | ${profile.assistContext.timedAssistEventsLabel}`}
+            tone="gold"
+            onPress={() => openDefinition("assistGapToLeader")}
+            ctaLabel="Definition"
+          />
+        ) : (
+          <EmptyMetric
+            label="Assist Gap to Leader"
+            sub="Need tracked assist direction and at least one assist."
+            onPress={() => openDefinition("assistGapToLeader")}
+            ctaLabel="Definition"
+          />
+        )}
+        {profile.assistContext.assistsAtSixPlusLabel ? (
+          <MetricCard
+            label="Assists at 6+ Prestige"
+            value={profile.assistContext.assistsAtSixPlusLabel}
+            sub={`Share of timed assists | ${profile.assistContext.timedAssistEventsLabel}`}
+            tone="accent"
+            onPress={() => openDefinition("assistsAtSixPlus")}
+            ctaLabel="Definition"
+          />
+        ) : (
+          <EmptyMetric
+            label="Assists at 6+ Prestige"
+            sub="Need tracked assist-direction games for this player."
+            onPress={() => openDefinition("assistsAtSixPlus")}
+            ctaLabel="Definition"
+          />
+        )}
+        {profile.assistContext.assistsOverFiveBehindLeaderLabel ? (
+          <MetricCard
+            label="Assists Over 5 Behind Leader"
+            value={profile.assistContext.assistsOverFiveBehindLeaderLabel}
+            sub={`Share of timed assists | ${profile.assistContext.timedAssistEventsLabel}`}
+            tone="red"
+            onPress={() => openDefinition("assistsOverFiveBehindLeader")}
+            ctaLabel="Definition"
+          />
+        ) : (
+          <EmptyMetric
+            label="Assists Over 5 Behind Leader"
+            sub="Need tracked assist-direction games for this player."
+            onPress={() => openDefinition("assistsOverFiveBehindLeader")}
+            ctaLabel="Definition"
+          />
+        )}
+        {profile.assistContext.assistPrestigeGainedLabel ? (
+          <MetricCard
+            label="Assist Prestige Gained"
+            value={profile.assistContext.assistPrestigeGainedLabel}
+            sub={
+              profile.assistContext.assistPrestigePerAssistLabel
+                ? `${profile.assistContext.assistPrestigePerAssistLabel} per assist | ${profile.assistContext.assistEventsLabel}`
+                : `Total helper prestige earned | ${profile.assistContext.trackedGamesLabel}`
+            }
+            tone="green"
+            onPress={() => openDefinition("assistPrestigeGained")}
+            ctaLabel="Definition"
+          />
+        ) : (
+          <EmptyMetric
+            label="Assist Prestige Gained"
+            sub="Need tracked assist data or legacy assist source totals."
+            onPress={() => openDefinition("assistPrestigeGained")}
+            ctaLabel="Definition"
+          />
+        )}
       </SectionBlock>
     </View>
   );
@@ -378,10 +564,17 @@ const styles = StyleSheet.create({
   subsection: {
     gap: 10,
   },
+  subsectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
   subsectionTitle: {
     color: COLORS.text,
     fontSize: 16,
     fontWeight: "700",
+    flexShrink: 1,
   },
   metricGrid: {
     flexDirection: "row",
@@ -396,12 +589,26 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
+  metricHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
   metricLabel: {
     color: COLORS.sub,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    flexShrink: 1,
+  },
+  metricCta: {
+    color: COLORS.blue,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   metricValue: {
     fontSize: 18,
@@ -411,6 +618,25 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 12,
     lineHeight: 16,
+  },
+  statusBadge: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  statusBadgeTitle: {
+    color: COLORS.sub,
+    fontSize: 9,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  statusBadgeValue: {
+    fontSize: 11,
+    fontWeight: "800",
   },
   emptyCard: {
     borderRadius: 16,

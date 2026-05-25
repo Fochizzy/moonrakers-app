@@ -350,6 +350,7 @@ export default function LoginScreen() {
             <View style={styles.copy}>
               <Text style={styles.title}>Log in</Text>
               <Text style={styles.subtitle}>Use your account.</Text>
+              <Text style={styles.explainer}>One registered host can launch a table</Text>
             </View>
 
             <TextInput
@@ -448,7 +449,7 @@ export default function LoginScreen() {
                 title:
                   activeAction === "reset"
                     ? "Sending..."
-                    : "Reset Password",
+                    : "Reset password email",
                 tone: "secondary",
                 busyIndicator: activeAction === "reset",
               })}
@@ -456,7 +457,7 @@ export default function LoginScreen() {
               {renderButton({
                 disabled: busy,
                 onPress: () => router.push(APP_ROUTES.register as any),
-                title: "Create Account",
+                title: "Create account",
                 tone: "accent",
               })}
 
@@ -466,7 +467,7 @@ export default function LoginScreen() {
                 title:
                   activeAction === "resend"
                     ? "Sending..."
-                    : "Resend Email",
+                    : "Resend confirmation email",
                 tone: "utility",
                 busyIndicator: activeAction === "resend",
               })}
@@ -516,6 +517,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: "#D7E1F4",
+  },
+  explainer: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#7D9BC4",
+    fontWeight: "600",
   },
   input: {
     minHeight: 58,

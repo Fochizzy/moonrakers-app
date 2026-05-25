@@ -412,6 +412,340 @@ const games = [
 }
 
 {
+  const assistContextPlayers = [
+    { id: "a", name: "Astra" },
+    { id: "b", name: "Bolt" },
+    { id: "c", name: "Comet" },
+  ];
+  const assistContextGames = [
+    {
+      id: "pc-1",
+      winnerId: "a",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 9, directPrestige: 9, assistPrestigeReceived: 0 },
+        b: { totalPrestige: 5, directPrestige: 5, assistPrestigeReceived: 0 },
+        c: { totalPrestige: 4, directPrestige: 4, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        {
+          playerId: "a",
+          prestige: 3,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: { b: 1 },
+          assistPrestigeRecipients: { b: 2 },
+        },
+        {
+          playerId: "b",
+          prestige: 2,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: { a: 2 },
+          assistPrestigeRecipients: { a: 4 },
+        },
+        {
+          playerId: "c",
+          prestige: 4,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: {},
+          assistPrestigeRecipients: {},
+        },
+        {
+          playerId: "a",
+          prestige: 1,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: { c: 1, b: 1 },
+          assistPrestigeRecipients: { c: 3, b: 1 },
+        },
+        {
+          playerId: "a",
+          prestige: 2,
+          contracts: 0,
+          failures: 0,
+          assistRecipients: {},
+          assistPrestigeRecipients: {},
+          metaType: "bonusObjective",
+        },
+        {
+          playerId: "a",
+          prestige: 0,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: { b: 1 },
+          assistPrestigeRecipients: { b: 2 },
+        },
+      ],
+    },
+    {
+      id: "pc-2",
+      winnerId: "b",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 2, directPrestige: 0, assistPrestigeReceived: 2 },
+        b: { totalPrestige: 1, directPrestige: 1, assistPrestigeReceived: 0 },
+        c: { totalPrestige: 6, directPrestige: 6, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        {
+          playerId: "c",
+          prestige: 6,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: {},
+          assistPrestigeRecipients: {},
+        },
+        {
+          playerId: "b",
+          prestige: 1,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: { a: 1 },
+          assistPrestigeRecipients: { a: 2 },
+        },
+        {
+          playerId: "a",
+          prestige: 0,
+          contracts: 0,
+          failures: 0,
+          assistRecipients: {},
+          assistPrestigeRecipients: {},
+        },
+      ],
+    },
+    {
+      id: "pc-3",
+      winnerId: "c",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 1, directPrestige: 1, assistPrestigeReceived: 0 },
+        b: { totalPrestige: 2, directPrestige: 2, assistPrestigeReceived: 0 },
+        c: { totalPrestige: 3, directPrestige: 3, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        {
+          playerId: "a",
+          prestige: 1,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: {},
+          assistPrestigeRecipients: {},
+        },
+        {
+          playerId: "b",
+          prestige: 2,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: {},
+          assistPrestigeRecipients: {},
+        },
+        {
+          playerId: "c",
+          prestige: 3,
+          contracts: 1,
+          failures: 0,
+          assistRecipients: {},
+          assistPrestigeRecipients: {},
+        },
+      ],
+    },
+  ];
+
+  const profile = buildMoonrakersIntelProfile({
+    playerId: "a",
+    players: assistContextPlayers,
+    games: assistContextGames,
+    samples: buildPlaystyleSamples(assistContextPlayers, assistContextGames),
+  });
+
+  assert.equal(profile.hasData, true);
+  assert.equal(profile.assistContext.assistGapToTargetLabel, "0.7");
+  assert.equal(profile.assistContext.assistGapToLeaderLabel, "2.0");
+  assert.equal(profile.assistContext.assistsAtSixPlusLabel, "0 (0%)");
+  assert.equal(profile.assistContext.assistsOverFiveBehindLeaderLabel, "1 (33%)");
+  assert.equal(profile.assistContext.assistPrestigeGainedLabel, "6.0");
+  assert.equal(profile.assistContext.assistEventsLabel, "3 assists");
+  assert.equal(profile.assistContext.importHealthLabel, "Exact assist timing");
+}
+
+{
+  const inferredOnlyPlayers = [
+    { id: "a", name: "Astra" },
+    { id: "b", name: "Bolt" },
+    { id: "c", name: "Comet" },
+  ];
+  const inferredOnlyGames = [
+    {
+      id: "quality-1",
+      winnerId: "a",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 2, directPrestige: 2, assistPrestigeReceived: 0 },
+        b: {
+          totalPrestige: 4,
+          directPrestige: 2,
+          assistPrestigeReceived: 2,
+          assistPrestigeByPlayer: { a: 2 },
+          assistCountBySource: { a: 1 },
+        },
+        c: { totalPrestige: 6, directPrestige: 6, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        {
+          playerId: "b",
+          prestige: 2,
+          contracts: 1,
+          failures: 0,
+        },
+        {
+          playerId: "c",
+          prestige: 6,
+          contracts: 1,
+          failures: 0,
+        },
+      ],
+    },
+    {
+      id: "quality-2",
+      winnerId: "b",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 0, directPrestige: 0, assistPrestigeReceived: 0 },
+        b: {
+          totalPrestige: 3,
+          directPrestige: 1,
+          assistPrestigeReceived: 2,
+          assistSources: { a: 2 },
+          assistCountBySource: { a: 1 },
+        },
+        c: { totalPrestige: 1, directPrestige: 1, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        {
+          playerId: "b",
+          prestige: 1,
+          contracts: 1,
+          failures: 0,
+        },
+        {
+          playerId: "c",
+          prestige: 1,
+          contracts: 1,
+          failures: 0,
+        },
+      ],
+    },
+    {
+      id: "quality-3",
+      winnerId: "c",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 1, directPrestige: 1, assistPrestigeReceived: 0 },
+        b: { totalPrestige: 2, directPrestige: 2, assistPrestigeReceived: 0 },
+        c: { totalPrestige: 3, directPrestige: 3, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        {
+          playerId: "a",
+          prestige: 1,
+          contracts: 1,
+          failures: 0,
+        },
+        {
+          playerId: "b",
+          prestige: 2,
+          contracts: 1,
+          failures: 0,
+        },
+        {
+          playerId: "c",
+          prestige: 3,
+          contracts: 1,
+          failures: 0,
+        },
+      ],
+    },
+  ];
+
+  const profile = buildMoonrakersIntelProfile({
+    playerId: "a",
+    players: inferredOnlyPlayers,
+    games: inferredOnlyGames,
+    samples: buildPlaystyleSamples(inferredOnlyPlayers, inferredOnlyGames),
+  });
+
+  assert.equal(profile.hasData, true);
+  assert.equal(profile.assistContext.importHealthLabel, "Partial assist inference");
+}
+
+{
+  const noAssistPlayers = [
+    { id: "a", name: "Astra" },
+    { id: "b", name: "Bolt" },
+    { id: "c", name: "Comet" },
+  ];
+  const noAssistGames = [
+    {
+      id: "na-1",
+      winnerId: "a",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 5, directPrestige: 5, assistPrestigeReceived: 0 },
+        b: { totalPrestige: 4, directPrestige: 4, assistPrestigeReceived: 0 },
+        c: { totalPrestige: 3, directPrestige: 3, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        { playerId: "a", prestige: 2, contracts: 1, failures: 0 },
+        { playerId: "b", prestige: 2, contracts: 1, failures: 0 },
+        { playerId: "c", prestige: 3, contracts: 1, failures: 0 },
+      ],
+    },
+    {
+      id: "na-2",
+      winnerId: "b",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 1, directPrestige: 1, assistPrestigeReceived: 0 },
+        b: { totalPrestige: 6, directPrestige: 6, assistPrestigeReceived: 0 },
+        c: { totalPrestige: 2, directPrestige: 2, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        { playerId: "a", prestige: 1, contracts: 1, failures: 0 },
+        { playerId: "b", prestige: 3, contracts: 1, failures: 0 },
+        { playerId: "c", prestige: 2, contracts: 1, failures: 0 },
+      ],
+    },
+    {
+      id: "na-3",
+      winnerId: "c",
+      players: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      totals: {
+        a: { totalPrestige: 2, directPrestige: 2, assistPrestigeReceived: 0 },
+        b: { totalPrestige: 1, directPrestige: 1, assistPrestigeReceived: 0 },
+        c: { totalPrestige: 5, directPrestige: 5, assistPrestigeReceived: 0 },
+      },
+      rounds: [
+        { playerId: "a", prestige: 2, contracts: 1, failures: 0 },
+        { playerId: "b", prestige: 1, contracts: 1, failures: 0 },
+        { playerId: "c", prestige: 5, contracts: 1, failures: 0 },
+      ],
+    },
+  ];
+
+  const profile = buildMoonrakersIntelProfile({
+    playerId: "a",
+    players: noAssistPlayers,
+    games: noAssistGames,
+    samples: buildPlaystyleSamples(noAssistPlayers, noAssistGames),
+  });
+
+  assert.equal(profile.hasData, true);
+  assert.equal(profile.assistContext.importHealthLabel, "No assist context");
+}
+
+{
   const profileSource = read(path.join("app", "player-profile", "[playerId].tsx"));
   assert.match(profileSource, /MoonrakersIntelSection/);
   assert.match(profileSource, /<MoonrakersIntelSection profile=\{moonrakersIntel\} \/>/);
@@ -424,6 +758,15 @@ const games = [
   assert.match(componentSource, /Base Discipline/);
   assert.match(componentSource, /Objective Profile/);
   assert.match(componentSource, /Support Profile/);
+  assert.match(componentSource, /Assist Context/);
+  assert.match(componentSource, /Assist Gap to Target/);
+  assert.match(componentSource, /Assist Gap to Leader/);
+  assert.match(componentSource, /Assists at 6\+ Prestige/);
+  assert.match(componentSource, /Assists Over 5 Behind Leader/);
+  assert.match(componentSource, /Assist Prestige Gained/);
+  assert.match(componentSource, /Import Health/);
+  assert.match(componentSource, /buildDefinitionsRoute/);
+  assert.match(componentSource, /router\.push\(buildDefinitionsRoute\(metricKey\)\)/);
 }
 
 console.log("player-profile-moonrakers.test.cjs passed");

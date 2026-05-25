@@ -39,13 +39,13 @@ assert.match(
 
 assert.match(
   source,
-  /const authSession = useStore\(\(s: any\) => s\.authSession\);/,
+  /const authSession = useAuthSession\(\);/,
   "expected the Elo screen to read the signed-in auth session from the store",
 );
 
 assert.match(
   source,
-  /const authProfile = useStore\(\(s: any\) => s\.authProfile\);/,
+  /const authProfile = useAuthProfile\(\);/,
   "expected the Elo screen to read the signed-in auth profile from the store",
 );
 

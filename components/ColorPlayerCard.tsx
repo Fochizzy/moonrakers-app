@@ -14,10 +14,15 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
-import { useStore } from "@/store/useStore";
-import { calculateElo } from "@/utils/elo";
+import {
+  useGames,
+  usePlayers,
+  useSelectedPlayerId,
+  useSetSelectedPlayerId,
+} from "@/store/useStore";
 import { getPlayerColors } from "@/utils/colors";
 import { buildPlayerIdentity } from "@/utils/playerIdentity";
+import { buildPlayerCardEloMap, resolvePlayerCardElo } from "@/utils/playerCardElo";
 import Text from "@/components/ui/Text";
 import StarryNight from "@/components/ui/StarryNight";
 
@@ -788,23 +793,13 @@ export default function ColorPlayerCardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ playerId?: string | string[] }>();
 
-  const players = useStore((s: any) =>
-    Array.isArray(s.players) ? s.players : []
-  ) as Player[];
-
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : []
-  ) as Game[];
-
-  const selectedPlayerIdFromStore = useStore((s: any) => s?.selectedPlayerId);
-  const setSelectedPlayerId = useStore((s: any) => s?.setSelectedPlayerId);
+  const players = (usePlayers() ?? []) as Player[];
+  const games = (useGames() ?? []) as Game[];
+  const selectedPlayerIdFromStore = useSelectedPlayerId();
+  const setSelectedPlayerId = useSetSelectedPlayerId();
 
   const eloMap = useMemo(() => {
-    try {
-      return calculateElo(games as any) ?? {};
-    } catch {
-      return {};
-    }
+    return buildPlayerCardEloMap(games);
   }, [games]);
 
   const routePlayerId =
@@ -844,7 +839,7 @@ export default function ColorPlayerCardScreen() {
           contractsFailed: resolved.contractsFailed,
           objectivesCompleted: resolved.objectivesCompleted,
           assists: resolved.assists,
-          elo: Math.round((eloMap as any)[String(player.id)] ?? 1000),
+          elo: resolvePlayerCardElo(String(player.id), eloMap),
         };
       })
       .sort((a, b) => {

@@ -54,6 +54,4 @@ run("Creation, definitions, setup, and analytics screens expose the new browse p
   expectIncludes(setupSource, 'join("  /  ")', "setup launch separator cleanup");
 
   expectIncludes(analyticsSource, "ANALYTICS_CARD_TONES", "analytics tint map");
-  expectIncludes(analyticsSource, "Featured View", "featured analytics card");
-  expectIncludes(analyticsSource, "Recent Session", "recent analytics summary");
 });

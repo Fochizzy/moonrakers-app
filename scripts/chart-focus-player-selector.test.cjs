@@ -63,7 +63,7 @@ assert.match(
 
 assert.match(
   source,
-  /focusPlayerSearch\.trim\(\)\s*\?\s*filteredFocusPlayerOptions\.length/s,
+  /focusPlayerSearch\.trim\(\)\s*\?\s*\(?\s*filteredFocusPlayerOptions\.length/s,
   "expected the chart setup screen to only expand search results when a focus-player query exists",
 );
 

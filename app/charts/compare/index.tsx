@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useReducer, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
@@ -15,6 +15,9 @@ import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
 import { useStore } from "@/store/useStore";
 
+import ChartInsightStrip from "@/components/charts/ChartInsightStrip";
+import ChartMetricChip from "@/components/charts/ChartMetricChip";
+import ChartSurface from "@/components/charts/ChartSurface";
 import CompareSelectionCard from "@/components/charts/compare/CompareSelectionCard";
 import CompareTelemetryRow from "@/components/charts/compare/CompareTelemetryRow";
 import CompareMatrixCard from "@/components/charts/compare/CompareMatrixCard";
@@ -49,6 +52,7 @@ import {
   SortDirection,
   StoredGame,
 } from "@/utils/compareTypes";
+import { COLORS } from "@/utils/colors";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -56,24 +60,6 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 const MAX_COMPARE_PLAYERS = 5;
 
-const COLORS = {
-  bg: "#081120",
-  card: "rgba(12,18,38,0.92)",
-  cardAlt: "rgba(16,24,48,0.95)",
-  text: "#E2E8F0",
-  sub: "#94A3B8",
-  muted: "#64748B",
-  accent: "#A855F7",
-  accentSoft: "rgba(168,85,247,0.18)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  green: "#22C55E",
-  greenSoft: "rgba(34,197,94,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.18)",
-  border: "rgba(255,255,255,0.08)",
-  whiteSoft: "rgba(255,255,255,0.06)",
-};
 
 type FlexibleStore = CompareStoreShape & Record<string, unknown>;
 
@@ -651,12 +637,18 @@ export default function IndexScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.navRow}>
-          <TouchableOpacity style={styles.navPill} onPress={() => router.push(APP_ROUTES.home)} activeOpacity={0.9}>
+          <Pressable
+            style={({ pressed }) => [styles.navPill, pressed && { opacity: 0.9 }]}
+            onPress={() => router.push(APP_ROUTES.home)}
+          >
             <Text style={styles.navPillText}>Back to Command</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navPill} onPress={() => router.push("/stats")} activeOpacity={0.9}>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.navPill, pressed && { opacity: 0.9 }]}
+            onPress={() => router.push("/stats")}
+          >
             <Text style={styles.navPillText}>Stats</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         <View style={styles.tabGrid}>
@@ -667,17 +659,16 @@ export default function IndexScreen() {
             ].map((tab) => {
               const active = tab.key === activeTab;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={tab.key}
-                  style={[styles.underlineMainTab, styles.underlineMainTabTwoCol]}
+                  style={({ pressed }) => [styles.underlineMainTab, styles.underlineMainTabTwoCol, pressed && { opacity: 0.9 }]}
                   onPress={() => setActiveTab(tab.key)}
-                  activeOpacity={0.9}
                 >
                   <Text style={[styles.underlineMainTabText, active && styles.underlineMainTabTextActive]}>
                     {tab.label}
                   </Text>
                   <View style={[styles.underlineMainTabLine, active && styles.underlineMainTabLineActive]} />
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -700,17 +691,16 @@ export default function IndexScreen() {
               const active = mode === value;
               const label = value === "players" ? "Players" : "Group";
               return (
-                <TouchableOpacity
+                <Pressable
                   key={value}
-                  style={styles.underlineTabButton}
+                  style={({ pressed }) => [styles.underlineTabButton, pressed && { opacity: 0.9 }]}
                   onPress={() => setModeAndSync(value)}
-                  activeOpacity={0.9}
                 >
                   <Text style={[styles.underlineTabText, active && styles.underlineTabTextActive]}>
                     {label}
                   </Text>
                   <View style={[styles.underlineTabLine, active && styles.underlineTabLineActive]} />
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -760,13 +750,12 @@ export default function IndexScreen() {
                     <Text style={styles.summarySubtext}>{selectionSummaryLabel}</Text>
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.summaryActionButton}
+                  <Pressable
+                    style={({ pressed }) => [styles.summaryActionButton, pressed && { opacity: 0.9 }]}
                     onPress={() => setCompareSetupCollapsed(false)}
-                    activeOpacity={0.9}
                   >
                     <Text style={styles.summaryActionText}>Edit lineup</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
 
                 <CompareSummaryStrip rows={rows} />
@@ -810,18 +799,25 @@ export default function IndexScreen() {
                   </View>
                 ) : null}
 
-                <View style={styles.insightCardCompact}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitle}>Live Summary</Text>
-                    <Text style={styles.insightChip}>{mode.toUpperCase()}</Text>
+                <ChartSurface
+                  eyebrow="Live Summary"
+                  title="Cohesion affect"
+                  subtitle={`Selection: ${selectionLabel}`}
+                  style={styles.chartSurfaceCard}
+                >
+                  <View style={styles.surfaceChipRow}>
+                    <ChartMetricChip label={mode.toUpperCase()} />
+                    <ChartMetricChip label={`Rows ${rows.length}`} />
+                    <ChartMetricChip label={`Focus ${activeFocusGroup}`} />
                   </View>
+                  <ChartInsightStrip label="Analyzed lineup" value={selectionLabel} />
                   <CompareInsightBar
                     rows={rows}
                     activeFocusGroup={activeFocusGroup}
                     modeLabel={mode}
                     selectionLabel={selectionLabel}
                   />
-                </View>
+                </ChartSurface>
 
                 <View style={styles.sectionCompact}>
                   <View style={styles.sectionHeaderRow}>
@@ -1034,6 +1030,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 4,
   },
+  chartSurfaceCard: {
+    marginBottom: 4,
+  },
+  surfaceChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
   summaryActionButton: {
     backgroundColor: COLORS.accentSoft,
     borderRadius: 999,
@@ -1111,14 +1115,4 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
 
-  insightChip: {
-    backgroundColor: COLORS.blueSoft,
-    color: COLORS.blue,
-    borderRadius: 999,
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    fontSize: 9,
-    fontWeight: "800",
-  },
 });

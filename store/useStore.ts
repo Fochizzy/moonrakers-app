@@ -186,6 +186,16 @@ function normalizeAssistMap(input: any): Record<string, number> {
   );
 }
 
+function normalizeAssistSourceMap(...inputs: any[]): Record<string, number> {
+  return inputs.reduce((merged, input) => {
+    const normalized = normalizeAssistMap(input);
+    for (const [playerId, value] of Object.entries(normalized)) {
+      merged[playerId] = safeNumber(merged[playerId]) + safeNumber(value);
+    }
+    return merged;
+  }, {} as Record<string, number>);
+}
+
 function normalizeRound(raw: any): StoredRound | null {
   const playerId = normalizeId(raw?.playerId);
   if (!playerId) return null;
@@ -405,7 +415,12 @@ function normalizeImportedGame(raw: any): Game {
       directPrestige: direct,
       assistPrestigeReceived: assist,
       assistPrestigeSent: safeNumber(t?.assistPrestigeSent),
-      assistPrestigeBySource: normalizeAssistMap(t?.assistPrestigeBySource),
+      assistPrestigeBySource: normalizeAssistSourceMap(
+        t?.assistPrestigeBySource,
+        t?.assistPrestigeByPlayer,
+        t?.assistPrestigeFromPlayers,
+        t?.assistSources
+      ),
       assistCountBySource: normalizeAssistMap(t?.assistCountBySource),
       objectivePrestige: objective,
       score: safeNumber(t?.score),
@@ -1179,3 +1194,25 @@ export const useStore = create<Store>((set, get) => ({
       selectedComparePlayerIds: [],
     }),
 }));
+
+export type StoreState = Store;
+
+export function useGames() { return useStore((s: Store) => s.games); }
+export function usePlayers() { return useStore((s: Store) => s.players); }
+export function useGroups() { return useStore((s: Store) => s.groups); }
+export function useActiveGame() { return useStore((s: Store) => s.activeGame); }
+export function useSelectedGroupId() { return useStore((s: Store) => s.selectedGroupId); }
+export function useAuthSession() { return useStore((s: Store) => s.authSession); }
+export function useAuthProfile() { return useStore((s: Store) => s.authProfile); }
+export function useAuthBootstrapStatus() { return useStore((s: Store) => s.authBootstrapStatus); }
+export function usePasswordRecoveryPending() { return useStore((s: Store) => s.passwordRecoveryPending); }
+export function useStatsSnapshot() { return useStore((s: Store) => s.statsSnapshot); }
+export function useSelectedPlayerId() { return useStore((s: Store) => s.selectedPlayerId); }
+export function useSelectedGameId() { return useStore((s: Store) => s.selectedGameId); }
+export function useSelectedComparePlayerIds() { return useStore((s: Store) => s.selectedComparePlayerIds); }
+export function useSetSelectedPlayerId() { return useStore((s: Store) => s.setSelectedPlayerId); }
+export function usePatchActiveGame() { return useStore((s: Store) => s.patchActiveGame); }
+export function useClearActiveGame() { return useStore((s: Store) => s.clearActiveGame); }
+export function useHydrateCloudSnapshot() { return useStore((s: Store) => s.hydrateCloudSnapshot); }
+export function useClearAuthState() { return useStore((s: Store) => s.clearAuthState); }
+export function useSetPasswordRecoveryPending() { return useStore((s: Store) => s.setPasswordRecoveryPending); }

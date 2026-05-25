@@ -9,7 +9,7 @@ import {
 import { useRouter } from 'expo-router';
 
 import StarryNight from '@/components/ui/StarryNight';
-import { useStore } from '@/store/useStore';
+import { useGames, usePlayers } from '@/store/useStore';
 import CorrelationStats from '@/components/CorrelationStats';
 import InsightList from '@/components/InsightList';
 import AssistNetworkOverview from '@/components/charts/AssistNetworkOverview';
@@ -153,13 +153,8 @@ function MetricCard({
 export default function InsightsScreen() {
   const router = useRouter();
 
-  const players = useStore((s: any) =>
-    Array.isArray(s.players) ? s.players : [],
-  ) as PlayerLike[];
-
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : [],
-  ) as StoredGame[];
+  const players = (usePlayers() ?? []) as PlayerLike[];
+  const games = (useGames() ?? []) as StoredGame[];
   const unifiedGames = useMemo(
     () =>
       canonicalizeGames(

@@ -1,18 +1,21 @@
-import React, { useMemo, useRef } from 'react';
-import {
-  View,
-  ScrollView,
-  StyleSheet,
-  Pressable,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useMemo, useRef } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
-import { useStore } from '@/store/useStore';
-import StarryNight from '@/components/ui/StarryNight';
-import Text from '@/components/ui/Text';
+import ActionButton from "@/components/ui/ActionButton";
+import HeroCard from "@/components/ui/HeroCard";
+import PageShell from "@/components/ui/PageShell";
+import SectionCard from "@/components/ui/SectionCard";
+import Text from "@/components/ui/Text";
+import { useStore } from "@/store/useStore";
+import {
+  APP_ROUTES,
+  buildHistoryRoute,
+  buildPlayerProfileRoute,
+} from "@/utils/appRoutes";
+import { formatDate } from "@/utils/formatters";
+import { toNumber } from "@/utils/numbers";
+import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 type Player = {
   id: string;
@@ -55,10 +58,6 @@ type Game = {
   manualWinnerId?: string;
 };
 
-function toNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
 function getWinnerId(game?: Game): string | undefined {
   if (!game) return undefined;
   return game.winnerId ?? game.selectedWinnerId ?? game.manualWinnerId;
@@ -66,40 +65,11 @@ function getWinnerId(game?: Game): string | undefined {
 
 function getTotalPrestige(totals?: Totals): number {
   const explicit = totals?.totalPrestige ?? totals?.prestige;
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
+  if (typeof explicit === "number" && Number.isFinite(explicit)) {
     return explicit;
   }
 
-  return (
-    toNumber(totals?.directPrestige) +
-    toNumber(totals?.assistPrestigeReceived)
-  );
-}
-
-function getPlayerColor(color?: string) {
-  switch ((color ?? '').toLowerCase()) {
-    case 'green':
-      return '#22c55e';
-    case 'purple':
-      return '#a855f7';
-    case 'blue':
-      return '#3b82f6';
-    case 'orange':
-      return '#f97316';
-    case 'yellow':
-      return '#eab308';
-    default:
-      return color || '#94a3b8';
-  }
-}
-
-function formatDate(value?: number) {
-  if (!value || !Number.isFinite(value)) return 'Unknown date';
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return 'Unknown date';
-  }
+  return toNumber(totals?.directPrestige) + toNumber(totals?.assistPrestigeReceived);
 }
 
 function safeDivide(numerator: number, denominator: number) {
@@ -121,35 +91,41 @@ function StatPill({
   );
 }
 
-function SectionCard({
-  title,
-  children,
+function NavButton({
+  label,
+  onPress,
 }: {
-  title: string;
-  children: React.ReactNode;
+  label: string;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.sectionCard}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
+    <Pressable onPress={onPress} style={styles.navButton}>
+      <Text style={styles.navButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function MiniTag({ label }: { label: string }) {
+  return (
+    <View style={styles.miniTag}>
+      <Text style={styles.miniTagText}>{label}</Text>
     </View>
   );
 }
 
 export default function GameTrendsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ gameId?: string | string[] }>();
   const gameId = Array.isArray(params.gameId) ? params.gameId[0] : params.gameId;
 
-  const games = useStore((s: any) =>
-    Array.isArray(s.games) ? s.games : []
+  const games = useStore((state: any) =>
+    Array.isArray(state?.games) ? state.games : [],
   ) as Game[];
 
   const game = useMemo(() => {
     if (!gameId) return undefined;
-    return games.find((g) => g.id === gameId);
-  }, [games, gameId]);
+    return games.find((entry) => entry.id === gameId);
+  }, [gameId, games]);
 
   const scrollRef = useRef<ScrollView | null>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
@@ -158,16 +134,16 @@ export default function GameTrendsScreen() {
   const rounds = game?.rounds ?? [];
   const totals = game?.totals ?? {};
   const winnerId = getWinnerId(game);
-  const winner = players.find((p) => p.id === winnerId);
+  const winner = players.find((player) => player.id === winnerId);
 
   const orderedPlayers = useMemo(() => {
     return [...players].sort((a, b) => {
       const seatA =
-        typeof a.startOrder === 'number' && Number.isFinite(a.startOrder)
+        typeof a.startOrder === "number" && Number.isFinite(a.startOrder)
           ? a.startOrder
           : 999;
       const seatB =
-        typeof b.startOrder === 'number' && Number.isFinite(b.startOrder)
+        typeof b.startOrder === "number" && Number.isFinite(b.startOrder)
           ? b.startOrder
           : 999;
       return seatA - seatB;
@@ -176,8 +152,8 @@ export default function GameTrendsScreen() {
 
   const prestigeTrendRows = useMemo(() => {
     const running: Record<string, number> = {};
-    players.forEach((p) => {
-      running[p.id] = 0;
+    players.forEach((player) => {
+      running[player.id] = 0;
     });
 
     return rounds.map((round, index) => {
@@ -185,8 +161,8 @@ export default function GameTrendsScreen() {
 
       return {
         round: index + 1,
-        leaderId: [...players]
-          .sort((a, b) => (running[b.id] ?? 0) - (running[a.id] ?? 0))[0]?.id,
+        leaderId: [...players].sort((a, b) => (running[b.id] ?? 0) - (running[a.id] ?? 0))[0]
+          ?.id,
         values: { ...running },
       };
     });
@@ -199,7 +175,10 @@ export default function GameTrendsScreen() {
         id: player.id,
         name: player.name,
         color: player.color,
-        seat: typeof player.startOrder === 'number' ? player.startOrder + 1 : index + 1,
+        seat:
+          typeof player.startOrder === "number" && Number.isFinite(player.startOrder)
+            ? player.startOrder + 1
+            : index + 1,
         totalPrestige: getTotalPrestige(stat),
         directPrestige: toNumber(stat?.directPrestige),
         assistPrestige: toNumber(stat?.assistPrestigeReceived),
@@ -232,8 +211,8 @@ export default function GameTrendsScreen() {
     if (!players.length) return [];
 
     const running: Record<string, number> = {};
-    players.forEach((p) => {
-      running[p.id] = 0;
+    players.forEach((player) => {
+      running[player.id] = 0;
     });
 
     return rounds.map((round, index) => {
@@ -254,7 +233,7 @@ export default function GameTrendsScreen() {
       return {
         round: index + 1,
         projectedWinnerId: leader?.id,
-        projectedWinnerName: leader?.name ?? '—',
+        projectedWinnerName: leader?.name ?? "-",
         projectedTotal: leader?.total ?? 0,
         margin,
         correct: leader?.id === winnerId,
@@ -282,120 +261,115 @@ export default function GameTrendsScreen() {
 
   function scrollToSection(key: string) {
     const y = sectionOffsets.current[key];
-    if (typeof y === 'number' && scrollRef.current) {
-      scrollRef.current.scrollTo({ y: Math.max(0, y - 88), animated: true });
+    if (typeof y === "number" && scrollRef.current) {
+      scrollRef.current.scrollTo({ y: Math.max(0, y - 84), animated: true });
     }
   }
 
   if (!game) {
     return (
-      <View style={styles.root}>
-        <View style={styles.backgroundLayer}>
-          <StarryNight />
-          <View style={styles.backgroundDim} />
-        </View>
-
-        <View style={styles.notFoundWrap}>
-          <View style={styles.notFoundCard}>
-            <Text style={styles.notFoundTitle}>Game not found</Text>
-            <Text style={styles.notFoundText}>
-              The saved game for this trends page could not be found.
-            </Text>
-
-            <Pressable style={styles.topButton} onPress={() => router.push('/history')}>
-              <Text style={styles.topButtonText}>Back to History</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+      <PageShell preset="analytics" density="compact">
+        <HeroCard
+          eyebrow="Postgame"
+          title="Game not found"
+          subtitle="The saved game for this trends page could not be found."
+          size="compact"
+          variant="stat"
+          actions={
+            <View style={styles.heroActions}>
+              <ActionButton
+                title="Back to History"
+                variant="secondary"
+                onPress={() => router.push(buildHistoryRoute())}
+                style={styles.heroAction}
+              />
+              <ActionButton
+                title="Home"
+                variant="ghost"
+                onPress={() => router.push(APP_ROUTES.home)}
+                style={styles.heroAction}
+              />
+            </View>
+          }
+        />
+      </PageShell>
     );
   }
 
   return (
-    <View style={styles.root}>
-      <View style={styles.backgroundLayer}>
-        <StarryNight />
-        <View style={styles.backgroundDim} />
-      </View>
-
+    <PageShell preset="analytics" density="compact" scroll={false}>
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: 12 + insets.top,
-            paddingBottom: 28 + insets.bottom,
-          },
-        ]}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topRow}>
-          <Pressable style={styles.topButton} onPress={() => router.back()}>
-            <Text style={styles.topButtonText}>Back</Text>
-          </Pressable>
-
-          <Pressable style={styles.topButton} onPress={() => router.push('/')}>
-            <Text style={styles.topButtonText}>Home</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Game Trends & Breakdown</Text>
-          <Text style={styles.heroMeta}>
-            {formatDate(game.createdAt)} · {rounds.length} rounds
-          </Text>
-          <Text style={styles.heroMeta}>
-            Winner: {winner?.name ?? 'Unknown'}
-          </Text>
-
+        <HeroCard
+          eyebrow="Postgame"
+          title="Game Trends & Breakdown"
+          subtitle={`${formatDate(game.createdAt)} | ${rounds.length} rounds | Winner ${winner?.name ?? "Unknown"}`}
+          size="compact"
+          variant="stat"
+          actions={
+            <View style={styles.heroActions}>
+              <ActionButton
+                title="Back"
+                variant="secondary"
+                onPress={() => router.back()}
+                style={styles.heroAction}
+              />
+              <ActionButton
+                title="Home"
+                variant="ghost"
+                onPress={() => router.push(APP_ROUTES.home)}
+                style={styles.heroAction}
+              />
+            </View>
+          }
+        >
           <View style={styles.summaryGrid}>
             <StatPill label="Players" value={players.length} />
             <StatPill label="Rounds" value={rounds.length} />
-            <StatPill label="Winner" value={winner?.name ?? '—'} />
+            <StatPill label="Winner" value={winner?.name ?? "-"} />
             <StatPill
               label="Top Prestige"
-              value={
-                Math.max(
-                  0,
-                  ...playerCardRows.map((row) => row.totalPrestige)
-                )
-              }
+              value={Math.max(0, ...playerCardRows.map((row) => row.totalPrestige))}
             />
           </View>
-        </View>
+          <Text style={styles.heroNote}>
+            Follow one saved game through pace, seat order, contract pressure, and winner projection.
+          </Text>
+        </HeroCard>
 
-        <View style={styles.navCard}>
-          <Text style={styles.navTitle}>Open Trends</Text>
+        <SectionCard
+          eyebrow="Navigate"
+          title="Open Trends"
+          subtitle="Jump to a section without losing your place."
+        >
           <View style={styles.navGrid}>
-            <NavButton
-              label="Prestige Trends"
-              onPress={() => scrollToSection('prestige')}
-            />
-            <NavButton
-              label="Turn Order Effect"
-              onPress={() => scrollToSection('turnOrder')}
-            />
+            <NavButton label="Prestige Trends" onPress={() => scrollToSection("prestige")} />
+            <NavButton label="Turn Order Effect" onPress={() => scrollToSection("turnOrder")} />
             <NavButton
               label="Contracts & Failures"
-              onPress={() => scrollToSection('contracts')}
+              onPress={() => scrollToSection("contracts")}
             />
             <NavButton
               label="Winner Prediction"
-              onPress={() => scrollToSection('prediction')}
+              onPress={() => scrollToSection("prediction")}
             />
-            <NavButton
-              label="Player Cards"
-              onPress={() => scrollToSection('playerCards')}
-            />
+            <NavButton label="Player Cards" onPress={() => scrollToSection("playerCards")} />
           </View>
-        </View>
+        </SectionCard>
 
         <View
-          onLayout={(e) => {
-            sectionOffsets.current.prestige = e.nativeEvent.layout.y;
+          onLayout={(event) => {
+            sectionOffsets.current.prestige = event.nativeEvent.layout.y;
           }}
         >
-          <SectionCard title="Prestige Trends">
+          <SectionCard
+            eyebrow="Timeline"
+            title="Prestige Trends"
+            subtitle="Running prestige after each recorded round."
+          >
             {prestigeTrendRows.length === 0 ? (
               <Text style={styles.emptyText}>No rounds recorded for this game.</Text>
             ) : (
@@ -408,19 +382,19 @@ export default function GameTrendsScreen() {
                         <View
                           style={[
                             styles.dot,
-                            { backgroundColor: getPlayerColor(player.color) },
+                            { backgroundColor: getPlayerAccentColor(player.color) },
                           ]}
                         />
-                        <Text style={styles.metricLabel} numberOfLines={1}>{player.name}</Text>
+                        <Text style={styles.metricLabel} numberOfLines={1}>
+                          {player.name}
+                        </Text>
                       </View>
-                      <Text style={styles.metricValue}>
-                        {row.values[player.id] ?? 0}
-                      </Text>
+                      <Text style={styles.metricValue}>{row.values[player.id] ?? 0}</Text>
                     </View>
                   ))}
                   <Text style={styles.noteText}>
-                    Leader after round {row.round}:{' '}
-                    {players.find((p) => p.id === row.leaderId)?.name ?? '—'}
+                    Leader after round {row.round}:{" "}
+                    {players.find((player) => player.id === row.leaderId)?.name ?? "-"}
                   </Text>
                 </View>
               ))
@@ -429,11 +403,15 @@ export default function GameTrendsScreen() {
         </View>
 
         <View
-          onLayout={(e) => {
-            sectionOffsets.current.turnOrder = e.nativeEvent.layout.y;
+          onLayout={(event) => {
+            sectionOffsets.current.turnOrder = event.nativeEvent.layout.y;
           }}
         >
-          <SectionCard title="Turn Order Effect">
+          <SectionCard
+            eyebrow="Seats"
+            title="Turn Order Effect"
+            subtitle="Compare seat position against total output."
+          >
             {turnOrderEffectRows.map((row) => (
               <View key={row.id} style={styles.rowCard}>
                 <View style={styles.metricRow}>
@@ -441,12 +419,12 @@ export default function GameTrendsScreen() {
                     <View
                       style={[
                         styles.dot,
-                        { backgroundColor: getPlayerColor(row.color) },
+                        { backgroundColor: getPlayerAccentColor(row.color) },
                       ]}
                     />
                     <Text style={styles.rowTitle}>
-                      Seat {row.seat} · {row.name}
-                      {row.winner ? ' 👑' : ''}
+                      Seat {row.seat} | {row.name}
+                      {row.winner ? " | Winner" : ""}
                     </Text>
                   </View>
                   <Text style={styles.metricValue}>{row.totalPrestige}</Text>
@@ -463,11 +441,15 @@ export default function GameTrendsScreen() {
         </View>
 
         <View
-          onLayout={(e) => {
-            sectionOffsets.current.contracts = e.nativeEvent.layout.y;
+          onLayout={(event) => {
+            sectionOffsets.current.contracts = event.nativeEvent.layout.y;
           }}
         >
-          <SectionCard title="Contracts & Failures">
+          <SectionCard
+            eyebrow="Pressure"
+            title="Contracts & Failures"
+            subtitle="Track conversion rate across scored contract attempts."
+          >
             {contractFailureRows.map((row) => (
               <View key={row.id} style={styles.rowCard}>
                 <View style={styles.metricRow}>
@@ -475,14 +457,12 @@ export default function GameTrendsScreen() {
                     <View
                       style={[
                         styles.dot,
-                        { backgroundColor: getPlayerColor(row.color) },
+                        { backgroundColor: getPlayerAccentColor(row.color) },
                       ]}
                     />
                     <Text style={styles.rowTitle}>{row.name}</Text>
                   </View>
-                  <Text style={styles.metricValue}>
-                    {(row.successRate * 100).toFixed(0)}%
-                  </Text>
+                  <Text style={styles.metricValue}>{(row.successRate * 100).toFixed(0)}%</Text>
                 </View>
 
                 <View style={styles.inlineStats}>
@@ -496,11 +476,15 @@ export default function GameTrendsScreen() {
         </View>
 
         <View
-          onLayout={(e) => {
-            sectionOffsets.current.prediction = e.nativeEvent.layout.y;
+          onLayout={(event) => {
+            sectionOffsets.current.prediction = event.nativeEvent.layout.y;
           }}
         >
-          <SectionCard title="Winner Prediction">
+          <SectionCard
+            eyebrow="Projection"
+            title="Winner Prediction"
+            subtitle="How early the pace of play pointed at the final winner."
+          >
             {winnerPredictionRows.length === 0 ? (
               <Text style={styles.emptyText}>No rounds recorded for this game.</Text>
             ) : (
@@ -514,7 +498,7 @@ export default function GameTrendsScreen() {
                         row.correct ? styles.predictionBadgeCorrect : styles.predictionBadgeMiss,
                       ]}
                     >
-                      {row.correct ? 'Matched final winner' : 'Projection changed'}
+                      {row.correct ? "Matched final winner" : "Projection changed"}
                     </Text>
                   </View>
 
@@ -532,33 +516,32 @@ export default function GameTrendsScreen() {
         </View>
 
         <View
-          onLayout={(e) => {
-            sectionOffsets.current.playerCards = e.nativeEvent.layout.y;
+          onLayout={(event) => {
+            sectionOffsets.current.playerCards = event.nativeEvent.layout.y;
           }}
         >
-          <SectionCard title="Player Cards">
+          <SectionCard
+            eyebrow="Profiles"
+            title="Player Cards"
+            subtitle="Jump from this match into each player's full profile."
+          >
             {playerCardRows.map((row) => (
               <Pressable
                 key={row.id}
                 style={styles.playerCard}
-                onPress={() =>
-                  router.push({
-                    pathname: '/player/[playerId]',
-                    params: { playerId: row.id },
-                  })
-                }
+                onPress={() => router.push(buildPlayerProfileRoute(row.id))}
               >
                 <View style={styles.metricRow}>
                   <View style={styles.metricLeft}>
                     <View
                       style={[
                         styles.dot,
-                        { backgroundColor: getPlayerColor(row.color) },
+                        { backgroundColor: getPlayerAccentColor(row.color) },
                       ]}
                     />
                     <Text style={styles.rowTitle}>{row.name}</Text>
                   </View>
-                  <Text style={styles.openText}>Open Card</Text>
+                  <Text style={styles.openText}>Open profile</Text>
                 </View>
 
                 <View style={styles.inlineStats}>
@@ -574,243 +557,165 @@ export default function GameTrendsScreen() {
           </SectionCard>
         </View>
       </ScrollView>
-    </View>
-  );
-}
-
-function NavButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.navButton}>
-      <Text style={styles.navButtonText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function MiniTag({ label }: { label: string }) {
-  return (
-    <View style={styles.miniTag}>
-      <Text style={styles.miniTagText}>{label}</Text>
-    </View>
+    </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#081120',
-  },
-  backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.18)',
-  },
   content: {
-    padding: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 28,
-    gap: 10,
+    gap: 12,
   },
-  topRow: {
-    flexDirection: 'row',
+  heroActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
-  topButton: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    backgroundColor: '#10243f',
-    borderWidth: 1,
-    borderColor: '#2563eb',
-  },
-  topButtonText: {
-    color: '#93c5fd',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  heroCard: {
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: '#162033',
-    borderWidth: 1,
-    borderColor: '#253247',
-  },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '900',
-    marginBottom: 6,
-  },
-  heroMeta: {
-    color: '#CBD5E1',
-    fontSize: 12,
-    marginBottom: 4,
+  heroAction: {
+    flexGrow: 1,
+    minWidth: 132,
   },
   summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    marginTop: 10,
   },
-  navCard: {
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: '#162033',
-    borderWidth: 1,
-    borderColor: '#253247',
-  },
-  navTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 10,
+  heroNote: {
+    color: "#BBD2F6",
+    fontSize: 11,
+    lineHeight: 17,
   },
   navGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   navButton: {
-    minWidth: '48%',
+    minWidth: "48%",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#1b283d',
+    backgroundColor: "rgba(18,31,52,0.92)",
     borderWidth: 1,
-    borderColor: '#2a3850',
+    borderColor: "rgba(96,165,250,0.20)",
   },
   navButtonText: {
-    color: '#F8FAFC',
+    color: "#F8FAFC",
     fontSize: 12,
-    fontWeight: '800',
-  },
-  sectionCard: {
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: '#162033',
-    borderWidth: 1,
-    borderColor: '#253247',
-  },
-  sectionTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 10,
+    fontWeight: "800",
   },
   rowCard: {
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: '#1b283d',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: "rgba(18,31,52,0.92)",
     borderWidth: 1,
-    borderColor: '#2a3850',
+    borderColor: "rgba(96,165,250,0.18)",
     marginBottom: 8,
+    gap: 8,
   },
   rowTitle: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   metricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
   },
   metricLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     flex: 1,
     paddingRight: 8,
   },
   metricLabel: {
-    color: '#E2E8F0',
+    color: "#E2E8F0",
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   metricValue: {
-    color: '#93c5fd',
+    color: "#93C5FD",
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   inlineStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    marginTop: 10,
   },
   miniTag: {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
-    borderColor: '#2a3850',
+    borderColor: "rgba(96,165,250,0.14)",
   },
   miniTagText: {
-    color: '#CBD5E1',
+    color: "#CBD5E1",
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   statPill: {
     minWidth: 92,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: '#1b283d',
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
-    borderColor: '#2a3850',
+    borderColor: "rgba(255,255,255,0.08)",
   },
   statPillLabel: {
     fontSize: 10,
-    color: '#8EA6C8',
+    color: "#8EA6C8",
     marginBottom: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
   },
   statPillValue: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#F8FAFC',
+    fontWeight: "800",
+    color: "#F8FAFC",
   },
   noteText: {
-    color: '#CBD5E1',
+    color: "#CBD5E1",
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 8,
   },
   predictionBadge: {
     fontSize: 10,
-    fontWeight: '900',
+    fontWeight: "900",
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   predictionBadgeCorrect: {
-    color: '#DCFCE7',
-    backgroundColor: 'rgba(34,197,94,0.18)',
+    color: "#DCFCE7",
+    backgroundColor: "rgba(34,197,94,0.18)",
   },
   predictionBadgeMiss: {
-    color: '#FDE68A',
-    backgroundColor: 'rgba(59,130,246,0.18)',
+    color: "#FDE68A",
+    backgroundColor: "rgba(59,130,246,0.18)",
   },
   playerCard: {
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: '#1b283d',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: "rgba(18,31,52,0.92)",
     borderWidth: 1,
-    borderColor: '#2a3850',
+    borderColor: "rgba(96,165,250,0.18)",
     marginBottom: 8,
+    gap: 8,
   },
   openText: {
-    color: '#93c5fd',
+    color: "#93C5FD",
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   dot: {
     width: 10,
@@ -818,30 +723,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   emptyText: {
-    color: '#94a3b8',
+    color: "#94A3B8",
     fontSize: 12,
-  },
-  notFoundWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 16,
-  },
-  notFoundCard: {
-    borderRadius: 16,
-    padding: 16,
-    backgroundColor: '#162033',
-    borderWidth: 1,
-    borderColor: '#253247',
-    gap: 10,
-  },
-  notFoundTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  notFoundText: {
-    color: '#CBD5E1',
-    fontSize: 13,
     lineHeight: 18,
   },
 });

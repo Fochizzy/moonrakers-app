@@ -48,8 +48,21 @@ export type ChartSetupParams = {
   profileId: string;
 };
 
+export type EloScreenParams = {
+  profileId: string;
+  focusPlayerId: string | null;
+  opponentId: string | null;
+  sortKey: string | null;
+};
+
 export type RefreshServerAuthoredAnalyticsParams = {
   profileId: string;
+};
+
+export type PlayerProfileScreenParams = {
+  profileId: string;
+  focusPlayerId: string | null;
+  opponentId: string | null;
 };
 
 export type AnalyticsMetricCard = {
@@ -133,6 +146,137 @@ export type ChartDatasetPayload = {
 export type ChartSetupOption = {
   key: string;
   label: string;
+};
+
+export type EloMetricCard = {
+  key: string;
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "default" | "accent" | "blue" | "green" | "danger";
+};
+
+export type EloPlayerOption = {
+  id: string;
+  name: string;
+  label: string;
+  displayName?: string | null;
+  playerName?: string | null;
+  color?: string | null;
+  assignedCardArtIndex?: number | null;
+  gamesPlayed?: number;
+  currentElo?: number;
+};
+
+export type EloLeaderboardRow = {
+  rank: number;
+  playerId: string;
+  name: string;
+  color?: string | null;
+  assignedCardArtIndex?: number | null;
+  currentElo: number;
+  peakElo: number;
+  confidence: number;
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  score: number;
+  prestige: number;
+  efficiency: number;
+  avgPrestige: number;
+};
+
+export type EloSummary = {
+  playerId: string | null;
+  name: string;
+  currentElo: number;
+  peakElo: number;
+  confidence: number;
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  avgDelta: number;
+  bestDelta: number;
+  worstDelta: number;
+  recentForm: string;
+  score?: number;
+  prestige?: number;
+  efficiency?: number;
+  avgPrestige?: number;
+};
+
+export type EloSectionPayload = {
+  title: string;
+  cards: EloMetricCard[];
+};
+
+export type EloInsightPayload = {
+  title: string;
+  body: string;
+};
+
+export type EloScreenPayload = {
+  generatedAt: string;
+  sortKey: string;
+  playerOptions: EloPlayerOption[];
+  selectedPlayerId: string | null;
+  selectedOpponentId: string | null;
+  leaderboardRows: EloLeaderboardRow[];
+  summary: EloSummary | null;
+  topCards: EloMetricCard[];
+  sections: Record<string, EloSectionPayload>;
+  insights: Record<string, EloInsightPayload>;
+  emptyState?: {
+    title: string;
+    description?: string;
+  } | null;
+};
+
+export type PlayerProfileScreenPayload = {
+  generatedAt: string;
+  selectedPlayerId: string | null;
+  selectedOpponentId: string | null;
+  playerOptions: EloPlayerOption[];
+  hero: {
+    id: string | null;
+    name: string;
+    color?: string | null;
+    assignedCardArtIndex?: number | null;
+    currentElo: number;
+    peakElo: number;
+    winRate: number;
+    totalWins: number;
+    totalGames: number;
+  };
+  quickActions?: {
+    compareLabel?: string | null;
+    chartsLabel?: string | null;
+    recentGamesLabel?: string | null;
+  } | null;
+  topCards: EloMetricCard[];
+  activeInsight: EloInsightPayload | null;
+  profileInsight: EloInsightPayload | null;
+  tabs: Record<string, EloSectionPayload>;
+  tabInsights?: Record<string, EloInsightPayload>;
+  moonrakersIntel: Record<string, unknown> | null;
+  opponentOptions: EloPlayerOption[];
+  topOpponentOptions: EloPlayerOption[];
+  recentGames: Array<Record<string, unknown>>;
+  emptyState?: {
+    title: string;
+    description?: string;
+  } | null;
+};
+
+export type LiveAnalyticsQueryState<TPayload> = {
+  queryKey: string;
+  payload: TPayload | null;
+  loading: boolean;
+  refreshing: boolean;
+  error: string | null;
+  isStale: boolean;
+  staleMessage: string | null;
+  lastSuccessAt: number | null;
 };
 
 export type ChartSetupPayload = {

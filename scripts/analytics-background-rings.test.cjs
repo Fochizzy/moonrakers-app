@@ -44,8 +44,8 @@ run("Analytics family screens opt into the analytics background preset", () => {
   expectIncludes(chartsHubSource, '<PageShell preset="analytics"', "charts hub preset");
   expectIncludes(chartDetailSource, '<PageShell preset="analytics"', "chart detail preset");
   expectIncludes(compareSource, '<ScreenBackground preset="analytics" />', "compare preset");
-  expectIncludes(statsSource, '<ScreenBackground preset="analytics" />', "stats preset");
-  expectIncludes(eloSource, '<ScreenBackground preset="analytics" />', "elo preset");
-  expectIncludes(insightsSource, '<ScreenBackground preset="analytics" />', "insights preset");
+  expectIncludes(statsSource, 'preset="analytics"', "stats preset");
+  expectIncludes(eloSource, 'preset="analytics"', "elo preset");
+  expectIncludes(insightsSource, 'preset="analytics"', "insights preset");
   expectIncludes(definitionsSource, '<PageShell preset="analytics"', "definitions preset");
 });
