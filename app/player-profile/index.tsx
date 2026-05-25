@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useStore } from '@/store/useStore';
 import StarryNight from '@/components/ui/StarryNight';
@@ -53,7 +54,9 @@ function getPlayerAccent(color?: string) {
 
 export default function PlayerIndexScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const rawPlayers = useStore((s: any) => s.players);
+  const [playerSearch, setPlayerSearch] = useState("");
 
   const players = useMemo<Player[]>(
     () =>
@@ -65,6 +68,19 @@ export default function PlayerIndexScreen() {
     [rawPlayers]
   );
 
+  const filteredPlayers = useMemo(() => {
+    const normalizedSearch = playerSearch.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return players;
+    }
+
+    return players.filter((player) => {
+      const name = String(player.name ?? "").toLowerCase();
+      const initials = String(player.initials ?? "").toLowerCase();
+      return name.includes(normalizedSearch) || initials.includes(normalizedSearch);
+    });
+  }, [playerSearch, players]);
+
   return (
     <View style={styles.root}>
       <View style={styles.backgroundLayer}>
@@ -73,7 +89,13 @@ export default function PlayerIndexScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: uiPolish.spacing.xl + insets.top,
+            paddingBottom: 28 + insets.bottom,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroCard}>
@@ -84,8 +106,16 @@ export default function PlayerIndexScreen() {
           </Text>
         </View>
 
+        <TextInput
+          value={playerSearch}
+          onChangeText={setPlayerSearch}
+          placeholder="Search players"
+          placeholderTextColor={COLORS.muted}
+          style={styles.searchInput}
+        />
+
         <View style={styles.grid}>
-          {players.map((player) => {
+          {filteredPlayers.map((player) => {
             const accent = getPlayerAccent(player.color);
 
             return (
@@ -159,6 +189,13 @@ export default function PlayerIndexScreen() {
               Add players or import a backup to populate this page.
             </Text>
           </View>
+        ) : filteredPlayers.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No matching players</Text>
+            <Text style={styles.emptyText}>
+              Try a different player name or initials.
+            </Text>
+          </View>
         ) : null}
       </ScrollView>
     </View>
@@ -213,6 +250,18 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 13,
     lineHeight: 19,
+  },
+
+  searchInput: {
+    minHeight: 48,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
 
   grid: {

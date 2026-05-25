@@ -1,15 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "@/store/useStore";
 import ScreenBackground from "@/components/ui/ScreenBackground";
 import { calculateElo } from "@/utils/elo";
+import { APP_ROUTES } from "@/utils/appRoutes";
+import { resolvePreferredChartPlayerId } from "@/utils/charts";
 
 const COLORS = {
   bg: "#081120",
@@ -602,6 +606,9 @@ function buildInsight(
 }
 
 export default function EloScreen() {
+  const router = useRouter();
+  const authSession = useStore((s: any) => s.authSession);
+  const authProfile = useStore((s: any) => s.authProfile);
   const games = useStore((s: any) => s.games || []);
   const players = useStore((s: any) => s.players || []);
 
@@ -611,24 +618,90 @@ export default function EloScreen() {
     );
   }, [players]);
 
+  const gameDrivenPlayerIds = useMemo(() => {
+    return new Set(
+      (Array.isArray(games) ? games : []).flatMap((game: any) =>
+        Array.isArray(game?.players)
+          ? game.players
+              .map((player: any) => normalizeId(player?.id ?? player?.playerId))
+              .filter(Boolean)
+          : []
+      )
+    );
+  }, [games]);
+
+  const analyticsPlayers = useMemo<StorePlayer[]>(() => {
+    const playersWithSavedGames = sortedPlayers.filter((player) =>
+      gameDrivenPlayerIds.has(normalizeId(player.id))
+    );
+
+    return playersWithSavedGames.length ? playersWithSavedGames : sortedPlayers;
+  }, [gameDrivenPlayerIds, sortedPlayers]);
+
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(
     null
   );
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
   const [activeTab, setActiveTab] =
     useState<EloMetricTab>("Leaderboard");
 
-  useEffect(() => {
-    if (!selectedPlayerId && sortedPlayers.length) {
-      setSelectedPlayerId(normalizeId(sortedPlayers[0].id));
-    }
-  }, [selectedPlayerId, sortedPlayers]);
+  const preferredPlayerId = useMemo(
+    () =>
+      resolvePreferredChartPlayerId({
+        availablePlayers: analyticsPlayers,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+      }),
+    [analyticsPlayers, authProfile?.id, authSession?.user?.id]
+  );
 
   useEffect(() => {
-    if (selectedOpponentId === selectedPlayerId) {
+    if (!analyticsPlayers.length) {
+      return;
+    }
+
+    const activeId = normalizeId(selectedPlayerId);
+    const hasActivePlayer = analyticsPlayers.some(
+      (player) => normalizeId(player.id) === activeId
+    );
+
+    if (!activeId || !hasActivePlayer) {
+      setSelectedPlayerId(preferredPlayerId ?? normalizeId(analyticsPlayers[0].id));
+    }
+  }, [analyticsPlayers, preferredPlayerId, selectedPlayerId]);
+
+  const normalizedPlayerQuery = deferredPlayerSearchQuery.trim().toLowerCase();
+  const filteredPlayerOptions = useMemo(() => {
+    if (!normalizedPlayerQuery) {
+      return analyticsPlayers;
+    }
+
+    return analyticsPlayers.filter((player) => {
+      const searchTargets = [
+        String(player?.name ?? ""),
+        normalizeId(player?.id),
+      ]
+        .filter(Boolean)
+        .map((value) => value.toLowerCase());
+
+      return searchTargets.some((value) => value.includes(normalizedPlayerQuery));
+    });
+  }, [analyticsPlayers, normalizedPlayerQuery]);
+
+  useEffect(() => {
+    const activeOpponentId = normalizeId(selectedOpponentId);
+    const isValidOpponent = analyticsPlayers.some(
+      (player) =>
+        normalizeId(player.id) === activeOpponentId &&
+        normalizeId(player.id) !== normalizeId(selectedPlayerId)
+    );
+
+    if (selectedOpponentId === selectedPlayerId || (activeOpponentId && !isValidOpponent)) {
       setSelectedOpponentId(null);
     }
-  }, [selectedOpponentId, selectedPlayerId]);
+  }, [analyticsPlayers, selectedOpponentId, selectedPlayerId]);
 
   const eloMap = useMemo<Record<string, number>>(() => {
     try {
@@ -641,24 +714,24 @@ export default function EloScreen() {
   }, [games]);
 
   const rowsByPlayer = useMemo(
-    () => buildGameRowsByPlayer(games, sortedPlayers),
-    [games, sortedPlayers]
+    () => buildGameRowsByPlayer(games, analyticsPlayers),
+    [analyticsPlayers, games]
   );
 
   const selectedPlayer = useMemo(
     () =>
-      sortedPlayers.find(
+      analyticsPlayers.find(
         (p) => normalizeId(p.id) === normalizeId(selectedPlayerId)
       ) || null,
-    [sortedPlayers, selectedPlayerId]
+    [analyticsPlayers, selectedPlayerId]
   );
 
   const opponentOptions = useMemo(
     () =>
-      sortedPlayers.filter(
+      analyticsPlayers.filter(
         (p) => normalizeId(p.id) !== normalizeId(selectedPlayerId)
       ),
-    [sortedPlayers, selectedPlayerId]
+    [analyticsPlayers, selectedPlayerId]
   );
 
   const selectedRows = useMemo(
@@ -675,21 +748,21 @@ export default function EloScreen() {
     () =>
       buildSummary(
         normalizeId(selectedPlayerId),
-        sortedPlayers,
+        analyticsPlayers,
         rowsByPlayer,
         eloMap
       ),
-    [selectedPlayerId, sortedPlayers, rowsByPlayer, eloMap]
+    [selectedPlayerId, analyticsPlayers, rowsByPlayer, eloMap]
   );
 
   const selectedOpponentName = useMemo(() => {
     return (
-      sortedPlayers.find(
+      analyticsPlayers.find(
         (player) =>
           normalizeId(player.id) === normalizeId(selectedOpponentId)
       )?.name || null
     );
-  }, [sortedPlayers, selectedOpponentId]);
+  }, [analyticsPlayers, selectedOpponentId]);
 
   const topCards = useMemo(
     () => buildTopCards(selectedSummary, selectedRows, selectedContextRows),
@@ -728,10 +801,10 @@ export default function EloScreen() {
   const hasData = selectedRows.length > 0;
 
   const leaderboardRows = useMemo(() => {
-    return sortedPlayers
+    return analyticsPlayers
       .map((player) => {
         const playerId = normalizeId(player.id);
-        const summary = buildSummary(playerId, sortedPlayers, rowsByPlayer, eloMap);
+        const summary = buildSummary(playerId, analyticsPlayers, rowsByPlayer, eloMap);
         return {
           rank: 0,
           playerId,
@@ -751,7 +824,7 @@ export default function EloScreen() {
         ...row,
         rank: index + 1,
       }));
-  }, [sortedPlayers, rowsByPlayer, eloMap, selectedPlayerId]);
+  }, [analyticsPlayers, rowsByPlayer, eloMap, selectedPlayerId]);
 
   const featuredCard = topCards[0];
   const secondaryCards = topCards.slice(1, 3);
@@ -768,13 +841,32 @@ export default function EloScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Player</Text>
-            <Text style={styles.sectionSub}>Select focus player</Text>
+          <View style={styles.heroHeader}>
+            <View style={styles.heroTitleWrap}>
+              <Text style={styles.sectionTitle}>Player</Text>
+              <Text style={styles.heroSub}>Select focus player</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.commandButton}
+              onPress={() => router.push(APP_ROUTES.home)}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.commandButtonText}>Back to Command</Text>
+            </TouchableOpacity>
           </View>
 
+          <TextInput
+            value={playerSearchQuery}
+            onChangeText={setPlayerSearchQuery}
+            placeholder="Search players"
+            placeholderTextColor={COLORS.muted}
+            style={styles.playerSearchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
           <View style={styles.underlineSelectorRow}>
-            {sortedPlayers.map((player) => {
+            {filteredPlayerOptions.map((player) => {
               const active =
                 normalizeId(player.id) === normalizeId(selectedPlayerId);
               return (
@@ -802,6 +894,12 @@ export default function EloScreen() {
               );
             })}
           </View>
+
+          {filteredPlayerOptions.length ? null : (
+            <Text style={styles.emptyText}>
+              No players match that search yet.
+            </Text>
+          )}
         </View>
 
         {activeTab === "Context" ? (
@@ -1137,6 +1235,38 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     marginBottom: 6,
   },
+  heroHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  heroTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  heroSub: {
+    color: COLORS.sub,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  commandButton: {
+    alignSelf: "flex-start",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.28)",
+    backgroundColor: "rgba(8,18,32,0.84)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  commandButtonText: {
+    color: "#F3E8FF",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.35,
+  },
   insightCardCompact: {
     backgroundColor: COLORS.cardAlt,
     borderRadius: 14,
@@ -1167,6 +1297,19 @@ const styles = StyleSheet.create({
   emptyText: {
     color: COLORS.sub,
     fontSize: 11,
+  },
+  playerSearchInput: {
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    color: COLORS.text,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
   },
   underlineSelectorRow: {
     flexDirection: "row",

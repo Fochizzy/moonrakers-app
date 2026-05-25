@@ -10,14 +10,20 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /<UtilityButton[\s\S]*label=\{setupOpen \? "Launch" : "Adjust"\}[\s\S]*onPress=\{\(\) =>[\s\S]*setupOpen \? openChart\(selectedChart\) : openSetup\(\)[\s\S]*\}[\s\S]*tone=\{setupOpen \? "green" : "blue"\}[\s\S]*subtitle=\{setupOpen \? "Open current chart" : undefined\}[\s\S]*size="compact"/,
-  "expected the sticky setup CTA to switch into a launch action when setup is open"
+  /<View style=\{styles\.heroActionRow\}>[\s\S]*\{setupOpen \? \([\s\S]*label="Open Chart"[\s\S]*onPress=\{\(\) => openChart\(selectedChart\)\}[\s\S]*tone="green"[\s\S]*size="compact"[\s\S]*<SetupBackButton onPress=\{\(\) => setChartSetupOpen\(false\)\} \/>[\s\S]*\) : \([\s\S]*label="Adjust"[\s\S]*onPress=\{\(\) => openSetup\(\)\}[\s\S]*tone="blue"[\s\S]*size="compact"[\s\S]*\)\}/s,
+  "expected the hero action row to swap from Adjust into Open Chart plus Close Setup when setup is open, without a star action"
 );
 
 assert.doesNotMatch(
   source,
-  /<UtilityButton[\s\S]*label=\{setupOpen \? "Close" : "Adjust"\}[\s\S]*setupOpen \? setChartSetupOpen\(false\) : openSetup\(\)/,
-  "expected the sticky setup CTA to stop acting like a close toggle during chart setup"
+  /label=\{setupOpen \? "Close" : "Adjust"\}/,
+  "expected the sticky setup CTA to stop using the old Close label toggle during chart setup"
+);
+
+assert.doesNotMatch(
+  source,
+  /function StarButton|styles\.starButton|styles\.starText|styles\.starTextActive|<StarButton/,
+  "expected the chart header star affordance to be removed altogether"
 );
 
 console.log("chart-setup-primary-cta.test.cjs passed");

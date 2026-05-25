@@ -268,10 +268,10 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
       }),
     );
 
+    const winnerParticipant = participants.find((participant) => participant.is_winner);
     const winnerId =
       String(game.winner_profile_id ?? "").trim() ||
-      participants.find((participant) => participant.is_winner)?.profile_id ||
-      undefined;
+      (winnerParticipant ? resolvePlayerId(winnerParticipant) : undefined);
 
     const normalizedGame = normalizeGameWithComputedTotals({
       id: game.id,

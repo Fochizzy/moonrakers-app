@@ -10,22 +10,28 @@ function read(relPath) {
 
 const screenSource = read(path.join("app", "add-players.tsx"));
 
-assert.match(
+assert.doesNotMatch(
   screenSource,
-  /APP_ICONS\.fullProfile/,
-  "expected app/add-players.tsx to showcase full_profile.png on the roster page"
+  /Create player|Quick Add|Bring a new captain aboard|Player name|Save Player|Tap player to edit or delete|Edit player|Delete Player/,
+  "expected app/add-players.tsx to remove generic player creation and roster-edit affordances"
 );
 
 assert.match(
   screenSource,
-  /APP_ICONS\.orangePerson/,
-  "expected app/add-players.tsx to showcase orange_person.png on the roster page"
+  /Your player card/,
+  "expected app/add-players.tsx to focus the Players tab on the signed-in profile card"
 );
 
 assert.match(
   screenSource,
-  /Ada_Masa\.png/,
-  "expected app/add-players.tsx to showcase Ada_Masa.png on the roster page"
+  /Delete your profile/,
+  "expected app/add-players.tsx to expose a self-delete action instead of arbitrary player deletion"
+);
+
+assert.match(
+  screenSource,
+  /ProfileAppearancePicker/,
+  "expected app/add-players.tsx to use the shared profile appearance picker for color and card selection"
 );
 
 console.log("add-players-roster-assets-regression.test.cjs passed");

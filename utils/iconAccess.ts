@@ -7,7 +7,7 @@ export const APP_ICONS = {
   damage: require("../assets/icons/damage.png"),
   definitions: require("../assets/icons/definitions.png"),
   elo: require("../assets/icons/elo.png"),
-  fullProfile: require("../assets/icons/full_profile.png"),
+  fullProfile: require("../assets/icons/Yellow 2.png"),
   hazardDieHub: require("../assets/icons/Hazard_Die.png"),
   greenHub: require("../assets/icons/Green.png"),
   history: require("../assets/icons/history.png"),

@@ -1,13 +1,29 @@
 import { supabase } from "../supabase";
 import { normalizeCloudSnapshot } from "./normalizeCloudSnapshot";
+import { isDeletedAtColumnMissingError } from "./profileSoftDeleteCompat";
 
-export async function loadCloudSnapshot(profileId: string) {
-  const [profileResult, groupsResult, gamesResult] = await Promise.all([
-    supabase
+async function loadProfileRow(profileId: string) {
+  let { data, error } = await supabase
+    .from("profiles")
+    .select("id, player_name, display_name, favorite_color, assigned_card_art_index")
+    .eq("id", profileId)
+    .is("deleted_at", null)
+    .single();
+
+  if (isDeletedAtColumnMissingError(error)) {
+    ({ data, error } = await supabase
       .from("profiles")
       .select("id, player_name, display_name, favorite_color, assigned_card_art_index")
       .eq("id", profileId)
-      .single(),
+      .single());
+  }
+
+  return { data, error };
+}
+
+export async function loadCloudSnapshot(profileId: string) {
+  const [profileResult, groupsResult, gamesResult] = await Promise.all([
+    loadProfileRow(profileId),
     supabase
       .from("groups")
       .select(
@@ -24,10 +40,10 @@ export async function loadCloudSnapshot(profileId: string) {
               favorite_color,
               assigned_card_art_index
             )
-          )
+            )
         `,
       )
-      .eq("created_by", profileId),
+      .order("name", { ascending: true }),
     supabase
       .from("games")
       .select(

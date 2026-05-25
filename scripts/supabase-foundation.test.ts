@@ -43,6 +43,26 @@ assert.match(
   }),
   /Fochizzy/,
 );
+assert.match(
+  formatSupabaseConfigError({
+    message:
+      "get_chart_dataset failed: Could not find the function public.get_chart_dataset(chart_key, compare_player_id, focus_player_id, graph_mode, line_mode, metric_key, opponent_id, profile_id, scoped_player_ids, selected_game_id) in the schema cache",
+  }),
+  /analytics schema update/,
+);
+assert.match(
+  formatSupabaseConfigError({
+    message:
+      "get_stats_screen failed: Could not find the function public.get_stats_screen(profile_id) in the schema cache",
+  }),
+  /analytics schema update|schema-cache refresh/i,
+);
+assert.match(
+  formatSupabaseConfigError({
+    message: "permission denied for function get_stats_screen",
+  }),
+  /analytics schema update|backend sync|schema-cache refresh/i,
+);
 assert.equal(
   buildSupabaseRedirectUrl("moonrakers"),
   "moonrakers://auth/callback",

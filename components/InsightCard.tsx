@@ -93,10 +93,9 @@ export default memo(InsightCard);
 
 const styles = StyleSheet.create({
   cardWrapper: {
-    flex: 1,
+    minWidth: 0,
   },
   card: {
-    flex: 1,
     position: 'relative',
     borderRadius: 16,
     padding: 14,
@@ -161,5 +160,4 @@ const styles = StyleSheet.create({
     color: '#e2e8f0',
   },
 });
-
 

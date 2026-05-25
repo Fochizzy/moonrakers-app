@@ -1,12 +1,16 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
+import { getAnalyticsHome } from "@/lib/cloud/analytics/getAnalyticsHome";
+import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
+import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { getAnalyticsHubCards } from "@/utils/appHubs";
+import { APP_ROUTES } from "@/utils/appRoutes";
 import { APP_ICONS } from "@/utils/iconAccess";
 
 const CARD_TONES: Record<
@@ -55,6 +59,16 @@ const CARD_TONES: Record<
     panel: "rgba(56,20,44,0.54)",
   },
 };
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function toCount(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
 
 function StatBlock({
   label,
@@ -114,29 +128,92 @@ function AnalyticsCard({
         pressed && styles.cardPressed,
       ]}
     >
-      <View style={styles.cardHeader}>
-        <CroppedHubIcon iconKey={card.iconKey} accent={accent} />
-        <Text style={[styles.cardEyebrow, { color: accent }]}>{card.eyebrow}</Text>
-      </View>
+      {fullWidth ? (
+        <View style={styles.cardWideRow}>
+          <CroppedHubIcon iconKey={card.iconKey} accent={accent} />
 
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>{card.title}</Text>
-        <View style={[styles.cardBodyPanel, { backgroundColor: tone.panel }]}>
-          <Text style={styles.cardDescription}>{card.description}</Text>
+          <View style={styles.cardWideContent}>
+            <View style={styles.cardWideTitleWrap}>
+              <Text style={[styles.cardTitle, styles.cardTitleWide]}>{card.title}</Text>
+            </View>
+          </View>
         </View>
-      </View>
+      ) : (
+        <>
+          <View style={styles.cardHeader}>
+            <CroppedHubIcon iconKey={card.iconKey} accent={accent} />
+          </View>
+
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>{card.title}</Text>
+          </View>
+        </>
+      )}
     </Pressable>
   );
 }
 
 export default function AnalyticsScreen() {
   const router = useRouter();
+  const authSession = useStore((state: any) => state.authSession);
+  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const cards = useMemo(() => getAnalyticsHubCards(), []);
-  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
-  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
+  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const profileId = String(authSession?.user?.id ?? "").trim();
+      if (!profileId) {
+        if (!cancelled) {
+          setPayload(null);
+          setError(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const nextPayload = await getAnalyticsHome({
+          profileId,
+        });
+
+        if (!cancelled) {
+          setPayload(toRecord(nextPayload));
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(formatSupabaseConfigError(nextError) || "Failed to load analytics.");
+          setPayload(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.user?.id, analyticsRefreshTick]);
+
+  const hero = toRecord(payload?.hero);
   const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
+  const heroMessage = error
+    ? error
+    : loading
+      ? "Syncing Supabase-authored analytics."
+      : "Counts on this screen come from Supabase analytics payloads.";
 
   return (
     <PageShell
@@ -146,16 +223,25 @@ export default function AnalyticsScreen() {
     >
       <HeroCard
         eyebrow="Data Center"
+        headerAction={
+          <Pressable
+            style={styles.commandButton}
+            onPress={() => router.push(APP_ROUTES.home)}
+          >
+            <Text style={styles.commandButtonText}>Back to Command</Text>
+          </Pressable>
+        }
         title="Analytics"
         size="compact"
         variant="stat"
         style={styles.heroCard}
       >
         <View style={styles.statsRow}>
-          <StatBlock label="Players" value={players.length} />
-          <StatBlock label="Games" value={games.length} />
-          <StatBlock label="Views" value={cards.length} />
+          <StatBlock label="Players" value={toCount(hero.players)} />
+          <StatBlock label="Games" value={toCount(hero.games)} />
+          <StatBlock label="Views" value={toCount(hero.views, cards.length)} />
         </View>
+        <Text style={styles.heroMeta}>{heroMessage}</Text>
       </HeroCard>
 
       <View style={styles.grid}>
@@ -189,15 +275,36 @@ export default function AnalyticsScreen() {
 
 const styles = StyleSheet.create({
   pageContent: {
-    gap: 12,
-    paddingBottom: 18,
+    gap: 10,
+    paddingBottom: 8,
   },
   heroCard: {
     borderRadius: 22,
   },
+  commandButton: {
+    alignSelf: "flex-start",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(117, 211, 252, 0.28)",
+    backgroundColor: "rgba(8, 18, 32, 0.84)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  commandButtonText: {
+    color: "#DFF6FF",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.35,
+  },
   statsRow: {
     flexDirection: "row",
     gap: 10,
+  },
+  heroMeta: {
+    color: "#BBD2F6",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 8,
   },
   statBlock: {
     flex: 1,
@@ -225,13 +332,13 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
   },
   card: {
     borderWidth: 1,
     borderRadius: 22,
-    padding: 14,
-    gap: 10,
+    padding: 12,
+    gap: 8,
     overflow: "hidden",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
@@ -240,73 +347,72 @@ const styles = StyleSheet.create({
   },
   cardStandard: {
     width: "48.5%",
-    minHeight: 172,
+    minHeight: 168,
   },
   cardWide: {
     width: "100%",
-    minHeight: 120,
+    minHeight: 140,
   },
   cardPressed: {
     transform: [{ scale: 0.985 }],
   },
+  cardWideRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
   cardHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 8,
   },
+  cardWideContent: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    position: "relative",
+    paddingRight: 8,
+  },
   iconShell: {
-    width: 64,
-    height: 52,
-    borderRadius: 18,
+    width: 128,
+    height: 104,
+    borderRadius: 28,
     borderWidth: 1,
-    padding: 5,
+    padding: 6,
     backgroundColor: "rgba(255,255,255,0.03)",
     alignItems: "center",
     justifyContent: "center",
   },
   iconPreviewFrame: {
-    width: 46,
-    height: 46,
+    width: 92,
+    height: 92,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    borderRadius: 16,
+    borderRadius: 32,
     backgroundColor: "rgba(255,255,255,0.03)",
   },
   iconImage: {
-    width: 40,
-    height: 40,
-  },
-  cardEyebrow: {
-    flex: 1,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    textAlign: "right",
+    width: 80,
+    height: 80,
   },
   cardBody: {
     flex: 1,
-    gap: 8,
+    justifyContent: "flex-end",
+  },
+  cardWideTitleWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   cardTitle: {
     color: "#FFFFFF",
     fontSize: 20,
     fontWeight: "900",
   },
-  cardBodyPanel: {
-    marginTop: "auto",
-    minHeight: 58,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    justifyContent: "flex-start",
-  },
-  cardDescription: {
-    color: "#E8EEF8",
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: "600",
+  cardTitleWide: {
+    textAlign: "center",
   },
 });

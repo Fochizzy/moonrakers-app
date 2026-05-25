@@ -135,6 +135,10 @@ export type StackedRow = {
 
 export type Relationships = Record<string, Record<string, number>>;
 
+export type CommonOpponentOption = StorePlayer & {
+  gamesPlayed: number;
+};
+
 export type MetricOption = {
   key: SimpleMetricKey;
   label: string;
@@ -215,6 +219,16 @@ function normalizeLooseName(value: unknown): string {
     .replace(/[_-]+/g, " ")
     .replace(/[^a-z0-9 ]+/g, "")
     .replace(/\s+/g, " ");
+}
+
+function normalizeLegacyAwareNameKey(value: unknown): string {
+  return normalizeLooseName(value)
+    .replace(/^(legacy|local)\s+/i, "")
+    .trim();
+}
+
+function normalizeId(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
 function normalizeChartKey(chartKey?: string | null): string {
@@ -417,26 +431,174 @@ export function getPlayerById(players: StorePlayer[], id?: string | null) {
   return (players ?? []).find((player) => String(player.id) === String(id)) ?? null;
 }
 
+export function resolvePreferredChartPlayerId(args: {
+  availablePlayers: StorePlayer[];
+  routePlayerId?: string | null;
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+}) {
+  const {
+    availablePlayers,
+    routePlayerId,
+    authProfileId,
+    authSessionUserId,
+  } = args;
+
+  const availableIds = new Set(
+    (availablePlayers ?? [])
+      .map((player) => normalizeId(player?.id))
+      .filter(Boolean),
+  );
+
+  const explicitRouteId = normalizeId(routePlayerId);
+  if (explicitRouteId && availableIds.has(explicitRouteId)) {
+    return explicitRouteId;
+  }
+
+  const profileId = normalizeId(authProfileId);
+  if (profileId && availableIds.has(profileId)) {
+    return profileId;
+  }
+
+  const sessionUserId = normalizeId(authSessionUserId);
+  if (sessionUserId && availableIds.has(sessionUserId)) {
+    return sessionUserId;
+  }
+
+  return availablePlayers?.[0]?.id ? normalizeId(availablePlayers[0].id) : null;
+}
+
+export function buildCommonOpponentOptions(args: {
+  playerId?: string | null;
+  players: StorePlayer[];
+  games: NormalizedGame[];
+  limit?: number;
+}): CommonOpponentOption[] {
+  const { playerId, players, games, limit = 5 } = args;
+  const focusPlayerId = normalizeId(playerId);
+
+  if (!focusPlayerId) {
+    return [];
+  }
+
+  const playerMap = new Map<string, StorePlayer>();
+  for (const player of players ?? []) {
+    const normalizedId = normalizeId(player?.id);
+    if (!normalizedId) continue;
+    playerMap.set(normalizedId, player);
+  }
+
+  const opponentCounts = new Map<string, number>();
+
+  for (const game of games ?? []) {
+    const gamePlayerIds = new Set<string>();
+
+    for (const player of Array.isArray(game?.players) ? game.players : []) {
+      const normalizedId = normalizeId(player?.id);
+      if (normalizedId) {
+        gamePlayerIds.add(normalizedId);
+      }
+    }
+
+    for (const rawId of Object.keys(game?.totals ?? {})) {
+      const normalizedId = normalizeId(rawId);
+      if (normalizedId) {
+        gamePlayerIds.add(normalizedId);
+      }
+    }
+
+    if (!gamePlayerIds.has(focusPlayerId)) {
+      continue;
+    }
+
+    gamePlayerIds.delete(focusPlayerId);
+
+    for (const opponentId of gamePlayerIds) {
+      if (!playerMap.has(opponentId)) {
+        continue;
+      }
+
+      opponentCounts.set(
+        opponentId,
+        toNumber(opponentCounts.get(opponentId)) + 1,
+      );
+    }
+  }
+
+  return [...opponentCounts.entries()]
+    .map(([id, gamesPlayed]): CommonOpponentOption | null => {
+      const player = playerMap.get(id);
+      return player
+        ? {
+            id: String(player.id ?? id),
+            name: player.name,
+            color: player.color,
+            initials: player.initials,
+            assignedCardArtIndex:
+              typeof player.assignedCardArtIndex === "number" &&
+              Number.isFinite(player.assignedCardArtIndex)
+                ? player.assignedCardArtIndex
+                : null,
+            artIndex:
+              typeof player.artIndex === "number" &&
+              Number.isFinite(player.artIndex)
+                ? player.artIndex
+                : null,
+            gamesPlayed,
+          }
+        : null;
+    })
+    .filter((player): player is CommonOpponentOption => player !== null)
+    .sort((left, right) => {
+      if (right.gamesPlayed !== left.gamesPlayed) {
+        return right.gamesPlayed - left.gamesPlayed;
+      }
+
+      const leftName = String(left.name ?? left.id ?? "").trim();
+      const rightName = String(right.name ?? right.id ?? "").trim();
+      return leftName.localeCompare(rightName);
+    })
+    .slice(0, Math.max(0, limit));
+}
+
 function createPlayerMatcher(players: StorePlayer[]) {
   const byId = new Map<string, StorePlayer>();
   const byName = new Map<string, StorePlayer>();
+  const byLegacyAwareName = new Map<string, StorePlayer>();
 
   for (const player of players ?? []) {
     const id = String(player?.id ?? "").trim();
     const nameKey = normalizeLooseName(player?.name);
+    const legacyAwareNameKey = normalizeLegacyAwareNameKey(player?.name);
     if (id) byId.set(id, player);
     if (nameKey && !byName.has(nameKey)) byName.set(nameKey, player);
+    if (legacyAwareNameKey && !byLegacyAwareName.has(legacyAwareNameKey)) {
+      byLegacyAwareName.set(legacyAwareNameKey, player);
+    }
   }
 
   return {
     resolve(rawPlayer: any, totalsEntry?: any): StorePlayer | null {
       const rawId = String(rawPlayer?.id ?? rawPlayer?.playerId ?? "").trim();
       const rawNameKey = normalizeLooseName(rawPlayer?.name);
+      const rawLegacyAwareNameKey = normalizeLegacyAwareNameKey(rawPlayer?.name);
       const totalsNameKey = normalizeLooseName(totalsEntry?.name ?? totalsEntry?.playerName);
+      const totalsLegacyAwareNameKey = normalizeLegacyAwareNameKey(
+        totalsEntry?.name ?? totalsEntry?.playerName
+      );
 
       if (rawId && byId.has(rawId)) return byId.get(rawId)!;
       if (rawNameKey && byName.has(rawNameKey)) return byName.get(rawNameKey)!;
       if (totalsNameKey && byName.has(totalsNameKey)) return byName.get(totalsNameKey)!;
+      if (rawLegacyAwareNameKey && byLegacyAwareName.has(rawLegacyAwareNameKey)) {
+        return byLegacyAwareName.get(rawLegacyAwareNameKey)!;
+      }
+      if (
+        totalsLegacyAwareNameKey &&
+        byLegacyAwareName.has(totalsLegacyAwareNameKey)
+      ) {
+        return byLegacyAwareName.get(totalsLegacyAwareNameKey)!;
+      }
 
       return null;
     },
@@ -939,11 +1101,18 @@ export function buildUnifiedSnapshots(
 export function buildReplaySnapshotsFromGame(
   game?: NormalizedGame | null
 ): SnapshotPoint[] {
-  if (!game?.rounds?.length) return [];
+  const replayRounds =
+    Array.isArray(game?.rounds) && game.rounds.length > 0
+      ? game.rounds
+      : Array.isArray(game?.timeline)
+        ? game.timeline
+        : [];
+
+  if (!replayRounds.length) return [];
 
   const running: Record<string, Record<string, number | string>> = {};
 
-  return game.rounds.map((round, index) => {
+  return replayRounds.map((round, index) => {
     const playerId = String(round?.playerId ?? "").trim();
     if (!playerId) {
       return {

@@ -45,7 +45,7 @@ module.exports = {
       ]
     ],
     android: {
-      package: 'com.fochizzy87.moonrakers',
+      package: 'com.fochizzy.moonrakers',
       adaptiveIcon: {
         foregroundImage: APP_ICON_PATH,
         backgroundColor: '#02030A'

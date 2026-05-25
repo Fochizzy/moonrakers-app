@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   ScrollView,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   View,
   type StyleProp,
@@ -35,17 +36,20 @@ import {
   withChartAlpha,
   type ChartTone,
 } from "@/components/charts/chartVisualSystem";
+import { getChartSetup } from "@/lib/cloud/analytics/getChartSetup";
+import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
+import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
-import {
-  getSupportedMetricKeysForChart,
-  normalizeMetricForChart,
-  type SimpleMetricKey,
-} from "@/utils/charts";
+import { APP_ROUTES } from "@/utils/appRoutes";
 import {
   buildRouteScopeSeedKey,
   getPreferredScopeIdsForChart,
 } from "@/utils/chartHubRouteState";
-import { getMetricOrFallback } from "@/utils/metricMap";
+import { buildAnalyticsPlayerDirectory } from "@/utils/analyticsPlayers";
+import {
+  buildCommonOpponentOptions,
+  resolvePreferredChartPlayerId,
+} from "@/utils/charts";
 
 function getParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -67,12 +71,6 @@ function isTruthyParam(value?: string | string[]) {
   return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
-type StorePlayer = {
-  id: string;
-  name?: string;
-  color?: string;
-};
-
 type EloSetupTab =
   | "Leaderboard"
   | "Momentum"
@@ -82,6 +80,16 @@ type EloSetupTab =
 type SetupOption = {
   key: string;
   label: string;
+};
+
+type SetupDefaults = {
+  focusPlayerId: string | null;
+  comparePlayerId: string | null;
+  scopedPlayerIds: string[];
+  metricKey: string | null;
+  lineMode: string | null;
+  eloTab: string | null;
+  opponentId: string | null;
 };
 
 const LINE_MODE_OPTIONS: readonly LineMode[] = ["raw", "cumulative", "average"];
@@ -120,12 +128,82 @@ function normalizeEloTab(value?: string | string[]) {
   );
 }
 
-function supportsLineView(chartKey: ChartCatalogKey) {
-  return (
-    chartKey === "line_chart" ||
-    chartKey === "multi_line_chart" ||
-    chartKey === "prestige_over_time"
-  );
+function toSetupOptions(value: unknown): SetupOption[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry, index) => ({
+      key: String(entry.key ?? entry.id ?? `option-${index}`),
+      label: String(entry.label ?? entry.name ?? entry.title ?? `Option ${index + 1}`),
+    }))
+    .filter((entry) => entry.key.trim().length > 0);
+}
+
+function toStringOrNull(value: unknown): string | null {
+  const normalized = String(value ?? "").trim();
+  return normalized ? normalized : null;
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .map((entry) => String(entry ?? "").trim())
+        .filter(Boolean)
+    : [];
+}
+
+function toSetupDefaults(value: unknown): SetupDefaults {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+
+  return {
+    focusPlayerId: toStringOrNull(record.focusPlayerId),
+    comparePlayerId: toStringOrNull(record.comparePlayerId),
+    scopedPlayerIds: toStringArray(record.scopedPlayerIds),
+    metricKey: toStringOrNull(record.metricKey),
+    lineMode: toStringOrNull(record.lineMode),
+    eloTab: toStringOrNull(record.eloTab),
+    opponentId: toStringOrNull(record.opponentId),
+  };
+}
+
+function findOption(options: readonly SetupOption[], key?: string | null) {
+  const normalized = String(key ?? "").trim();
+  if (!normalized) return null;
+  return options.find((option) => String(option.key) === normalized) ?? null;
+}
+
+function resolveOptionKey(
+  options: readonly SetupOption[],
+  ...candidates: Array<string | null | undefined>
+) {
+  for (const candidate of candidates) {
+    const match = findOption(options, candidate);
+    if (match) {
+      return String(match.key);
+    }
+  }
+
+  return options[0] ? String(options[0].key) : null;
+}
+
+function haveSameIds(left: readonly string[], right: readonly string[]) {
+  if (left.length !== right.length) return false;
+  return left.every((id, index) => String(id) === String(right[index]));
+}
+
+function sanitizeSelectedIds(
+  options: readonly SetupOption[],
+  ids: readonly string[],
+  fallbackIds: readonly string[],
+) {
+  const validIds = new Set(options.map((option) => String(option.key)));
+  const nextIds = ids.filter((id) => validIds.has(String(id)));
+  if (nextIds.length) return nextIds;
+  return fallbackIds.filter((id) => validIds.has(String(id)));
 }
 
 function canUseSegmentedControl(items: readonly SetupOption[]) {
@@ -168,36 +246,33 @@ function SetupTabs({
   );
 }
 
-function ActionChip({
+function ScopeTab({
   label,
   active,
-  tone,
   onPress,
 }: {
   label: string;
   active: boolean;
-  tone: ChartTone;
   onPress: () => void;
 }) {
-  const quiet = getQuietChipStyle(active ? tone : "neutral");
   return (
     <TouchableOpacity
-      style={[
-        styles.actionChip,
-        {
-          backgroundColor: quiet.backgroundColor,
-          borderColor: quiet.borderColor,
-        },
-      ]}
+      style={styles.scopeTab}
       onPress={onPress}
       activeOpacity={0.9}
     >
       <Text
         numberOfLines={1}
-        style={[styles.actionChipText, { color: quiet.textColor }]}
+        style={[styles.scopeTabText, active && styles.scopeTabTextActive]}
       >
         {label}
       </Text>
+      <View
+        style={[
+          styles.scopeTabUnderline,
+          active && styles.scopeTabUnderlineActive,
+        ]}
+      />
     </TouchableOpacity>
   );
 }
@@ -456,9 +531,12 @@ export default function ChartsIndexScreen() {
     opponentId?: string | string[];
     setup?: string | string[];
   }>();
-  const players = useStore((state: any) =>
-    Array.isArray(state?.players) ? state.players : []
-  ) as StorePlayer[];
+  const authSession = useStore((state: any) => state.authSession);
+  const authProfile = useStore((state: any) => state?.authProfile ?? null);
+  const players = useStore((state: any) => state?.players ?? []);
+  const games = useStore((state: any) => state?.games ?? []);
+  const groups = useStore((state: any) => state?.groups ?? []);
+  const analyticsRefreshTick = useAnalyticsRefreshTick();
 
   const routeChartKey = normalizeChartHubSelection(
     getParam(params.chartKey)
@@ -473,25 +551,15 @@ export default function ChartsIndexScreen() {
   const routeOpponentId = getParam(params.opponentId);
   const routeSetupOpen = isTruthyParam(params.setup);
 
-  const sortedPlayers = useMemo(
-    () =>
-      [...players].sort((left, right) =>
-        String(left?.name || "").localeCompare(String(right?.name || ""))
-      ),
-    [players]
-  );
-
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(
     routePlayerId ?? null
   );
   const [comparePlayerId, setComparePlayerId] = useState<string | null>(
     routeCompareId ?? null
   );
-  const [selectedMetric, setSelectedMetric] =
-    useState<SimpleMetricKey>(
-      (normalizeMetricForChart(routeChartKey, routeMetric) ??
-        "totalPrestige") as SimpleMetricKey
-    );
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(
+    routeMetric ? String(routeMetric).trim() : null
+  );
   const [selectedChartKey, setSelectedChartKey] =
     useState<ChartCatalogKey>(routeChartKey);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(routeIds);
@@ -500,17 +568,191 @@ export default function ChartsIndexScreen() {
     [selectedChartKey, routeIds]
   );
   const [selectedLineMode, setSelectedLineMode] =
-    useState<LineMode>(routeLineMode);
+    useState<string>(routeLineMode);
   const [selectedEloTab, setSelectedEloTab] =
-    useState<EloSetupTab>(routeEloTab);
+    useState<string>(routeEloTab);
   const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(
     routeOpponentId ?? null
   );
+  const [focusPlayerSearch, setFocusPlayerSearch] = useState("");
   const [setupOpen, setSetupOpen] = useState(routeSetupOpen);
+  const [setupPayload, setSetupPayload] = useState<Record<string, unknown> | null>(null);
+  const [setupLoading, setSetupLoading] = useState(true);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const deferredFocusPlayerSearch = useDeferredValue(focusPlayerSearch);
+  const selectedChart = useMemo(
+    () => resolveChartCatalogEntry(selectedChartKey),
+    [selectedChartKey]
+  );
+  const focusPlayerOptions = useMemo(
+    () => toSetupOptions(setupPayload?.focusPlayerOptions),
+    [setupPayload?.focusPlayerOptions]
+  );
+  const comparePlayerOptions = useMemo(
+    () => toSetupOptions(setupPayload?.comparePlayerOptions),
+    [setupPayload?.comparePlayerOptions]
+  );
+  const scopePlayerOptions = useMemo(
+    () => toSetupOptions(setupPayload?.scopePlayerOptions),
+    [setupPayload?.scopePlayerOptions]
+  );
+  const metricOptions = useMemo(
+    () => toSetupOptions(setupPayload?.metricOptions),
+    [setupPayload?.metricOptions]
+  );
+  const lineModeOptions = useMemo(
+    () => toSetupOptions(setupPayload?.lineModeOptions),
+    [setupPayload?.lineModeOptions]
+  );
+  const eloViewOptions = useMemo(
+    () => toSetupOptions(setupPayload?.eloViewOptions),
+    [setupPayload?.eloViewOptions]
+  );
+  const opponentOptions = useMemo(
+    () => toSetupOptions(setupPayload?.opponentOptions),
+    [setupPayload?.opponentOptions]
+  );
+  const setupDefaults = useMemo(
+    () => toSetupDefaults(setupPayload?.defaults),
+    [setupPayload?.defaults]
+  );
+  const scopePlayerIds = useMemo(
+    () => scopePlayerOptions.map((option) => String(option.key)),
+    [scopePlayerOptions]
+  );
+  const scopePlayerIdentities = useMemo(
+    () => scopePlayerOptions.map((option) => ({ id: String(option.key) })),
+    [scopePlayerOptions]
+  );
+  const analyticsDirectory = useMemo(
+    () => buildAnalyticsPlayerDirectory({ players, games, groups }),
+    [players, games, groups]
+  );
+  const focusPlayerDirectoryPlayers = useMemo(() => {
+    const playerById = new Map(
+      analyticsDirectory.players.map((player) => [String(player.id), player])
+    );
+
+    return focusPlayerOptions.map((option) => {
+      const matched = playerById.get(String(option.key));
+      return {
+        id: String(option.key),
+        name: option.label || matched?.name || "Player",
+        color: matched?.color,
+        initials: matched?.initials,
+        assignedCardArtIndex:
+          typeof matched?.assignedCardArtIndex === "number"
+            ? matched.assignedCardArtIndex
+            : null,
+        artIndex:
+          typeof matched?.artIndex === "number"
+            ? matched.artIndex
+            : null,
+      };
+    });
+  }, [analyticsDirectory.players, focusPlayerOptions]);
+  const preferredFocusPlayerId = useMemo(
+    () =>
+      resolvePreferredChartPlayerId({
+        availablePlayers: focusPlayerDirectoryPlayers,
+        routePlayerId,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+      }),
+    [focusPlayerDirectoryPlayers, routePlayerId, authProfile?.id, authSession?.user?.id]
+  );
+  const topCommonFocusPlayers = useMemo(
+    () =>
+      buildCommonOpponentOptions({
+        playerId: preferredFocusPlayerId,
+        players: focusPlayerDirectoryPlayers,
+        games: analyticsDirectory.games,
+        limit: 3,
+      }),
+    [preferredFocusPlayerId, focusPlayerDirectoryPlayers, analyticsDirectory.games]
+  );
+  const quickFocusPlayerOptions = useMemo(() => {
+    const optionByKey = new Map(
+      focusPlayerOptions.map((option) => [String(option.key), option])
+    );
+    const seen = new Set<string>();
+    const ordered: SetupOption[] = [];
+
+    const pushOption = (optionKey?: string | null) => {
+      const normalizedKey = String(optionKey ?? "").trim();
+      if (!normalizedKey || seen.has(normalizedKey)) return;
+
+      const match = optionByKey.get(normalizedKey);
+      if (!match) return;
+
+      seen.add(normalizedKey);
+      ordered.push(match);
+    };
+
+    pushOption(preferredFocusPlayerId);
+    topCommonFocusPlayers.forEach((player) => pushOption(String(player.id)));
+
+    return ordered;
+  }, [focusPlayerOptions, preferredFocusPlayerId, topCommonFocusPlayers]);
+  const filteredFocusPlayerOptions = useMemo(() => {
+    const normalizedQuery = deferredFocusPlayerSearch.trim().toLowerCase();
+    if (!normalizedQuery) return [];
+
+    return focusPlayerOptions.filter((option) =>
+      String(option.label ?? "").toLowerCase().includes(normalizedQuery)
+    );
+  }, [focusPlayerOptions, deferredFocusPlayerSearch]);
 
   useEffect(() => {
     setSelectedChartKey(routeChartKey);
   }, [routeChartKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      const profileId = String(authSession?.user?.id ?? "").trim();
+      if (!profileId) {
+        if (!cancelled) {
+          setSetupPayload(null);
+          setSetupError(null);
+          setSetupLoading(false);
+        }
+        return;
+      }
+
+      setSetupLoading(true);
+      setSetupError(null);
+
+      try {
+        const nextPayload = await getChartSetup({
+          chartKey: selectedChart.key,
+          profileId,
+        });
+
+        if (!cancelled) {
+          setSetupPayload(nextPayload as unknown as Record<string, unknown>);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setSetupPayload(null);
+          setSetupError(
+            formatSupabaseConfigError(nextError) || "Failed to load chart setup.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setSetupLoading(false);
+        }
+      }
+    }
+
+    void loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.user?.id, selectedChart.key, analyticsRefreshTick]);
 
   useEffect(() => {
     if (getParam(params.setup) != null) {
@@ -519,50 +761,104 @@ export default function ChartsIndexScreen() {
   }, [params.setup, routeSetupOpen]);
 
   useEffect(() => {
-    if (getParam(params.lineMode) != null) {
-      setSelectedLineMode(routeLineMode);
-    }
-  }, [params.lineMode, routeLineMode]);
-
-  useEffect(() => {
-    if (getParam(params.eloTab) != null) {
-      setSelectedEloTab(routeEloTab);
-    }
-  }, [params.eloTab, routeEloTab]);
-
-  useEffect(() => {
-    if (!routePlayerId) return;
-    const match = sortedPlayers.find(
-      (player) => String(player.id) === String(routePlayerId)
+    const nextLineMode = resolveOptionKey(
+      lineModeOptions,
+      getParam(params.lineMode) != null ? routeLineMode : null,
+      selectedLineMode,
+      setupDefaults.lineMode,
     );
-    if (match) {
-      setSelectedPlayerId(String(match.id));
+    if (nextLineMode && nextLineMode !== selectedLineMode) {
+      setSelectedLineMode(nextLineMode);
     }
-  }, [routePlayerId, sortedPlayers]);
+  }, [lineModeOptions, params.lineMode, routeLineMode, selectedLineMode, setupDefaults.lineMode]);
 
   useEffect(() => {
-    if (!routeCompareId) return;
-    const match = sortedPlayers.find(
-      (player) => String(player.id) === String(routeCompareId)
+    const nextEloTab = resolveOptionKey(
+      eloViewOptions,
+      getParam(params.eloTab) != null ? routeEloTab : null,
+      selectedEloTab,
+      setupDefaults.eloTab,
     );
-    if (match) {
-      setComparePlayerId(String(match.id));
+    if (nextEloTab && nextEloTab !== selectedEloTab) {
+      setSelectedEloTab(nextEloTab);
     }
-  }, [routeCompareId, sortedPlayers]);
+  }, [eloViewOptions, params.eloTab, routeEloTab, selectedEloTab, setupDefaults.eloTab]);
 
   useEffect(() => {
-    if (!routeOpponentId) return;
-    const match = sortedPlayers.find(
-      (player) => String(player.id) === String(routeOpponentId)
+    const activeId = String(selectedPlayerId ?? "").trim();
+    const hasActivePlayer = focusPlayerOptions.some(
+      (option) => String(option.key) === activeId
     );
-    if (match) {
-      setSelectedOpponentId(String(match.id));
+
+    if (!activeId || !hasActivePlayer) {
+      setSelectedPlayerId(
+        preferredFocusPlayerId ?? (focusPlayerOptions[0] ? String(focusPlayerOptions[0].key) : null)
+      );
+      return;
     }
-  }, [routeOpponentId, sortedPlayers]);
+
+    const nextSelectedPlayerId = resolveOptionKey(
+      focusPlayerOptions,
+      routePlayerId,
+      activeId,
+      preferredFocusPlayerId,
+      setupDefaults.focusPlayerId,
+    );
+    if (nextSelectedPlayerId !== selectedPlayerId) {
+      setSelectedPlayerId(nextSelectedPlayerId);
+    }
+  }, [
+    focusPlayerOptions,
+    preferredFocusPlayerId,
+    routePlayerId,
+    selectedPlayerId,
+    setupDefaults.focusPlayerId,
+  ]);
+
+  useEffect(() => {
+    const nextComparePlayerId = resolveOptionKey(
+      comparePlayerOptions,
+      routeCompareId,
+      comparePlayerId,
+      setupDefaults.comparePlayerId,
+    );
+    if (nextComparePlayerId !== comparePlayerId) {
+      setComparePlayerId(nextComparePlayerId);
+    }
+  }, [comparePlayerId, comparePlayerOptions, routeCompareId, setupDefaults.comparePlayerId]);
+
+  useEffect(() => {
+    const nextSelectedOpponentId = resolveOptionKey(
+      opponentOptions,
+      routeOpponentId,
+      selectedOpponentId,
+      setupDefaults.opponentId,
+      "none",
+    );
+    if (nextSelectedOpponentId !== selectedOpponentId) {
+      setSelectedOpponentId(nextSelectedOpponentId);
+    }
+  }, [opponentOptions, routeOpponentId, selectedOpponentId, setupDefaults.opponentId]);
+
+  useEffect(() => {
+    const nextMetric = resolveOptionKey(
+      metricOptions,
+      routeMetric,
+      selectedMetric,
+      setupDefaults.metricKey,
+    );
+    if (nextMetric !== selectedMetric) {
+      setSelectedMetric(nextMetric);
+    }
+  }, [metricOptions, routeMetric, selectedMetric, setupDefaults.metricKey]);
 
   useEffect(() => {
     if (!routeScopeSeedKey) {
       appliedRouteScopeKeyRef.current = null;
+      return;
+    }
+
+    if (!scopePlayerIdentities.length) {
       return;
     }
 
@@ -574,7 +870,7 @@ export default function ChartsIndexScreen() {
       chartKey: selectedChartKey,
       routeIds,
       currentIds: selectedGroupIds,
-      players: sortedPlayers,
+      players: scopePlayerIdentities,
     });
 
     if (nextRouteGroupIds) {
@@ -582,48 +878,30 @@ export default function ChartsIndexScreen() {
     }
 
     appliedRouteScopeKeyRef.current = routeScopeSeedKey;
-  }, [routeIds, routeScopeSeedKey, selectedChartKey, selectedGroupIds, sortedPlayers]);
-
-  useEffect(() => {
-    if (!selectedPlayerId && sortedPlayers.length) {
-      setSelectedPlayerId(String(sortedPlayers[0].id));
-    }
-  }, [selectedPlayerId, sortedPlayers]);
-
-  useEffect(() => {
-    if (!comparePlayerId && sortedPlayers.length > 1) {
-      const fallback = sortedPlayers.find(
-        (player) => String(player.id) !== String(selectedPlayerId)
-      );
-      if (fallback) setComparePlayerId(String(fallback.id));
-    }
-  }, [comparePlayerId, selectedPlayerId, sortedPlayers]);
+  }, [routeIds, routeScopeSeedKey, scopePlayerIdentities, selectedChartKey, selectedGroupIds]);
 
   useEffect(() => {
     setSelectedGroupIds((current) => {
-      if (!sortedPlayers.length) return [];
-      const valid = current.filter((id) =>
-        sortedPlayers.some((player) => String(player.id) === String(id))
-      );
-      if (valid.length) return valid;
-      return sortedPlayers
-        .slice(0, Math.min(4, sortedPlayers.length))
-        .map((player) => String(player.id));
+      const fallbackIds = setupDefaults.scopedPlayerIds.length
+        ? sanitizeSelectedIds(scopePlayerOptions, setupDefaults.scopedPlayerIds, [])
+        : scopePlayerIds.slice(0, Math.min(4, scopePlayerIds.length));
+      const nextIds = sanitizeSelectedIds(scopePlayerOptions, current, fallbackIds);
+      return haveSameIds(nextIds, current) ? current : nextIds;
     });
-  }, [sortedPlayers]);
+  }, [scopePlayerIds, scopePlayerOptions, setupDefaults.scopedPlayerIds]);
 
   useEffect(() => {
     if (comparePlayerId && String(comparePlayerId) === String(selectedPlayerId)) {
-      const fallback = sortedPlayers.find(
-        (player) => String(player.id) !== String(selectedPlayerId)
+      const fallback = comparePlayerOptions.find(
+        (option) => String(option.key) !== String(selectedPlayerId)
       );
-      setComparePlayerId(fallback ? String(fallback.id) : null);
+      setComparePlayerId(fallback ? String(fallback.key) : null);
     }
-  }, [comparePlayerId, selectedPlayerId, sortedPlayers]);
+  }, [comparePlayerId, comparePlayerOptions, selectedPlayerId]);
 
   useEffect(() => {
     if (selectedOpponentId && String(selectedOpponentId) === String(selectedPlayerId)) {
-      setSelectedOpponentId(null);
+      setSelectedOpponentId("none");
     }
   }, [selectedOpponentId, selectedPlayerId]);
 
@@ -653,55 +931,22 @@ export default function ChartsIndexScreen() {
   }, [setupOpen]);
 
   const selectedPlayer = useMemo(
-    () =>
-      sortedPlayers.find((player) => String(player.id) === String(selectedPlayerId)) ??
-      sortedPlayers[0] ??
-      null,
-    [selectedPlayerId, sortedPlayers]
+    () => findOption(focusPlayerOptions, selectedPlayerId) ?? focusPlayerOptions[0] ?? null,
+    [focusPlayerOptions, selectedPlayerId]
   );
 
   const comparePlayer = useMemo(() => {
-    const explicit = sortedPlayers.find(
-      (player) => String(player.id) === String(comparePlayerId)
-    );
+    const explicit = findOption(comparePlayerOptions, comparePlayerId);
     if (explicit) return explicit;
-    return (
-      sortedPlayers.find((player) => String(player.id) !== String(selectedPlayer?.id)) ??
-      null
-    );
-  }, [comparePlayerId, selectedPlayer?.id, sortedPlayers]);
+    return comparePlayerOptions[0] ?? null;
+  }, [comparePlayerId, comparePlayerOptions]);
 
   const selectedOpponent = useMemo(() => {
-    const explicit = sortedPlayers.find(
-      (player) => String(player.id) === String(selectedOpponentId)
-    );
-    if (explicit) return explicit;
+    if (!selectedOpponentId || selectedOpponentId === "none") return null;
+    const explicit = findOption(opponentOptions, selectedOpponentId);
+    if (explicit && explicit.key !== "none") return explicit;
     return null;
-  }, [selectedOpponentId, sortedPlayers]);
-
-  const selectedChart = useMemo(
-    () => resolveChartCatalogEntry(selectedChartKey),
-    [selectedChartKey]
-  );
-  const selectedChartMetricOptions = useMemo(
-    () => getSupportedMetricKeysForChart(selectedChart.key),
-    [selectedChart.key]
-  );
-
-  useEffect(() => {
-    if (!routeMetric) return;
-    const normalized = normalizeMetricForChart(selectedChart.key, routeMetric);
-    if (normalized) {
-      setSelectedMetric(normalized as SimpleMetricKey);
-    }
-  }, [routeMetric, selectedChart.key]);
-
-  useEffect(() => {
-    const normalizedMetric = normalizeMetricForChart(selectedChart.key, selectedMetric);
-    if (normalizedMetric && normalizedMetric !== selectedMetric) {
-      setSelectedMetric(normalizedMetric);
-    }
-  }, [selectedChart.key, selectedMetric]);
+  }, [opponentOptions, selectedOpponentId]);
 
   const sectionedCharts = useMemo(
     () =>
@@ -712,61 +957,21 @@ export default function ChartsIndexScreen() {
     [selectedChart.key]
   );
 
-  const activeMetric =
-    normalizeMetricForChart(selectedChart.key, selectedMetric) ?? "totalPrestige";
-  const metricLabel = getMetricOrFallback(activeMetric).label;
-  const focusPlayerOptions = useMemo<SetupOption[]>(
-    () =>
-      sortedPlayers.map((player) => ({
-        key: String(player.id),
-        label: player.name || "Unknown",
-      })),
-    [sortedPlayers]
+  const activeMetric = resolveOptionKey(
+    metricOptions,
+    selectedMetric,
+    setupDefaults.metricKey,
   );
-  const comparePlayerOptions = useMemo<SetupOption[]>(
-    () =>
-      sortedPlayers
-        .filter((player) => String(player.id) !== String(selectedPlayer?.id))
-        .map((player) => ({
-          key: String(player.id),
-          label: player.name || "Unknown",
-        })),
-    [selectedPlayer?.id, sortedPlayers]
-  );
-  const lineModeOptions = useMemo<SetupOption[]>(
-    () =>
-      LINE_MODE_OPTIONS.map((mode) => ({
-        key: mode,
-        label: titleCase(mode),
-      })),
-    []
-  );
-  const eloViewOptions = useMemo<SetupOption[]>(
-    () =>
-      ELO_VIEW_OPTIONS.map((tab) => ({
-        key: tab,
-        label: tab,
-      })),
-    []
-  );
-  const opponentOptions = useMemo<SetupOption[]>(
-    () => [
-      { key: "none", label: "None" },
-      ...sortedPlayers
-        .filter((player) => String(player.id) !== String(selectedPlayer?.id))
-        .map((player) => ({
-          key: String(player.id),
-          label: player.name || "Unknown",
-        })),
-    ],
-    [selectedPlayer?.id, sortedPlayers]
+  const activeMetricLabel = useMemo(
+    () => findOption(metricOptions, activeMetric)?.label ?? null,
+    [activeMetric, metricOptions]
   );
   const heroTakeaway = buildFeaturedChartTakeaway({
     chartKey: selectedChart.key,
-    selectedPlayerName: selectedPlayer?.name,
-    comparePlayerName: comparePlayer?.name,
+    selectedPlayerName: selectedPlayer?.label,
+    comparePlayerName: comparePlayer?.label,
     scopedCount: selectedGroupIds.length,
-    metricKey: activeMetric,
+    metricKey: activeMetric ?? undefined,
   });
   const selectedSection = CHART_SECTIONS.find(
     (section) => section.key === selectedChart.section
@@ -774,23 +979,23 @@ export default function ChartsIndexScreen() {
   const heroContextChips = useMemo(() => {
     const chips: string[] = [];
 
-    if (selectedPlayer?.name) {
-      chips.push(`Focus: ${selectedPlayer.name}`);
+    if (selectedPlayer?.label) {
+      chips.push(`Focus: ${selectedPlayer.label}`);
     }
 
-    if (selectedChart.supportsCompare && comparePlayer?.name) {
-      chips.push(`Matchup: ${comparePlayer.name}`);
-    } else if (!selectedChart.supportsCompare && selectedChart.supportsMetric) {
-      chips.push(metricLabel);
+    if (comparePlayerOptions.length > 0 && comparePlayer?.label) {
+      chips.push(`Matchup: ${comparePlayer.label}`);
+    } else if (metricOptions.length > 0 && activeMetricLabel) {
+      chips.push(activeMetricLabel);
     }
 
     return chips.slice(0, 2);
   }, [
-    comparePlayer?.name,
-    metricLabel,
-    selectedChart.supportsCompare,
-    selectedChart.supportsMetric,
-    selectedPlayer?.name,
+    activeMetricLabel,
+    comparePlayer?.label,
+    comparePlayerOptions.length,
+    metricOptions.length,
+    selectedPlayer?.label,
   ]);
 
   function toggleGroupPlayer(playerId: string) {
@@ -811,33 +1016,32 @@ export default function ChartsIndexScreen() {
     const params: Record<string, string | undefined> = {
       chartKey: chart.key,
       setup: setupOpen ? "true" : undefined,
-      playerId: selectedPlayer?.id ? String(selectedPlayer.id) : undefined,
+      playerId: selectedPlayer?.key ? String(selectedPlayer.key) : undefined,
     };
 
     if (chart.key === "elo") {
       params.ids = selectedGroupIds.length ? selectedGroupIds.join(",") : undefined;
-      params.eloTab = selectedEloTab;
+      params.eloTab = selectedEloTab || undefined;
       params.opponentId =
-        selectedEloTab === "Context" && selectedOpponent?.id
-          ? String(selectedOpponent.id)
+        selectedEloTab === "Context" && selectedOpponent?.key
+          ? String(selectedOpponent.key)
           : undefined;
       return params;
     }
 
-    if (chart.supportsCompare && comparePlayer?.id) {
-      params.compareId = String(comparePlayer.id);
+    if (comparePlayerOptions.length > 0 && comparePlayer?.key) {
+      params.compareId = String(comparePlayer.key);
     }
 
-    if (chart.supportsIds && selectedGroupIds.length) {
+    if (scopePlayerOptions.length > 0 && selectedGroupIds.length) {
       params.ids = selectedGroupIds.join(",");
     }
 
-    if (getSupportedMetricKeysForChart(chart.key).length > 0) {
-      params.metric =
-        normalizeMetricForChart(chart.key, selectedMetric) ?? "totalPrestige";
+    if (metricOptions.length > 0 && activeMetric) {
+      params.metric = activeMetric;
     }
 
-    if (supportsLineView(chart.key)) {
+    if (lineModeOptions.length > 0) {
       params.lineMode = selectedLineMode;
     }
 
@@ -936,9 +1140,11 @@ export default function ChartsIndexScreen() {
                 tone={setupOpen ? "neutral" : "blue"}
                 size="compact"
               />
-              <StarButton
-                active={false}
-                onPress={() => undefined}
+              <UtilityButton
+                label="Back to Command"
+                onPress={() => router.push(APP_ROUTES.home)}
+                tone="neutral"
+                size="compact"
               />
             </View>
           </HeroCard>
@@ -950,87 +1156,130 @@ export default function ChartsIndexScreen() {
             style={styles.sectionCardCompact}
           >
             <View style={styles.setupStack}>
-              <SetupSection
-                title="Focus player"
-              >
-                <SetupTabs
-                  items={focusPlayerOptions}
-                  value={selectedPlayer ? String(selectedPlayer.id) : ""}
-                  onChange={setSelectedPlayerId}
-                />
-              </SetupSection>
+              {setupLoading ? (
+                <Text style={styles.emptyText}>
+                  Loading Supabase-authored setup options.
+                </Text>
+              ) : setupError ? (
+                <Text style={styles.emptyText}>{setupError}</Text>
+              ) : (
+                <>
+                  <SetupSection
+                    title="Focus player"
+                    subtitle="You first, then your most-played tablemates."
+                    contentStyle={styles.focusPlayerSectionContent}
+                  >
+                    {quickFocusPlayerOptions.length ? (
+                      <SetupTabs
+                        items={quickFocusPlayerOptions}
+                        value={selectedPlayer ? String(selectedPlayer.key) : ""}
+                        onChange={setSelectedPlayerId}
+                      />
+                    ) : null}
 
-              {selectedChart.supportsCompare ? (
-                <SetupSection title="Compare player">
-                  <SetupTabs
-                    items={comparePlayerOptions}
-                    value={comparePlayer ? String(comparePlayer.id) : ""}
-                    onChange={setComparePlayerId}
-                  />
-                </SetupSection>
-              ) : null}
-
-              {selectedChartMetricOptions.length > 0 ? (
-                <SetupSection
-                  title="Metric"
-                  contentStyle={styles.metricGrid}
-                >
-                  {selectedChartMetricOptions.map((metric) => (
-                    <MetricButton
-                      key={`metric-${metric}`}
-                      label={titleCase(metric)}
-                      active={metric === selectedMetric}
-                      onPress={() => setSelectedMetric(metric)}
+                    <TextInput
+                      value={focusPlayerSearch}
+                      onChangeText={setFocusPlayerSearch}
+                      placeholder="Search for Player"
+                      placeholderTextColor={CHART_COLORS.sub}
+                      style={styles.setupSearchInput}
+                      autoCapitalize="words"
+                      autoCorrect={false}
                     />
-                  ))}
-                </SetupSection>
-              ) : null}
 
-              {supportsLineView(selectedChart.key) ? (
-                <SetupSection title="Line view">
-                  <SetupTabs
-                    items={lineModeOptions}
-                    value={selectedLineMode}
-                    onChange={(next) => setSelectedLineMode(next as LineMode)}
-                  />
-                </SetupSection>
-              ) : null}
+                    {focusPlayerSearch.trim() ? (
+                      filteredFocusPlayerOptions.length ? (
+                        <SetupTabs
+                          items={filteredFocusPlayerOptions}
+                          value={selectedPlayer ? String(selectedPlayer.key) : ""}
+                          onChange={setSelectedPlayerId}
+                        />
+                      ) : (
+                        <Text style={styles.emptyText}>No players match that search yet.</Text>
+                      )
+                    ) : null}
+                  </SetupSection>
 
-              {selectedChart.key === "elo" ? (
-                <SetupSection title="ELO view">
-                  <SetupTabs
-                    items={eloViewOptions}
-                    value={selectedEloTab}
-                    onChange={(next) => setSelectedEloTab(next as EloSetupTab)}
-                  />
-                </SetupSection>
-              ) : null}
+                  {comparePlayerOptions.length > 0 ? (
+                    <SetupSection title="Compare player">
+                      <SetupTabs
+                        items={comparePlayerOptions}
+                        value={comparePlayer ? String(comparePlayer.key) : ""}
+                        onChange={setComparePlayerId}
+                      />
+                    </SetupSection>
+                  ) : null}
 
-              {selectedChart.key === "elo" && selectedEloTab === "Context" ? (
-                <SetupSection title="Opponent">
-                  <SetupTabs
-                    items={opponentOptions}
-                    value={selectedOpponent ? String(selectedOpponent.id) : "none"}
-                    onChange={(next) =>
-                      setSelectedOpponentId(next === "none" ? null : next)
-                    }
-                  />
-                </SetupSection>
-              ) : null}
+                  {metricOptions.length > 0 ? (
+                    <SetupSection
+                      title="Metric"
+                      contentStyle={styles.metricGrid}
+                    >
+                      {metricOptions.map((metric) => (
+                        <MetricButton
+                          key={`metric-${metric.key}`}
+                          label={metric.label}
+                          active={metric.key === activeMetric}
+                          onPress={() => setSelectedMetric(metric.key)}
+                        />
+                      ))}
+                    </SetupSection>
+                  ) : null}
 
-              {selectedChart.supportsIds ? (
-                <SetupSection title="Players in scope">
-                  {sortedPlayers.map((player) => (
-                    <ActionChip
-                      key={`scope-${player.id}`}
-                      label={player.name || "Unknown"}
-                      active={selectedGroupIds.includes(String(player.id))}
-                      tone="blue"
-                      onPress={() => toggleGroupPlayer(String(player.id))}
-                    />
-                  ))}
-                </SetupSection>
-              ) : null}
+                  {lineModeOptions.length > 0 ? (
+                    <SetupSection title="Line view">
+                      <SetupTabs
+                        items={lineModeOptions}
+                        value={selectedLineMode}
+                        onChange={setSelectedLineMode}
+                      />
+                    </SetupSection>
+                  ) : null}
+
+                  {eloViewOptions.length > 0 ? (
+                    <SetupSection title="ELO view">
+                      <SetupTabs
+                        items={eloViewOptions}
+                        value={selectedEloTab}
+                        onChange={setSelectedEloTab}
+                      />
+                    </SetupSection>
+                  ) : null}
+
+                  {selectedChart.key === "elo" && selectedEloTab === "Context" && opponentOptions.length > 0 ? (
+                    <SetupSection title="Opponent">
+                      <SetupTabs
+                        items={opponentOptions}
+                        value={selectedOpponent ? String(selectedOpponent.key) : "none"}
+                        onChange={setSelectedOpponentId}
+                      />
+                    </SetupSection>
+                  ) : null}
+
+                  {scopePlayerOptions.length > 0 ? (
+                    <SetupSection
+                      title="Players in scope"
+                      contentStyle={styles.scopeTabSectionContent}
+                    >
+                      <ScrollView
+                        horizontal
+                        nestedScrollEnabled
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.scopeTabRail}
+                      >
+                        {scopePlayerOptions.map((player) => (
+                          <ScopeTab
+                            key={`scope-${player.key}`}
+                            label={player.label || "Unknown"}
+                            active={selectedGroupIds.includes(String(player.key))}
+                            onPress={() => toggleGroupPlayer(String(player.key))}
+                          />
+                        ))}
+                      </ScrollView>
+                    </SetupSection>
+                  ) : null}
+                </>
+              )}
 
               <View style={styles.setupFooterActions}>
                 <UtilityButton
@@ -1283,6 +1532,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  setupSearchInput: {
+    minHeight: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: CHART_COLORS.whiteSoft,
+    color: CHART_COLORS.textStrong,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 11,
+    fontWeight: "700",
+  },
   setupStack: {
     gap: 4,
   },
@@ -1331,25 +1592,51 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 6,
   },
+  focusPlayerSectionContent: {
+    width: "100%",
+    gap: 8,
+  },
+  scopeTabSectionContent: {
+    width: "100%",
+    flexWrap: "nowrap",
+    gap: 0,
+  },
   setupSegmentedControl: {
     width: "100%",
   },
   setupUnderlineTabs: {
     gap: 6,
   },
-  actionChip: {
-    borderRadius: 14,
-    borderWidth: 1,
-    minHeight: 24,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  scopeTabRail: {
+    gap: 12,
+    paddingRight: 12,
+    alignItems: "flex-end",
+  },
+  scopeTab: {
+    minWidth: 52,
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 2,
+    gap: 4,
   },
-  actionChipText: {
-    fontSize: 9,
+  scopeTabText: {
+    color: CHART_COLORS.sub,
+    fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.12,
+  },
+  scopeTabTextActive: {
+    color: CHART_COLORS.textStrong,
+  },
+  scopeTabUnderline: {
+    width: "100%",
+    minWidth: 24,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: withChartAlpha(CHART_COLORS.accent, 0),
+  },
+  scopeTabUnderlineActive: {
+    backgroundColor: CHART_COLORS.accent,
   },
   metricGrid: {
     flexDirection: "row",

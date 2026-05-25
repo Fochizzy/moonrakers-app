@@ -26,8 +26,8 @@ assert.match(
 
 assert.match(
   source,
-  /collectUnifiedGames\(\{[\s\S]*games[\s\S]*\}\s+as (?:any|FlexibleStore)\)/,
-  "expected app/insights.tsx to build unified games from the stable games slice"
+  /buildAnalyticsPlayerDirectory\(\{[\s\S]*games:\s*games as any[\s\S]*\}\)/,
+  "expected app/insights.tsx to build analytics data from the stable games slice"
 );
 
 assert.doesNotMatch(

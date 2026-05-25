@@ -16,20 +16,20 @@ assert.match(
 
 assert.match(
   source,
-  /style=\{styles\.setupBackButton\}[\s\S]*style=\{styles\.setupBackButtonText\}[\s\S]*Close setup/,
-  "expected the Close setup back pill helper to render the dedicated back-pill styles and label"
+  /style=\{styles\.setupBackButton\}[\s\S]*style=\{styles\.setupBackButtonText\}[\s\S]*Close Setup/,
+  "expected the Close Setup back pill helper to render the dedicated back-pill styles and exact label"
 );
 
 assert.match(
   source,
-  /<View style=\{styles\.setupFooterActions\}>[\s\S]*<SetupBackButton onPress=\{\(\) => setChartSetupOpen\(false\)\} \/>\s*<\/View>/,
-  "expected the setup footer to render the Close setup back pill"
+  /<View style=\{styles\.heroActionRow\}>[\s\S]*<SetupBackButton onPress=\{\(\) => setChartSetupOpen\(false\)\} \/>\s*[\s\S]*<\/View>/,
+  "expected the hero action row to render the Close Setup back pill while chart setup is open"
 );
 
 assert.doesNotMatch(
   source,
-  /<View style=\{styles\.setupFooterActions\}>[\s\S]*label="Launch"[\s\S]*<\/View>/,
-  "expected the setup footer to stop rendering the primary launch CTA"
+  /<View style=\{styles\.setupFooterActions\}>[\s\S]*(Open Chart|Close Setup|SetupBackButton)[\s\S]*<\/View>/,
+  "expected the setup footer to stop rendering the Open Chart and Close Setup actions"
 );
 
 console.log("chart-setup-back-pill.test.cjs passed");

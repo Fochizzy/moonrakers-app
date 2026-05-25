@@ -29,9 +29,9 @@ import {
   readPendingAuthIntent,
 } from "@/lib/auth/pendingAuthIntent";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
+import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
 import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
-import { persistLocalCacheSnapshot } from "@/lib/localCache/persistLocalCacheSnapshot";
 import {
   type AuthProfile,
   type AuthSession,
@@ -40,10 +40,6 @@ import {
 import { ThemeProvider, useTheme } from "@/theme";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
-import {
-  loadGames,
-  loadPlayers,
-} from "@/utils/storage/storage";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -123,11 +119,20 @@ function normalizeAuthSession(sessionLike: unknown): AuthSession {
 }
 
 async function loadAuthProfile(userId: string): Promise<AuthProfile> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("profiles")
     .select("id, player_name, display_name, favorite_color, assigned_card_art_index")
     .eq("id", userId)
+    .is("deleted_at", null)
     .maybeSingle();
+
+  if (isDeletedAtColumnMissingError(error)) {
+    ({ data, error } = await supabase
+      .from("profiles")
+      .select("id, player_name, display_name, favorite_color, assigned_card_art_index")
+      .eq("id", userId)
+      .maybeSingle());
+  }
 
   if (error) {
     throw error;
@@ -146,16 +151,28 @@ async function loadAuthProfile(userId: string): Promise<AuthProfile> {
   };
 }
 
-async function loadLocalSnapshot() {
-  const [players, games] = await Promise.all([
-    loadPlayers(),
-    loadGames(),
+async function loadHydratedSharedSnapshot(session: AuthSession) {
+  if (!session?.user?.id) {
+    throw new Error("Signed-in session required to hydrate the shared cloud snapshot.");
+  }
+
+  const [snapshot, registeredProfiles] = await Promise.all([
+    loadCloudSnapshot(session.user.id),
+    loadRegisteredProfiles().catch(() => []),
   ]);
+  const statsSnapshot = await loadStatsSnapshot({
+    profileId: session.user.id,
+    groups: snapshot.groups,
+    games: snapshot.games,
+  });
 
   return {
-    players: Array.isArray(players) ? players : [],
-    groups: [],
-    games: Array.isArray(games) ? games : [],
+    session,
+    snapshot: {
+      ...snapshot,
+      players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
+    },
+    statsSnapshot,
   };
 }
 
@@ -236,9 +253,6 @@ function AppNavigator() {
   const passwordRecoveryPending = useStore(
     (state) => state.passwordRecoveryPending,
   );
-  const players = useStore((state) => state.players);
-  const groups = useStore((state) => state.groups);
-  const games = useStore((state) => state.games);
 
   const setAuthSession = useStore((state) => state.setAuthSession);
   const setAuthProfile = useStore((state) => state.setAuthProfile);
@@ -258,6 +272,7 @@ function AppNavigator() {
   const setGames = useStore((state) => state.setGames);
 
   const bootstrapIdRef = useRef(0);
+  const sharedRefreshIdRef = useRef(0);
 
   const isPublicAuthRoute = PUBLIC_AUTH_ROUTES.has(pathname);
   const showBlockingOverlay =
@@ -314,15 +329,10 @@ function AppNavigator() {
             : normalizeAuthSession((await supabase.auth.getSession()).data.session);
 
         if (!session?.user?.id) {
-          const localSnapshot = await loadLocalSnapshot();
-          if (!active || requestId !== bootstrapIdRef.current) {
-            return;
-          }
-
           clearAuthState();
-          setPlayers(localSnapshot.players as any);
-          setGroups(localSnapshot.groups as any);
-          setGames(localSnapshot.games as any);
+          setPlayers([] as any);
+          setGroups([] as any);
+          setGames([] as any);
           setStatsSnapshot(null);
           setPasswordRecoveryPending(pendingIntent === "recovery-ready");
           setAuthBootstrapStatus("ready");
@@ -335,45 +345,22 @@ function AppNavigator() {
         }
 
         if (!profile?.player_name) {
-          const localSnapshot = await loadLocalSnapshot();
-          if (!active || requestId !== bootstrapIdRef.current) {
-            return;
-          }
-
-          setPlayers(localSnapshot.players as any);
-          setGroups(localSnapshot.groups as any);
-          setGames(localSnapshot.games as any);
+          setPlayers([] as any);
+          setGroups([] as any);
+          setGames([] as any);
           setStatsSnapshot(null);
           setPasswordRecoveryPending(pendingIntent === "recovery-ready");
           hydrateAuthBootstrap({ session, profile });
           return;
         }
 
-        const [snapshot, registeredProfiles] = await Promise.all([
-          loadCloudSnapshot(session.user.id),
-          loadRegisteredProfiles().catch(() => []),
-        ]);
-        const statsSnapshot = await loadStatsSnapshot({
-          profileId: session.user.id,
-          groups: snapshot.groups,
-          games: snapshot.games,
-        });
+        const hydratedSnapshot = await loadHydratedSharedSnapshot(session);
 
         if (!active || requestId !== bootstrapIdRef.current) {
           return;
         }
 
-        hydrateCloudSnapshot({
-          session,
-          snapshot: {
-            ...snapshot,
-            players: mergeRegisteredProfilesIntoPlayers(
-              snapshot.players,
-              registeredProfiles,
-            ),
-          },
-          statsSnapshot,
-        });
+        hydrateCloudSnapshot(hydratedSnapshot);
         setPasswordRecoveryPending(pendingIntent === "recovery-ready");
       } catch (error) {
         if (!active || requestId !== bootstrapIdRef.current) {
@@ -411,16 +398,70 @@ function AppNavigator() {
   ]);
 
   useEffect(() => {
-    if (authBootstrapStatus === "idle") {
+    if (authBootstrapStatus !== "ready" || !authSession?.user?.id || !authProfile?.player_name) {
       return;
     }
 
-    void persistLocalCacheSnapshot({
-      players,
-      groups,
-      games,
-    });
-  }, [authBootstrapStatus, games, groups, players]);
+    let active = true;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function refreshSharedSnapshot() {
+      const requestId = ++sharedRefreshIdRef.current;
+
+      try {
+        const hydratedSnapshot = await loadHydratedSharedSnapshot(authSession);
+        if (!active || requestId !== sharedRefreshIdRef.current) {
+          return;
+        }
+
+        hydrateCloudSnapshot(hydratedSnapshot);
+      } catch (error) {
+        if (!active || requestId !== sharedRefreshIdRef.current) {
+          return;
+        }
+
+        console.warn("Failed to refresh shared cloud snapshot", error);
+      }
+    }
+
+    function scheduleRefresh() {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      // Group writes emit related events back-to-back, so debounce one shared refresh.
+      refreshTimer = setTimeout(() => {
+        void refreshSharedSnapshot();
+      }, 150);
+    }
+
+    const channel = supabase
+      .channel(`moonrakers-shared-cloud:${authSession.user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "groups" },
+        scheduleRefresh,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_members" },
+        scheduleRefresh,
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [
+    authBootstrapStatus,
+    authProfile?.player_name,
+    authSession,
+    hydrateCloudSnapshot,
+  ]);
 
   useEffect(() => {
     if (authBootstrapStatus !== "ready") {

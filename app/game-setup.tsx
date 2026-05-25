@@ -16,17 +16,20 @@ import DraggableFlatList, {
 } from "react-native-draggable-flatlist";
 
 import ActionButton from "@/components/ui/ActionButton";
-import AppHeader from "@/components/ui/AppHeader";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import { useStore } from "@/store/useStore";
 import {
+  applyTurnOrderPlayerColorOverride,
   buildActiveGamePlayersFromTurnOrder,
   buildTurnOrderSummary,
   canSubmitGameSetup,
   type GameSetupTurnOrderPlayer,
 } from "@/utils/gameSetupTurnOrder";
+import type { CardColor } from "@/utils/cardAssignment";
+import ProfileAppearancePicker from "@/components/player/ProfileAppearancePicker";
+import { normalizePreferredProfileColor } from "@/utils/profileAppearance";
 import { resolveStoredPlayerColor } from "@/utils/playerColor";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 
@@ -237,16 +240,23 @@ function TurnOrderRow({
   drag,
   isActive,
   isStartingGame,
+  selectedPlayerId,
+  onSelectPlayer,
 }: RenderItemParams<PlayerLike> & {
   isStartingGame: boolean;
+  selectedPlayerId: string | null;
+  onSelectPlayer: (playerId: string) => void;
 }) {
   const accent = getAccentColor(item.color, index);
   const displayName = resolveDisplayName(item, index);
   const isFirstCaptain = index === 0;
+  const isSelected = item.id === selectedPlayerId;
+  const isHighlighted = isActive || isSelected;
 
   return (
     <ScaleDecorator>
       <Pressable
+        onPress={isStartingGame ? undefined : () => onSelectPlayer(item.id)}
         onLongPress={isStartingGame ? undefined : drag}
         delayLongPress={120}
         disabled={isStartingGame}
@@ -260,64 +270,120 @@ function TurnOrderRow({
           style={[
             styles.rowCard,
             {
-              borderColor: isActive ? accent : `${accent}4A`,
+              borderColor: isHighlighted ? accent : `${accent}4A`,
               backgroundColor: isActive
                 ? darkenHex(accent, 0.68)
+                : isSelected
+                  ? darkenHex(accent, 0.74)
                 : darkenHex(accent, 0.8),
               shadowColor: accent,
             },
           ]}
         >
           <View style={styles.rowHeader}>
-            <View
-              style={[
-                styles.rowOrderPill,
-                isFirstCaptain ? styles.rowOrderPillPrimary : null,
-              ]}
-            >
+            <View style={[styles.rowOrderPill, isFirstCaptain ? styles.rowOrderPillPrimary : null]}>
               <Text style={styles.rowOrderPillText}>{index + 1}</Text>
             </View>
 
-            {isFirstCaptain ? (
+            {isSelected ? (
               <View
                 style={[
                   styles.firstChip,
                   {
-                    borderColor: `${accent}55`,
+                    borderColor: `${accent}AA`,
                     backgroundColor: `${accent}18`,
                   },
                 ]}
               >
-                <Text style={[styles.firstChipText, { color: accent }]}>FIRST CAPTAIN</Text>
+                <Text style={[styles.firstChipText, { color: accent }]}>Selected</Text>
               </View>
             ) : (
-              <Text style={styles.rowTapMeta}>Drag this card into its snapped turn slot.</Text>
+              <Text style={styles.rowTapMeta}>Tap to select</Text>
             )}
           </View>
 
-          <Text style={styles.rowName} numberOfLines={1}>
-            {displayName}
-          </Text>
+          <View style={styles.rowBody}>
+            <View style={[styles.rowAvatarWrap, { borderColor: `${accent}55` }]}>
+              <PlayerCardIcon
+                player={item as any}
+                size={72}
+                borderRadius={14}
+                showInitial={false}
+              />
+            </View>
 
-          <View style={[styles.rowAvatarWrap, { borderColor: `${accent}55` }]}>
-            <PlayerCardIcon
-              player={item as any}
-              size={88}
-              borderRadius={18}
-              showInitial={false}
-            />
+            <View style={styles.rowCopy}>
+              <Text
+                style={[
+                  styles.rowName,
+                  isFirstCaptain ? { color: accent } : null,
+                ]}
+                numberOfLines={1}
+              >
+                {displayName}
+              </Text>
+
+              <Text style={styles.rowMeta} numberOfLines={2}>
+                {isSelected
+                  ? "Change color from the top-right button."
+                  : "Tap to select. Hold to drag."}
+              </Text>
+            </View>
           </View>
-
-          <Text style={styles.rowMeta}>
-            {isFirstCaptain
-              ? "Top card starts the game. Drag another card above it to change the opener."
-              : `Current seat ${index + 1}. Hold and drag to reorder.`}
-          </Text>
-
-          <Text style={styles.dragHandleText}>Hold and drag to reorder</Text>
         </View>
       </Pressable>
     </ScaleDecorator>
+  );
+}
+
+function GameOnlyColorOverlay({
+  player,
+  index,
+  onClose,
+  onSelectColor,
+}: {
+  player: PlayerLike;
+  index: number;
+  onClose: () => void;
+  onSelectColor: (color: CardColor) => void;
+}) {
+  const accent = getAccentColor(player.color, index);
+
+  return (
+    <View style={styles.colorOverlay} pointerEvents="box-none">
+      <Pressable style={styles.colorOverlayScrim} onPress={onClose} />
+
+      <View
+        style={[
+          styles.colorOverlayCard,
+          {
+            borderColor: `${accent}66`,
+            shadowColor: accent,
+          },
+        ]}
+      >
+        <View style={styles.colorOverlayHeader}>
+          <View style={styles.colorOverlayTitleBlock}>
+            <Text variant="utilityLabel" style={styles.colorOverlayEyebrow}>
+              Selected Captain
+            </Text>
+            <Text style={styles.colorOverlayName}>{resolveDisplayName(player, index)}</Text>
+          </View>
+
+          <Pressable style={styles.colorOverlayCloseButton} onPress={onClose}>
+            <Text style={styles.colorOverlayCloseText}>Close</Text>
+          </Pressable>
+        </View>
+
+        <ProfileAppearancePicker
+          title="Game-only color"
+          subtitle="Changes this session only. Saved player colors stay the same."
+          favoriteColor={normalizePreferredProfileColor(player.color)}
+          onSelectFavoriteColor={onSelectColor}
+          autoAssignHint="Pick a different color for this game only."
+        />
+      </View>
+    </View>
   );
 }
 
@@ -359,7 +425,9 @@ export default function GameSetup() {
   }, [allPlayers, mode, selectedGroup, selectedPlayers]);
 
   const [turnOrder, setTurnOrder] = useState<PlayerLike[]>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const overlayGlow = useRef(new Animated.Value(0)).current;
@@ -367,20 +435,25 @@ export default function GameSetup() {
   const contentOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    setTurnOrder(
-      resolvedPlayers.map((player, index) => ({
+    const nextTurnOrder = resolvedPlayers.map((player, index) => ({
         ...player,
         color: resolveStoredPlayerColor(player.color, index),
-      }))
+      }));
+
+    setTurnOrder(nextTurnOrder);
+    setSelectedPlayerId((current) =>
+      current && nextTurnOrder.some((player) => player.id === current) ? current : null
     );
+    setIsColorPickerOpen(false);
   }, [resolvedPlayers]);
 
   const canStart = canSubmitGameSetup(turnOrder);
-
-  const goBack = useCallback(() => {
-    if (isStarting) return;
-    router.back();
-  }, [isStarting, router]);
+  const selectedPlayerIndex = useMemo(
+    () => turnOrder.findIndex((player) => player.id === selectedPlayerId),
+    [selectedPlayerId, turnOrder]
+  );
+  const selectedPlayer =
+    selectedPlayerIndex >= 0 ? turnOrder[selectedPlayerIndex] ?? null : null;
 
   const playStartAnimation = useCallback(async () => {
     setIsStarting(true);
@@ -437,14 +510,40 @@ export default function GameSetup() {
     Haptics.selectionAsync().catch(() => {});
   }, []);
 
+  const handleSelectPlayer = useCallback((playerId: string) => {
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedPlayerId(playerId);
+  }, []);
+
+  const openColorPicker = useCallback(() => {
+    if (!selectedPlayer || isStarting) return;
+    Haptics.selectionAsync().catch(() => {});
+    setIsColorPickerOpen(true);
+  }, [isStarting, selectedPlayer]);
+
+  const closeColorPicker = useCallback(() => {
+    setIsColorPickerOpen(false);
+  }, []);
+
+  const handleSelectGameColor = useCallback((nextColor: CardColor) => {
+    if (!selectedPlayerId) return;
+    setTurnOrder((currentPlayers) =>
+      applyTurnOrderPlayerColorOverride(currentPlayers, selectedPlayerId, nextColor)
+    );
+    Haptics.selectionAsync().catch(() => {});
+    setIsColorPickerOpen(false);
+  }, [selectedPlayerId]);
+
   const renderItem = useCallback(
     (params: RenderItemParams<PlayerLike>) => (
       <TurnOrderRow
         {...params}
         isStartingGame={isStarting}
+        selectedPlayerId={selectedPlayerId}
+        onSelectPlayer={handleSelectPlayer}
       />
     ),
-    [isStarting]
+    [handleSelectPlayer, isStarting, selectedPlayerId]
   );
 
   const startGame = useCallback(async () => {
@@ -459,7 +558,7 @@ export default function GameSetup() {
     });
 
     setTimeout(() => {
-      router.replace("/game");
+      router.push("/game");
     }, 520);
   }, [
     canStart,
@@ -478,35 +577,50 @@ export default function GameSetup() {
       scroll={false}
       edges={["top", "left", "right", "bottom"]}
       contentContainerStyle={styles.pageContent}
-    >
-      <Animated.View
-        style={[
-          styles.mainContentWrap,
+      >
+        <Animated.View
+          style={[
+            styles.mainContentWrap,
           {
             opacity: contentOpacity,
             transform: [{ scale: contentScale }],
           },
         ]}
       >
-        <AppHeader
-          eyebrow="Moonrakers Command"
-          title="Create Game"
-          subtitle="Drag players into turn order. The top captain goes first."
-          identity="emblem"
-          size="compact"
-        />
+        <View style={styles.topActionRow}>
+          <ActionButton
+            title="Start Game"
+            subtitle={buildTurnOrderSummary(turnOrder)}
+            onPress={startGame}
+            disabled={!canStart || isStarting}
+            style={styles.topActionButton}
+          />
+        </View>
 
         <View style={styles.listShell}>
           <View style={styles.listHeader}>
-            <Text variant="utilityLabel" style={styles.sectionLabel}>
-              Turn Order
-            </Text>
-            <Text style={styles.listHint}>
-              Hold a player card and drag it into place. The top card starts.
-            </Text>
-          </View>
+            <View style={styles.listHeaderCopy}>
+              <Text variant="utilityLabel" style={styles.sectionLabel}>
+                Turn Order
+              </Text>
+              <Text style={styles.listHint}>
+                Tap a tile to select a captain, then change this game's color.
+              </Text>
+            </View>
 
-          <Text style={styles.inlineOrderSummary}>{buildTurnOrderSummary(turnOrder)}</Text>
+            <ActionButton
+              title="Change Color"
+              subtitle={
+                selectedPlayer
+                  ? resolveDisplayName(selectedPlayer, selectedPlayerIndex)
+                  : "Select a player"
+              }
+              onPress={openColorPicker}
+              disabled={!selectedPlayer || isStarting}
+              variant="secondary"
+              style={styles.colorActionButton}
+            />
+          </View>
 
           <DraggableFlatList
             data={turnOrder}
@@ -517,32 +631,19 @@ export default function GameSetup() {
             activationDistance={6}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
-            ListEmptyComponent={
-              <View style={styles.listEmptyState}>
-                <Text style={styles.summaryEmptyText}>
-                  No character cards are ready yet.
-                </Text>
-              </View>
-            }
-          />
-        </View>
-
-        <View style={styles.setupFooter}>
-          <ActionButton
-            title="Back"
-            variant="ghost"
-            onPress={goBack}
-            disabled={isStarting}
-            style={styles.setupFooterButton}
-          />
-          <ActionButton
-            title={isStarting ? "Starting..." : "Start Game"}
-            onPress={startGame}
-            disabled={!canStart || isStarting}
-            style={styles.setupFooterButton}
+            ListEmptyComponent={<View style={styles.listEmptyState} />}
           />
         </View>
       </Animated.View>
+
+      {isColorPickerOpen && selectedPlayer ? (
+        <GameOnlyColorOverlay
+          player={selectedPlayer}
+          index={selectedPlayerIndex}
+          onClose={closeColorPicker}
+          onSelectColor={handleSelectGameColor}
+        />
+      ) : null}
 
       {isStarting ? (
         <Animated.View
@@ -570,10 +671,6 @@ export default function GameSetup() {
           />
           <View style={styles.launchCard}>
             <ActivityIndicator size="small" color="#7DD3FC" />
-            <Text style={styles.launchTitle}>Launching game</Text>
-            <Text style={styles.launchSubtitle} numberOfLines={2}>
-              {buildTurnOrderSummary(turnOrder)}
-            </Text>
           </View>
         </Animated.View>
       ) : null}
@@ -590,6 +687,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     gap: 12,
+  },
+  topActionRow: {
+    paddingTop: 2,
+  },
+  topActionButton: {
+    width: "100%",
   },
   sectionLabel: {
     color: "#7DD3FC",
@@ -754,7 +857,7 @@ const styles = StyleSheet.create({
     minHeight: 280,
     borderRadius: 24,
     paddingHorizontal: 14,
-    paddingTop: 14,
+    paddingTop: 12,
     paddingBottom: 10,
     backgroundColor: "rgba(8, 13, 34, 0.96)",
     borderWidth: 1,
@@ -768,16 +871,24 @@ const styles = StyleSheet.create({
   },
   listHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
   },
-  listHint: {
+  listHeaderCopy: {
     flex: 1,
-    textAlign: "right",
+    minWidth: 0,
+    gap: 4,
+  },
+  listHint: {
     color: "#CBD5E1",
     fontSize: 12,
     fontWeight: "700",
+    lineHeight: 18,
+  },
+  colorActionButton: {
+    minWidth: 154,
+    alignSelf: "flex-start",
   },
   inlineOrderSummary: {
     color: "#E2E8F0",
@@ -798,19 +909,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowPressable: {
-    marginBottom: 10,
+    marginBottom: 8,
   },
   rowPressed: {
     opacity: 0.98,
   },
   rowCard: {
-    minHeight: 210,
+    minHeight: 132,
     borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     alignItems: "stretch",
-    gap: 10,
+    justifyContent: "center",
+    gap: 8,
     shadowOpacity: 0.16,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -821,11 +933,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    width: "100%",
+    gap: 8,
   },
   rowOrderPill: {
-    width: 30,
-    height: 30,
+    width: 26,
+    height: 26,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -838,51 +951,61 @@ const styles = StyleSheet.create({
   },
   rowOrderPillText: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
   },
   rowTapMeta: {
     flex: 1,
     textAlign: "right",
     color: "#BFDBFE",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
   },
   rowAvatarWrap: {
-    alignSelf: "center",
-    width: 108,
-    height: 146,
-    borderRadius: 20,
+    width: 84,
+    height: 112,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.04)",
     overflow: "hidden",
   },
+  rowBody: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rowCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+    justifyContent: "center",
+  },
   rowName: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "900",
-    textAlign: "center",
+    textAlign: "left",
   },
   rowMeta: {
     color: "#CBD5E1",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    lineHeight: 18,
-    textAlign: "center",
+    lineHeight: 15,
+    textAlign: "left",
   },
   firstChip: {
-    minWidth: 92,
+    minWidth: 84,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     alignItems: "center",
     justifyContent: "center",
   },
   firstChipText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.6,
   },
@@ -894,13 +1017,61 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textTransform: "uppercase",
   },
-  setupFooter: {
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 2,
+  colorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+    zIndex: 20,
   },
-  setupFooterButton: {
+  colorOverlayScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(3, 8, 22, 0.78)",
+  },
+  colorOverlayCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
+    backgroundColor: "rgba(8, 13, 34, 0.98)",
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+    gap: 14,
+  },
+  colorOverlayHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  colorOverlayTitleBlock: {
     flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  colorOverlayEyebrow: {
+    color: "#7DD3FC",
+  },
+  colorOverlayName: {
+    color: "#F8FAFC",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  colorOverlayCloseButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  colorOverlayCloseText: {
+    color: "#E2E8F0",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   launchOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -917,14 +1088,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(125,211,252,0.16)",
   },
   launchCard: {
-    minWidth: 240,
-    maxWidth: 320,
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    width: 96,
+    height: 96,
+    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
     backgroundColor: "rgba(9, 14, 34, 0.95)",
     borderWidth: 1,
     borderColor: "rgba(125,211,252,0.24)",

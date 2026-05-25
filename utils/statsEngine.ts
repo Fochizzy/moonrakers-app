@@ -3,6 +3,7 @@
   name: string;
   initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
 };
 
 export type Totals = {
@@ -39,6 +40,7 @@ export type PlayerStats = {
   name: string;
   initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
   totalPrestige: number;
   directPrestige: number;
   assistPrestigeReceived: number;
@@ -156,6 +158,11 @@ export function buildLeaderboard(players: Player[], games: Game[]): PlayerStats[
       name: player.name,
       initials: player.initials,
       color: player.color,
+      assignedCardArtIndex:
+        typeof player.assignedCardArtIndex === 'number' &&
+        Number.isFinite(player.assignedCardArtIndex)
+          ? player.assignedCardArtIndex
+          : null,
       totalPrestige: 0,
       directPrestige: 0,
       assistPrestigeReceived: 0,

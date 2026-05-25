@@ -7,6 +7,8 @@ export type HubCard = {
   description: string;
   route: AppRoute;
   iconKey?: AppIconKey | null;
+  layout?: "graphic" | "text" | "graphic-horizontal";
+  fullWidth?: boolean;
   eyebrow?: string;
   bestFor?: string;
 };
@@ -53,7 +55,7 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
     title: "Insights",
     description: "Meta signals",
     route: APP_ROUTES.insights,
-    iconKey: "hazardDieHub",
+    iconKey: "thruster",
     eyebrow: "Meta",
     bestFor: "Signals",
   },
@@ -63,29 +65,26 @@ const PLAYERS_HUB_CARDS: HubCard[] = [
   {
     key: "roster",
     title: "Roster",
-    description: "Roster tools",
+    description: "",
     route: APP_ROUTES.roster,
     iconKey: "addRemoves",
     eyebrow: "Manage",
-    bestFor: "Editing your roster",
   },
   {
     key: "directory",
     title: "Profiles",
-    description: "Player lookup",
+    description: "",
     route: APP_ROUTES.playerDirectory,
     iconKey: "billBendo",
     eyebrow: "Browse",
-    bestFor: "Player lookup",
   },
   {
     key: "cards",
-    title: "Cards",
-    description: "Card gallery",
+    title: "Player Card",
+    description: "",
     route: APP_ROUTES.playerCards,
     iconKey: "blueHub",
     eyebrow: "Gallery",
-    bestFor: "Visual scanning",
   },
 ];
 
@@ -93,7 +92,7 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   {
     key: "history",
     title: "History",
-    description: "Past sessions",
+    description: "",
     route: APP_ROUTES.history,
     iconKey: "missionHub",
     eyebrow: "Archive",
@@ -101,8 +100,8 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   },
   {
     key: "analytics",
-    title: "Analytics",
-    description: "League reads",
+    title: "Data",
+    description: "",
     route: APP_ROUTES.analytics,
     iconKey: "moneyHub",
     eyebrow: "Data",
@@ -111,7 +110,7 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   {
     key: "players",
     title: "Players",
-    description: "Roster hub",
+    description: "",
     route: APP_ROUTES.players,
     iconKey: "prestigeHub",
     eyebrow: "Roster",
@@ -120,11 +119,22 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
   {
     key: "definitions",
     title: "Definitions",
-    description: "Metric lookup",
+    description: "",
     route: APP_ROUTES.definitions,
     iconKey: "objectiveHub",
     eyebrow: "Reference",
     bestFor: "Metric lookup",
+  },
+  {
+    key: "profile-management",
+    title: "Profile Management",
+    description: "Profile Picture",
+    route: APP_ROUTES.roster,
+    iconKey: "billBendo",
+    layout: "graphic-horizontal",
+    fullWidth: true,
+    eyebrow: "Account",
+    bestFor: "Profile setup",
   },
 ];
 

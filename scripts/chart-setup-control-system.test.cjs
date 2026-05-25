@@ -52,8 +52,8 @@ assert.doesNotMatch(
 
 assert.match(
   source,
-  /if \(chart\.supportsIds && selectedGroupIds.length\) \{[\s\S]*params\.ids = selectedGroupIds\.join\(","\);/,
-  "expected the charts hub launch contract to keep serializing the selected player ids"
+  /if \(scopePlayerOptions\.length > 0 && selectedGroupIds.length\) \{[\s\S]*params\.ids = selectedGroupIds\.join\(","\);/,
+  "expected the charts hub launch contract to keep serializing the selected player ids from the server-authored scope options"
 );
 
 assert.doesNotMatch(

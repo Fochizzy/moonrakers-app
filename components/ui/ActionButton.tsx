@@ -17,6 +17,7 @@ type ActionButtonProps = {
   icon?: React.ReactNode;
   onPress?: (event: GestureResponderEvent) => void;
   style?: StyleProp<ViewStyle>;
+  subtitle?: string;
   title: string;
   variant?: ActionButtonVariant;
 };
@@ -52,6 +53,7 @@ export default function ActionButton({
   icon,
   onPress,
   style,
+  subtitle,
   title,
   variant = "primary",
 }: ActionButtonProps) {
@@ -77,7 +79,10 @@ export default function ActionButton({
     >
       <View style={styles.content}>
         {icon}
-        <Text style={styles.title}>{title}</Text>
+        <View style={styles.copy}>
+          <Text style={styles.title}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
       </View>
     </Pressable>
   );
@@ -98,9 +103,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
+  copy: {
+    flexShrink: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
   title: {
     fontSize: 14,
     fontWeight: "800",
     textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "center",
+    color: "rgba(232, 240, 255, 0.82)",
   },
 });

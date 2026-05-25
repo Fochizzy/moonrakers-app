@@ -79,6 +79,14 @@ export function readSupabaseEnv(
 
 export function formatSupabaseConfigError(error: unknown) {
   let message = "";
+  const analyticsRpcNames = [
+    "get_analytics_home",
+    "get_stats_screen",
+    "get_insights_screen",
+    "get_chart_setup",
+    "get_chart_dataset",
+    "refresh_server_authored_analytics",
+  ];
 
   if (error instanceof Error) {
     message = error.message;
@@ -107,6 +115,27 @@ export function formatSupabaseConfigError(error: unknown) {
     (message.includes("column") || message.includes("schema cache"))
   ) {
     return "This Supabase project does not match the Moonrakers schema yet. The app expects public.profiles.player_name, but the connected project is missing that column.";
+  }
+
+  if (
+    message.includes("deleted_at") &&
+    (message.includes("column") || message.includes("schema cache"))
+  ) {
+    return "This Moonrakers Supabase project is missing the latest profile-delete schema update. Restart Metro with a clear cache so the client fallback loads, or apply the deleted_at migration to the Moonrakers database.";
+  }
+
+  if (
+    analyticsRpcNames.some((name) => message.includes(name)) &&
+    (
+      message.includes("schema cache") ||
+      message.includes("permission denied for function")
+    )
+  ) {
+    return "This Moonrakers analytics view is out of sync with the connected Supabase backend. Apply the latest analytics schema update or refresh the PostgREST schema cache, then restart the app with a cleared cache.";
+  }
+
+  if (message.includes("display_name") && message.includes("already exists")) {
+    return "Display name already in use. Please choose a unique display name.";
   }
 
   return message || "Unable to connect to Supabase.";
@@ -161,7 +190,6 @@ export function createSupabaseClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
-      flowType: "pkce",
       lock: processLock,
       ...(nativeBindings && nativeBindings.platformOs !== "web"
         ? { storage: nativeBindings.AsyncStorage }

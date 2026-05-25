@@ -49,7 +49,11 @@ run("Auth screens opt into the compact above-the-fold shell", () => {
   );
 
   expectIncludes(registerSource, 'density="compact"', "compact register shell");
-  expectIncludes(registerSource, 'viewport="fit"', "fit register shell");
+  expectIncludes(
+    registerSource,
+    'viewport={needsProfileOnly ? "scroll" : "fit"}',
+    "conditional register shell viewport"
+  );
   expectNotIncludes(
     registerSource,
     "Choose your command color. Moonrakers will assign the matching default card at signup.",
@@ -91,6 +95,9 @@ run("Primary hubs opt into compact framing", () => {
     "A small working-memory card so this hub feels active instead of purely navigational.",
     "players resume explainer"
   );
+  expectNotIncludes(playersSource, 'title="Resume"', "players resume section");
+  expectNotIncludes(playersSource, "resumeActionCard", "players resume card style");
+  expectNotIncludes(playersSource, "resumeRecommendation", "players resume recommendation");
   expectNotIncludes(
     playersSource,
     "Roster work, profile browsing, and card scanning now live under one consistent players hub.",

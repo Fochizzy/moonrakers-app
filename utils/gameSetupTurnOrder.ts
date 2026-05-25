@@ -1,4 +1,5 @@
 import { resolveStoredPlayerColor } from "./playerColor";
+import { buildArtIndexFromRowAndColor, getRowFromArtIndex, type CardColor } from "./cardAssignment";
 
 export type GameSetupTurnOrderPlayer = {
   id: string;
@@ -91,4 +92,38 @@ export function buildActiveGamePlayersFromTurnOrder(
           : null,
       startOrder: index,
     }));
+}
+
+export function applyTurnOrderPlayerColorOverride(
+  players: GameSetupTurnOrderPlayer[] | null | undefined,
+  playerId: string,
+  nextColor: CardColor,
+) {
+  if (!Array.isArray(players)) return [];
+
+  const normalizedTarget = String(playerId ?? "").trim();
+  if (!normalizedTarget) return [...players];
+
+  return players.map((player) => {
+    if (String(player?.id ?? "").trim() !== normalizedTarget) {
+      return player;
+    }
+
+    const currentArtIndex =
+      typeof player.assignedCardArtIndex === "number" && Number.isFinite(player.assignedCardArtIndex)
+        ? player.assignedCardArtIndex
+        : typeof player.artIndex === "number" && Number.isFinite(player.artIndex)
+          ? player.artIndex
+          : null;
+
+    const artRow = getRowFromArtIndex(currentArtIndex) ?? 0;
+    const nextArtIndex = buildArtIndexFromRowAndColor(artRow, nextColor);
+
+    return {
+      ...player,
+      color: nextColor,
+      assignedCardArtIndex: nextArtIndex,
+      artIndex: nextArtIndex,
+    };
+  });
 }

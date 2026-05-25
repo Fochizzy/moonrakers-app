@@ -16,10 +16,18 @@ import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import {
+  buildDuplicateDisplayNameMessage,
+  findDisplayNameConflict,
+} from "@/lib/auth/displayNameUniqueness";
+import {
   buildSavedAuthProfile,
   getImmediateProfileUserId,
 } from "@/lib/auth/registerFlow";
 import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
+import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
+import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
+import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
+import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import {
   buildSupabaseRedirectUrl,
   formatSupabaseConfigError,
@@ -34,6 +42,7 @@ import {
   normalizePreferredProfileColor,
   resolveAssignedCardArtIndexForProfile,
 } from "@/utils/profileAppearance";
+import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
 
 function normalizePlayerName(value: string) {
   return value.trim();
@@ -49,6 +58,7 @@ export default function RegisterScreen() {
   );
   const setAuthProfile = useStore((state) => state.setAuthProfile);
   const setAuthSession = useStore((state) => state.setAuthSession);
+  const hydrateCloudSnapshot = useStore((state) => state.hydrateCloudSnapshot);
   const upsertRegisteredProfile = useStore((state) => state.upsertRegisteredProfile);
 
   const [email, setEmail] = useState("");
@@ -96,20 +106,45 @@ export default function RegisterScreen() {
     nextFavoriteColor: CardColor,
     nextAssignedCardArtIndex: number | null,
   ) {
-    const { error } = await supabase.from("profiles").upsert(
+    const payload = buildProfileAppearanceSavePayload({
+      playerName,
+      displayName,
+      favoriteColor: nextFavoriteColor,
+      assignedCardArtIndex: nextAssignedCardArtIndex,
+    });
+
+    const conflictingProfile = findDisplayNameConflict({
+      displayName: payload.display_name,
+      currentUserId: userId,
+      profiles: await loadRegisteredProfiles(),
+    });
+
+    if (conflictingProfile) {
+      throw new Error(buildDuplicateDisplayNameMessage(payload.display_name));
+    }
+
+    let { error } = await supabase.from("profiles").upsert(
       {
         id: userId,
-        ...buildProfileAppearanceSavePayload({
-          playerName,
-          displayName,
-          favoriteColor: nextFavoriteColor,
-          assignedCardArtIndex: nextAssignedCardArtIndex,
-        }),
+        deleted_at: null,
+        ...payload,
       },
       {
         onConflict: "id",
       },
     );
+
+    if (isDeletedAtColumnMissingError(error)) {
+      ({ error } = await supabase.from("profiles").upsert(
+        {
+          id: userId,
+          ...payload,
+        },
+        {
+          onConflict: "id",
+        },
+      ));
+    }
 
     if (error) {
       throw error;
@@ -132,26 +167,58 @@ export default function RegisterScreen() {
 
       if (needsProfileOnly && authSession?.user?.id) {
         await saveProfile(authSession.user.id, favoriteColor, assignedCardArtIndex);
-        setAuthProfile(
-          buildSavedAuthProfile(
-            authSession.user.id,
-            playerName,
-            displayName,
-            favoriteColor,
-            assignedCardArtIndex,
-          ),
+        const savedProfile = buildSavedAuthProfile(
+          authSession.user.id,
+          playerName,
+          displayName,
+          favoriteColor,
+          assignedCardArtIndex,
         );
-        upsertRegisteredProfile({
+        const savedRegisteredProfile = {
           id: authSession.user.id,
           name: normalizePlayerName(playerName),
           displayName: displayName.trim() || undefined,
           color: favoriteColor,
           assignedCardArtIndex,
           hasSavedGames: false,
-        });
+        };
+
+        try {
+          const [snapshot, registeredProfiles] = await Promise.all([
+            loadCloudSnapshot(authSession.user.id),
+            loadRegisteredProfiles().catch(() => []),
+          ]);
+          const statsSnapshot = await loadStatsSnapshot({
+            profileId: authSession.user.id,
+            groups: snapshot.groups,
+            games: snapshot.games,
+          });
+
+          hydrateCloudSnapshot({
+            session: authSession,
+            snapshot: {
+              ...snapshot,
+              players: mergeRegisteredProfilesIntoPlayers(
+                snapshot.players,
+                registeredProfiles,
+              ),
+            },
+            statsSnapshot,
+          });
+        } catch {
+          setAuthProfile(savedProfile);
+          upsertRegisteredProfile(savedRegisteredProfile);
+        }
+
         setPasswordRecoveryPending(false);
         await clearPendingAuthIntent();
-        router.replace(APP_ROUTES.home as any);
+        router.replace({
+          pathname: APP_ROUTES.roster,
+          params: {
+            tab: "players",
+            profileSetup: "1",
+          },
+        } as any);
         return;
       }
 
@@ -220,13 +287,15 @@ export default function RegisterScreen() {
     <PageShell
       preset="authHero"
       density="compact"
-      viewport="fit"
+      viewport={needsProfileOnly ? "scroll" : "fit"}
       edges={["top", "left", "right", "bottom"]}
-      contentContainerStyle={styles.pageContent}
+      contentContainerStyle={
+        needsProfileOnly ? styles.pageContentScroll : styles.pageContentFit
+      }
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.keyboard}
+        style={needsProfileOnly ? styles.keyboardScroll : styles.keyboardFit}
       >
         <View style={styles.stack}>
           <AppHeader
@@ -374,13 +443,19 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  pageContent: {
+  pageContentFit: {
     flex: 1,
     justifyContent: "center",
   },
-  keyboard: {
+  pageContentScroll: {
+    justifyContent: "flex-start",
+  },
+  keyboardFit: {
     flex: 1,
     justifyContent: "center",
+  },
+  keyboardScroll: {
+    flex: 1,
   },
   stack: {
     gap: 12,

@@ -1,10 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
+import { APP_ROUTES } from "@/utils/appRoutes";
 
 type DefinitionItem = {
   key: string;
@@ -77,6 +84,7 @@ const DEFINITION_GROUPS: DefinitionGroup[] = [
 ];
 
 export default function DefinitionsScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ metric?: string }>();
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
@@ -130,6 +138,14 @@ export default function DefinitionsScreen() {
       <SectionCard
         title="Definitions"
         subtitle="Search metrics or jump to a category so this page works like a reference, not a long flat glossary."
+        actions={
+          <Pressable
+            style={styles.commandButton}
+            onPress={() => router.push(APP_ROUTES.home)}
+          >
+            <Text style={styles.commandButtonText}>Back to Command</Text>
+          </Pressable>
+        }
       >
         <TextInput
           value={query}
@@ -139,21 +155,25 @@ export default function DefinitionsScreen() {
           style={styles.searchInput}
         />
 
-        <View style={styles.categoryRow}>
-          <CategoryChip
+        <ScrollView
+          horizontal
+          contentContainerStyle={styles.categoryTabRail}
+          showsHorizontalScrollIndicator={false}
+        >
+          <CategoryTab
             label="All"
             active={activeCategory === "all"}
             onPress={() => setActiveCategory("all")}
           />
           {DEFINITION_GROUPS.map((group) => (
-            <CategoryChip
+            <CategoryTab
               key={group.key}
               label={group.title}
               active={activeCategory === group.key}
               onPress={() => setActiveCategory(group.key)}
             />
           ))}
-        </View>
+        </ScrollView>
       </SectionCard>
 
       {visibleGroups.map((group) => (
@@ -183,7 +203,7 @@ export default function DefinitionsScreen() {
   );
 }
 
-function CategoryChip({
+function CategoryTab({
   label,
   active,
   onPress,
@@ -193,18 +213,37 @@ function CategoryChip({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.categoryChip, active && styles.categoryChipActive]}
-    >
-      <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
+    <Pressable onPress={onPress} style={styles.categoryTab}>
+      <Text style={[styles.categoryTabText, active && styles.categoryTabTextActive]}>
         {label}
       </Text>
+      <View
+        style={[
+          styles.categoryTabUnderline,
+          active && styles.categoryTabUnderlineActive,
+        ]}
+      />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  commandButton: {
+    minHeight: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.34)",
+    backgroundColor: "rgba(37,99,235,0.16)",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  commandButtonText: {
+    color: "#E8F1FF",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
   searchInput: {
     minHeight: 46,
     borderRadius: 14,
@@ -217,35 +256,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  categoryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+  categoryTabRail: {
+    paddingTop: 2,
+    paddingRight: 8,
+    gap: 18,
+    alignItems: "flex-end",
   },
-  categoryChip: {
-    minHeight: 36,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.03)",
+  categoryTab: {
+    minWidth: 72,
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 4,
+    gap: 6,
   },
-  categoryChipActive: {
-    backgroundColor: "rgba(96,165,250,0.16)",
-    borderColor: "rgba(96,165,250,0.30)",
-  },
-  categoryChipText: {
+  categoryTabText: {
     color: "#AFC3E8",
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.25,
+    textAlign: "center",
   },
-  categoryChipTextActive: {
+  categoryTabTextActive: {
     color: "#F8FBFF",
+  },
+  categoryTabUnderline: {
+    width: "100%",
+    minWidth: 44,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  categoryTabUnderlineActive: {
+    backgroundColor: "#67E8F9",
   },
   definitionList: {
     gap: 10,

@@ -47,6 +47,36 @@ async function main() {
     },
   });
   assert.equal(payload.chartKey, "elo");
+
+  await assert.rejects(
+    () =>
+      getChartDataset(
+        {
+          async rpc() {
+            return {
+              data: null,
+              error: {
+                message:
+                  "Could not find the function public.get_chart_dataset(chart_key, compare_player_id, focus_player_id, graph_mode, line_mode, metric_key, opponent_id, profile_id, scoped_player_ids, selected_game_id) in the schema cache",
+              },
+            };
+          },
+        } as any,
+        {
+          chartKey: "elo",
+          profileId: "chart-profile",
+          focusPlayerId: "player-1",
+          comparePlayerId: "player-2",
+          scopedPlayerIds: ["player-1", "player-2"],
+          selectedGameId: null,
+          metricKey: "totalPrestige",
+          lineMode: "raw",
+          graphMode: null,
+          opponentId: null,
+        },
+      ),
+    /analytics schema update/i,
+  );
 }
 
 main()

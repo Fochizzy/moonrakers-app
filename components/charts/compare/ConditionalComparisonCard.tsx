@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Text from '@/components/ui/Text';
 import {
   ConditionalAnalysis,
@@ -20,6 +20,7 @@ type Props = {
   description?: string;
   players: Player[];
   groups: Group[];
+  quickSelectIds: string[];
   subjectMode: ConditionalSubjectMode;
   conditionalState: ConditionalState;
   conditionalAnalysis: ConditionalAnalysis;
@@ -147,6 +148,7 @@ export default function ConditionalComparisonCard({
   description,
   players,
   groups,
+  quickSelectIds,
   subjectMode,
   conditionalState,
   conditionalAnalysis,
@@ -161,11 +163,42 @@ export default function ConditionalComparisonCard({
   onSort,
 }: Props) {
   const [showBaseline, setShowBaseline] = useState(false);
+  const [anchorSearchQuery, setAnchorSearchQuery] = useState('');
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
   const entities = useMemo(() => activeEntities(subjectMode, players, groups), [subjectMode, players, groups]);
   const selectedIds = useMemo(() => getSelectionIds(conditionalState), [conditionalState]);
   const availableEntities = useMemo(
     () => entities.filter((entity) => entity.id !== conditionalState.anchorId),
     [entities, conditionalState.anchorId]
+  );
+  const quickSelectEntities = useMemo(
+    () =>
+      quickSelectIds.map((id) => entities.find((entity) => entity.id === id)).filter((entity): entity is Entity => Boolean(entity)),
+    [entities, quickSelectIds]
+  );
+  const partnerQuickSelectEntities = useMemo(
+    () => quickSelectEntities.filter((entity) => entity.id !== conditionalState.anchorId),
+    [conditionalState.anchorId, quickSelectEntities]
+  );
+  const normalizedAnchorSearchQuery = anchorSearchQuery.trim().toLowerCase();
+  const normalizedPartnerSearchQuery = partnerSearchQuery.trim().toLowerCase();
+  const filteredAnchorEntities = useMemo(
+    () =>
+      entities.filter((entity) =>
+        normalizedAnchorSearchQuery.length === 0
+          ? true
+          : entity.name.toLowerCase().includes(normalizedAnchorSearchQuery)
+      ),
+    [entities, normalizedAnchorSearchQuery]
+  );
+  const filteredPartnerEntities = useMemo(
+    () =>
+      availableEntities.filter((entity) =>
+        normalizedPartnerSearchQuery.length === 0
+          ? true
+          : entity.name.toLowerCase().includes(normalizedPartnerSearchQuery)
+      ),
+    [availableEntities, normalizedPartnerSearchQuery]
   );
   const sentenceParts = useMemo(
     () => getSentenceParts(entities, conditionalState, subjectMode),
@@ -223,29 +256,81 @@ export default function ConditionalComparisonCard({
         <View style={styles.builderStack}>
           <View style={styles.builderSection}>
             <Text style={styles.builderLabel}>Anchor</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
-              {entities.map((entity) => {
-                const active = conditionalState.anchorId === entity.id;
-                return (
-                  <Pressable
-                    key={entity.id}
-                    onPress={() => onSetAnchor(entity.id)}
-                    style={[styles.selectorCard, active && styles.selectorCardAnchor]}
-                  >
-                    <View style={styles.selectorIdentity}>
-                      <View
-                        style={[
-                          styles.selectorDot,
-                          entity.color ? { backgroundColor: entity.color } : null,
-                          active && styles.selectorDotActive,
-                        ]}
-                      />
-                      <Text style={[styles.selectorTitle, active && styles.selectorTitleActive]}>{entity.name}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <TextInput
+              value={anchorSearchQuery}
+              onChangeText={setAnchorSearchQuery}
+              placeholder={subjectMode === 'groups' ? 'Search groups for anchor' : 'Search players for anchor'}
+              placeholderTextColor="#8FA6C4"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.searchInput}
+            />
+            <Text style={styles.builderHelp}>
+              Search and tap a result to set the anchor for this condition.
+            </Text>
+
+            {quickSelectEntities.length > 0 ? (
+              <View style={styles.quickSelectBlock}>
+                <Text style={styles.quickSelectLabel}>Quick select</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickSelectCards}>
+                  {quickSelectEntities.map((entity) => {
+                    const active = conditionalState.anchorId === entity.id;
+                    return (
+                      <Pressable
+                        key={`anchor-quick-${entity.id}`}
+                        onPress={() => onSetAnchor(entity.id)}
+                        style={[styles.quickSelectCard, active && styles.quickSelectCardActive]}
+                      >
+                        <View
+                          style={[
+                            styles.selectorDot,
+                            entity.color ? { backgroundColor: entity.color } : null,
+                            active && styles.selectorDotActive,
+                          ]}
+                        />
+                        <Text style={[styles.quickSelectText, active && styles.quickSelectTextActive]} numberOfLines={1}>
+                          {entity.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            {normalizedAnchorSearchQuery.length > 0 ? (
+              filteredAnchorEntities.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
+                  {filteredAnchorEntities.map((entity) => {
+                    const active = conditionalState.anchorId === entity.id;
+                    return (
+                      <Pressable
+                        key={entity.id}
+                        onPress={() => onSetAnchor(entity.id)}
+                        style={[styles.selectorCard, active && styles.selectorCardAnchor]}
+                      >
+                        <View style={styles.selectorIdentity}>
+                          <View
+                            style={[
+                              styles.selectorDot,
+                              entity.color ? { backgroundColor: entity.color } : null,
+                              active && styles.selectorDotActive,
+                            ]}
+                          />
+                          <Text style={[styles.selectorTitle, active && styles.selectorTitleActive]}>{entity.name}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
+                <View style={styles.emptySearchState}>
+                  <Text style={styles.emptySearchText}>
+                    {subjectMode === 'groups' ? 'No groups match this search.' : 'No players match this search.'}
+                  </Text>
+                </View>
+              )
+            ) : null}
           </View>
 
           <View style={styles.controlGrid}>
@@ -300,34 +385,85 @@ export default function ConditionalComparisonCard({
 
           <View style={styles.builderSection}>
             <Text style={styles.builderLabel}>Partners</Text>
-            <View style={styles.selectionGrid}>
-              {availableEntities.map((entity) => {
-                const active = selectedIds.includes(entity.id);
+            <TextInput
+              value={partnerSearchQuery}
+              onChangeText={setPartnerSearchQuery}
+              placeholder={subjectMode === 'groups' ? 'Search groups for partners' : 'Search players for partners'}
+              placeholderTextColor="#8FA6C4"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.searchInput}
+            />
+            <Text style={styles.builderHelp}>
+              Search and add one or more partners for the condition.
+            </Text>
 
-                return (
-                  <Pressable
-                    key={entity.id}
-                    onPress={() => onToggleEntity(entity.id)}
-                    style={[
-                      styles.selectorCard,
-                      styles.partnerSelectorCard,
-                      active && styles.partnerSelectorCardActive,
-                    ]}
-                  >
-                    <View style={styles.selectorIdentity}>
-                      <View
+            {partnerQuickSelectEntities.length > 0 ? (
+              <View style={styles.quickSelectBlock}>
+                <Text style={styles.quickSelectLabel}>Quick select</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickSelectCards}>
+                  {partnerQuickSelectEntities.map((entity) => {
+                    const active = selectedIds.includes(entity.id);
+                    return (
+                      <Pressable
+                        key={`partner-quick-${entity.id}`}
+                        onPress={() => onToggleEntity(entity.id)}
+                        style={[styles.quickSelectCard, active && styles.quickSelectCardActive]}
+                      >
+                        <View
+                          style={[
+                            styles.selectorDot,
+                            entity.color ? { backgroundColor: entity.color } : null,
+                            active && styles.selectorDotActive,
+                          ]}
+                        />
+                        <Text style={[styles.quickSelectText, active && styles.quickSelectTextActive]} numberOfLines={1}>
+                          {entity.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+            {normalizedPartnerSearchQuery.length > 0 ? (
+              filteredPartnerEntities.length > 0 ? (
+                <View style={styles.selectionGrid}>
+                  {filteredPartnerEntities.map((entity) => {
+                    const active = selectedIds.includes(entity.id);
+
+                    return (
+                      <Pressable
+                        key={entity.id}
+                        onPress={() => onToggleEntity(entity.id)}
                         style={[
-                          styles.selectorDot,
-                          entity.color ? { backgroundColor: entity.color } : null,
-                          active && styles.selectorDotActive,
+                          styles.selectorCard,
+                          styles.partnerSelectorCard,
+                          active && styles.partnerSelectorCardActive,
                         ]}
-                      />
-                      <Text style={[styles.selectorTitle, active && styles.selectorTitleActive]}>{entity.name}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+                      >
+                        <View style={styles.selectorIdentity}>
+                          <View
+                            style={[
+                              styles.selectorDot,
+                              entity.color ? { backgroundColor: entity.color } : null,
+                              active && styles.selectorDotActive,
+                            ]}
+                          />
+                          <Text style={[styles.selectorTitle, active && styles.selectorTitleActive]}>{entity.name}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.emptySearchState}>
+                  <Text style={styles.emptySearchText}>
+                    {subjectMode === 'groups' ? 'No groups match this search.' : 'No players match this search.'}
+                  </Text>
+                </View>
+              )
+            ) : null}
           </View>
 
           <Pressable
@@ -604,6 +740,57 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
   },
+  searchInput: {
+    minHeight: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.16)',
+    backgroundColor: 'rgba(11, 18, 32, 0.94)',
+    color: '#E5EEF9',
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  quickSelectBlock: {
+    gap: 5,
+  },
+  quickSelectLabel: {
+    color: '#8FA6C4',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  quickSelectCards: {
+    gap: 6,
+    paddingRight: 6,
+  },
+  quickSelectCard: {
+    minWidth: 112,
+    minHeight: 40,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.16)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickSelectCardActive: {
+    backgroundColor: 'rgba(86, 120, 255, 0.22)',
+    borderColor: 'rgba(125, 235, 255, 0.52)',
+  },
+  quickSelectText: {
+    color: '#E5EEF9',
+    fontSize: 11,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  quickSelectTextActive: {
+    color: '#FFFFFF',
+  },
   horizontalCards: {
     gap: 6,
     paddingRight: 6,
@@ -721,6 +908,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+  },
+  emptySearchState: {
+    minHeight: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.16)',
+    backgroundColor: 'rgba(11, 18, 32, 0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  emptySearchText: {
+    color: '#8FA6C4',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   partnerSelectorCard: {
     width: '48.4%',
@@ -923,5 +1127,3 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 });
-
-

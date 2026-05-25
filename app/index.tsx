@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  TextInput,
 } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
@@ -22,13 +23,18 @@ import { useStore } from "@/store/useStore";
 import Text from "@/components/ui/Text";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import RankBadge from "@/components/RankBadge";
-import { getBridgeDestinations } from "@/utils/appHubs";
+import { getBridgeDestinations, type HubCard } from "@/utils/appHubs";
 import {
   APP_ROUTES,
   buildPlayerProfileRoute,
   normalizeHomeTab,
 } from "@/utils/appRoutes";
 import { calculateElo } from "@/utils/elo";
+import {
+  ensureRequiredPlayerSelection,
+  filterGroupsForSignedInPlayer,
+} from "@/utils/homeCommandSelection";
+import { buildCloudPlayableCommandDirectory } from "@/utils/registeredProfilePlayer";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 type Tab = "game" | "leaderboard" | "hubs";
@@ -281,6 +287,11 @@ function sameIdSet(a: string[], b: string[]) {
   const aSorted = [...a].sort();
   const bSorted = [...b].sort();
   return aSorted.every((id, index) => id === bSorted[index]);
+}
+
+function sameOrderedIds(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  return a.every((id, index) => id === b[index]);
 }
 
 function sortLabel(metric: SortMetric) {
@@ -601,7 +612,11 @@ function HomeLeaderboardTab({
 
       const existing = playerMap.get(normalizedId);
       if (existing) {
-        if ((!existing.name || existing.name === "Recovered Player") && fallback?.name) {
+        if (
+          (!existing.name ||
+            normalizeName(existing.name).toLowerCase() === "recovered player") &&
+          fallback?.name
+        ) {
           existing.name = fallback.name;
         }
         if (!existing.color && fallback?.color) existing.color = fallback.color;
@@ -615,9 +630,12 @@ function HomeLeaderboardTab({
         return existing;
       }
 
+      const fallbackName = normalizeName(fallback?.name);
+      if (!fallbackName) return null;
+
       const created = {
         id: normalizedId,
-        name: normalizeName(fallback?.name) || "Recovered Player",
+        name: fallbackName,
         color: fallback?.color,
         initials: fallback?.initials,
         assignedCardArtIndex:
@@ -676,7 +694,7 @@ function HomeLeaderboardTab({
         if (!playerId) continue;
 
         if (!gamePlayerIds.has(playerId)) {
-          gamePlayerIds.add(playerId);
+          continue;
         }
 
         const entry = ensurePlayer(playerId);
@@ -841,6 +859,14 @@ export default function HomeScreen() {
   const clearActiveGame = useStore((s: any) => s.clearActiveGame);
 
   const bridgeDestinations = useMemo(() => getBridgeDestinations(), []);
+  const compactBridgeDestinations = useMemo(
+    () => bridgeDestinations.filter((card) => !card.fullWidth),
+    [bridgeDestinations]
+  );
+  const featuredBridgeDestinations = useMemo(
+    () => bridgeDestinations.filter((card) => card.fullWidth),
+    [bridgeDestinations]
+  );
   const homeRedirect = resolveHomeRedirect({
     authBootstrapStatus,
     session: authSession,
@@ -848,6 +874,7 @@ export default function HomeScreen() {
     passwordRecoveryPending,
   });
   const [tab, setTab] = useState<Tab>(normalizeHomeTab(params.initialTab));
+  const [playerSearch, setPlayerSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<GroupLike | null>(null);
 
@@ -855,6 +882,15 @@ export default function HomeScreen() {
   const startGlowOpacity = useRef(new Animated.Value(0)).current;
   const startGlowScale = useRef(new Animated.Value(0.98)).current;
   const removePulse = useRef(new Animated.Value(1)).current;
+
+  const openBridgeDestination = (card: HubCard) => {
+    if (card.key === "players" && selectedPlayers.length > 0) {
+      openFullProfileFromHubs();
+      return;
+    }
+
+    router.push(card.route as any);
+  };
   const dockPulse = useRef(new Animated.Value(1)).current;
   const dockGlowOpacity = useRef(new Animated.Value(0)).current;
 
@@ -887,12 +923,21 @@ export default function HomeScreen() {
     [rawGames]
   );
 
+  const commandDirectory = useMemo(
+    () => buildCloudPlayableCommandDirectory(players, groups),
+    [groups, players]
+  );
+
+  const commandPlayers = commandDirectory.players;
+  const commandGroups = commandDirectory.groups as GroupLike[];
+  const playerIdAliases = commandDirectory.aliases;
+
   const playersById = useMemo(() => {
-    return players.reduce((acc: Record<string, PlayerLike>, player) => {
+    return commandPlayers.reduce((acc: Record<string, PlayerLike>, player) => {
       acc[player.id] = player;
       return acc;
     }, {});
-  }, [players]);
+  }, [commandPlayers]);
 
   const usage = useMemo(() => {
     const playerGameCount: Record<string, number> = {};
@@ -904,7 +949,13 @@ export default function HomeScreen() {
 
     for (const game of games) {
       const createdAt = game.createdAt ?? 0;
-      const gamePlayerIds = Array.from(new Set(getGamePlayerIds(game)));
+      const gamePlayerIds = Array.from(
+        new Set(
+          getGamePlayerIds(game)
+            .map((playerId) => playerIdAliases[playerId] ?? playerId)
+            .filter(Boolean)
+        )
+      );
       const comboKey = [...gamePlayerIds].sort().join("|");
 
       for (const playerId of gamePlayerIds) {
@@ -940,10 +991,10 @@ export default function HomeScreen() {
       comboUseCount,
       comboRecentAt,
     };
-  }, [games]);
+  }, [games, playerIdAliases]);
 
   const rankedPlayers = useMemo(() => {
-    return [...players].sort((a, b) => {
+    return [...commandPlayers].sort((a, b) => {
       const aCount = usage.playerGameCount[a.id] ?? 0;
       const bCount = usage.playerGameCount[b.id] ?? 0;
       if (bCount !== aCount) return bCount - aCount;
@@ -954,10 +1005,10 @@ export default function HomeScreen() {
 
       return String(a.name ?? "").localeCompare(String(b.name ?? ""));
     });
-  }, [players, usage]);
+  }, [commandPlayers, usage]);
 
   const rankedGroups = useMemo(() => {
-    return [...groups]
+    return [...commandGroups]
       .map((group) => {
         const directUseCount = usage.groupUseCount[group.id] ?? 0;
         const directRecentAt = usage.groupRecentAt[group.id] ?? 0;
@@ -981,13 +1032,34 @@ export default function HomeScreen() {
         }
         return a.name.localeCompare(b.name);
       });
-  }, [groups, usage]);
+  }, [commandGroups, usage]);
+
+  const signedInPlayerId = useMemo(() => {
+    const candidates = [
+      normalizeId(authProfile?.id),
+      normalizeId(authSession?.user?.id),
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+      const canonicalId = normalizeId(playerIdAliases[candidate] ?? candidate);
+      if (canonicalId && commandPlayers.some((player) => player.id === canonicalId)) {
+        return canonicalId;
+      }
+    }
+
+    return "";
+  }, [authProfile?.id, authSession?.user?.id, commandPlayers, playerIdAliases]);
+
+  const visibleGroups = useMemo(
+    () => filterGroupsForSignedInPlayer(rankedGroups, signedInPlayerId),
+    [rankedGroups, signedInPlayerId]
+  );
 
   const detectedGroup = useMemo(() => {
     if (selectedIds.length < 2 || selectedGroup) return null;
 
     const exactGroup =
-      rankedGroups.find((group) => sameIdSet(group.playerIds, selectedIds)) ?? null;
+      visibleGroups.find((group) => sameIdSet(group.playerIds, selectedIds)) ?? null;
 
     if (exactGroup) return exactGroup;
 
@@ -1003,14 +1075,68 @@ export default function HomeScreen() {
       inferredUseCount: comboCount,
       inferredRecentAt: usage.comboRecentAt[comboKey] ?? 0,
     } as GroupLike;
-  }, [rankedGroups, selectedIds, usage, selectedGroup]);
+  }, [visibleGroups, selectedIds, usage, selectedGroup]);
 
   const selectedPlayers = useMemo(
     () => rankedPlayers.filter((player) => selectedIds.includes(player.id)),
     [rankedPlayers, selectedIds]
   );
 
+  const filteredPlayers = useMemo(() => {
+    const query = playerSearch.trim().toLowerCase();
+    if (!query) {
+      return rankedPlayers;
+    }
+
+    return rankedPlayers.filter((player) =>
+      [player.name, player.initials].some((value) =>
+        String(value ?? "").toLowerCase().includes(query)
+      )
+    );
+  }, [playerSearch, rankedPlayers]);
+
   const canStart = selectedPlayers.length >= 2 && selectedPlayers.length <= 5;
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const remapped = ensureRequiredPlayerSelection(
+        Array.from(
+          new Set(current.map((playerId) => playerIdAliases[playerId] ?? playerId))
+        ),
+        signedInPlayerId
+      );
+      return sameOrderedIds(current, remapped) ? current : remapped;
+    });
+  }, [playerIdAliases, signedInPlayerId]);
+
+  useEffect(() => {
+    if (!signedInPlayerId) {
+      return;
+    }
+
+    setSelectedIds((current) => {
+      const next = ensureRequiredPlayerSelection(current, signedInPlayerId);
+      return sameOrderedIds(current, next) ? current : next;
+    });
+  }, [signedInPlayerId]);
+
+  useEffect(() => {
+    setSelectedGroup((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextGroup = visibleGroups.find((group) => group.id === current.id) ?? null;
+      if (!nextGroup) {
+        return null;
+      }
+
+      return current.name === nextGroup.name &&
+        sameOrderedIds(current.playerIds, nextGroup.playerIds)
+        ? current
+        : nextGroup;
+    });
+  }, [visibleGroups]);
 
   useEffect(() => {
     if (canStart && !prevCanStart.current) {
@@ -1140,22 +1266,25 @@ export default function HomeScreen() {
     setSelectedIds((prev) => {
       const exists = prev.includes(id);
       if (exists) {
+        if (id === signedInPlayerId) {
+          return prev;
+        }
         triggerRemovePulse();
         return prev.filter((x) => x !== id);
       }
       if (prev.length >= 5) return prev;
-      return [...prev, id];
+      return ensureRequiredPlayerSelection([...prev, id], signedInPlayerId);
     });
   };
 
   const loadGroup = (group: GroupLike) => {
     setSelectedGroup(group);
-    setSelectedIds(group.playerIds.slice(0, 5));
+    setSelectedIds(ensureRequiredPlayerSelection(group.playerIds, signedInPlayerId));
   };
 
   const clearSelection = () => {
     setSelectedGroup(null);
-    setSelectedIds([]);
+    setSelectedIds(ensureRequiredPlayerSelection([], signedInPlayerId));
     triggerRemovePulse();
   };
 
@@ -1165,9 +1294,12 @@ export default function HomeScreen() {
   };
 
   const openFullProfileFromHubs = () => {
-    const selectedPlayer = selectedPlayers[0] || rankedPlayers[0];
-    if (!selectedPlayer?.id) return;
-    router.push(buildPlayerProfileRoute(selectedPlayer.id));
+    const focusPlayer =
+      rankedPlayers.find((player) => player.id === signedInPlayerId) ??
+      selectedPlayers[0] ??
+      rankedPlayers[0];
+    if (!focusPlayer?.id) return;
+    router.push(buildPlayerProfileRoute(focusPlayer.id));
   };
 
   const handleSignOut = async () => {
@@ -1184,7 +1316,12 @@ export default function HomeScreen() {
   const startGame = () => {
     if (!canStart) return;
 
-    const effectiveGroup = selectedGroup;
+    const effectiveGroup = selectedGroup
+      ? {
+          ...selectedGroup,
+          playerIds: ensureRequiredPlayerSelection(selectedIds, signedInPlayerId),
+        }
+      : null;
     const selectedPlayerNamesOnly = rankedPlayers
       .filter((player) => selectedIds.includes(player.id))
       .map((player) => ({
@@ -1332,52 +1469,73 @@ export default function HomeScreen() {
                   <Text style={styles.emptyPanelText}>No player profiles found.</Text>
                 </View>
               ) : (
-                <View style={styles.commandPlayerViewport}>
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.commandPlayerViewportContent}
-                  >
-                    <Animated.View
-                      style={[
-                        styles.playerGridCompact,
-                        { transform: [{ scale: removePulse }] },
-                      ]}
-                    >
-                      {rankedPlayers.map((player) => {
-                        const selected =
-                          !selectedGroup && selectedIds.includes(player.id);
-                        const locked =
-                          !selected &&
-                          !selectedGroup &&
-                          selectedIds.length >= 5;
-                        const dimmed = Boolean(selectedGroup) && !selected;
+                <View style={styles.commandPlayerPicker}>
+                  <TextInput
+                    value={playerSearch}
+                    onChangeText={setPlayerSearch}
+                    placeholder="Search players"
+                    placeholderTextColor="#7D9BC4"
+                    style={styles.commandSearchInput}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="search"
+                  />
 
-                        return (
-                          <PlayerSelectionCard
-                            key={player.id}
-                            player={player}
-                            selected={selected}
-                            dimmed={dimmed}
-                            locked={locked}
-                            onPress={() => togglePlayer(player.id)}
-                            onLongPress={() => openPlayerProfile(player)}
-                          />
-                        );
-                      })}
-                    </Animated.View>
-                  </ScrollView>
+                  <View style={styles.commandPlayerViewport}>
+                    <ScrollView
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={styles.commandPlayerViewportContent}
+                    >
+                      {filteredPlayers.length === 0 ? (
+                        <View style={styles.emptyPanel}>
+                          <Text style={styles.emptyPanelText}>
+                            No players match that search yet.
+                          </Text>
+                        </View>
+                      ) : (
+                        <Animated.View
+                          style={[
+                            styles.playerGridCompact,
+                            { transform: [{ scale: removePulse }] },
+                          ]}
+                        >
+                          {filteredPlayers.map((player) => {
+                            const selected = selectedIds.includes(player.id);
+                            const locked =
+                              !selected &&
+                              !selectedGroup &&
+                              selectedIds.length >= 5;
+                            const dimmed = Boolean(selectedGroup) && !selected;
+
+                            return (
+                              <PlayerSelectionCard
+                                key={player.id}
+                                player={player}
+                                selected={selected}
+                                dimmed={dimmed}
+                                locked={locked}
+                                onPress={() => togglePlayer(player.id)}
+                                onLongPress={() => openPlayerProfile(player)}
+                              />
+                            );
+                          })}
+                        </Animated.View>
+                      )}
+                    </ScrollView>
+                  </View>
                 </View>
               )}
             </SectionCard>
 
             <SectionCard eyebrow="Saved Tables" title="Groups">
-              {rankedGroups.length === 0 ? (
+              {visibleGroups.length === 0 ? (
                 <View style={styles.emptyPanel}>
                   <Text style={styles.emptyPanelText}>No saved groups found.</Text>
                 </View>
               ) : (
                 <View style={styles.groupListCompact}>
-                  {rankedGroups.map((group) => {
+                  {visibleGroups.map((group) => {
                     const isActive = selectedGroup?.id === group.id;
 
                     return (
@@ -1434,26 +1592,38 @@ export default function HomeScreen() {
       {tab === "hubs" && (
         <View style={styles.hubsPanel}>
           <View style={styles.hubGrid}>
-            {bridgeDestinations.map((card, index) => (
+            {compactBridgeDestinations.map((card, index) => (
               <HubTileCard
                 key={card.key}
                 title={card.title}
                 description={card.description}
                 iconKey={card.iconKey ?? null}
-                layout={card.iconKey ? "graphic" : "text"}
+                layout={card.layout ?? (card.iconKey ? "graphic" : "text")}
                 tint={
                   index % 2 === 0
                     ? "rgba(96,165,250,0.16)"
                     : "rgba(168,85,247,0.14)"
                 }
-                style={styles.hubTile}
-                onPress={() => {
-                  if (card.key === "players" && selectedPlayers.length > 0) {
-                    openFullProfileFromHubs();
-                  } else {
-                    router.push(card.route as any);
-                  }
-                }}
+                style={[styles.hubTileBase, styles.hubTileHalf]}
+                onPress={() => openBridgeDestination(card)}
+              />
+            ))}
+          </View>
+          <View style={styles.hubWideStack}>
+            {featuredBridgeDestinations.map((card, index) => (
+              <HubTileCard
+                key={card.key}
+                title={card.title}
+                description={card.description}
+                iconKey={card.iconKey ?? null}
+                layout={card.layout ?? (card.iconKey ? "graphic" : "text")}
+                tint={
+                  index % 2 === 0
+                    ? "rgba(96,165,250,0.16)"
+                    : "rgba(168,85,247,0.14)"
+                }
+                style={[styles.hubTileBase, styles.hubTileFullWidth]}
+                onPress={() => openBridgeDestination(card)}
               />
             ))}
           </View>
@@ -1471,7 +1641,6 @@ const styles = StyleSheet.create({
   },
   homeShellContent: {
     flex: 1,
-    paddingBottom: 4,
   },
   headerAction: {
     alignSelf: "center",
@@ -1740,6 +1909,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  commandPlayerPicker: {
+    gap: 10,
+  },
   commandHalfButton: {
     flex: 1,
   },
@@ -1750,11 +1922,22 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   commandPlayerViewport: {
-    maxHeight: 238,
-    minHeight: 196,
+    height: 198,
   },
   commandPlayerViewportContent: {
     paddingBottom: 4,
+  },
+  commandSearchInput: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.2)",
+    backgroundColor: "rgba(9,14,28,0.96)",
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   clearSelectionButton: {
     minWidth: 120,
@@ -1775,21 +1958,37 @@ const styles = StyleSheet.create({
   },
   hubsPanel: {
     flex: 1,
+    minHeight: 0,
     justifyContent: "flex-start",
     paddingHorizontal: 4,
     paddingTop: 8,
-    paddingBottom: 4,
+    paddingBottom: 8,
+    gap: 10,
   },
   hubGrid: {
+    flex: 1,
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    alignContent: "flex-start",
+    alignContent: "space-between",
   },
-  hubTile: {
+  hubWideStack: {
+    width: "100%",
+  },
+  hubTileBase: {
+    minHeight: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  hubTileHalf: {
     width: "48.5%",
-    minHeight: 188,
-    marginBottom: 12,
+    height: "48.5%",
+  },
+  hubTileFullWidth: {
+    width: "100%",
+    minHeight: 112,
+    paddingHorizontal: 18,
   },
   groupCardCompact: {
     borderRadius: 10,
@@ -2165,9 +2364,3 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
-
-
-
-
-
-

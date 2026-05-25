@@ -8,6 +8,9 @@ type Input = {
     players?: Array<{
       id: string;
       name?: string;
+      displayName?: string;
+      color?: string;
+      assignedCardArtIndex?: number | null;
       startOrder?: number;
     }>;
     rounds?: Array<{
@@ -58,6 +61,13 @@ export function buildCompletedGamePayload(input: Input) {
       return {
         profile_id: player.id,
         player_name_snapshot: player.name ?? "Unknown Player",
+        display_name_snapshot: player.displayName ?? null,
+        color_snapshot: player.color ?? null,
+        assigned_card_art_index_snapshot:
+          typeof player.assignedCardArtIndex === "number" &&
+          Number.isFinite(player.assignedCardArtIndex)
+            ? player.assignedCardArtIndex
+            : null,
         start_order: player.startOrder ?? 0,
         total_prestige: toNumber(totals.totalPrestige ?? totals.prestige),
         direct_prestige: toNumber(totals.directPrestige),

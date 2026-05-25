@@ -1,15 +1,16 @@
-import React, { useMemo, useState } from "react";
+import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   Pressable,
+  TextInput,
   View,
   Image,
 } from "react-native";
 import { uiPolish } from "@/utils/uiPolish";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "@/store/useStore";
 
 import {
@@ -24,6 +25,10 @@ import {
 import MoonrakersIntelSection from "@/components/player/MoonrakersIntelSection";
 import { buildPlaystyleSamples } from "@/utils/playstyleEngine";
 import { buildMoonrakersIntelProfile } from "@/utils/playerProfileMoonrakers";
+import { resolveAssignedCardArtIndexForProfile } from "@/utils/profileAppearance";
+import { isValidPlayerCardArtIndex } from "@/utils/playerCards";
+import { APP_ROUTES, buildPlayerProfileRoute } from "@/utils/appRoutes";
+import { buildCommonOpponentOptions } from "@/utils/charts";
 
 const SHEET = require("@/assets/images/player-card-sheet.png");
 
@@ -50,6 +55,7 @@ type StorePlayer = {
   id: string;
   name?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
 };
 
 type ProfileGameRow = {
@@ -96,23 +102,6 @@ function getPlayerAccent(color?: string) {
       return "#FACC15";
     default:
       return "#A855F7";
-  }
-}
-
-function getColorColumn(color?: string) {
-  switch ((color ?? "").toLowerCase()) {
-    case "blue":
-      return 0;
-    case "green":
-      return 1;
-    case "purple":
-      return 2;
-    case "orange":
-      return 3;
-    case "yellow":
-      return 4;
-    default:
-      return 2;
   }
 }
 
@@ -789,6 +778,10 @@ export default function PlayerProfileDetailScreen() {
   const playerId = Array.isArray(params.playerId) ? params.playerId[0] : params.playerId;
   const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<EloMetricTab>(getDefaultMetricTab());
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
+  const [opponentSearchQuery, setOpponentSearchQuery] = useState("");
+  const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
+  const deferredOpponentSearchQuery = useDeferredValue(opponentSearchQuery);
 
   const sortedPlayers = useMemo<StorePlayer[]>(() => {
     return [...players].sort((a: StorePlayer, b: StorePlayer) =>
@@ -796,19 +789,69 @@ export default function PlayerProfileDetailScreen() {
     );
   }, [players]);
 
+  useEffect(() => {
+    setSelectedOpponentId(null);
+    setPlayerSearchQuery("");
+    setOpponentSearchQuery("");
+  }, [playerId]);
+
+  const openCommandPage = () => {
+    router.push(APP_ROUTES.home);
+  };
+
+  const handleSelectPlayer = (nextPlayerId: string) => {
+    if (String(nextPlayerId) === String(playerId)) return;
+    router.replace(buildPlayerProfileRoute(String(nextPlayerId)));
+  };
+
   const selectedPlayer = useMemo(
     () => sortedPlayers.find((p) => String(p.id) === String(playerId)) || null,
     [sortedPlayers, playerId]
   );
 
+  const filteredPlayerOptions = useMemo(() => {
+    const normalizedQuery = deferredPlayerSearchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return sortedPlayers;
+
+    return sortedPlayers.filter((player) =>
+      String(player?.name || "").toLowerCase().includes(normalizedQuery)
+    );
+  }, [sortedPlayers, deferredPlayerSearchQuery]);
+
   const selectedPlayerName = selectedPlayer?.name || "Player";
   const playerAccent = getPlayerAccent(selectedPlayer?.color);
-  const playerArtIndex = Math.floor(Math.random() * 6) * 5 + getColorColumn(selectedPlayer?.color);
+  const playerArtIndex =
+    (isValidPlayerCardArtIndex(selectedPlayer?.assignedCardArtIndex)
+      ? selectedPlayer?.assignedCardArtIndex
+      : resolveAssignedCardArtIndexForProfile({
+          favoriteColor: selectedPlayer?.color,
+          assignedCardArtIndex: null,
+        })) ?? 0;
 
   const opponentOptions = useMemo(
     () => sortedPlayers.filter((p) => String(p.id) !== String(playerId)),
     [sortedPlayers, playerId]
   );
+
+  const topOpponentOptions = useMemo(
+    () =>
+      buildCommonOpponentOptions({
+        playerId,
+        players: sortedPlayers as any,
+        games: games as any,
+        limit: 4,
+      }),
+    [playerId, sortedPlayers, games]
+  );
+
+  const filteredOpponentOptions = useMemo(() => {
+    const normalizedQuery = deferredOpponentSearchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return [];
+
+    return opponentOptions.filter((player) =>
+      String(player?.name || "").toLowerCase().includes(normalizedQuery)
+    );
+  }, [opponentOptions, deferredOpponentSearchQuery]);
 
   const profilePlayers = useMemo(
     () =>
@@ -867,9 +910,9 @@ export default function PlayerProfileDetailScreen() {
   const totalWins = filteredRows.filter((row) => row.win === 1).length;
   const winRate = totalGames > 0 ? totalWins / totalGames : 0;
 
-  const currentEloBadgeIndex = ((playerArtIndex + 5) % 30);
-  const peakBadgeIndex = ((playerArtIndex + 10) % 30);
-  const winRateBadgeIndex = ((playerArtIndex + 15) % 30);
+  const currentEloBadgeIndex = playerArtIndex;
+  const peakBadgeIndex = playerArtIndex;
+  const winRateBadgeIndex = playerArtIndex;
 
   const customSection = useMemo(
     () =>
@@ -913,7 +956,7 @@ export default function PlayerProfileDetailScreen() {
       return gamePlayers.some((p: any) => String(p?.id) === String(selectedOpponentId));
     });
 
-    return filteredGames.slice(-6).reverse();
+    return filteredGames.reverse();
   }, [games, playerId, selectedOpponentId]);
 
   const profileInsight = useMemo(
@@ -932,9 +975,9 @@ export default function PlayerProfileDetailScreen() {
 
           <Pressable
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={openCommandPage}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backButtonText}>Back to Command</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -980,16 +1023,59 @@ export default function PlayerProfileDetailScreen() {
               </Text>
             </View>
 
-            <Text style={styles.subtitle}>
-              Custom profile tabs with player-specific metrics, form, context, and projection signals.
-            </Text>
+            <TextInput
+              value={playerSearchQuery}
+              onChangeText={setPlayerSearchQuery}
+              placeholder="Search User"
+              placeholderTextColor={COLORS.muted}
+              style={styles.playerSearchInput}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+
+            {filteredPlayerOptions.length ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.profileSearchRail}
+              >
+                {filteredPlayerOptions.map((player) => {
+                  const active = String(player.id) === String(playerId);
+
+                  return (
+                    <Pressable
+                      key={String(player.id)}
+                      style={styles.underlineTabButton}
+                      onPress={() => handleSelectPlayer(String(player.id))}
+                    >
+                      <Text
+                        style={[
+                          styles.underlineTabText,
+                          active && styles.underlineTabTextActive,
+                        ]}
+                      >
+                        {player.name || "Player"}
+                      </Text>
+                      <View
+                        style={[
+                          styles.underlineTabLine,
+                          active && styles.underlineTabLineActive,
+                        ]}
+                      />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <Text style={styles.emptyText}>No players match that search yet.</Text>
+            )}
           </View>
 
           <Pressable
             style={styles.headerBadge}
-            onPress={() => router.back()}
+            onPress={openCommandPage}
           >
-            <Text style={styles.headerBadgeText}>BACK</Text>
+            <Text style={styles.headerBadgeText}>Back to Command</Text>
           </Pressable>
         </View>
 
@@ -1162,7 +1248,7 @@ export default function PlayerProfileDetailScreen() {
                 />
               </Pressable>
 
-              {opponentOptions.map((player) => {
+              {topOpponentOptions.map((player) => {
                 const active = String(player.id) === String(selectedOpponentId);
                 return (
                   <Pressable
@@ -1188,6 +1274,50 @@ export default function PlayerProfileDetailScreen() {
                 );
               })}
             </View>
+
+            <TextInput
+              value={opponentSearchQuery}
+              onChangeText={setOpponentSearchQuery}
+              placeholder="Search opponents"
+              placeholderTextColor={COLORS.muted}
+              style={styles.contextSearchInput}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+
+            {opponentSearchQuery.trim() ? (
+              filteredOpponentOptions.length ? (
+                <View style={styles.underlineSelectorRow}>
+                  {filteredOpponentOptions.map((player) => {
+                    const active = String(player.id) === String(selectedOpponentId);
+                    return (
+                      <Pressable
+                        key={`search-${player.id}`}
+                        style={styles.underlineTabButton}
+                        onPress={() => setSelectedOpponentId(String(player.id))}
+                      >
+                        <Text
+                          style={[
+                            styles.underlineTabText,
+                            active && styles.underlineTabTextActive,
+                          ]}
+                        >
+                          {player.name || "Unknown"}
+                        </Text>
+                        <View
+                          style={[
+                            styles.underlineTabLine,
+                            active && styles.underlineTabLineActive,
+                          ]}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.emptyText}>No opponents match that search yet.</Text>
+              )
+            ) : null}
           </View>
         ) : null}
 
@@ -1303,12 +1433,12 @@ export default function PlayerProfileDetailScreen() {
         <MoonrakersIntelSection profile={moonrakersIntel} />
 
         <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Recent Games</Text>
-            <Text style={styles.sectionSub}>
-              {selectedOpponentId ? "Filtered by opponent" : "Latest appearances"}
-            </Text>
-          </View>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Recent Games</Text>
+              <Text style={styles.sectionSub}>
+              {selectedOpponentId ? "Filtered by opponent" : "Full history"}
+              </Text>
+            </View>
 
           {recentGames.length === 0 ? (
             <Text style={styles.emptyText}>No recent games found for this player.</Text>
@@ -1339,7 +1469,7 @@ export default function PlayerProfileDetailScreen() {
                           ]}
                         >
                           <CropCardArt
-                            artIndex={((index % 6) * 5) + getColorColumn(selectedPlayer?.color)}
+                            artIndex={playerArtIndex}
                             width={24}
                             height={24}
                           />
@@ -1537,22 +1667,54 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 24,
   },
-  subtitle: {
-    color: COLORS.sub,
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 6,
+  playerSearchInput: {
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    color: COLORS.text,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 10,
+  },
+  contextSearchInput: {
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.whiteSoft,
+    color: COLORS.text,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 10,
+  },
+  profileSearchRail: {
+    gap: 8,
+    paddingTop: 8,
+    paddingRight: 8,
+    alignItems: "center",
   },
   headerBadge: {
-    backgroundColor: COLORS.accentSoft,
+    minHeight: 38,
     borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.blueSoft,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.34)",
   },
   headerBadgeText: {
-    color: COLORS.accent,
+    color: "#E8F1FF",
     fontSize: 11,
     fontWeight: "800",
+    letterSpacing: 0.2,
   },
 
   metricGridTop: {
@@ -1893,13 +2055,4 @@ const styles = StyleSheet.create({
     height: 8,
   },
 });
-
-
-
-
-
-
-
-
-
 

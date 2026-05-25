@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useReducer, useState } from "react";
 import {
   LayoutAnimation,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -10,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
@@ -25,6 +25,7 @@ import MetricInfoModal from "@/components/charts/compare/MetricInfoModal";
 import CompareFocusBar from "@/components/charts/compare/CompareFocusBar";
 
 import { METRICS, METRIC_GROUPS } from "@/utils/compareMetrics";
+import { APP_ROUTES } from "@/utils/appRoutes";
 import {
   buildConditionalAnalysis,
   conditionalReducer,
@@ -75,6 +76,18 @@ const COLORS = {
 };
 
 type FlexibleStore = CompareStoreShape & Record<string, unknown>;
+
+type AuthSessionLike = {
+  user?: {
+    id?: string | null;
+  } | null;
+} | null;
+
+type AuthProfileLike = {
+  id?: string | null;
+  player_name?: string | null;
+  display_name?: string | null;
+} | null;
 
 type FocusGroup =
   | "outcomes"
@@ -173,6 +186,137 @@ function getFocusAliases(group: FocusGroup): string[] {
   }
 }
 
+function normalizeComparePlayerId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normalizeComparePlayerName(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function resolveConditionalQuickSelectAuthPlayerId(args: {
+  players: Player[];
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+  authPlayerName?: string | null;
+  authDisplayName?: string | null;
+}) {
+  const {
+    players,
+    authProfileId,
+    authSessionUserId,
+    authPlayerName,
+    authDisplayName,
+  } = args;
+
+  for (const candidateId of [authProfileId, authSessionUserId]) {
+    const normalizedCandidateId = normalizeComparePlayerId(candidateId);
+    if (!normalizedCandidateId) continue;
+
+    const matchedPlayer = players.find(
+      (player) => normalizeComparePlayerId(player?.id) === normalizedCandidateId
+    );
+    if (matchedPlayer) {
+      return normalizeComparePlayerId(matchedPlayer.id);
+    }
+  }
+
+  const normalizedCandidateNames = [authPlayerName, authDisplayName]
+    .map((value) => normalizeComparePlayerName(value).toLowerCase())
+    .filter(Boolean);
+
+  for (const candidateName of normalizedCandidateNames) {
+    const matchedPlayer = players.find(
+      (player) => normalizeComparePlayerName(player?.name).toLowerCase() === candidateName
+    );
+    if (matchedPlayer) {
+      return normalizeComparePlayerId(matchedPlayer.id);
+    }
+  }
+
+  return null;
+}
+
+function buildConditionalQuickSelectPlayerIds(args: {
+  players: Player[];
+  games: StoredGame[];
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+  authPlayerName?: string | null;
+  authDisplayName?: string | null;
+}) {
+  const {
+    players,
+    games,
+    authProfileId,
+    authSessionUserId,
+    authPlayerName,
+    authDisplayName,
+  } = args;
+
+  const validPlayers = players
+    .map((player) => ({
+      id: normalizeComparePlayerId(player?.id),
+      name: normalizeComparePlayerName(player?.name),
+    }))
+    .filter((player) => player.id && player.name);
+
+  const validPlayerIds = new Set(validPlayers.map((player) => player.id));
+  const appearanceCounts = new Map(validPlayers.map((player) => [player.id, 0]));
+
+  for (const game of games) {
+    const seenGamePlayerIds = new Set<string>();
+    for (const gamePlayer of Array.isArray(game?.players) ? game.players : []) {
+      const normalizedId = normalizeComparePlayerId(gamePlayer?.id);
+      if (!normalizedId || !validPlayerIds.has(normalizedId) || seenGamePlayerIds.has(normalizedId)) {
+        continue;
+      }
+      seenGamePlayerIds.add(normalizedId);
+      appearanceCounts.set(normalizedId, (appearanceCounts.get(normalizedId) ?? 0) + 1);
+    }
+  }
+
+  const loggedInPlayerId = resolveConditionalQuickSelectAuthPlayerId({
+    players,
+    authProfileId,
+    authSessionUserId,
+    authPlayerName,
+    authDisplayName,
+  });
+
+  const rankedPlayerIds = [...validPlayers]
+    .sort((left, right) => {
+      const countDelta =
+        (appearanceCounts.get(right.id) ?? 0) - (appearanceCounts.get(left.id) ?? 0);
+      if (countDelta !== 0) {
+        return countDelta;
+      }
+      return left.name.localeCompare(right.name);
+    })
+    .map((player) => player.id);
+
+  const quickSelectIds: string[] = [];
+
+  if (loggedInPlayerId) {
+    quickSelectIds.push(loggedInPlayerId);
+  }
+
+  for (const playerId of rankedPlayerIds) {
+    if (quickSelectIds.includes(playerId)) {
+      continue;
+    }
+    if ((appearanceCounts.get(playerId) ?? 0) <= 0) {
+      continue;
+    }
+    quickSelectIds.push(playerId);
+    if (quickSelectIds.length >= (loggedInPlayerId ? 6 : 5)) {
+      break;
+    }
+  }
+
+  return quickSelectIds;
+}
+
 export default function IndexScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string | string[]; ids?: string | string[] }>();
@@ -222,10 +366,31 @@ export default function IndexScreen() {
   });
 
   const store = useStore() as FlexibleStore;
+  const authSession = store.authSession as AuthSessionLike;
+  const authProfile = store.authProfile as AuthProfileLike;
 
   const players: Player[] = Array.isArray(store.players) ? store.players : [];
   const groups: Group[] = Array.isArray(store.groups) ? store.groups : [];
   const games: StoredGame[] = useMemo(() => collectGamesFromStore(store), [store]);
+  const conditionalQuickSelectPlayerIds = useMemo(
+    () =>
+      buildConditionalQuickSelectPlayerIds({
+        players,
+        games,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+        authPlayerName: authProfile?.player_name,
+        authDisplayName: authProfile?.display_name,
+      }),
+    [
+      players,
+      games,
+      authProfile?.display_name,
+      authProfile?.id,
+      authProfile?.player_name,
+      authSession?.user?.id,
+    ]
+  );
 
   const playerMap = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
@@ -479,11 +644,13 @@ export default function IndexScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.navRow}>
-          <TouchableOpacity style={styles.navPill} onPress={() => router.replace("/")} activeOpacity={0.9}>
-            <Text style={styles.navPillText}>Home</Text>
+          <TouchableOpacity style={styles.navPill} onPress={() => router.push(APP_ROUTES.home)} activeOpacity={0.9}>
+            <Text style={styles.navPillText}>Back to Command</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.navPill} onPress={() => router.push("/stats")} activeOpacity={0.9}>
             <Text style={styles.navPillText}>Stats</Text>
@@ -561,6 +728,7 @@ export default function IndexScreen() {
               description=""
               players={players}
               groups={groups}
+              quickSelectIds={mode === "players" ? conditionalQuickSelectPlayerIds : []}
               subjectMode={mode === "groups" ? "groups" : "players"}
               conditionalState={conditionalState}
               conditionalAnalysis={conditionalAnalysis}
@@ -952,4 +1120,3 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
-

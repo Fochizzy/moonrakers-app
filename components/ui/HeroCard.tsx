@@ -15,6 +15,7 @@ type HeroCardProps = {
   art?: ImageSourcePropType;
   children?: React.ReactNode;
   eyebrow?: string;
+  headerAction?: React.ReactNode;
   size?: "default" | "compact";
   style?: StyleProp<ViewStyle>;
   subtitle?: string;
@@ -27,6 +28,7 @@ export default function HeroCard({
   art,
   children,
   eyebrow,
+  headerAction,
   size = "default",
   style,
   subtitle,
@@ -47,8 +49,20 @@ export default function HeroCard({
         stat ? styles.innerStat : null,
       ]}
     >
-      {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
-      <Text variant="pageTitle">{title}</Text>
+      {headerAction ? (
+        <View style={styles.headerRow}>
+          <View style={styles.headerCopy}>
+            {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
+            <Text variant="pageTitle">{title}</Text>
+          </View>
+          <View style={styles.headerAction}>{headerAction}</View>
+        </View>
+      ) : (
+        <>
+          {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
+          <Text variant="pageTitle">{title}</Text>
+        </>
+      )}
       {subtitle ? <Text variant="heroSubtitle">{subtitle}</Text> : null}
       {children}
       {actions ? <View style={[styles.actions, compact ? styles.actionsCompact : null]}>{actions}</View> : null}
@@ -111,6 +125,20 @@ const styles = StyleSheet.create({
   },
   innerStat: {
     gap: 8,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  headerAction: {
+    flexShrink: 0,
+    alignSelf: "flex-start",
   },
   actions: {
     flexDirection: "row",

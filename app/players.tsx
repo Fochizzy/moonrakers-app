@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import ActionButton from "@/components/ui/ActionButton";
 import HeroCard from "@/components/ui/HeroCard";
 import HubTileCard from "@/components/ui/HubTileCard";
 import PageShell from "@/components/ui/PageShell";
@@ -107,6 +108,13 @@ export default function PlayersScreen() {
         </View>
       </HeroCard>
 
+      <ActionButton
+        title="Search player"
+        variant="secondary"
+        style={styles.searchPlayerButton}
+        onPress={() => router.push(APP_ROUTES.playerDirectory)}
+      />
+
       {resumeRecommendation ? (
         <SectionCard title="Resume">
           <Pressable
@@ -129,7 +137,7 @@ export default function PlayersScreen() {
             onPress={() => router.push(APP_ROUTES.roster)}
             style={({ pressed }) => [styles.primaryAction, pressed && styles.primaryActionPressed]}
           >
-            <Text style={styles.primaryActionText}>Open Roster Tools</Text>
+            <Text style={styles.primaryActionText}>Open roster</Text>
           </Pressable>
         </SectionCard>
       ) : null}
@@ -141,10 +149,13 @@ export default function PlayersScreen() {
               key={card.key}
               description={card.description}
               iconKey={card.iconKey ?? null}
-              layout={card.iconKey ? "graphic" : "text"}
+              layout={card.key === "cards" ? "graphic-horizontal" : card.iconKey ? "graphic" : "text"}
               title={card.title}
               badge={card.bestFor}
-              style={card.iconKey ? styles.surfaceTileGraphic : styles.surfaceTileText}
+              style={[
+                card.iconKey ? styles.surfaceTileGraphic : styles.surfaceTileText,
+                card.key === "cards" ? styles.surfaceTileWide : null,
+              ]}
               onPress={() => router.push(card.route as any)}
             />
           ))}
@@ -174,6 +185,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
+  },
+  searchPlayerButton: {
+    width: "100%",
   },
   metricPill: {
     minWidth: 94,
@@ -244,5 +258,9 @@ const styles = StyleSheet.create({
   },
   surfaceTileText: {
     minHeight: 144,
+  },
+  surfaceTileWide: {
+    flexBasis: "100%",
+    minHeight: 164,
   },
 });

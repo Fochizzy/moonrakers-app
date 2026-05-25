@@ -39,6 +39,8 @@ type Player = {
   name?: string;
   initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
+  artIndex?: number | null;
   elo?: number;
   prestige?: number;
   totalPrestige?: number;
@@ -160,6 +162,21 @@ function buildCardArtIndex(color?: string, seed = 0) {
   return row * 5 + column;
 }
 
+function resolveRenderableCardArtIndex(player?: Player | null) {
+  return typeof player?.assignedCardArtIndex === "number" &&
+    Number.isFinite(player.assignedCardArtIndex)
+    ? player.assignedCardArtIndex
+    : typeof player?.artIndex === "number" &&
+        Number.isFinite(player.artIndex)
+      ? player.artIndex
+      : typeof player?.id === "string" || typeof player?.id === "number"
+        ? buildCardArtIndex(
+            player?.color,
+            Number(String(player?.id).replace(/\D/g, "").slice(-3) || 0)
+          )
+        : buildCardArtIndex(player?.color, 0);
+}
+
 function CropCardArt({
   artIndex,
   width,
@@ -195,13 +212,7 @@ function SmallPlayerArt({
   player: Player;
   size?: number;
 }) {
-  const artIndex =
-    typeof player?.id === "string" || typeof player?.id === "number"
-      ? buildCardArtIndex(
-          player?.color,
-          Number(String(player?.id).replace(/\D/g, "").slice(-3) || 0)
-        )
-      : buildCardArtIndex(player?.color, 0);
+  const artIndex = resolveRenderableCardArtIndex(player);
 
   return (
     <View
@@ -469,7 +480,7 @@ function StatTile({
   );
 }
 
-function PlayerCard({
+export function PlayerCard({
   player,
   games,
   isSelected = false,
@@ -546,13 +557,7 @@ function PlayerCard({
   const subtitle = safeString(identity.subtitle, "No player data");
   const featuredStats = `${resolved.gamesPlayed} Games • ${resolved.wins} Wins • ${winRate}% WR`;
 
-  const artIndex =
-    typeof safePlayer?.id === "string" || typeof safePlayer?.id === "number"
-      ? buildCardArtIndex(
-          safePlayer?.color,
-          Number(String(safePlayer?.id).replace(/\D/g, "").slice(-3) || 0)
-        )
-      : buildCardArtIndex(safePlayer?.color, 0);
+  const artIndex = resolveRenderableCardArtIndex(safePlayer);
 
   const openPlayerProfile = () => {
     if (!safePlayer?.id) return;
@@ -866,7 +871,7 @@ export default function ColorPlayerCardScreen() {
     }
 
     router.replace({
-      pathname: "/ColorPlayerCard",
+      pathname: "/player-cards",
       params: { playerId: String(playerId) },
     });
   };

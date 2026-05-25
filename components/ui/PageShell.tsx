@@ -6,7 +6,11 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { SafeAreaView, type Edge } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  type Edge,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useTheme } from "@/theme";
 import ScreenBackground, {
   type ScreenBackgroundPreset,
@@ -24,6 +28,37 @@ type PageShellProps = {
   viewport?: "scroll" | "fit";
 };
 
+function readNumericPadding(value: unknown) {
+  return typeof value === "number" ? value : undefined;
+}
+
+function resolvePaddingValue(
+  style: ViewStyle | undefined,
+  edge: "top" | "right" | "bottom" | "left",
+  fallback: number,
+) {
+  const padding = readNumericPadding(style?.padding);
+  const paddingHorizontal = readNumericPadding(style?.paddingHorizontal);
+  const paddingVertical = readNumericPadding(style?.paddingVertical);
+  const paddingTop = readNumericPadding(style?.paddingTop);
+  const paddingRight = readNumericPadding(style?.paddingRight);
+  const paddingBottom = readNumericPadding(style?.paddingBottom);
+  const paddingLeft = readNumericPadding(style?.paddingLeft);
+
+  switch (edge) {
+    case "top":
+      return paddingTop ?? paddingVertical ?? padding ?? fallback;
+    case "right":
+      return paddingRight ?? paddingHorizontal ?? padding ?? fallback;
+    case "bottom":
+      return paddingBottom ?? paddingVertical ?? padding ?? fallback;
+    case "left":
+      return paddingLeft ?? paddingHorizontal ?? padding ?? fallback;
+    default:
+      return fallback;
+  }
+}
+
 export default function PageShell({
   children,
   contentContainerStyle,
@@ -36,22 +71,46 @@ export default function PageShell({
   viewport,
 }: PageShellProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const compact = density === "compact";
   const resolvedViewport = viewport ?? (scroll ? "scroll" : "fit");
   const shouldScroll = resolvedViewport === "scroll";
+  const flattenedContentStyle =
+    StyleSheet.flatten(contentContainerStyle) ?? undefined;
+  const resolvedPaddingTop = resolvePaddingValue(
+    flattenedContentStyle,
+    "top",
+    compact ? theme.spacing.lg : theme.spacing.xl,
+  );
+  const resolvedPaddingRight = resolvePaddingValue(
+    flattenedContentStyle,
+    "right",
+    theme.spacing.lg,
+  );
+  const resolvedPaddingBottom = resolvePaddingValue(
+    flattenedContentStyle,
+    "bottom",
+    compact ? theme.spacing.xl : theme.spacing["2xl"],
+  );
+  const resolvedPaddingLeft = resolvePaddingValue(
+    flattenedContentStyle,
+    "left",
+    theme.spacing.lg,
+  );
 
   const content = (
     <View
       style={[
         styles.shellContentInset,
         styles.content,
-        {
-          paddingHorizontal: theme.spacing.lg,
-          paddingTop: compact ? theme.spacing.lg : theme.spacing.xl,
-          paddingBottom: compact ? theme.spacing.xl : theme.spacing["2xl"],
-        },
         compact ? styles.contentCompact : null,
         contentContainerStyle,
+        {
+          paddingTop: resolvedPaddingTop + insets.top,
+          paddingRight: resolvedPaddingRight,
+          paddingBottom: resolvedPaddingBottom + insets.bottom,
+          paddingLeft: resolvedPaddingLeft,
+        },
       ]}
     >
       {children}

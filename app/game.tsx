@@ -9,8 +9,15 @@ import {
   Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { loadCloudSnapshot } from '@/lib/cloud/loadCloudSnapshot';
+import { loadRegisteredProfiles } from '@/lib/cloud/loadRegisteredProfiles';
+import { loadStatsSnapshot } from '@/lib/cloud/loadStatsSnapshot';
+import { createSharedGroup } from '@/lib/cloud/sharedGroups';
+import { resolveCloudGameSaveState } from '@/lib/game-save/resolveCloudGameSave';
 import { saveCompletedGame } from '@/lib/game-save/saveCompletedGame';
+import { formatSupabaseConfigError } from '@/lib/supabase';
 import { useStore } from '@/store/useStore';
 import StarryNight from '@/components/ui/StarryNight';
 import Text from '@/components/ui/Text';
@@ -29,11 +36,16 @@ import {
   getPlayerAccentColor,
   getPlayerBackgroundColor,
 } from '@/utils/turnTheme';
+import { mergeRegisteredProfilesIntoPlayers } from '@/utils/registeredProfilePlayer';
+import { APP_ROUTES } from '@/utils/appRoutes';
 
 type Player = {
   id: string;
   name: string;
+  displayName?: string;
+  initials?: string;
   color?: string;
+  assignedCardArtIndex?: number | null;
   startOrder?: number;
 };
 
@@ -805,10 +817,10 @@ function ObjectiveRow({
 
 function ObjectivesSection({
   currentAccent,
-  currentPlayerName,
+  currentPlayerId,
   currentObjectiveCount,
   onSetCurrentObjectiveCount,
-  otherPlayers,
+  playersInTurnOrder,
   objectiveAwardsByPlayer,
   onSetOtherPlayerObjective,
   collapsed,
@@ -816,18 +828,23 @@ function ObjectivesSection({
   onSelectNone,
 }: {
   currentAccent: string;
-  currentPlayerName: string;
+  currentPlayerId: string;
   currentObjectiveCount: number;
   onSetCurrentObjectiveCount: (next: number) => void;
-  otherPlayers: Player[];
+  playersInTurnOrder: Player[];
   objectiveAwardsByPlayer: Record<string, number>;
   onSetOtherPlayerObjective: (playerId: string, next: number) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onSelectNone: () => void;
 }) {
-  const totalAwarded =
-    currentObjectiveCount + otherPlayers.reduce((sum, p) => sum + clampCount(objectiveAwardsByPlayer[p.id]), 0);
+  const totalAwarded = playersInTurnOrder.reduce((sum, player) => {
+    const count =
+      player.id === currentPlayerId
+        ? clampCount(currentObjectiveCount)
+        : clampCount(objectiveAwardsByPlayer[player.id]);
+    return sum + count;
+  }, 0);
 
   return (
     <View style={[styles.sectionCard, { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: UI.card }, glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8)]}>
@@ -845,19 +862,25 @@ function ObjectivesSection({
 
       {!collapsed ? (
         <View style={styles.rowsStack}>
-          <ObjectiveRow
-            title={currentPlayerName}
-            value={clampCount(currentObjectiveCount)}
-            accent={currentAccent}
-            onChange={onSetCurrentObjectiveCount}
-          />
-          {otherPlayers.map((player, index) => (
+          {playersInTurnOrder.map((player, index) => (
             <ObjectiveRow
               key={player.id}
               title={player.name}
-              value={clampCount(objectiveAwardsByPlayer[player.id])}
-              accent={getPlayerAccentColor(resolveStoredPlayerColor(player.color, index))}
-              onChange={(next) => onSetOtherPlayerObjective(player.id, next)}
+              value={
+                player.id === currentPlayerId
+                  ? clampCount(currentObjectiveCount)
+                  : clampCount(objectiveAwardsByPlayer[player.id])
+              }
+              accent={
+                player.id === currentPlayerId
+                  ? currentAccent
+                  : getPlayerAccentColor(resolveStoredPlayerColor(player.color, index))
+              }
+              onChange={
+                player.id === currentPlayerId
+                  ? onSetCurrentObjectiveCount
+                  : (next) => onSetOtherPlayerObjective(player.id, next)
+              }
             />
           ))}
         </View>
@@ -867,6 +890,7 @@ function ObjectivesSection({
 }
 
 function ActionsSection({
+  bottomInset,
   editingRoundId,
   canSubmitTurn,
   canEditPreviousTurn,
@@ -877,6 +901,7 @@ function ActionsSection({
   onSaveOrAdvance,
   onFinishGame,
 }: {
+  bottomInset: number;
   editingRoundId: string | null;
   canSubmitTurn: boolean;
   canEditPreviousTurn: boolean;
@@ -888,7 +913,12 @@ function ActionsSection({
   onFinishGame: () => void;
 }) {
   return (
-    <View style={styles.actionsWrap}>
+    <View
+      style={[
+        styles.actionsWrap,
+        { paddingBottom: Math.max(bottomInset, 16) + 16 },
+      ]}
+    >
       <View style={styles.actionRow}>
         <ScaleButton
           disabled={!canEditPreviousTurn}
@@ -985,12 +1015,15 @@ function PreviousRoundsSection({
 
 export default function Game() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const activeGame = useStore((s: any) => s.activeGame);
   const patchActiveGame = useStore((s: any) => s.patchActiveGame);
   const clearActiveGame = useStore((s: any) => s.clearActiveGame);
-  const addGame = useStore((s: any) => s.addGame);
+  const hydrateCloudSnapshot = useStore((s: any) => s.hydrateCloudSnapshot);
   const authSession = useStore((s: any) => s.authSession);
+  const playerDirectory = useStore((s: any) => s.players ?? []);
+  const groupDirectory = useStore((s: any) => s.groups ?? []);
 
   const [contractChoice, setContractChoice] = useState<BinaryChoice>(0);
   const [failureChoice, setFailureChoice] = useState<BinaryChoice>(0);
@@ -1489,43 +1522,88 @@ export default function Game() {
       }
 
       const winnerId = leaderboard[0]?.id;
-      await saveCompletedGame({
-        hostProfileId: authSession.user.id,
+      const cloudSave = resolveCloudGameSaveState({
         activeGame: {
           ...activeGame,
+          players,
           totals: finalTotals,
           rounds,
         },
         winnerId,
+        playerDirectory,
+        groupDirectory,
       });
 
-      addGame({
-        id: activeGame.id,
+      if (cloudSave.unresolvedPlayerNames.length) {
+        Alert.alert(
+          'Registered players required',
+          `${cloudSave.unresolvedPlayerNames.join(', ')} need Moonrakers accounts before this game can be saved to Supabase.`,
+        );
+        return;
+      }
+
+      let cloudGame = cloudSave.activeGame;
+      if (cloudSave.createGroupRequest) {
+        const sharedGroup = await createSharedGroup({
+          createdBy: authSession.user.id,
+          name: cloudSave.createGroupRequest.name,
+          playerIds: cloudSave.createGroupRequest.playerIds,
+        });
+
+        cloudGame = {
+          ...cloudGame,
+          groupId: sharedGroup.id,
+          groupName: sharedGroup.name,
+        };
+      }
+
+      await saveCompletedGame({
         hostProfileId: authSession.user.id,
-        players: players.map((player) => ({
-          ...player,
-          totalPrestige: getTotalPrestigeFromTotals(finalTotals[player.id] as PlayerTotals),
-          directPrestige: finalTotals[player.id]?.directPrestige ?? 0,
-          objectivePrestige: finalTotals[player.id]?.objectivePrestige ?? 0,
-          score: finalTotals[player.id]?.score ?? 0,
-        })),
-        winnerId,
-        selectedWinnerId: activeGame.selectedWinnerId ?? undefined,
-        totals: finalTotals,
-        rounds,
-        timeline: rounds,
-        roundCount: rounds.length,
-        createdAt: activeGame.createdAt,
-        groupId: activeGame.groupId,
-        groupName: activeGame.groupName,
-        objectiveStatsEligible: true,
+        activeGame: cloudGame,
+        winnerId: cloudSave.winnerId,
       });
 
       clearActiveGame();
+
+      try {
+        const [snapshot, registeredProfiles] = await Promise.all([
+          loadCloudSnapshot(authSession.user.id),
+          loadRegisteredProfiles().catch(() => []),
+        ]);
+        const statsSnapshot = await loadStatsSnapshot({
+          profileId: authSession.user.id,
+          groups: snapshot.groups,
+          games: snapshot.games,
+        });
+
+        hydrateCloudSnapshot({
+          session: authSession,
+          snapshot: {
+            ...snapshot,
+            players: mergeRegisteredProfilesIntoPlayers(
+              snapshot.players,
+              registeredProfiles,
+            ),
+          },
+          statsSnapshot,
+        });
+      } catch (refreshError) {
+        console.error('Finished game saved, but cloud refresh failed:', refreshError);
+        router.replace('/');
+        Alert.alert(
+          'Game saved',
+          'The game was saved to Supabase, but the local view could not refresh yet.',
+        );
+        return;
+      }
+
       router.replace('/');
     } catch (error) {
       console.error('Finish Game failed:', error);
-      Alert.alert('Error', 'Something went wrong finishing the game.');
+      Alert.alert(
+        'Couldn\'t save game',
+        formatSupabaseConfigError(error) || 'Something went wrong finishing the game.',
+      );
     }
   }
 
@@ -1566,7 +1644,15 @@ export default function Game() {
         ]}
       />
 
-      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.container}>
+      <View
+        style={[
+          styles.heroStickyShell,
+          {
+            paddingTop: 10 + insets.top,
+            backgroundColor: appBackground,
+          },
+        ]}
+      >
         <View
           style={[
             styles.heroCard,
@@ -1576,39 +1662,64 @@ export default function Game() {
             },
           ]}
         >
-          {editingRoundId ? (
-            <Text style={styles.heroEyebrow}>Editing Previous Turn</Text>
-          ) : null}
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroHeaderSpacer} />
 
-          <View style={styles.heroIdentityRow}>
-            <View
-              style={[
-                styles.nameBadge,
-                {
-                  backgroundColor: currentDark,
-                  borderColor: withAlpha(currentAccent, 0.34),
-                },
-              ]}
-            >
-              <Text style={styles.nameBadgeText}>{currentPlayer.name}</Text>
+            <View style={styles.heroHeaderCopy}>
+              {editingRoundId ? (
+                <Text style={styles.heroEyebrow}>Editing Previous Turn</Text>
+              ) : null}
+
+              <View style={styles.heroIdentityRow}>
+                <View
+                  style={[
+                    styles.nameBadge,
+                    {
+                      backgroundColor: currentDark,
+                      borderColor: withAlpha(currentAccent, 0.34),
+                    },
+                  ]}
+                >
+                  <Text style={styles.nameBadgeText}>{currentPlayer.name}</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.roundBadge,
+                    {
+                      backgroundColor: currentDarker,
+                      borderColor: withAlpha(currentAccent, 0.22),
+                    },
+                  ]}
+                >
+                  <Text style={styles.roundBadgeText}>
+                    Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
+                  </Text>
+                </View>
+              </View>
             </View>
 
-            <View
-              style={[
-                styles.roundBadge,
-                {
-                  backgroundColor: currentDarker,
-                  borderColor: withAlpha(currentAccent, 0.22),
-                },
-              ]}
+            <Pressable
+              style={styles.commandButton}
+              onPress={() => router.push(APP_ROUTES.home)}
             >
-              <Text style={styles.roundBadgeText}>
-                Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
-              </Text>
-            </View>
+              <Text style={styles.commandButtonText}>Back to Command</Text>
+            </Pressable>
           </View>
         </View>
+      </View>
 
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.container,
+          {
+            paddingTop: 0,
+            paddingBottom: 14 + insets.bottom,
+          },
+        ]}
+      >
         <CompactPlayerStrip players={leaderboardPlayers} activePlayerId={currentPlayer.id} totals={totals} />
 
         <DirectPrestigeSection
@@ -1642,10 +1753,10 @@ export default function Game() {
 
         <ObjectivesSection
           currentAccent={currentAccent}
-          currentPlayerName={currentPlayer.name}
+          currentPlayerId={currentPlayer.id}
           currentObjectiveCount={clampCount(current.objectiveCount)}
           onSetCurrentObjectiveCount={(next) => updateCurrent({ objectiveCount: next })}
-          otherPlayers={otherPlayers}
+          playersInTurnOrder={players}
           objectiveAwardsByPlayer={objectiveAwardsByPlayer}
           onSetOtherPlayerObjective={setOtherPlayerObjective}
           collapsed={objectivesCollapsed}
@@ -1663,6 +1774,7 @@ export default function Game() {
         ) : null}
 
         <ActionsSection
+          bottomInset={insets.bottom}
           editingRoundId={editingRoundId}
           canSubmitTurn={canSubmitTurn}
           canEditPreviousTurn={!!latestDisplayRound}
@@ -1695,10 +1807,30 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 8,
   },
+  heroStickyShell: {
+    zIndex: 4,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
   heroCard: {
     borderRadius: 10,
     borderWidth: 1,
     padding: 10,
+    gap: 6,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  heroHeaderSpacer: {
+    width: 128,
+  },
+  heroHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
     gap: 6,
   },
   heroEyebrow: {
@@ -1734,6 +1866,24 @@ const styles = StyleSheet.create({
     color: UI.text,
     fontSize: 11,
     fontWeight: '700',
+  },
+  commandButton: {
+    minWidth: 128,
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: withAlpha(UI.text, 0.16),
+    backgroundColor: UI.cardMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commandButtonText: {
+    color: UI.text,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   playerStripRow: {
     gap: 4,
@@ -2188,5 +2338,3 @@ noneChip: {
     fontWeight: '800',
   },
 });
-
-

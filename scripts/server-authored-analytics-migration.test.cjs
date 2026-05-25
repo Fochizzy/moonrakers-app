@@ -22,6 +22,7 @@ for (const pattern of [
   /create or replace function public\.get_analytics_home/i,
   /create or replace function public\.get_stats_screen/i,
   /create or replace function public\.get_insights_screen/i,
+  /create or replace function public\.get_chart_setup/i,
   /create or replace function public\.get_chart_dataset/i,
   /create or replace function public\.refresh_server_authored_analytics/i,
 ]) {

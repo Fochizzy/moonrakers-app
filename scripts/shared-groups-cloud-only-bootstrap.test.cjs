@@ -9,47 +9,28 @@ function read(relPath) {
 }
 
 const layoutSource = read(path.join("app", "_layout.tsx"));
-const helperMatch = layoutSource.match(
-  /async function loadLocalSnapshot\(\)\s*\{([\s\S]*?)\n\}/,
+assert.doesNotMatch(
+  layoutSource,
+  /async function loadLocalSnapshot\(/,
+  "expected _layout.tsx to remove the local app-data snapshot helper",
 );
-
-assert.ok(
-  helperMatch,
-  "expected _layout.tsx to define loadLocalSnapshot()",
-);
-
-const helperBody = helperMatch[1];
 
 assert.doesNotMatch(
-  helperBody,
-  /loadGroups\(\)/,
-  "expected _layout.tsx to stop loading local groups during bootstrap",
-);
-
-const promiseAllMatch = helperBody.match(
-  /const\s*\[\s*players\s*,\s*games\s*\]\s*=\s*await\s*Promise\.all\s*\(\s*\[([\s\S]*?)\]\s*\)/s,
-);
-
-assert.ok(
-  promiseAllMatch,
-  "expected loadLocalSnapshot to await Promise.all for local players and games",
-);
-
-const loadCalls = Array.from(
-  promiseAllMatch[1].matchAll(/load[A-Za-z]+\(\)/g),
-  (match) => match[0],
-);
-
-assert.deepStrictEqual(
-  loadCalls,
-  ["loadPlayers()", "loadGames()"],
-  "expected loadLocalSnapshot to keep only local players and games",
+  layoutSource,
+  /loadPlayers\(\)|loadGames\(\)/,
+  "expected _layout.tsx to stop loading local players and games during auth bootstrap",
 );
 
 assert.match(
-  helperBody,
-  /groups:\s*\[\],/,
-  "expected loadLocalSnapshot to return an empty local groups array",
+  layoutSource,
+  /if\s*\(!session\?\.user\?\.id\)\s*\{[\s\S]*?clearAuthState\(\);[\s\S]*?setPlayers\(\[\]\s+as any\);[\s\S]*?setGroups\(\[\]\s+as any\);[\s\S]*?setGames\(\[\]\s+as any\);/s,
+  "expected signed-out bootstrap to clear store data instead of restoring local app data",
+);
+
+assert.match(
+  layoutSource,
+  /if\s*\(!profile\?\.player_name\)\s*\{[\s\S]*?setPlayers\(\[\]\s+as any\);[\s\S]*?setGroups\(\[\]\s+as any\);[\s\S]*?setGames\(\[\]\s+as any\);[\s\S]*?hydrateAuthBootstrap\(\{\s*session,\s*profile\s*\}\);/s,
+  "expected incomplete-profile bootstrap to keep app data empty instead of restoring local app data",
 );
 
 console.log("shared-groups-cloud-only-bootstrap.test.cjs passed");

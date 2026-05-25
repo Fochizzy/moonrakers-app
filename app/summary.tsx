@@ -7,6 +7,7 @@ import {
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import StarryNight from '@/components/ui/StarryNight';
 import Text from '@/components/ui/Text';
@@ -183,6 +184,7 @@ function buildReplayRows(game?: StoredGame) {
 
 export default function SummaryScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ gameId?: string }>();
 
   const rawPlayers = useStore((s: any) => s.players);
@@ -292,7 +294,13 @@ export default function SummaryScreen() {
       <StarryNight />
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: 18 + insets.top,
+            paddingBottom: 28 + insets.bottom,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>

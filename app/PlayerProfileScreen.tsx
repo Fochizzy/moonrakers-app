@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PlayerProfileScreen() {
   const [tab, setTab] = useState<'overview' | 'advanced' | 'matchups' | 'history'>('overview');
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
       <Text style={{ color: 'red', fontSize: 20, fontWeight: '900' }}>
         CORRECT FILE LOADED
       </Text>
@@ -62,7 +63,7 @@ export default function PlayerProfileScreen() {
         )}
 
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -120,5 +121,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
 

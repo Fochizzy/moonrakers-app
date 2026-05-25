@@ -1,3 +1,5 @@
+import { refreshServerAuthoredAnalytics } from "../cloud/analytics/refreshServerAuthoredAnalytics";
+
 type RpcResult = {
   error?: unknown;
 };
@@ -41,6 +43,10 @@ export async function refreshRollupsAfterLegacyImport(
   if (result?.error) {
     throw result.error;
   }
+
+  await refreshServerAuthoredAnalytics({
+    profileId: hostProfileId,
+  });
 
   return true;
 }

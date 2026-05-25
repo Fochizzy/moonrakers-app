@@ -17,11 +17,15 @@ type Insight = {
 type Props = {
   insights?: Insight[];
   title?: string;
+  embedded?: boolean;
+  showHeader?: boolean;
 };
 
 function InsightList({
   insights = [],
   title = 'Insight Feed',
+  embedded = false,
+  showHeader = true,
 }: Props) {
   const { width } = useWindowDimensions();
   const players = useStore((state: any) => state.players ?? []);
@@ -35,24 +39,27 @@ function InsightList({
   }, [players]);
 
   const visible = useMemo(() => insights.filter(Boolean), [insights]);
-  const isTwoColumn = width >= 700;
+  const isTwoColumn = width >= 360;
 
-  return (
-    <View style={styles.panel}>
-      <View pointerEvents="none" style={styles.nebulaPurple} />
-      <View pointerEvents="none" style={styles.nebulaBlue} />
+  const body = (
+    <>
+      {showHeader ? (
+        <>
+          <View style={styles.header}>
+            <View style={styles.titleWrap}>
+              <Text style={styles.eyebrow}>Intelligence</Text>
+              <Text style={styles.title}>{title}</Text>
+            </View>
 
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>Intelligence</Text>
-        <Text style={styles.title}>{title}</Text>
+            <View style={styles.countCard}>
+              <Text style={styles.countValue}>{visible.length}</Text>
+              <Text style={styles.countLabel}>Signals</Text>
+            </View>
+          </View>
 
-        <View style={styles.countCard}>
-          <Text style={styles.countValue}>{visible.length}</Text>
-          <Text style={styles.countLabel}>Signals</Text>
-        </View>
-      </View>
-
-      <View style={styles.divider} />
+          <View style={styles.divider} />
+        </>
+      ) : null}
 
       {visible.length === 0 ? (
         <View style={styles.empty}>
@@ -76,6 +83,18 @@ function InsightList({
           ))}
         </View>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return <View style={styles.embeddedBody}>{body}</View>;
+  }
+
+  return (
+    <View style={styles.panel}>
+      <View pointerEvents="none" style={styles.nebulaPurple} />
+      <View pointerEvents="none" style={styles.nebulaBlue} />
+      {body}
     </View>
   );
 }
@@ -91,6 +110,9 @@ const styles = StyleSheet.create({
     borderColor: withAlpha('#3b82f6', 0.2),
     gap: 14,
     overflow: 'hidden',
+  },
+  embeddedBody: {
+    gap: 10,
   },
   nebulaPurple: {
     position: 'absolute',
@@ -111,7 +133,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(59,130,246,0.1)',
   },
   header: {
-    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  titleWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
   },
   eyebrow: {
     fontSize: 11,
@@ -121,27 +151,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   title: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
     color: '#ffffff',
   },
   countCard: {
-    marginTop: 6,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
+    minWidth: 62,
+    paddingHorizontal: 8,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: 'rgba(168,85,247,0.12)',
     borderWidth: 1,
     borderColor: 'rgba(168,85,247,0.3)',
+    alignItems: 'center',
   },
   countValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     color: '#ffffff',
   },
   countLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
     color: '#c084fc',
   },
@@ -150,20 +180,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(148,163,184,0.15)',
   },
   list: {
-    gap: 10,
+    gap: 8,
   },
   listTwoColumn: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'flex-start',
-    marginHorizontal: -5,
+    gap: 0,
+    rowGap: 8,
+    justifyContent: 'space-between',
   },
   cardCell: {
     width: '100%',
   },
   cardCellTwoColumn: {
-    width: '50%',
-    paddingHorizontal: 5,
+    width: '49%',
   },
   empty: {
     padding: 16,
@@ -182,5 +213,3 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
 });
-
-

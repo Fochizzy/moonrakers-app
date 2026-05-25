@@ -8,6 +8,7 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useStore } from '@/store/useStore';
 import StarryNight from '@/components/ui/StarryNight';
@@ -137,6 +138,7 @@ function SectionCard({
 
 export default function GameTrendsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ gameId?: string | string[] }>();
   const gameId = Array.isArray(params.gameId) ? params.gameId[0] : params.gameId;
 
@@ -300,7 +302,7 @@ export default function GameTrendsScreen() {
               The saved game for this trends page could not be found.
             </Text>
 
-            <Pressable style={styles.topButton} onPress={() => router.replace('/history')}>
+            <Pressable style={styles.topButton} onPress={() => router.push('/history')}>
               <Text style={styles.topButtonText}>Back to History</Text>
             </Pressable>
           </View>
@@ -318,7 +320,13 @@ export default function GameTrendsScreen() {
 
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: 12 + insets.top,
+            paddingBottom: 28 + insets.bottom,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topRow}>
@@ -326,7 +334,7 @@ export default function GameTrendsScreen() {
             <Text style={styles.topButtonText}>Back</Text>
           </Pressable>
 
-          <Pressable style={styles.topButton} onPress={() => router.replace('/')}>
+          <Pressable style={styles.topButton} onPress={() => router.push('/')}>
             <Text style={styles.topButtonText}>Home</Text>
           </Pressable>
         </View>
@@ -837,5 +845,3 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
-
-

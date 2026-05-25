@@ -151,6 +151,14 @@ function normalizeStringOrUndefined(v: any): string | undefined {
   return normalized || undefined;
 }
 
+function isRecoveredPlayerName(v: any): boolean {
+  return normalizeName(v).toLowerCase() === 'recovered player';
+}
+
+function isRecoveredPlayerRecord(v: any): boolean {
+  return isRecoveredPlayerName(v?.name ?? v?.playerName ?? v?.displayName);
+}
+
 function getInitialsFromName(name: string): string {
   const parts = String(name ?? '')
     .trim()
@@ -219,11 +227,110 @@ function createEmptyCurrent(): ActiveGameCurrent {
   };
 }
 
+function sanitizeStoredPlayers(players: any): Player[] {
+  const seen = new Set<string>();
+
+  return (Array.isArray(players) ? players : [])
+    .map((rawPlayer: any) => {
+      const id = normalizeId(rawPlayer?.id);
+      const name = normalizeName(rawPlayer?.name);
+
+      if (!id || !name || isRecoveredPlayerName(name) || seen.has(id)) {
+        return null;
+      }
+
+      seen.add(id);
+
+      return {
+        ...rawPlayer,
+        id,
+        name,
+        initials:
+          normalizeStringOrUndefined(rawPlayer?.initials) || getInitialsFromName(name),
+        color: normalizeStringOrUndefined(rawPlayer?.color),
+        displayName: normalizeStringOrUndefined(rawPlayer?.displayName),
+        hasSavedGames:
+          typeof rawPlayer?.hasSavedGames === 'boolean'
+            ? rawPlayer.hasSavedGames
+            : undefined,
+        assignedCardArtIndex:
+          typeof rawPlayer?.assignedCardArtIndex === 'number' &&
+          Number.isFinite(rawPlayer.assignedCardArtIndex)
+            ? rawPlayer.assignedCardArtIndex
+            : null,
+      } satisfies Player;
+    })
+    .filter((player): player is Player => Boolean(player));
+}
+
+function sanitizeStoredGroups(groups: any, validPlayerIds: Set<string>): Group[] {
+  return (Array.isArray(groups) ? groups : [])
+    .map((rawGroup: any) => {
+      const id = normalizeId(rawGroup?.id);
+      const name = normalizeName(rawGroup?.name);
+
+      if (!id || !name) {
+        return null;
+      }
+
+      const playerIds = Array.from(
+        new Set(
+          (Array.isArray(rawGroup?.playerIds) ? rawGroup.playerIds : [])
+            .map((playerId: any) => normalizeId(playerId))
+            .filter((playerId) => Boolean(playerId) && validPlayerIds.has(playerId))
+        )
+      );
+
+      if (playerIds.length === 0) {
+        return null;
+      }
+
+      return {
+        ...rawGroup,
+        id,
+        name,
+        playerIds,
+        createdAt:
+          typeof rawGroup?.createdAt === 'number' && Number.isFinite(rawGroup.createdAt)
+            ? rawGroup.createdAt
+            : undefined,
+        objectiveStatsEligible:
+          typeof rawGroup?.objectiveStatsEligible === 'boolean'
+            ? rawGroup.objectiveStatsEligible
+            : undefined,
+      } satisfies Group;
+    })
+    .filter((group): group is Group => Boolean(group));
+}
+
+function sanitizeStoredGames(games: any): Game[] {
+  return (Array.isArray(games) ? games : [])
+    .map((game: any) => normalizeImportedGame(game))
+    .filter((game) => Array.isArray(game?.players) && game.players.length > 0);
+}
+
+function sanitizeSnapshotState(input: {
+  players?: any;
+  groups?: any;
+  games?: any;
+}) {
+  const players = sanitizeStoredPlayers(input.players);
+  const validPlayerIds = new Set(players.map((player) => player.id));
+
+  return {
+    players,
+    groups: sanitizeStoredGroups(input.groups, validPlayerIds),
+    games: sanitizeStoredGames(input.games),
+  };
+}
+
 function normalizeImportedGame(raw: any): Game {
   const playerMap = new Map<string, GamePlayer>();
 
   if (Array.isArray(raw?.players)) {
     raw.players.forEach((p: any, index: number) => {
+      if (isRecoveredPlayerRecord(p)) return;
+
       const id = normalizeId(p?.id ?? p?.playerId);
       if (!id) return;
 
@@ -267,16 +374,6 @@ function normalizeImportedGame(raw: any): Game {
     .map(normalizeRound)
     .filter((round): round is StoredRound => Boolean(round));
 
-  for (const round of [...rounds, ...timeline]) {
-    if (!playerMap.has(round.playerId)) {
-      playerMap.set(round.playerId, {
-        id: round.playerId,
-        name: 'Recovered Player',
-        assignedCardArtIndex: null,
-      });
-    }
-  }
-
   const totals: GameTotals = {};
   const rawTotals =
     raw?.totals && typeof raw.totals === 'object' && !Array.isArray(raw.totals)
@@ -286,14 +383,7 @@ function normalizeImportedGame(raw: any): Game {
   Object.entries(rawTotals).forEach(([rawPlayerId, t]: any) => {
     const id = normalizeId(rawPlayerId);
     if (!id) return;
-
-    if (!playerMap.has(id)) {
-      playerMap.set(id, {
-        id,
-        name: 'Recovered Player',
-        assignedCardArtIndex: null,
-      });
-    }
+    if (!playerMap.has(id)) return;
 
     const direct = safeNumber(t?.directPrestige);
     const assist = safeNumber(t?.assistPrestigeReceived);
@@ -539,15 +629,23 @@ export const useStore = create<Store>((set, get) => ({
     }),
 
   hydrateCloudSnapshot: ({ session, snapshot, statsSnapshot = null }) =>
-    set({
+    set(() => {
+      const sanitized = sanitizeSnapshotState({
+        players: snapshot.players,
+        groups: snapshot.groups,
+        games: snapshot.games,
+      });
+
+      return {
       authSession: session,
       authProfile: snapshot.profile,
-      players: Array.isArray(snapshot.players) ? snapshot.players : [],
-      groups: Array.isArray(snapshot.groups) ? snapshot.groups : [],
-      games: Array.isArray(snapshot.games) ? snapshot.games : [],
+      players: sanitized.players,
+      groups: sanitized.groups,
+      games: sanitized.games,
       statsSnapshot,
       authBootstrapStatus: 'ready',
       authError: null,
+      };
     }),
 
   clearAuthState: () =>
@@ -562,7 +660,7 @@ export const useStore = create<Store>((set, get) => ({
 
   setPlayers: (players) =>
     set({
-      players: Array.isArray(players) ? players : [],
+      players: sanitizeStoredPlayers(players),
     }),
 
   addPlayer: (player) =>
@@ -739,9 +837,9 @@ export const useStore = create<Store>((set, get) => ({
   deletePlayer: (playerId) => get().removePlayer(playerId),
 
   setGroups: (groups) =>
-    set({
-      groups: Array.isArray(groups) ? groups : [],
-    }),
+    set((state) => ({
+      groups: sanitizeStoredGroups(groups, new Set(state.players.map((player) => player.id))),
+    })),
 
   addGroup: (group) =>
     set((state) => ({
@@ -767,9 +865,9 @@ export const useStore = create<Store>((set, get) => ({
 
   setGames: (games) =>
     set(() => {
-      const normalizedGames = Array.isArray(games)
-        ? games.map(normalizeImportedGame).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
-        : [];
+      const normalizedGames = sanitizeStoredGames(games).sort(
+        (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
+      );
       const currentSelectedGameId = get().selectedGameId;
 
       const validSelectedGameId =
@@ -785,11 +883,18 @@ export const useStore = create<Store>((set, get) => ({
     }),
 
   addGame: (game) =>
-    set((state) => ({
-      games: [normalizeImportedGame(game), ...state.games].sort(
-        (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
-      ),
-    })),
+    set((state) => {
+      const normalizedGame = normalizeImportedGame(game);
+      if (!Array.isArray(normalizedGame.players) || normalizedGame.players.length === 0) {
+        return {};
+      }
+
+      return {
+        games: [normalizedGame, ...state.games].sort(
+          (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
+        ),
+      };
+    }),
 
   removeGame: (gameId) =>
     set((state) => {
@@ -898,7 +1003,10 @@ export const useStore = create<Store>((set, get) => ({
     });
 
     for (const game of existing) {
-      byId.set(game.id, normalizeImportedGame(game));
+      const normalizedGame = normalizeImportedGame(game);
+      if (normalizedGame.players.length > 0) {
+        byId.set(game.id, normalizedGame);
+      }
     }
 
     for (const game of incomingGames) {
