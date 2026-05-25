@@ -51,9 +51,59 @@ export function buildHomeRoute(initialTab: HomeTab = "game") {
   } as const;
 }
 
+export function buildCompareRoute(input?: {
+  mode?: "players" | "groups";
+  ids?: string[];
+}) {
+  const ids = (input?.ids ?? []).map((id) => String(id).trim()).filter(Boolean);
+
+  return {
+    pathname: APP_ROUTES.compare,
+    params: {
+      ...(input?.mode ? { mode: input.mode } : {}),
+      ...(ids.length ? { ids: ids.join(",") } : {}),
+    },
+  } as const;
+}
+
+export function buildChartsRoute(input?: {
+  playerId?: string | null;
+  compareId?: string | null;
+  ids?: string[];
+  setup?: boolean;
+}) {
+  const ids = (input?.ids ?? []).map((id) => String(id).trim()).filter(Boolean);
+  const playerId = String(input?.playerId ?? "").trim();
+  const compareId = String(input?.compareId ?? "").trim();
+
+  return {
+    pathname: APP_ROUTES.charts,
+    params: {
+      ...(playerId ? { playerId } : {}),
+      ...(compareId ? { compareId } : {}),
+      ...(ids.length ? { ids: ids.join(",") } : {}),
+      ...(input?.setup ? { setup: "1" } : {}),
+    },
+  } as const;
+}
+
+export function buildHistoryRoute(input?: { intent?: "import" | null }) {
+  return {
+    pathname: APP_ROUTES.history,
+    params: input?.intent ? { intent: input.intent } : undefined,
+  } as const;
+}
+
 export function buildPlayerProfileRoute(playerId: string) {
   return {
     pathname: APP_ROUTES.playerProfileDetail,
     params: { playerId },
+  } as const;
+}
+
+export function buildDefinitionsRoute(metric: string) {
+  return {
+    pathname: APP_ROUTES.definitions,
+    params: { metric },
   } as const;
 }

@@ -26,6 +26,9 @@ import RankBadge from "@/components/RankBadge";
 import { getBridgeDestinations, type HubCard } from "@/utils/appHubs";
 import {
   APP_ROUTES,
+  buildChartsRoute,
+  buildCompareRoute,
+  buildHistoryRoute,
   buildPlayerProfileRoute,
   normalizeHomeTab,
 } from "@/utils/appRoutes";
@@ -1453,6 +1456,35 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
+            <SectionCard title="Quick Launch">
+              <View style={styles.quickLaunchGrid}>
+                <ActionButton
+                  title="Compare"
+                  variant="secondary"
+                  style={styles.quickLaunchButton}
+                  onPress={() => router.push(buildCompareRoute())}
+                />
+                <ActionButton
+                  title="Charts"
+                  variant="secondary"
+                  style={styles.quickLaunchButton}
+                  onPress={() => router.push(buildChartsRoute())}
+                />
+                <ActionButton
+                  title="Profiles"
+                  variant="secondary"
+                  style={styles.quickLaunchButton}
+                  onPress={() => router.push(APP_ROUTES.playerDirectory)}
+                />
+                <ActionButton
+                  title="History"
+                  variant="secondary"
+                  style={styles.quickLaunchButton}
+                  onPress={() => router.push(buildHistoryRoute())}
+                />
+              </View>
+            </SectionCard>
+
             {false && detectedGroup?.name ? (
               <Text style={styles.detectedGroupText}>
                 {selectedGroup?.name
@@ -1917,6 +1949,15 @@ const styles = StyleSheet.create({
   },
   primaryActions: {
     marginBottom: 2,
+  },
+  quickLaunchGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  quickLaunchButton: {
+    flexBasis: "48%",
+    flexGrow: 1,
   },
   startGameButton: {
     width: "100%",
