@@ -110,4 +110,4 @@ as $$
   limit 10
 $$;
 
-grant execute on function public.search_profiles_by_player_name(text) to authenticated;
+grant execute on function public.search_profiles_by_player_name(text) to authenticated;;

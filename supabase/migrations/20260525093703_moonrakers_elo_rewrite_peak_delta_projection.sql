@@ -1,4 +1,3 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
 -- Rewrites get_elo_screen with:
 -- #1: Pre-fetch all participant data upfront (one query instead of 82 inner SELECTs)
@@ -108,7 +107,7 @@ begin
     group by gp.game_id
   ) as gd;
 
-  -- ELO replay loop ? reads from all_game_participants (in-memory); no DB queries inside.
+  -- ELO replay loop — reads from all_game_participants (in-memory); no DB queries inside.
   for game_row in
     select g.id, g.winner_profile_id
     from public.games as g
@@ -124,7 +123,7 @@ begin
       p_id := part_text::uuid;
       current_rating := coalesce((rating_map->>part_text)::numeric, 1000::numeric);
 
-      -- Opponent ratings from in-memory JSONB ? no DB query
+      -- Opponent ratings from in-memory JSONB — no DB query
       select coalesce(
         array_agg(coalesce((rating_map->>v2)::numeric, 1000::numeric) order by v2)
         filter (where v2 <> part_text),
@@ -431,4 +430,4 @@ begin
   );
 end;
 $$;
-
+;

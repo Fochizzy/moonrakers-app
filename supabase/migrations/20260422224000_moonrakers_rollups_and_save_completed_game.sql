@@ -217,4 +217,4 @@ begin
 end;
 $$;
 
-grant execute on function public.save_completed_game(jsonb) to authenticated;
+grant execute on function public.save_completed_game(jsonb) to authenticated;;

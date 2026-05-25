@@ -1,6 +1,5 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
--- #5: admin_refresh_analytics ? add pairing/macro/personal/synergy to insightsScreen rollup.
+-- #5: admin_refresh_analytics — add pairing/macro/personal/synergy to insightsScreen rollup.
 -- These were computed live on every get_insights_screen call; now computed once at save time.
 create or replace function private.admin_refresh_analytics(target_profile_id uuid)
 returns jsonb
@@ -515,7 +514,7 @@ $$;
 
 -- #3 + #5: get_insights_screen simplified to pure rollup reader.
 -- #3: target_game_ids array replaces 6 repeated target_games CTEs.
--- #5: no more live pairing/macro/personal/synergy queries ? reads from rollup.
+-- #5: no more live pairing/macro/personal/synergy queries — reads from rollup.
 --     Only player_options remains live (viewer-context-dependent).
 create or replace function public.get_insights_screen(profile_id uuid default auth.uid())
 returns jsonb
@@ -550,7 +549,7 @@ begin
     end if;
   end if;
 
-  -- #3: collect target game IDs once ? replaces 6 repeated target_games CTEs.
+  -- #3: collect target game IDs once — replaces 6 repeated target_games CTEs.
   -- Uses the new partial index on games(created_at) WHERE status='finished'.
   select array_agg(g.id)
   into target_game_ids
@@ -605,4 +604,4 @@ begin
   return insights_payload;
 end;
 $$;
-
+;

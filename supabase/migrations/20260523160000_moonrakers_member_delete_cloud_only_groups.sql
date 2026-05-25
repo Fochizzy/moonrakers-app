@@ -1,23 +1,18 @@
 drop policy if exists "groups_manage_own" on public.groups;
 drop policy if exists "groups_insert_self_created" on public.groups;
-
 create policy "groups_insert_self_created"
 on public.groups
 for insert
 to authenticated
 with check ((select auth.uid()) = created_by);
-
 drop policy if exists "groups_update_own" on public.groups;
-
 create policy "groups_update_own"
 on public.groups
 for update
 to authenticated
 using ((select auth.uid()) = created_by)
 with check ((select auth.uid()) = created_by);
-
 drop policy if exists "groups_delete_group_members" on public.groups;
-
 create policy "groups_delete_group_members"
 on public.groups
 for delete

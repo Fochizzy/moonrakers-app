@@ -1,5 +1,137 @@
--- Recovered from live supabase_migrations.schema_migrations on 2026-05-25 to reconcile local migration history.
 
+-- #1 save_completed_game: refresh all participant rollups AFTER rounds are inserted.
+--    The existing trigger fires per participant before rounds exist; this end-of-function
+--    call overwrites those incomplete rollups with correct round-aware data.
+create or replace function public.save_completed_game(payload jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = 'public'
+as $$
+declare
+  new_game_id uuid;
+  host_profile_id uuid;
+  saved_group_id uuid;
+  winner_profile_id uuid;
+  participant_count int;
+begin
+  host_profile_id    := nullif(payload->>'host_profile_id', '')::uuid;
+  saved_group_id     := nullif(payload->>'group_id', '')::uuid;
+  winner_profile_id  := nullif(payload->>'winner_profile_id', '')::uuid;
+  participant_count  := coalesce(jsonb_array_length(coalesce(payload->'participants', '[]'::jsonb)), 0);
+
+  if host_profile_id is null or host_profile_id <> (select auth.uid()) then
+    raise exception 'host_profile_id must match the authenticated profile';
+  end if;
+
+  if participant_count < 2 or participant_count > 5 then
+    raise exception 'games must have between 2 and 5 participants';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(coalesce(payload->'participants', '[]'::jsonb)) as participant_row(item)
+    where nullif(participant_row.item->>'profile_id', '') is null
+  ) then
+    raise exception 'all new-game participants are registered';
+  end if;
+
+  insert into public.games (
+    host_profile_id, group_id, group_name_snapshot, status, created_at, finished_at, winner_profile_id
+  ) values (
+    host_profile_id, saved_group_id,
+    nullif(payload->>'group_name_snapshot', ''),
+    'finished',
+    case when nullif(payload->>'created_at', '') is null then now() else (payload->>'created_at')::timestamptz end,
+    now(),
+    winner_profile_id
+  ) returning id into new_game_id;
+
+  with participant_rows as (
+    select row_number() over () as row_num, item
+    from jsonb_array_elements(coalesce(payload->'participants', '[]'::jsonb)) as participant_row(item)
+  )
+  insert into public.game_participants (
+    game_id, profile_id, player_name_snapshot, display_name_snapshot,
+    color_snapshot, assigned_card_art_index_snapshot, start_order,
+    total_prestige, direct_prestige, assist_prestige_received, objective_prestige,
+    score, assists, failures, contracts, is_winner
+  )
+  select
+    new_game_id,
+    nullif(participant_rows.item->>'profile_id', '')::uuid,
+    coalesce(nullif(participant_rows.item->>'player_name_snapshot', ''), 'Unknown Player'),
+    nullif(participant_rows.item->>'display_name_snapshot', ''),
+    nullif(participant_rows.item->>'color_snapshot', ''),
+    case when jsonb_typeof(participant_rows.item->'assigned_card_art_index_snapshot') = 'number' then (participant_rows.item->>'assigned_card_art_index_snapshot')::int else null end,
+    coalesce((participant_rows.item->>'start_order')::int, participant_rows.row_num - 1),
+    coalesce((participant_rows.item->>'total_prestige')::numeric, 0),
+    coalesce((participant_rows.item->>'direct_prestige')::numeric, 0),
+    coalesce((participant_rows.item->>'assist_prestige_received')::numeric, 0),
+    coalesce((participant_rows.item->>'objective_prestige')::numeric, 0),
+    coalesce((participant_rows.item->>'score')::numeric, 0),
+    coalesce((participant_rows.item->>'assists')::int, 0),
+    coalesce((participant_rows.item->>'failures')::int, 0),
+    coalesce((participant_rows.item->>'contracts')::int, 0),
+    coalesce(nullif(participant_rows.item->>'profile_id', '')::uuid = winner_profile_id, false)
+  from participant_rows;
+
+  -- Rounds are inserted AFTER participants. The AFTER INSERT trigger on game_participants
+  -- already fired (without round data). The refresh at the end of this function will
+  -- overwrite those incomplete rollups with correct round-aware data.
+  insert into public.game_rounds (
+    game_id, participant_id, round_index, prestige, contracts, failures,
+    assist_recipients, assist_prestige_recipients, objective_count, objective_prestige, created_at
+  )
+  select
+    new_game_id,
+    participants.id,
+    coalesce((round_rows.item->>'round_index')::int, 0),
+    coalesce((round_rows.item->>'prestige')::numeric, 0),
+    coalesce((round_rows.item->>'contracts')::int, 0),
+    coalesce((round_rows.item->>'failures')::int, 0),
+    coalesce(round_rows.item->'assist_recipients', '{}'::jsonb),
+    coalesce(round_rows.item->'assist_prestige_recipients', '{}'::jsonb),
+    coalesce((round_rows.item->>'objective_count')::int, 0),
+    coalesce((round_rows.item->>'objective_prestige')::numeric, 0),
+    now()
+  from jsonb_array_elements(coalesce(payload->'rounds', '[]'::jsonb)) as round_rows(item)
+  join public.game_participants as participants
+    on participants.game_id = new_game_id
+   and participants.profile_id = nullif(round_rows.item->>'participant_id', '')::uuid;
+
+  -- #1: Refresh all registered participant rollups now that rounds are fully inserted.
+  -- This corrects the incomplete rollups produced by the trigger during participant inserts.
+  perform private.admin_refresh_analytics(gp.profile_id)
+  from public.game_participants as gp
+  where gp.game_id = new_game_id and gp.profile_id is not null;
+
+  insert into public.global_stats_rollups as global_rollup (key, payload, updated_at)
+  values ('overview', jsonb_build_object(
+    'gamesPlayed', (select count(*) from public.games where public.games.status = 'finished'),
+    'playersRegistered', (select count(*) from public.profiles),
+    'lastGameId', new_game_id), now())
+  on conflict (key) do update set payload = excluded.payload, updated_at = excluded.updated_at;
+
+  if saved_group_id is not null then
+    insert into public.group_stats_rollups as group_rollup (group_id, payload, updated_at)
+    values (saved_group_id, jsonb_build_object(
+      'groupId', saved_group_id,
+      'gamesPlayed', (select count(*) from public.games where public.games.group_id = saved_group_id),
+      'lastGameId', new_game_id), now())
+    on conflict (group_id) do update set payload = excluded.payload, updated_at = excluded.updated_at;
+  end if;
+
+  return new_game_id;
+end;
+$$;
+
+
+-- #2 #3 #4 #5: Update admin_refresh_analytics
+-- #2 days_since_last_game: filter by target_profile_id (was global max across all games)
+-- #3 negative prestige: count prestige <= 0 as zero-round (was prestige = 0, missing penalty rounds)
+-- #4 sessionProfile: win rate and prestige by game-within-session position
+-- #5 score in game history: add score field to games.items
 create or replace function private.admin_refresh_analytics(target_profile_id uuid)
 returns jsonb
 language plpgsql
@@ -68,6 +200,12 @@ declare
   ht_lead_win_count integer := 0;
   ht_trail_win_count integer := 0;
   halftime_profile jsonb := '{}'::jsonb;
+  -- #4 session profile
+  session_profile_items jsonb := '[]'::jsonb;
+  session_early_wr numeric := 0;
+  session_late_wr numeric := 0;
+  session_tendency text := 'Consistent';
+  session_profile jsonb := '{}'::jsonb;
   playstyle_label text := 'Direct-driven';
   playstyle_summary text := '';
   playstyle_highlights jsonb := '[]'::jsonb;
@@ -86,11 +224,15 @@ begin
   select count(*) into player_row_count
   from public.game_participants where public.game_participants.profile_id = target_profile_id;
 
-  select (extract(epoch from (now() - max(coalesce(public.games.finished_at, public.games.created_at)))) / 86400)::int
+  -- #2: Filter by target_profile_id so each player sees their own last-game gap,
+  --     not the global most-recent game across all players.
+  select (extract(epoch from (now() - max(coalesce(g.finished_at, g.created_at)))) / 86400)::int
   into days_since_last_game
-  from public.games where public.games.status = 'finished';
+  from public.games as g
+  join public.game_participants as gp on gp.game_id = g.id and gp.profile_id = target_profile_id
+  where g.status = 'finished';
 
-  -- Consolidated participant query: signal stats + prestige sources + correlations in one pass
+  -- Consolidated participant query
   select
     count(distinct gp.game_id)::int,
     count(*) filter (where gp.is_winner)::int,
@@ -127,8 +269,8 @@ begin
   corr_avg_obj_lose := ps_avg_objective_lose;
   ps_total          := greatest(ps_avg_direct + ps_avg_assist_recv + ps_avg_objective, 0.01);
 
-  -- Consolidated round query: pace + phases + #4 consistency in a single game_rounds scan.
-  -- Fix: move *100.0 inside avg() so filter can attach directly to the aggregate.
+  -- Consolidated round query: pace + phases + consistency.
+  -- #3: prestige <= 0 catches penalty rounds (negative prestige) as non-scoring.
   select
     coalesce(round(avg(fp), 1), 0)::numeric,
     coalesce(round(avg(sp), 1), 0)::numeric,
@@ -144,8 +286,7 @@ begin
     coalesce(round(sum(ef)::numeric / nullif(sum(er), 0), 2), 0)::numeric,
     coalesce(round(sum(mf)::numeric / nullif(sum(mr), 0), 2), 0)::numeric,
     coalesce(round(sum(lf)::numeric / nullif(sum(lr), 0), 2), 0)::numeric,
-    -- consistency: *100.0 is inside avg() so FILTER attaches cleanly to the aggregate
-    coalesce(round(avg(zero_r::numeric / nullif(er + mr + lr, 0) * 100.0),                     1), 0)::numeric,
+    coalesce(round(avg(zero_r::numeric / nullif(er + mr + lr, 0) * 100.0),                      1), 0)::numeric,
     coalesce(round(avg(zero_r::numeric / nullif(er + mr + lr, 0) * 100.0) filter (where is_win), 1), 0)::numeric,
     coalesce(max(peak_r), 0)::numeric
   into
@@ -172,7 +313,8 @@ begin
       count(*)                   filter (where gr.round_index >= 15)                  as lr,
       coalesce(sum(gr.contracts) filter (where gr.round_index >= 15), 0)             as lc,
       coalesce(sum(gr.failures)  filter (where gr.round_index >= 15), 0)             as lf,
-      count(*)                   filter (where gr.prestige = 0)                       as zero_r,
+      -- #3: prestige <= 0 treats penalty rounds as non-scoring (was prestige = 0)
+      count(*)                   filter (where gr.prestige <= 0)                      as zero_r,
       max(gr.prestige)                                                                 as peak_r
     from public.game_participants as gp
     join public.games as g on g.id = gp.game_id and g.status = 'finished'
@@ -207,7 +349,7 @@ begin
     'description', case when finished_game_count = 0 then 'No games yet.'
       else concat(round(100.0 - consistency_zero_pct, 0)::int::text, '% of rounds score prestige (best single round: ', consistency_best_round::text, ').') end);
 
-  -- #6 Playstyle label, summary, highlights ? computed from real stats in rollup
+  -- Playstyle
   if finished_game_count > 0 then
     playstyle_label := case
       when ps_avg_assist_recv / ps_total >= 0.12 then 'Support-oriented'
@@ -315,7 +457,7 @@ begin
   into position_stats
   from (select gp.start_order, count(*)::int as appearances, count(*) filter (where gp.is_winner)::int as wins, round(avg(gp.total_prestige),1) as avg_prestige from public.game_participants as gp join public.games as g on g.id=gp.game_id and g.status='finished' where gp.profile_id=target_profile_id group by gp.start_order) as pos_data;
 
-  -- #1 Player count split
+  -- Player count split
   select coalesce(jsonb_agg(jsonb_build_object('playerCount',player_count,'games',games,'wins',wins,'winRate',case when games>0 then round(wins::numeric/games,3) else 0::numeric end,'avgPrestige',avg_prestige,'avgAssists',avg_assists,'avgFailures',avg_failures) order by player_count asc),'[]'::jsonb)
   into player_count_split
   from (
@@ -327,7 +469,7 @@ begin
     where gp.profile_id=target_profile_id group by pc.player_count
   ) as splits;
 
-  -- #2 Halftime profile: was the target player leading at the midpoint of each game?
+  -- Halftime profile
   with target_halftimes as (
     select gp.game_id, gp.is_winner,
       coalesce(sum(gr.prestige) filter (where gr.round_index < mri.max_ri / 2.0), 0) as my_half
@@ -368,12 +510,65 @@ begin
         round(100.0*ht_lead_count/ht_total,0)::int::text,'%). ',
         case when ht_lead_count>0 then concat('Win rate from lead: ',round(100.0*ht_lead_win_count/ht_lead_count,0)::int::text,'%.') else '' end) end);
 
-  -- Game history
-  select coalesce(jsonb_agg(jsonb_build_object('gameId',game_id,'finishedAt',finished_at,'groupName',group_name,'playerCount',player_count,'isWinner',is_winner,'prestige',total_prestige,'prestigeSpread',prestige_spread,'winnerName',winner_name,'assists',assists,'failures',failures,'contracts',contracts) order by finished_at desc, game_id desc),'[]'::jsonb)
+  -- #4 Session profile: win rate and avg prestige by position within same-day session.
+  -- Reveals warm-up or fatigue patterns across consecutive games on the same day.
+  with game_sessions as (
+    select
+      gp.is_winner,
+      gp.total_prestige,
+      row_number() over (
+        partition by date(coalesce(g.finished_at, g.created_at))
+        order by coalesce(g.finished_at, g.created_at), g.id
+      ) as pos
+    from public.game_participants as gp
+    join public.games as g on g.id = gp.game_id and g.status = 'finished'
+    where gp.profile_id = target_profile_id
+  ),
+  position_agg as (
+    select
+      pos,
+      count(*)::int as appearances,
+      count(*) filter (where is_winner)::int as wins,
+      round(avg(total_prestige), 1) as avg_prestige
+    from game_sessions
+    group by pos
+  )
+  select
+    coalesce(jsonb_agg(
+      jsonb_build_object('gameNumber', pos, 'appearances', appearances, 'wins', wins,
+        'winRate', case when appearances>0 then round(wins::numeric/appearances,3) else 0::numeric end,
+        'avgPrestige', avg_prestige)
+      order by pos
+    ), '[]'::jsonb),
+    coalesce(round(sum(wins) filter (where pos <= 2)::numeric / nullif(sum(appearances) filter (where pos <= 2), 0), 3), 0)::numeric,
+    coalesce(round(sum(wins) filter (where pos >= 3)::numeric / nullif(sum(appearances) filter (where pos >= 3), 0), 3), 0)::numeric
+  into session_profile_items, session_early_wr, session_late_wr
+  from position_agg;
+
+  session_tendency := case
+    when session_late_wr  > session_early_wr + 0.15 then 'Warms up'
+    when session_early_wr > session_late_wr  + 0.15 then 'Fades late'
+    else 'Consistent'
+  end;
+
+  session_profile := jsonb_build_object(
+    'items', session_profile_items,
+    'tendency', session_tendency,
+    'earlyWinRate', session_early_wr,
+    'lateWinRate', session_late_wr,
+    'description', case
+      when finished_game_count = 0 then 'No games yet.'
+      when session_tendency = 'Warms up' then concat('Performs better as sessions progress (game 1-2: ',round(session_early_wr*100,0)::int::text,'% → game 3+: ',round(session_late_wr*100,0)::int::text,'% win rate).')
+      when session_tendency = 'Fades late' then concat('Performance declines through sessions (game 1-2: ',round(session_early_wr*100,0)::int::text,'% → game 3+: ',round(session_late_wr*100,0)::int::text,'% win rate).')
+      else 'Win rate is consistent across games within a session.'
+    end);
+
+  -- #5 Game history: add score field (client-computed game score stored at save time)
+  select coalesce(jsonb_agg(jsonb_build_object('gameId',game_id,'finishedAt',finished_at,'groupName',group_name,'playerCount',player_count,'isWinner',is_winner,'prestige',total_prestige,'score',score,'prestigeSpread',prestige_spread,'winnerName',winner_name,'assists',assists,'failures',failures,'contracts',contracts) order by finished_at desc, game_id desc),'[]'::jsonb)
   into game_history
   from (
     select g.id as game_id, coalesce(g.finished_at,g.created_at) as finished_at, g.group_name_snapshot as group_name,
-      ga.player_count, ga.prestige_spread, gp.is_winner, gp.total_prestige, gp.assists, gp.failures, gp.contracts,
+      ga.player_count, ga.prestige_spread, gp.is_winner, gp.total_prestige, gp.score, gp.assists, gp.failures, gp.contracts,
       coalesce(nullif(wp.display_name,''),wp.player_name,'Unknown') as winner_name
     from public.game_participants as gp
     join public.games as g on g.id=gp.game_id and g.status='finished'
@@ -397,9 +592,6 @@ begin
       'avgPrestige', round(ps_avg_direct+ps_avg_assist_recv+ps_avg_objective,1),
       'contractConversion', concat(round(signal_contract_conversion*100),'%')));
 
-  -- Build payload. 'charts' key is intentionally absent (#3):
-  -- get_chart_dataset already handles a missing 'charts' key via its fallback path,
-  -- producing identical empty-array output. Removing it cuts payload size ~50%.
   analytics_payload := jsonb_build_object(
     'generatedAt', generated_at,
     'analyticsHome', jsonb_build_object(
@@ -409,7 +601,7 @@ begin
         jsonb_build_object('key','registered-players','title','Registered players','value',registered_player_count,'description','Players currently available to analytics.'),
         jsonb_build_object('key','tracked-games','title','Tracked games','value',finished_game_count,'description','Finished games involving this profile.'),
         jsonb_build_object('key','player-rows','title','Player rows','value',player_row_count,'description','Saved participant rows available to summarize.'),
-        jsonb_build_object('key','days-since-last-game','title','Days since last game','value',coalesce(days_since_last_game::text,'-'),'description','Calendar days since the most recent finished game.'))),
+        jsonb_build_object('key','days-since-last-game','title','Days since last game','value',coalesce(days_since_last_game::text,'-'),'description','Calendar days since this player''s most recent finished game.'))),
     'statsScreen', jsonb_build_object(
       'generatedAt', generated_at,
       'overview', jsonb_build_object(
@@ -419,7 +611,8 @@ begin
         'streaks', jsonb_build_object('currentStreak',streak_current_len,'currentStreakIsWin',streak_current_is_win,'longestWinStreak',streak_longest_win,'longestLossStreak',streak_longest_loss),
         'positionStats', position_stats,
         'playerCountSplit', player_count_split,
-        'halftimeProfile', halftime_profile),
+        'halftimeProfile', halftime_profile,
+        'sessionProfile', session_profile),
       'players', jsonb_build_object('options',player_options,'selectedPlayerId',target_profile_id,'detail',player_detail),
       'prestigeSources', prestige_sources,
       'paceProfile', jsonb_build_object('avgFirstHalf',pace_avg_first_half,'avgSecondHalf',pace_avg_second_half,'avgLateDelta',pace_avg_late_delta,'avgFirstHalfWin',pace_avg_first_half_win,'avgFirstHalfLose',pace_avg_first_half_lose,
@@ -464,7 +657,7 @@ begin
 end;
 $$;
 
--- Backfill all profiles
+-- Backfill all profiles with the updated rollup logic
 do $$
 declare p record;
 begin
@@ -473,4 +666,4 @@ begin
   end loop;
 end;
 $$;
-
+;
