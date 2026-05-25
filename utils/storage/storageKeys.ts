@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   GAMES: createKey('games'),
   GROUPS: createKey('groups'),
   SETTINGS: createKey('settings'),
+  GAME_DRAFT: createKey('game-draft'),
 } as const;
 
 export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS];
@@ -36,8 +37,10 @@ export type StoredPlayerTotals = {
   totalPrestige?: number;
   directPrestige?: number;
   assistPrestigeReceived?: number;
+  assistPrestigeSent?: number;
   assistPrestigeBySource?: Record<string, number>;
   assistCountBySource?: Record<string, number>;
+  objectivePrestige?: number;
   score?: number;
   assists?: number;
   failures?: number;
@@ -55,6 +58,8 @@ export type StoredRound = {
   failures: number;
   assistRecipients: Record<string, number>;
   assistPrestigeRecipients: Record<string, number>;
+  objectiveCount: number;
+  objectivePrestige: number;
   createdAt: number;
 };
 
@@ -64,6 +69,7 @@ export type StoredGamePlayer = {
   initials?: string;
   color?: string;
   startOrder?: number;
+  assignedCardArtIndex?: number | null;
   prestige?: number;
   totalPrestige?: number;
   directPrestige?: number;
@@ -98,9 +104,55 @@ export type StoredSettings = {
   lastOpenedAt?: number;
 };
 
+export type StoredGameDraftPhase =
+  | 'player_selection'
+  | 'setup'
+  | 'in_progress'
+  | 'ready_to_finish';
+
+export type StoredGameDraftGameplay = {
+  turnIndex: number;
+  rounds: StoredRound[];
+  totals: Record<string, StoredPlayerTotals>;
+  current: {
+    prestige: number;
+    contracts: number;
+    failures: number;
+    assistRecipients: Record<string, number>;
+    assistPrestigeRecipients: Record<string, number>;
+    objectiveCount: number;
+  };
+  roundCount: number;
+  selectedWinnerId?: string | null;
+};
+
+export type StoredGameDraft = {
+  profileId: string;
+  draftId: string;
+  phase: StoredGameDraftPhase;
+  revision: number;
+  updatedAt: number;
+  deviceUpdatedAt: number;
+  selectedPlayerIds: string[];
+  selectedGroupId?: string | null;
+  selectedGroupName?: string | null;
+  turnOrder: string[];
+  playerSnapshots: StoredGamePlayer[];
+  gameplay?: StoredGameDraftGameplay | null;
+};
+
+export type StoredGameDraftShadow = {
+  profileId: string;
+  draft: StoredGameDraft | null;
+  dirty: boolean;
+  syncState: 'idle' | 'restoring' | 'saving' | 'saved' | 'pending' | 'conflict' | 'failed';
+  lastSyncedAt?: number | null;
+};
+
 export type StorageSchema = {
   players: StoredPlayer[];
   games: StoredGame[];
   groups: StoredGroup[];
   settings: StoredSettings;
+  gameDraft: StoredGameDraftShadow;
 };

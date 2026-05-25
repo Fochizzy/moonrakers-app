@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,6 +9,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
+import ActionButton from "@/components/ui/ActionButton";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import {
@@ -27,7 +27,6 @@ import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
 
 type ActiveAction = "login" | "resend" | "reset" | null;
-type LoginButtonTone = "primary" | "secondary" | "accent" | "utility";
 
 function formatAuthMessage(error: unknown) {
   const message = formatSupabaseConfigError(error);
@@ -37,36 +36,6 @@ function formatAuthMessage(error: unknown) {
   }
 
   return message;
-}
-
-function getButtonTone(tone: LoginButtonTone) {
-  switch (tone) {
-    case "secondary":
-      return {
-        backgroundColor: "rgba(42,19,70,0.64)",
-        borderColor: "rgba(128,90,213,0.32)",
-        textColor: "#A78BFA",
-      };
-    case "accent":
-      return {
-        backgroundColor: "rgba(82,36,122,0.72)",
-        borderColor: "rgba(168,85,247,0.38)",
-        textColor: "#F5EBFF",
-      };
-    case "utility":
-      return {
-        backgroundColor: "rgba(8,19,39,0.58)",
-        borderColor: "rgba(96,165,250,0.2)",
-        textColor: "#7E93B5",
-      };
-    case "primary":
-    default:
-      return {
-        backgroundColor: "rgba(114,170,211,0.76)",
-        borderColor: "rgba(147,197,253,0.34)",
-        textColor: "#18324F",
-      };
-  }
 }
 
 export default function LoginScreen() {
@@ -85,56 +54,6 @@ export default function LoginScreen() {
   const busy = activeAction !== null;
   const canSubmit = normalizedEmail.length > 0 && password.trim().length > 0;
   const canSendEmail = normalizedEmail.length > 0;
-
-  function renderButton({
-    disabled,
-    onPress,
-    title,
-    tone,
-    busyIndicator,
-  }: {
-    disabled: boolean;
-    onPress: () => void;
-    title: string;
-    tone: LoginButtonTone;
-    busyIndicator?: boolean;
-  }) {
-    const toneStyles = getButtonTone(tone);
-
-    return (
-      <Pressable
-        onPress={onPress}
-        disabled={disabled}
-        style={({ pressed }) => [
-          styles.button,
-          {
-            backgroundColor: toneStyles.backgroundColor,
-            borderColor: toneStyles.borderColor,
-            opacity: disabled ? 0.55 : pressed ? 0.88 : 1,
-          },
-        ]}
-      >
-        <View style={styles.buttonContent}>
-          {busyIndicator ? (
-            <ActivityIndicator
-              color={toneStyles.textColor}
-              size="small"
-            />
-          ) : null}
-          <Text
-            style={[
-              styles.buttonText,
-              {
-                color: toneStyles.textColor,
-              },
-            ]}
-          >
-            {title}
-          </Text>
-        </View>
-      </Pressable>
-    );
-  }
 
   useEffect(() => {
     let active = true;
@@ -435,42 +354,33 @@ export default function LoginScreen() {
             ) : null}
 
             <View style={styles.actions}>
-              {renderButton({
-                disabled: !canSubmit || busy,
-                onPress: handleLogin,
-                title: activeAction === "login" ? "Logging in..." : "Log in",
-                tone: "primary",
-                busyIndicator: activeAction === "login",
-              })}
+              <ActionButton
+                title={activeAction === "login" ? "Logging in..." : "Log in"}
+                disabled={!canSubmit || busy}
+                onPress={handleLogin}
+                style={styles.loginPrimaryButton}
+              />
 
-              {renderButton({
-                disabled: !canSendEmail || busy,
-                onPress: handleResetPassword,
-                title:
-                  activeAction === "reset"
-                    ? "Sending..."
-                    : "Reset password email",
-                tone: "secondary",
-                busyIndicator: activeAction === "reset",
-              })}
+              <ActionButton
+                title={activeAction === "reset" ? "Sending..." : "Reset password email"}
+                variant="secondary"
+                disabled={!canSendEmail || busy}
+                onPress={handleResetPassword}
+              />
 
-              {renderButton({
-                disabled: busy,
-                onPress: () => router.push(APP_ROUTES.register as any),
-                title: "Create account",
-                tone: "accent",
-              })}
+              <ActionButton
+                title="Create account"
+                variant="secondary"
+                disabled={busy}
+                onPress={() => router.push(APP_ROUTES.register as any)}
+              />
 
-              {renderButton({
-                disabled: !canSendEmail || busy,
-                onPress: handleResendConfirmation,
-                title:
-                  activeAction === "resend"
-                    ? "Sending..."
-                    : "Resend confirmation email",
-                tone: "utility",
-                busyIndicator: activeAction === "resend",
-              })}
+              <ActionButton
+                title={activeAction === "resend" ? "Sending..." : "Resend confirmation email"}
+                variant="ghost"
+                disabled={!canSendEmail || busy}
+                onPress={handleResendConfirmation}
+              />
             </View>
           </View>
         </View>
@@ -566,25 +476,7 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 2,
   },
-  button: {
-    minHeight: 54,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  buttonText: {
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: "800",
-    textAlign: "center",
+  loginPrimaryButton: {
+    minHeight: 58,
   },
 });

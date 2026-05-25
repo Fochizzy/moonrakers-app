@@ -1,5 +1,13 @@
 
 import { create } from 'zustand';
+import { buildActiveGameProjection } from '../lib/game-draft/buildActiveGameProjection.ts';
+import {
+  isGameplayDraftPhase,
+} from '../lib/game-draft/phase.ts';
+import type {
+  GameDraft,
+  GameDraftSyncState,
+} from '../lib/game-draft/types.ts';
 import { mergeRegisteredProfileIntoPlayer } from '../utils/registeredProfilePlayer';
 
 export type Player = {
@@ -527,6 +535,8 @@ type Store = {
   groups: Group[];
   games: Game[];
   activeGame: ActiveGame | null;
+  gameDraft: GameDraft | null;
+  gameDraftSyncState: GameDraftSyncState;
   selectedGroupId: string | null;
   authSession: AuthSession;
   authProfile: AuthProfile;
@@ -583,6 +593,13 @@ type Store = {
   startActiveGame: (input: StartActiveGameInput) => void;
   patchActiveGame: (patch: Partial<ActiveGame>) => void;
   clearActiveGame: () => void;
+  hydrateGameDraft: (input: {
+    draft: GameDraft | null;
+    syncState?: Partial<GameDraftSyncState>;
+  }) => void;
+  patchGameDraft: (updater: (draft: GameDraft | null) => GameDraft | null) => void;
+  setGameDraftSyncState: (patch: Partial<GameDraftSyncState>) => void;
+  clearGameDraft: () => void;
 
   assignPlayerCard: (playerId: string, artIndex: number | null) => void;
   resetStore: () => void;
@@ -593,6 +610,13 @@ export const useStore = create<Store>((set, get) => ({
   groups: [],
   games: [],
   activeGame: null,
+  gameDraft: null,
+  gameDraftSyncState: {
+    state: 'idle',
+    dirty: false,
+    lastSyncedAt: null,
+    conflictMessage: null,
+  },
   selectedGroupId: null,
   authSession: null,
   authProfile: null,
@@ -1156,6 +1180,58 @@ export const useStore = create<Store>((set, get) => ({
       activeGame: null,
     }),
 
+  hydrateGameDraft: ({ draft, syncState }) =>
+    set((state) => ({
+      gameDraft: draft,
+      gameDraftSyncState: {
+        ...state.gameDraftSyncState,
+        ...syncState,
+      },
+      activeGame:
+        draft && isGameplayDraftPhase(draft.phase)
+          ? buildActiveGameProjection(draft)
+          : null,
+    })),
+
+  patchGameDraft: (updater) =>
+    set((state) => {
+      const nextDraft = updater(state.gameDraft);
+
+      return {
+        gameDraft: nextDraft,
+        gameDraftSyncState: {
+          ...state.gameDraftSyncState,
+          state: 'pending',
+          dirty: true,
+          conflictMessage: null,
+        },
+        activeGame:
+          nextDraft && isGameplayDraftPhase(nextDraft.phase)
+            ? buildActiveGameProjection(nextDraft)
+            : null,
+      };
+    }),
+
+  setGameDraftSyncState: (patch) =>
+    set((state) => ({
+      gameDraftSyncState: {
+        ...state.gameDraftSyncState,
+        ...patch,
+      },
+    })),
+
+  clearGameDraft: () =>
+    set({
+      gameDraft: null,
+      gameDraftSyncState: {
+        state: 'idle',
+        dirty: false,
+        lastSyncedAt: null,
+        conflictMessage: null,
+      },
+      activeGame: null,
+    }),
+
   assignPlayerCard: (playerId, artIndex) =>
     set((state) => {
       const normalized = normalizeId(playerId);
@@ -1182,6 +1258,13 @@ export const useStore = create<Store>((set, get) => ({
       groups: [],
       games: [],
       activeGame: null,
+      gameDraft: null,
+      gameDraftSyncState: {
+        state: 'idle',
+        dirty: false,
+        lastSyncedAt: null,
+        conflictMessage: null,
+      },
       selectedGroupId: null,
       authSession: null,
       authProfile: null,
@@ -1213,6 +1296,8 @@ export function useSelectedComparePlayerIds() { return useStore((s: Store) => s.
 export function useSetSelectedPlayerId() { return useStore((s: Store) => s.setSelectedPlayerId); }
 export function usePatchActiveGame() { return useStore((s: Store) => s.patchActiveGame); }
 export function useClearActiveGame() { return useStore((s: Store) => s.clearActiveGame); }
+export function useGameDraft() { return useStore((s: Store) => s.gameDraft); }
+export function useGameDraftSyncState() { return useStore((s: Store) => s.gameDraftSyncState); }
 export function useHydrateCloudSnapshot() { return useStore((s: Store) => s.hydrateCloudSnapshot); }
 export function useClearAuthState() { return useStore((s: Store) => s.clearAuthState); }
 export function useSetPasswordRecoveryPending() { return useStore((s: Store) => s.setPasswordRecoveryPending); }

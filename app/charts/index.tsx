@@ -11,6 +11,8 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
+import ActionButton from "@/components/ui/ActionButton";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
@@ -38,6 +40,8 @@ import {
 } from "@/components/charts/chartVisualSystem";
 import { getChartSetup } from "@/lib/cloud/analytics/getChartSetup";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
+import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
+import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import {
@@ -382,32 +386,13 @@ function SetupBackButton({ onPress }: { onPress: () => void; }) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.setupBackButton, pressed && { opacity: 0.9 }]}
+      style={styles.setupBackButton}
     >
-      <Text style={styles.setupBackButtonText}>Close setup</Text>
+      <Text style={styles.setupBackButtonText}>Close Setup</Text>
     </Pressable>
   );
 }
 
-function StarButton({
-  active,
-  onPress,
-}: {
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={styles.starButton}
-      hitSlop={{ top: 8, left: 8, right: 8, bottom: 8 }}
-    >
-      <Text style={[styles.starText, active && styles.starTextActive]}>
-        {active ? "★" : "☆"}
-      </Text>
-    </Pressable>
-  );
-}
 
 function ChartCard({
   chart,
@@ -529,7 +514,7 @@ export default function ChartsIndexScreen() {
   }>();
   const authSession = useStore((state: any) => state.authSession);
   const authProfile = useStore((state: any) => state?.authProfile ?? null);
-  const players = useStore((state: any) => state?.players ?? []);
+  const players = useStore((state: any) => state.players ?? []);
   const games = useStore((state: any) => state?.games ?? []);
   const groups = useStore((state: any) => state?.groups ?? []);
   const profileId = String(authProfile?.id ?? authSession?.user?.id ?? "").trim();
@@ -579,6 +564,8 @@ export default function ChartsIndexScreen() {
     () => resolveChartCatalogEntry(selectedChartKey),
     [selectedChartKey]
   );
+  const analyticsRefreshTick = useAnalyticsRefreshTick();
+  const [setupError, setSetupError] = useState<string | null>(null);
   const chartSetupQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),
     queryKey: `chart-setup:${profileId || "anon"}:${selectedChart.key}`,
@@ -588,12 +575,19 @@ export default function ChartsIndexScreen() {
         profileId,
       }),
   });
+  useEffect(() => {
+    const nextError = chartSetupQuery.error;
+    if (nextError !== null) {
+      setSetupError(formatSupabaseConfigError(nextError) || "Failed to load chart setup.");
+    } else {
+      setSetupError(null);
+    }
+  }, [chartSetupQuery.error]);
   const setupPayload =
     chartSetupQuery.payload && typeof chartSetupQuery.payload === "object"
       ? (chartSetupQuery.payload as Record<string, unknown>)
       : null;
   const setupLoading = chartSetupQuery.loading;
-  const setupError = chartSetupQuery.error;
   const setupIsStale = chartSetupQuery.isStale;
   const setupStaleMessage = chartSetupQuery.staleMessage;
   const focusPlayerOptions = useMemo(
@@ -1172,14 +1166,24 @@ export default function ChartsIndexScreen() {
             ) : null}
 
             <View style={styles.heroActionRow}>
-              <UtilityButton
-                label={setupOpen ? "Close" : "Adjust"}
-                onPress={() =>
-                  setupOpen ? setChartSetupOpen(false) : openSetup()
-                }
-                tone={setupOpen ? "neutral" : "blue"}
-                size="compact"
-              />
+              {setupOpen ? (
+                <>
+                  <UtilityButton
+                    label="Open Chart"
+                    onPress={() => openChart(selectedChart)}
+                    tone="green"
+                    size="prominent"
+                  />
+                  <SetupBackButton onPress={() => setChartSetupOpen(false)} />
+                </>
+              ) : (
+                <UtilityButton
+                  label="Adjust"
+                  onPress={() => openSetup()}
+                  tone="blue"
+                  size="compact"
+                />
+              )}
               <UtilityButton
                 label="Back to Command"
                 onPress={() => router.push(APP_ROUTES.home)}
@@ -1197,11 +1201,12 @@ export default function ChartsIndexScreen() {
           >
             <View style={styles.setupStack}>
               {setupLoading ? (
-                <Text style={styles.emptyText}>
-                  Loading Supabase-authored setup options.
-                </Text>
+                <EmptyStateCard message="Loading chart setup options..." />
               ) : setupError ? (
-                <Text style={styles.emptyText}>{setupError}</Text>
+                <EmptyStateCard
+                  message={setupError}
+                  hint="Check your connection or try switching to a different chart."
+                />
               ) : (
                 <>
                   {setupIsStale ? (
@@ -1371,15 +1376,7 @@ export default function ChartsIndexScreen() {
                 </>
               )}
 
-              <View style={styles.setupFooterActions}>
-                <UtilityButton
-                  label="Open Chart"
-                  onPress={() => openChart(selectedChart)}
-                  tone="green"
-                  size="compact"
-                />
-                <SetupBackButton onPress={() => setChartSetupOpen(false)} />
-              </View>
+              <View style={styles.setupFooterActions} />
             </View>
           </SectionCard>
         ) : (
@@ -1485,12 +1482,15 @@ const styles = StyleSheet.create({
   displayChip: {
     borderRadius: CHART_LAYOUT.chipRadius,
     borderWidth: 1,
+    borderColor: withChartAlpha(CHART_COLORS.sub, 0.28),
+    backgroundColor: withChartAlpha(CHART_COLORS.sub, 0.08),
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   displayChipText: {
     fontSize: 9,
     fontWeight: "800",
+    color: CHART_COLORS.sub,
   },
   utilityButton: {
     minHeight: 34,
@@ -1598,25 +1598,6 @@ const styles = StyleSheet.create({
   previewWrap: {
     marginTop: "auto",
   },
-  starButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: CHART_COLORS.border,
-    backgroundColor: CHART_COLORS.whiteSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  starText: {
-    color: CHART_COLORS.sub,
-    fontSize: 18,
-    fontWeight: "900",
-    lineHeight: 18,
-  },
-  starTextActive: {
-    color: CHART_COLORS.gold,
-  },
   emptyText: {
     color: CHART_COLORS.sub,
     fontSize: 12,
@@ -1642,6 +1623,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingTop: 1,
+  },
+  backToCommandButton: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   setupBackButton: {
     borderRadius: CHART_LAYOUT.chipRadius,

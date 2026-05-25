@@ -24,6 +24,9 @@ export const APP_ROUTES = {
   playerCards: "/player-cards",
   game: "/game",
   gameSetup: "/game-setup",
+  summary: "/summary",
+  gameTrends: "/game-trends",
+  replay: "/charts/replay",
 } as const;
 
 export type AppRoute = (typeof APP_ROUTES)[keyof typeof APP_ROUTES];
@@ -98,6 +101,20 @@ export function buildPlayerProfileRoute(playerId: string) {
   return {
     pathname: APP_ROUTES.playerProfileDetail,
     params: { playerId },
+  } as const;
+}
+
+export function buildSummaryRoute(gameId: string) {
+  return {
+    pathname: APP_ROUTES.summary,
+    params: { gameId },
+  } as const;
+}
+
+export function buildGameTrendsRoute(gameId: string) {
+  return {
+    pathname: APP_ROUTES.gameTrends,
+    params: { gameId },
   } as const;
 }
 

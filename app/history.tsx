@@ -1,15 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Alert,
   StyleSheet,
   Pressable,
   TextInput,
-  Animated,
   ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AppStatusBanner from '@/components/status/AppStatusBanner';
 import {
@@ -20,18 +20,26 @@ import {
   useHydrateCloudSnapshot,
 } from '@/store/useStore';
 import ActionButton from '@/components/ui/ActionButton';
+import EmptyStateCard from '@/components/ui/EmptyStateCard';
 import HeroCard from '@/components/ui/HeroCard';
 import PageShell from '@/components/ui/PageShell';
 import SectionCard from '@/components/ui/SectionCard';
 import Text from '@/components/ui/Text';
 import { useHistoryDataManager } from '@/lib/history/useHistoryDataManager';
-import { APP_ROUTES } from '@/utils/appRoutes';
+import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
+import { loadCloudSnapshot } from '@/lib/cloud/loadCloudSnapshot';
+import { loadRegisteredProfiles } from '@/lib/cloud/loadRegisteredProfiles';
+import { loadStatsSnapshot } from '@/lib/cloud/loadStatsSnapshot';
+import { importBackupFromPicker } from '@/lib/migration/importBackupFromPicker';
+import { mergeRegisteredProfilesIntoPlayers } from '@/utils/registeredProfilePlayer';
+import { APP_ROUTES, buildSummaryRoute } from '@/utils/appRoutes';
 
 import {
   getWinnerIdFromGame,
 } from '@/utils/gameTotals';
 import { COLORS } from '@/utils/colors';
 import { formatDate } from '@/utils/formatters';
+import ScalePressable from '@/components/ui/ScalePressable';
 
 type Player = {
   id: string;
@@ -78,11 +86,6 @@ type StoredGame = {
 
 type HistoryFilter = 'all' | 'group' | 'mine';
 type HistorySort = 'newest' | 'oldest' | 'winner' | 'rounds';
-
-const SUMMARY_ROUTE = '/summary';
-const REPLAY_ROUTE = '/charts/replay';
-
-
 
 function normalizeHistoryId(value: unknown): string {
   return String(value ?? '').trim();
@@ -196,45 +199,6 @@ function gameIncludesPlayer(game: StoredGame, playerId: string) {
   }
 
   return false;
-}
-
-function ScalePressable({
-  onPress,
-  onLongPress,
-  style,
-  children,
-  disabled,
-}: {
-  onPress?: () => void;
-  onLongPress?: () => void;
-  style?: any;
-  children: React.ReactNode;
-  disabled?: boolean;
-}) {
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const animateTo = (value: number) => {
-    Animated.spring(scale, {
-      toValue: value,
-      useNativeDriver: true,
-      speed: 28,
-      bounciness: value === 1 ? 7 : 0,
-    }).start();
-  };
-
-  return (
-    <Animated.View style={[style, { transform: [{ scale }] }]}> 
-      <Pressable
-        disabled={disabled}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        onPressIn={() => animateTo(0.985)}
-        onPressOut={() => animateTo(1)}
-      >
-        {children}
-      </Pressable>
-    </Animated.View>
-  );
 }
 
 function HistoryTab({
@@ -467,11 +431,29 @@ export default function HistoryScreen() {
 
             void (async () => {
               try {
-                await removeGame(normalizedGameId, activeSession);
+                await deleteCompletedGame(normalizedGameId);
 
                 if (selectedGameId === normalizedGameId) {
                   setSelectedGameId(undefined);
                 }
+
+                const [snapshot, registeredProfiles] = await Promise.all([
+                  loadCloudSnapshot(activeSession?.user?.id ?? ''),
+                  loadRegisteredProfiles().catch(() => []),
+                ]);
+                const statsSnapshot = await loadStatsSnapshot({
+                  profileId: activeSession?.user?.id ?? '',
+                  groups: snapshot.groups,
+                  games: snapshot.games,
+                });
+                hydrateCloudSnapshot({
+                  session: activeSession,
+                  snapshot: {
+                    ...snapshot,
+                    players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
+                  },
+                  statsSnapshot,
+                });
               } catch (error) {
                 console.error('Delete Game failed:', error);
                 Alert.alert(
@@ -494,10 +476,11 @@ export default function HistoryScreen() {
       return;
     }
 
-    router.push({ pathname: SUMMARY_ROUTE as any, params: { gameId: game.id } });
+    router.push(buildSummaryRoute(game.id) as any);
   };
 
   return (
+    <SafeAreaView edges={[]} style={{ flex: 1 }}>
     <PageShell density="compact">
       <HeroCard
         eyebrow="History"
@@ -528,7 +511,11 @@ export default function HistoryScreen() {
           title={importingBackup ? 'Importing...' : 'Import backup'}
           subtitle="Merge a local JSON backup into this signed-in profile"
           onPress={() => {
-            void importBackup().catch((error) => {
+            void importBackupFromPicker({
+              signedInProfileId: authSession?.user?.id ?? '',
+              signedInPlayerName: authProfile?.player_name ?? '',
+              resolvedProfilesByName: {},
+            }).then(() => importBackup()).catch((error) => {
               Alert.alert(
                 'Import failed',
                 error instanceof Error
@@ -545,15 +532,25 @@ export default function HistoryScreen() {
       </SectionCard>
 
       <SectionCard title="Filter" subtitle={`${displayedGames.length} visible`}>
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => setSearchFocused(false)}
-          placeholder="Search by winner, group, or date"
-          placeholderTextColor={COLORS.sub}
-          style={[styles.input, searchFocused && styles.inputFocused]}
-        />
+        <View style={styles.searchWrap}>
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            placeholder="Search by winner, group, or date"
+            placeholderTextColor={COLORS.sub}
+            style={[styles.input, searchFocused && styles.inputFocused, searchQuery.length > 0 && styles.inputWithClear]}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable
+              onPress={() => setSearchQuery('')}
+              style={({ pressed }) => [styles.searchClear, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.searchClearText}>✕</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.historyTabRail}>
           <HistoryTab
@@ -648,7 +645,10 @@ export default function HistoryScreen() {
 
       <SectionCard title="Game History" subtitle="Tap a card to expand actions">
         {displayedGames.length === 0 ? (
-            <Text style={styles.emptyText}>No matching mission logs. Try a different search or filter.</Text>
+            <EmptyStateCard
+              message="No matching mission logs."
+              hint="Try a different search or filter, or import a backup to populate history."
+            />
           ) : (
             <View style={styles.historyList}>
               {displayedGames.map((game, index) => {
@@ -703,9 +703,11 @@ export default function HistoryScreen() {
                         </View>
 
                         <View style={styles.leaderboardRight}>
-                          <Text style={[styles.statusText, isSelected && styles.statusTextActive]}>
-                            {isSelected ? 'Selected' : 'Select'}
-                          </Text>
+                          <View style={styles.chevronWrap}>
+                            <Text style={[styles.chevronText, isSelected && styles.chevronTextActive]}>
+                              {isSelected ? '▴' : '▾'}
+                            </Text>
+                          </View>
                         </View>
                       </View>
                     </ScalePressable>
@@ -718,8 +720,7 @@ export default function HistoryScreen() {
 
                         <View style={styles.metricGridDense}>
                           <ScalePressable style={styles.metricCardDense} onPress={() => handleOpenGameSummary(game)}>
-                            <View style={[styles.actionCard, { backgroundColor: COLORS.accentSoft }]}> 
-                              <Text style={styles.metricLabelCompact}>Open</Text>
+                            <View style={[styles.actionCard, { backgroundColor: COLORS.accentSoft }]}>
                               <Text style={[styles.metricValueCompact, { color: COLORS.accent }]}>Summary</Text>
                             </View>
                           </ScalePressable>
@@ -736,7 +737,7 @@ export default function HistoryScreen() {
                               }
 
                               router.push({
-                                pathname: REPLAY_ROUTE as any,
+                                pathname: APP_ROUTES.replay as any,
                                 params: {
                                   gameId: game.id,
                                   selectedGameId: game.id,
@@ -745,15 +746,13 @@ export default function HistoryScreen() {
                               });
                             }}
                           >
-                            <View style={[styles.actionCard, { backgroundColor: COLORS.blueSoft }]}> 
-                              <Text style={styles.metricLabelCompact}>Open</Text>
+                            <View style={[styles.actionCard, { backgroundColor: COLORS.blueSoft }]}>
                               <Text style={[styles.metricValueCompact, { color: COLORS.blue }]}>Replay</Text>
                             </View>
                           </ScalePressable>
 
                           <ScalePressable style={styles.metricCardDense} onPress={() => handleDeleteGame(game, index)}>
-                            <View style={[styles.actionCard, { backgroundColor: COLORS.redSoft }]}> 
-                              <Text style={styles.metricLabelCompact}>Remove</Text>
+                            <View style={[styles.actionCard, { backgroundColor: COLORS.redSoft }]}>
                               <Text style={[styles.metricValueCompact, { color: COLORS.red }]}>Delete</Text>
                             </View>
                           </ScalePressable>
@@ -767,6 +766,7 @@ export default function HistoryScreen() {
           )}
       </SectionCard>
     </PageShell>
+    </SafeAreaView>
   );
 }
 
@@ -782,6 +782,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 8,
   },
+  searchWrap: {
+    position: 'relative',
+    marginBottom: 8,
+  },
   input: {
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -792,7 +796,23 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.input,
     fontSize: 12,
     fontWeight: '700',
-    marginBottom: 8,
+  },
+  inputWithClear: {
+    paddingRight: 36,
+  },
+  searchClear: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchClearText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: '800',
   },
   inputFocused: {
     borderColor: COLORS.blue,
@@ -882,12 +902,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minHeight: 52,
     justifyContent: 'center',
-  },
-  metricLabelCompact: {
-    color: COLORS.sub,
-    fontSize: 10,
-    lineHeight: 12,
-    marginBottom: 4,
   },
   metricValueCompact: {
     fontSize: 14,
@@ -985,12 +999,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
   },
-  statusText: {
-    color: COLORS.sub,
-    fontSize: 10,
-    fontWeight: '800',
+  chevronWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statusTextActive: {
+  chevronText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  chevronTextActive: {
     color: COLORS.accent,
   },
   gameCardAccent: {

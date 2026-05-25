@@ -8,6 +8,7 @@ import {
   Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import AnalyticsSourceBadge from "@/components/analytics/AnalyticsSourceBadge";
 import MoonrakersIntelSection from "@/components/player/MoonrakersIntelSection";
@@ -15,6 +16,7 @@ import PlayerProfileMetricTabs from "@/components/player-profile/PlayerProfileMe
 import PlayerProfileRecentGames from "@/components/player-profile/PlayerProfileRecentGames";
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { getPlayerProfileScreen } from "@/lib/cloud/analytics/getPlayerProfileScreen";
@@ -792,9 +794,10 @@ export default function PlayerProfileDetailScreen() {
             sectionCards={sectionCards}
           />
         ) : (
-          <View style={styles.sectionCompact}>
-            <Text style={styles.emptyText}>No server-authored profile analytics are available yet.</Text>
-          </View>
+          <EmptyStateCard
+            message="No profile analytics available yet."
+            hint="Finish or import more games to unlock server-authored stats for this player."
+          />
         )}
 
         <MoonrakersIntelSection profile={moonrakersIntel} />

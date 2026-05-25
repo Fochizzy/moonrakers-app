@@ -86,7 +86,7 @@ assert.equal(
 assert.equal(
   cards.find((card) => card.key === "elo")?.iconKey,
   "billBendo",
-  "expected ELO to use the Bill_Bendo tile on the analytics landing"
+  "expected ELO to use the Bill Bendo tile on the analytics landing"
 );
 
 assert.equal(

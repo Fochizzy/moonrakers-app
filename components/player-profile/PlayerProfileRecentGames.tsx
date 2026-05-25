@@ -1,8 +1,11 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { useRouter } from "expo-router";
 
 import Text from "@/components/ui/Text";
 import { COLORS } from "@/utils/colors";
+import { formatDate } from "@/utils/formatters";
+import { buildSummaryRoute } from "@/utils/appRoutes";
 
 type PlayerProfileRecentGamesProps = {
   emptyText?: string;
@@ -26,6 +29,8 @@ export default function PlayerProfileRecentGames({
   recentGames,
   renderBadge,
 }: PlayerProfileRecentGamesProps) {
+  const router = useRouter();
+
   if (!recentGames.length) {
     return <Text style={styles.emptyText}>{emptyText}</Text>;
   }
@@ -33,17 +38,25 @@ export default function PlayerProfileRecentGames({
   return (
     <View style={styles.gameList}>
       {recentGames.map((game, index) => {
+        const gameId = String(game.id ?? game.gameId ?? "").trim();
         const participants = toArray(game.players);
         const participantNames = participants
           .map((participant) => String(participant.name ?? "Unknown"))
           .join(" • ");
         const winnerId = String(game.winnerId ?? "").trim();
         const isWin = winnerId === String(playerId);
+        const dateLabel =
+          (game.createdAt != null
+            ? formatDate(game.createdAt as string | number)
+            : null) || "Tracked game";
 
         return (
-          <View
+          <Pressable
             key={String(game.id ?? game.gameId ?? index)}
-            style={styles.gameRow}
+            style={({ pressed }) => [styles.gameRow, pressed && styles.gameRowPressed]}
+            onPress={() => {
+              if (gameId) router.push(buildSummaryRoute(gameId) as any);
+            }}
           >
             <View style={styles.gameLeft}>
               <View style={styles.gameTitleRow}>
@@ -65,11 +78,9 @@ export default function PlayerProfileRecentGames({
               >
                 {isWin ? "WIN" : "LOSS"}
               </Text>
-              <Text style={styles.gameMeta}>
-                {String(game.id ?? game.gameId ?? "Tracked")}
-              </Text>
+              <Text style={styles.gameMeta}>{dateLabel}</Text>
             </View>
-          </View>
+          </Pressable>
         );
       })}
     </View>
@@ -123,10 +134,13 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 2,
   },
+  gameRowPressed: {
+    opacity: 0.8,
+  },
   gameResultWin: {
     color: COLORS.green,
   },
   gameResultLoss: {
-    color: COLORS.blue,
+    color: COLORS.danger,
   },
 });

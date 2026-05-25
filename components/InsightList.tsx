@@ -2,6 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { useStore } from '@/store/useStore';
+import EmptyStateCard from '@/components/ui/EmptyStateCard';
 import Text from '@/components/ui/Text';
 import { chartColors, withAlpha } from '@/utils/chartTheme';
 
@@ -62,12 +63,10 @@ function InsightList({
       ) : null}
 
       {visible.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No insights yet</Text>
-          <Text style={styles.emptyText}>
-            Play more games to generate analytics.
-          </Text>
-        </View>
+        <EmptyStateCard
+          message="No insights yet"
+          hint="Play more games to generate analytics."
+        />
       ) : (
         <View style={[styles.list, isTwoColumn && styles.listTwoColumn]}>
           {visible.map((insight, index) => (
@@ -104,11 +103,11 @@ export default memo(InsightList);
 const styles = StyleSheet.create({
   panel: {
     borderRadius: 18,
-    padding: 16,
+    padding: 12,
     backgroundColor: '#040914',
     borderWidth: 1,
     borderColor: withAlpha('#3b82f6', 0.2),
-    gap: 14,
+    gap: 10,
     overflow: 'hidden',
   },
   embeddedBody: {
@@ -195,21 +194,5 @@ const styles = StyleSheet.create({
   },
   cardCellTwoColumn: {
     width: '49%',
-  },
-  empty: {
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: 'rgba(10,15,28,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.2)',
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#e2e8f0',
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#94a3b8',
   },
 });

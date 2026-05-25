@@ -52,8 +52,8 @@ assertMatch(
 
 assertMatch(
   appHubsSource,
-  /key:\s*"elo"[\s\S]*?iconKey:\s*"reactor"/,
-  "elo card reactor artwork swap"
+  /key:\s*"elo"[\s\S]*?iconKey:\s*"billBendo"/,
+  "elo card Bill Bendo artwork swap"
 );
 
 assertMatch(

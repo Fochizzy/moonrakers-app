@@ -1,9 +1,10 @@
 import React, { useMemo } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import ActionButton from "@/components/ui/ActionButton";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
@@ -11,6 +12,7 @@ import Text from "@/components/ui/Text";
 import { useGames, usePlayers } from "@/store/useStore";
 import { COLORS } from "@/utils/colors";
 import { formatDate } from "@/utils/formatters";
+import { buildGameTrendsRoute } from "@/utils/appRoutes";
 import {
   getResolvedTotalsForPlayer,
   getWinnerIdFromGame,
@@ -225,6 +227,12 @@ export default function SummaryScreen() {
   );
   const roundsCount = useMemo(() => getRoundsCount(game), [game]);
 
+  const gameTitle = game?.groupName
+    ? game.groupName
+    : game?.createdAt
+      ? formatDate(game.createdAt)
+      : "Completed Match";
+
   const rankedPlayers = useMemo(() => {
     if (!game?.players?.length) return [];
 
@@ -313,7 +321,7 @@ export default function SummaryScreen() {
     <PageShell preset="analytics" density="compact">
       <HeroCard
         eyebrow="Game Summary"
-        title="Completed Match"
+        title={gameTitle}
         subtitle="Review the final standings, detailed totals, and replay flow."
         size="compact"
         variant="stat"
@@ -339,7 +347,7 @@ export default function SummaryScreen() {
       >
         <View style={styles.overviewHeader}>
           <View style={styles.overviewTextWrap}>
-            <Text style={styles.overviewGameName}>Completed Match</Text>
+            <Text style={styles.overviewGameName}>{gameTitle}</Text>
             <Text style={styles.overviewDate}>{formatDate(game.createdAt)}</Text>
           </View>
 
@@ -461,9 +469,10 @@ export default function SummaryScreen() {
         }
       >
         {replayRows.length === 0 ? (
-          <Text style={styles.emptyInlineText}>
-            No timeline data is available for this saved game yet.
-          </Text>
+          <EmptyStateCard
+            message="No timeline data available."
+            hint="Timeline entries are recorded during play. Imported games may not include round-level detail."
+          />
         ) : (
           <View style={styles.replayList}>
             {replayRows.map((row) => {
@@ -522,14 +531,9 @@ export default function SummaryScreen() {
 
           <Pressable
             style={[styles.actionButton, styles.primaryAction]}
-            onPress={() =>
-              Alert.alert(
-                "Replay graph",
-                "This page is ready for your replay graph component. Plug it into the Replay Flow section or replace it with your chart view.",
-              )
-            }
+            onPress={() => router.push(buildGameTrendsRoute(params.gameId!) as any)}
           >
-            <Text style={styles.actionButtonText}>Replay Graph</Text>
+            <Text style={styles.actionButtonText}>Game Trends</Text>
           </Pressable>
         </View>
       </SectionCard>

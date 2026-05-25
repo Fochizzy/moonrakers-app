@@ -109,6 +109,8 @@ export type StatsScreenPayload = {
     };
     cards: AnalyticsMetricCard[];
     topSignals: AnalyticsTopSignal[];
+    halftimeProfile?: Record<string, unknown>;
+    playerCountSplit?: Record<string, unknown>[];
   };
   players: {
     options: AnalyticsPlayerOption[];
@@ -118,6 +120,9 @@ export type StatsScreenPayload = {
   playstyle: Record<string, unknown>;
   correlations: Record<string, unknown>;
   games: Record<string, unknown>;
+  contractEfficiency?: Record<string, unknown>;
+  groupMeta?: Record<string, unknown>;
+  headToHead?: Record<string, unknown>[];
 };
 
 export type InsightsScreenPayload = {

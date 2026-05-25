@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
@@ -637,12 +638,9 @@ export default function IndexScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.navRow}>
-          <Pressable
-            style={({ pressed }) => [styles.navPill, pressed && { opacity: 0.9 }]}
-            onPress={() => router.push(APP_ROUTES.home)}
-          >
+          <TouchableOpacity style={styles.navPill} onPress={() => router.push(APP_ROUTES.home)} activeOpacity={0.9}>
             <Text style={styles.navPillText}>Back to Command</Text>
-          </Pressable>
+          </TouchableOpacity>
           <Pressable
             style={({ pressed }) => [styles.navPill, pressed && { opacity: 0.9 }]}
             onPress={() => router.push("/stats")}

@@ -21,6 +21,8 @@ import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import { useStore } from "@/store/useStore";
+import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
+import { APP_ROUTES } from "@/utils/appRoutes";
 import {
   applyTurnOrderPlayerColorOverride,
   buildActiveGamePlayersFromTurnOrder,
@@ -96,7 +98,6 @@ function darkenHex(hex?: string, amount = 0.42) {
 
 function TurnOrderSummary({ players }: { players: PlayerLike[] }) {
   const startingPlayer = players[0] ?? null;
-  const summaryText = buildTurnOrderSummary(players);
   const accent = startingPlayer ? getAccentColor(startingPlayer.color, 0) : "#7DD3FC";
 
   return (
@@ -146,7 +147,34 @@ function TurnOrderSummary({ players }: { players: PlayerLike[] }) {
         <Text variant="utilityLabel" style={styles.summaryTextLabel}>
           Locked Order
         </Text>
-        <Text style={styles.summaryTextValue}>{summaryText}</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.orderChipRail}
+        >
+          {players.map((p, index) => {
+            const chipAccent = getAccentColor(p.color, index);
+            return (
+              <View
+                key={p.id}
+                style={[
+                  styles.orderChip,
+                  {
+                    borderColor: `${chipAccent}66`,
+                    backgroundColor: `${chipAccent}12`,
+                  },
+                ]}
+              >
+                <Text style={[styles.orderChipNum, { color: chipAccent }]}>
+                  {index + 1}
+                </Text>
+                <Text style={styles.orderChipName} numberOfLines={1}>
+                  {p.name ?? "?"}
+                </Text>
+              </View>
+            );
+          })}
+        </ScrollView>
       </View>
     </View>
   );
@@ -299,7 +327,9 @@ function TurnOrderRow({
                 <Text style={[styles.firstChipText, { color: accent }]}>Selected</Text>
               </View>
             ) : (
-              <Text style={styles.rowTapMeta}>Tap to select</Text>
+              <View style={styles.tapSelectChip}>
+                <Text style={styles.tapSelectChipText}>Tap to select</Text>
+              </View>
             )}
           </View>
 
@@ -371,9 +401,12 @@ function GameOnlyColorOverlay({
             <Text style={styles.colorOverlayName}>{resolveDisplayName(player, index)}</Text>
           </View>
 
-          <Pressable style={styles.colorOverlayCloseButton} onPress={onClose}>
-            <Text style={styles.colorOverlayCloseText}>Close</Text>
-          </Pressable>
+          <ActionButton
+            title="Close"
+            variant="ghost"
+            onPress={onClose}
+            style={styles.colorOverlayCloseButton}
+          />
         </View>
 
         <ProfileAppearancePicker
@@ -391,7 +424,9 @@ function GameOnlyColorOverlay({
 export default function GameSetup() {
   const router = useRouter();
   const params = useLocalSearchParams<SetupParams>();
-  const startActiveGame = useStore((state) => state.startActiveGame);
+  const storedPlayers = useStore((state) => state.players ?? []);
+  const storedGroups = useStore((state) => state.groups ?? []);
+  const { gameDraft, replaceDraft, beginGameplay } = useSyncedGameDraft();
 
   const selectedPlayers = useMemo(
     () => safeParseArray<PlayerLike>(params.selectedPlayers),
@@ -410,20 +445,42 @@ export default function GameSetup() {
 
   const modeParam = firstParam(params.mode);
   const mode: "players" | "group" =
-    modeParam === "group" || selectedGroups.length > 0 ? "group" : "players";
+    gameDraft?.selectedGroupId || modeParam === "group" || selectedGroups.length > 0
+      ? "group"
+      : "players";
 
-  const selectedGroup = mode === "group" ? selectedGroups[0] ?? null : null;
+  const selectedGroup =
+    mode === "group"
+      ? (storedGroups.find((group: any) => group.id === gameDraft?.selectedGroupId) as GroupLike) ??
+        selectedGroups[0] ??
+        null
+      : null;
 
   const resolvedPlayers = useMemo(() => {
+    const availablePlayers = Array.isArray(storedPlayers) && storedPlayers.length
+      ? (storedPlayers as PlayerLike[])
+      : allPlayers;
+    const playerMap = new Map(availablePlayers.map((player) => [player.id, player]));
+
+    const draftPlayerIds =
+      gameDraft?.turnOrder?.length
+        ? gameDraft.turnOrder
+        : gameDraft?.selectedPlayerIds ?? [];
+
+    if (draftPlayerIds.length > 0) {
+      return draftPlayerIds
+        .map((playerId) => playerMap.get(playerId))
+        .filter(Boolean) as PlayerLike[];
+    }
+
     if (mode === "players") return selectedPlayers;
 
     if (!selectedGroup?.playerIds?.length) return [];
 
-    const playerMap = new Map(allPlayers.map((player) => [player.id, player]));
     return selectedGroup.playerIds
       .map((playerId) => playerMap.get(playerId))
       .filter(Boolean) as PlayerLike[];
-  }, [allPlayers, mode, selectedGroup, selectedPlayers]);
+  }, [allPlayers, gameDraft, mode, selectedGroup, selectedPlayers, storedPlayers]);
 
   const [turnOrder, setTurnOrder] = useState<PlayerLike[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -449,6 +506,14 @@ export default function GameSetup() {
   }, [resolvedPlayers]);
 
   const canStart = canSubmitGameSetup(turnOrder);
+
+  const startGameSubtitle = useMemo(() => {
+    const count = turnOrder.filter((p) => String(p?.id ?? "").trim().length > 0).length;
+    if (count === 0) return "Select 2–5 players to begin.";
+    if (count === 1) return "Add at least 1 more player (2–5 required).";
+    if (count > 5) return "Too many players — remove some (max 5).";
+    return buildTurnOrderSummary(turnOrder);
+  }, [turnOrder]);
   const selectedPlayerIndex = useMemo(
     () => turnOrder.findIndex((player) => player.id === selectedPlayerId),
     [selectedPlayerId, turnOrder]
@@ -505,7 +570,26 @@ export default function GameSetup() {
   const handleDragEnd = useCallback(({ data }: { data: PlayerLike[] }) => {
     Haptics.selectionAsync().catch(() => {});
     setTurnOrder(data);
-  }, []);
+    if (!gameDraft) {
+      return;
+    }
+
+    const timestamp = Date.now();
+    void replaceDraft({
+      ...gameDraft,
+      phase: "setup",
+      turnOrder: data.map((player) => player.id),
+      playerSnapshots: data.map((player) => ({
+        id: player.id,
+        name: player.name ?? "Unknown",
+        initials: player.initials,
+        color: player.color,
+        assignedCardArtIndex: player.assignedCardArtIndex ?? null,
+      })),
+      updatedAt: timestamp,
+      deviceUpdatedAt: timestamp,
+    });
+  }, [gameDraft, replaceDraft]);
 
   const handleDragBegin = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -551,25 +635,17 @@ export default function GameSetup() {
     if (!canStart || isStarting) return;
 
     await playStartAnimation();
-
-    startActiveGame({
-      players: buildActiveGamePlayersFromTurnOrder(turnOrder),
-      groupId: selectedGroup?.id,
-      groupName: selectedGroup?.name,
-    });
+    await beginGameplay();
 
     setTimeout(() => {
-      router.push("/game");
+      router.push(APP_ROUTES.game as any);
     }, 520);
   }, [
+    beginGameplay,
     canStart,
     isStarting,
     playStartAnimation,
     router,
-    selectedGroup?.id,
-    selectedGroup?.name,
-    startActiveGame,
-    turnOrder,
   ]);
 
   return (
@@ -787,12 +863,6 @@ const styles = StyleSheet.create({
   summaryTextLabel: {
     color: "#93C5FD",
   },
-  summaryTextValue: {
-    color: "#F8FAFC",
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "800",
-  },
   nameStripBlock: {
     gap: 10,
   },
@@ -956,13 +1026,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-  rowTapMeta: {
-    flex: 1,
-    textAlign: "right",
-    color: "#BFDBFE",
-    fontSize: 11,
-    fontWeight: "800",
-  },
   rowAvatarWrap: {
     width: 84,
     height: 112,
@@ -1061,19 +1124,47 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   colorOverlayCloseButton: {
+    alignSelf: "flex-start",
+  },
+  tapSelectChip: {
+    minWidth: 84,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(255,255,255,0.04)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  colorOverlayCloseText: {
-    color: "#E2E8F0",
-    fontSize: 11,
+  tapSelectChipText: {
+    fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.6,
-    textTransform: "uppercase",
+    color: "#94A3B8",
+  },
+  orderChipRail: {
+    gap: 6,
+    paddingRight: 4,
+  },
+  orderChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  orderChipNum: {
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  orderChipName: {
+    color: "#F8FAFC",
+    fontSize: 11,
+    fontWeight: "800",
+    maxWidth: 72,
   },
   launchOverlay: {
     ...StyleSheet.absoluteFillObject,

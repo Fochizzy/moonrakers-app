@@ -190,27 +190,36 @@ export default function AnalyticsScreen() {
   const hero = toRecord(payload?.hero);
   const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
-  const recoveryState = resolveAnalyticsRecoveryState({
-    loading,
-    error,
-    playersCount: players.length,
-    gamesCount: games.length,
-  });
-  const heroMessage = error
-    ? error
-    : loading
-      ? "Syncing Supabase-authored analytics."
-      : isStale
-        ? `Showing the last successful server payload because the latest refresh failed${staleMessage ? `: ${staleMessage}` : "."}`
-      : "Counts on this screen come from Supabase analytics payloads.";
-  const analyticsSectionState =
-    loading
-      ? "loading"
-      : error
-        ? "error"
-        : recoveryState.kind === "no-players" || recoveryState.kind === "no-games"
-          ? "empty"
-          : "ready";
+  const recoveryState = useMemo(
+    () =>
+      resolveAnalyticsRecoveryState({
+        loading,
+        error,
+        playersCount: players.length,
+        gamesCount: games.length,
+      }),
+    [loading, error, players.length, games.length],
+  );
+  const analyticsSectionState = useMemo<"loading" | "error" | "empty" | "ready">(() => {
+    if (loading) return "loading";
+    if (error) return "error";
+    if (recoveryState.kind === "no-players" || recoveryState.kind === "no-games") return "empty";
+    return "ready";
+  }, [loading, error, recoveryState.kind]);
+  const analyticsPrimaryAction = useMemo(() => {
+    if (recoveryState.kind === "no-players")
+      return { label: "Open roster", onPress: () => router.push(APP_ROUTES.roster) };
+    if (recoveryState.kind === "no-games")
+      return { label: "Start tracked game", onPress: () => router.push(buildHomeRoute("game")) };
+    return null;
+  }, [recoveryState.kind, router]);
+  const analyticsSecondaryAction = useMemo(() => {
+    if (recoveryState.kind === "no-players")
+      return { label: "Profiles", variant: "secondary" as const, onPress: () => router.push(APP_ROUTES.playerDirectory) };
+    if (recoveryState.kind === "no-games")
+      return { label: "Import backup", variant: "secondary" as const, onPress: () => router.push(buildHistoryRoute({ intent: "import" })) };
+    return null;
+  }, [recoveryState.kind, router]);
   const analyticsSectionTitle =
     recoveryState.kind === "no-players"
       ? "No tracked players yet"
@@ -227,32 +236,13 @@ export default function AnalyticsScreen() {
         : error
           ? error
           : "Syncing the analytics hub surface from the published Supabase payload.";
-  const analyticsPrimaryAction =
-    recoveryState.kind === "no-players"
-      ? {
-          label: "Open roster",
-          onPress: () => router.push(APP_ROUTES.roster),
-        }
-      : recoveryState.kind === "no-games"
-        ? {
-            label: "Start tracked game",
-            onPress: () => router.push(buildHomeRoute("game")),
-          }
-        : null;
-  const analyticsSecondaryAction =
-    recoveryState.kind === "no-players"
-      ? {
-          label: "Profiles",
-          onPress: () => router.push(APP_ROUTES.playerDirectory),
-          variant: "secondary" as const,
-        }
-      : recoveryState.kind === "no-games"
-        ? {
-            label: "Import backup",
-            onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
-            variant: "secondary" as const,
-          }
-        : null;
+  const heroMessage = error
+    ? error
+    : loading
+      ? "Syncing Supabase-authored analytics."
+      : isStale
+        ? `Showing the last successful server payload because the latest refresh failed${staleMessage ? `: ${staleMessage}` : "."}`
+      : "Counts on this screen come from Supabase analytics payloads.";
 
   return (
     <PageShell preset="analytics" density="compact" contentContainerStyle={styles.pageContent}>

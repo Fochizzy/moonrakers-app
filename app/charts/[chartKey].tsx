@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -41,6 +42,8 @@ import StackedBarChart from "@/components/charts/StackedBarChart";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { getChartDataset } from "@/lib/cloud/analytics/getChartDataset";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
+import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
+import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import { buildLocalChartDetailState } from "@/utils/chartDetailLocalData";
@@ -278,9 +281,18 @@ export default function ChartKeyScreen() {
         opponentId: routeOpponentId ?? null,
       }),
   });
+  const analyticsRefreshTick = useAnalyticsRefreshTick();
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const nextError = datasetQuery.error;
+    if (nextError !== null) {
+      setError(formatSupabaseConfigError(nextError) || "Failed to load chart.");
+    } else {
+      setError(null);
+    }
+  }, [datasetQuery.error]);
   const dataset = toRecord(datasetQuery.payload);
   const loading = datasetQuery.loading;
-  const error = datasetQuery.error;
   const isStale = datasetQuery.isStale;
   const staleMessage = datasetQuery.staleMessage;
 
@@ -311,6 +323,8 @@ export default function ChartKeyScreen() {
   const localFallbackGames = storeChartData.hasData
     ? storeGames
     : cloudFallbackGames;
+  const unifiedGames = localFallbackGames;
+  const resolvedPlayers = localFallbackPlayers;
   const localChartData = useMemo(
     () =>
       buildLocalChartDetailState({
@@ -334,6 +348,7 @@ export default function ChartKeyScreen() {
       routeSelectedGameId,
     ],
   );
+  const scopedPlayerIds = localChartData.scopedPlayerIds;
   const shouldUseLocalChartFallback =
     localChartData.hasData && !loading && (Boolean(error) || !hasData);
   const usingCloudFallbackData =
@@ -432,12 +447,13 @@ export default function ChartKeyScreen() {
       case "sparkline":
         return renderSparklineFallback();
       case "relationship_graph":
-      case "assist_network_overview":
         return (
           <AssistNetworkOverview
-            games={localChartData.scopedGames as any}
-            players={localChartData.chartPlayers as any}
-            scopedPlayerIds={localChartData.scopedPlayerIds}
+            games={unifiedGames as any}
+            players={resolvedPlayers as any}
+            scopedPlayerIds={routeIds.length ? routeIds : scopedPlayerIds}
+            exactScopePlayerIds={routeIds.length >= 2 ? routeIds : undefined}
+            mode={routeMode}
           />
         );
       case "head_to_head":
@@ -805,12 +821,12 @@ export default function ChartKeyScreen() {
             >
               <Text style={styles.primaryButtonText}>Back to Adjust</Text>
             </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.9 }]}
+            <TouchableOpacity
+              style={styles.secondaryButton}
               onPress={openCommandPage}
             >
               <Text style={styles.secondaryButtonText}>Back to Command</Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         ) : null}
       </HeroCard>

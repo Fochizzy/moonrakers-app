@@ -6,6 +6,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useAuthSession,
   useAuthProfile,
@@ -15,14 +16,15 @@ import {
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
 import ActionButton from "@/components/ui/ActionButton";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { APP_ROUTES } from "@/utils/appRoutes";
-import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
+import { APP_ROUTES, buildPlayerProfileRoute } from "@/utils/appRoutes";
+import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 import { COLORS } from "@/utils/colors";
 import {
   type EloMetricCard,
@@ -329,13 +331,13 @@ export default function EloScreen() {
   const leaderboardRows = useMemo(() => {
     const gameRows = buildGameRowsByPlayer(games, analyticsPlayers);
     return analyticsPlayers
-      .map((player) => {
+      .map((player, index) => {
         const playerId = normalizeId(player.id);
         const cloudRow = rawLeaderboardRows.find(
           (r) => normalizeId(r.playerId) === playerId
         );
         return {
-          rank: toNumber(cloudRow?.rank),
+          rank: toNumber(cloudRow?.rank) || index + 1,
           playerId,
           name: player.name ?? "Unknown",
           currentElo: toNumber(cloudRow?.currentElo) || DEFAULT_ELO,
@@ -363,30 +365,20 @@ export default function EloScreen() {
   const staleSourceCaption = isStale
     ? `Showing the last successful Supabase ELO payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
     : null;
-  const recoveryState = resolveAnalyticsRecoveryState({
+  const {
+    recoveryState,
+    sectionState: baseSectionState,
+  } = useAnalyticsRecovery({
     loading,
     error,
     playersCount: players.length,
     gamesCount: games.length,
+    context: "leaderboard",
   });
   const sharedSectionState =
-    loading
-      ? "loading"
-      : error
-        ? "error"
-        : recoveryState.kind === "no-players" || recoveryState.kind === "no-games" || !hasData
-          ? "empty"
-          : "ready";
+    baseSectionState === "ready" && !hasData ? "empty" : baseSectionState;
   const leaderboardSectionState =
-    loading
-      ? "loading"
-      : error
-        ? "error"
-        : recoveryState.kind === "no-players" ||
-            recoveryState.kind === "no-games" ||
-            !leaderboardRows.length
-          ? "empty"
-          : "ready";
+    baseSectionState === "ready" && !leaderboardRows.length ? "empty" : baseSectionState;
   const emptyStateTitle =
     recoveryState.kind === "no-players"
       ? "No tracked players yet"
@@ -405,10 +397,11 @@ export default function EloScreen() {
           : emptyStateDescription;
 
   return (
+    <SafeAreaView edges={[]} style={{ flex: 1 }}>
     <PageShell preset="analytics" density="compact">
       <HeroCard
         eyebrow="ELO"
-        title="Player Focus"
+        title={selectedPlayer?.name ?? "Player Focus"}
         subtitle="Select a player to explore ratings"
         size="compact"
         variant="stat"
@@ -421,15 +414,25 @@ export default function EloScreen() {
           />
         }
       >
-        <TextInput
-          value={playerSearchQuery}
-          onChangeText={setPlayerSearchQuery}
-          placeholder="Search players"
-          placeholderTextColor={COLORS.muted}
-          style={styles.playerSearchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <View style={styles.searchWrap}>
+          <TextInput
+            value={playerSearchQuery}
+            onChangeText={setPlayerSearchQuery}
+            placeholder="Search players"
+            placeholderTextColor={COLORS.muted}
+            style={styles.playerSearchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {playerSearchQuery.length > 0 ? (
+            <Pressable
+              onPress={() => setPlayerSearchQuery("")}
+              style={styles.searchClear}
+            >
+              <Text style={styles.searchClearText}>✕</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.underlineSelectorRow}>
           {filteredPlayerOptions.map((player) => {
@@ -461,9 +464,9 @@ export default function EloScreen() {
         </View>
 
         {filteredPlayerOptions.length ? null : (
-          <Text style={styles.emptyText}>
-            No players match that search yet.
-          </Text>
+          <EmptyStateCard
+            message="No players match that search."
+          />
         )}
       </HeroCard>
 
@@ -710,7 +713,10 @@ export default function EloScreen() {
                     row.isSelected && styles.leaderboardRowSelected,
                     pressed && { opacity: 0.9 },
                   ]}
-                  onPress={() => setSelectedPlayerId(row.playerId)}
+                  onPress={() => {
+                    setSelectedPlayerId(row.playerId);
+                    router.push(buildPlayerProfileRoute(row.playerId) as any);
+                  }}
                 >
                   <View style={styles.leaderboardLeft}>
                     <View
@@ -797,6 +803,7 @@ export default function EloScreen() {
         ) : null}
       </AnalyticsStateSection>
     </PageShell>
+    </SafeAreaView>
   );
 }
 
@@ -804,11 +811,13 @@ const styles = StyleSheet.create({
   backButton: {
     alignSelf: "flex-start",
   },
-  emptyText: {
-    color: COLORS.sub,
-    fontSize: 11,
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
   },
   playerSearchInput: {
+    flex: 1,
     minHeight: 40,
     borderRadius: 12,
     borderWidth: 1,
@@ -819,7 +828,18 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     fontSize: 12,
     fontWeight: "700",
-    marginBottom: 8,
+  },
+  searchClear: {
+    position: "absolute",
+    right: 10,
+    height: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  searchClearText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: "700",
   },
   underlineSelectorRow: {
     flexDirection: "row",

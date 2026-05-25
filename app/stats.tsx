@@ -8,9 +8,9 @@ import {
 import { useRouter } from "expo-router";
 
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import PlaystyleSection from "@/components/stats/PlaystyleSection";
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
-import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
@@ -21,7 +21,7 @@ import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefre
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { buildChartsRoute, buildHistoryRoute, buildHomeRoute, APP_ROUTES } from "@/utils/appRoutes";
-import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
+import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 import { formatDate } from "@/utils/formatters";
 import { COLORS } from "@/utils/colors";
 import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
@@ -210,6 +210,10 @@ export default function StatsScreen() {
   ];
   const overviewCards = toArray(overview.cards);
   const topSignals = normalizeTopSignals(overview.topSignals, payload?.generatedAt);
+  const halftimeProfile = toRecord(overview.halftimeProfile);
+  const contractEfficiency = toRecord(payload?.contractEfficiency);
+  const groupMeta = toRecord(payload?.groupMeta);
+  const headToHead = toArray(payload?.headToHead);
   const playersSection = toRecord(payload?.players);
   const playstyleSection = toRecord(payload?.playstyle);
   const correlationsSection = toRecord(payload?.correlations);
@@ -275,75 +279,42 @@ export default function StatsScreen() {
     correlationItems.length > 0 ||
     gamesItems.length > 0 ||
     toNumberValue(hero.games) > 0;
-  const overviewRecoveryState = useMemo(
-    () =>
-      resolveAnalyticsRecoveryState({
-        loading,
-        error,
-        playersCount: players.length,
-        gamesCount: games.length,
-      }),
-    [error, games.length, loading, players.length],
-  );
-  const playerRecoveryState = useMemo(
-    () =>
-      resolveAnalyticsRecoveryState({
-        loading,
-        error,
-        playersCount: players.length,
-        gamesCount: games.length,
-        playerOptionsCount: playerOptions.length,
-        hasLeagueData,
-        selectedPlayerHasDetail: detailStats.length > 0,
-      }),
-    [detailStats.length, error, games.length, hasLeagueData, loading, playerOptions.length, players.length],
-  );
+  const {
+    recoveryState: overviewRecoveryState,
+  } = useAnalyticsRecovery({
+    loading,
+    error,
+    playersCount: players.length,
+    gamesCount: games.length,
+    context: "stats",
+  });
+  const { recoveryState: playerRecoveryState } = useAnalyticsRecovery({
+    loading,
+    error,
+    playersCount: players.length,
+    gamesCount: games.length,
+    playerOptionsCount: playerOptions.length,
+    hasLeagueData,
+    selectedPlayerHasDetail: detailStats.length > 0,
+    context: "stats",
+  });
 
-  function renderSharedRecoveryCard(kind: "no-players" | "no-games" | "player-empty") {
-    if (kind === "no-players") {
-      return {
-        title: "No tracked players yet",
-        body: "Set up your roster first so the analytics surfaces have real commanders to work with.",
-        primaryAction: {
-          label: "Open roster",
-          onPress: () => router.push(APP_ROUTES.roster),
-        },
-        secondaryAction: {
-          label: "Profiles",
-          onPress: () => router.push(APP_ROUTES.playerDirectory),
-          variant: "secondary" as const,
-        },
-        tone: "warning" as const,
-      };
-    }
-
-    if (kind === "player-empty") {
-      return {
-        title: "No player-specific detail yet",
-        body: "League data exists, but the current player does not have a full detail payload on this screen yet.",
-        primaryAction: {
-          label: "Choose another player",
-          onPress: () => {
-            const fallbackPlayer =
-              filteredPlayerOptions.find((player) => player.id !== selectedPlayerId) ??
-              playerOptions.find((player) => player.id !== selectedPlayerId) ??
-              filteredPlayerOptions[0] ??
-              playerOptions[0];
-            if (fallbackPlayer?.id) {
-              setSelectedPlayerId(fallbackPlayer.id);
-            }
-          },
-        },
-        secondaryAction: {
-          label: "Open charts",
-          onPress: () => router.push(buildChartsRoute()),
-          variant: "secondary" as const,
-        },
-        tone: "warning" as const,
-      };
-    }
-
-    return {
+  const sharedRecoveryCards = useMemo(() => ({
+    "no-players": {
+      title: "No tracked players yet",
+      body: "Set up your roster first so the analytics surfaces have real commanders to work with.",
+      primaryAction: {
+        label: "Open roster",
+        onPress: () => router.push(APP_ROUTES.roster),
+      },
+      secondaryAction: {
+        label: "Profiles",
+        variant: "secondary" as const,
+        onPress: () => router.push(APP_ROUTES.playerDirectory),
+      },
+      tone: "warning" as const,
+    },
+    "no-games": {
       title: "No tracked games yet",
       body: "Your roster is ready, but you need mission history before the analytics hub can populate.",
       primaryAction: {
@@ -352,11 +323,36 @@ export default function StatsScreen() {
       },
       secondaryAction: {
         label: "Import backup",
+        variant: "secondary" as const,
         onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
+      },
+      tone: "warning" as const,
+    },
+    "player-empty": {
+      title: "No player-specific detail yet",
+      body: "League data exists, but the current player does not have a full detail payload on this screen yet.",
+      primaryAction: {
+        label: "Choose another player",
+        onPress: () => {
+          const fallbackPlayer =
+            filteredPlayerOptions.find((player) => player.id !== selectedPlayerId) ??
+            playerOptions.find((player) => player.id !== selectedPlayerId) ??
+            filteredPlayerOptions[0] ??
+            playerOptions[0];
+          if (fallbackPlayer?.id) setSelectedPlayerId(fallbackPlayer.id);
+        },
+      },
+      secondaryAction: {
+        label: "Open charts",
+        onPress: () => router.push(buildChartsRoute()),
         variant: "secondary" as const,
       },
       tone: "warning" as const,
-    };
+    },
+  }), [filteredPlayerOptions, playerOptions, selectedPlayerId, router]);
+
+  function renderSharedRecoveryCard(kind: "no-players" | "no-games" | "player-empty") {
+    return sharedRecoveryCards[kind];
   }
 
   function renderOverviewTab() {
@@ -449,6 +445,104 @@ export default function StatsScreen() {
             </Text>
           )}
         </View>
+
+        {toNumberValue(halftimeProfile.totalGames) > 0 ? (
+          <View style={styles.metricSubsection}>
+            <Text style={styles.metricSubsectionTitle}>Momentum</Text>
+            <View style={styles.compactGrid}>
+              <StatPill
+                label="Comeback rate"
+                value={`${Math.round(toNumberValue(halftimeProfile.trailToWinRate) * 100)}%`}
+                accent={COLORS.green}
+              />
+              <StatPill
+                label="Lead held"
+                value={`${Math.round(toNumberValue(halftimeProfile.leadToWinRate) * 100)}%`}
+                accent={COLORS.cyan}
+              />
+              <StatPill
+                label="Leads at half"
+                value={`${Math.round(toNumberValue(halftimeProfile.leadRate) * 100)}%`}
+              />
+              <StatPill
+                label="Games tracked"
+                value={toDisplayValue(halftimeProfile.totalGames)}
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {toNumberValue(contractEfficiency.avgContractsPerGame) > 0 ||
+        toNumberValue(contractEfficiency.contractConversion) > 0 ? (
+          <View style={styles.metricSubsection}>
+            <Text style={styles.metricSubsectionTitle}>Contract Efficiency</Text>
+            <View style={styles.compactGrid}>
+              <StatPill
+                label="Contracts / game"
+                value={toDisplayValue(contractEfficiency.avgContractsPerGame)}
+                accent={COLORS.purple}
+              />
+              <StatPill
+                label="Conversion rate"
+                value={`${toDisplayValue(contractEfficiency.contractConversion)}%`}
+                accent={COLORS.green}
+              />
+              <StatPill
+                label="Abandonment rate"
+                value={`${toDisplayValue(contractEfficiency.abandonmentRate)}%`}
+                accent={COLORS.gold}
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {(toNumberValue(groupMeta.avgSpread) > 0 || groupMeta.optimalPlayerCount != null) ? (
+          <View style={styles.metricSubsection}>
+            <Text style={styles.metricSubsectionTitle}>Group Meta</Text>
+            <View style={styles.compactGrid}>
+              <StatPill
+                label="Avg prestige spread"
+                value={toDisplayValue(groupMeta.avgSpread)}
+                accent={COLORS.cyan}
+              />
+              <StatPill
+                label="Chaos index"
+                value={toDisplayValue(groupMeta.chaosIndex)}
+                accent={COLORS.blueGlow}
+              />
+              {groupMeta.optimalPlayerCount != null ? (
+                <StatPill
+                  label="Best table size"
+                  value={`${toDisplayValue(groupMeta.optimalPlayerCount)}p`}
+                  accent={COLORS.green}
+                />
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
+        {headToHead.length > 0 ? (
+          <View style={styles.metricSubsection}>
+            <Text style={styles.metricSubsectionTitle}>Head-to-Head</Text>
+            {headToHead.slice(0, 5).map((entry, index) => {
+              const wins = toNumberValue(entry.wins);
+              const losses = toNumberValue(entry.losses);
+              const together = toNumberValue(entry.gamesTogether);
+              return (
+                <View key={toStringValue(entry.opponentId, `h2h-${index}`)} style={styles.signalCard}>
+                  <View style={styles.signalBody}>
+                    <Text style={styles.signalLabel}>
+                      {toStringValue(entry.opponentName, `Opponent ${index + 1}`)}
+                    </Text>
+                    <Text style={styles.signalValue}>
+                      {wins}W – {losses}L ({together} games)
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
       </AnalyticsStateSection>
     );
   }
@@ -570,6 +664,7 @@ export default function StatsScreen() {
     const supportingEntries = playstyleHighlights.slice(1);
 
     return (
+      <>
       <AnalyticsStateSection
         eyebrow="Spotlight"
         title="Playstyle Spotlight"
@@ -651,6 +746,14 @@ export default function StatsScreen() {
           </Text>
         )}
       </AnalyticsStateSection>
+      <PlaystyleSection
+        players={players}
+        games={games as any}
+        leaderboard={players}
+        selectedPlayerId={selectedPlayerId}
+        onSelectPlayer={setSelectedPlayerId}
+      />
+      </>
     );
   }
 
@@ -795,24 +898,21 @@ export default function StatsScreen() {
 
   return (
     <PageShell preset="analytics">
-      <HeroCard
-        eyebrow="Statistics"
-        title="Statistics"
-        subtitle={
-          error
-            ? error
-            : loading
-              ? "Loading Supabase-authored statistics."
-              : toStringValue(
-                  hero.takeaway,
-                  "Supabase now authors the statistics payload for this screen.",
-                )
-        }
-        size="compact"
-      >
+      <SectionCard>
         <View style={styles.heroHeader}>
           <View style={styles.heroTitleWrap}>
+            <Text style={styles.heroEyebrow}>Statistics</Text>
             <Text style={styles.heroTitle}>Mission Snapshot</Text>
+            <Text style={styles.heroSubtitle}>
+              {error
+                ? error
+                : loading
+                  ? "Loading Supabase-authored statistics."
+                  : toStringValue(
+                      hero.takeaway,
+                      "Supabase now authors the statistics payload for this screen.",
+                    )}
+            </Text>
           </View>
           <Pressable onPress={() => router.push(APP_ROUTES.home)} style={styles.backButton}>
             <Text style={styles.backButtonText}>Back to Command</Text>
@@ -826,7 +926,7 @@ export default function StatsScreen() {
             </View>
           ))}
         </View>
-      </HeroCard>
+      </SectionCard>
 
       <View style={styles.primaryTabRail}>
         <TabButton
@@ -869,16 +969,32 @@ const styles = StyleSheet.create({
   heroHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
+    alignItems: "flex-start",
+    gap: 8,
+    marginBottom: 10,
   },
   heroTitleWrap: {
     flex: 1,
+    minWidth: 0,
+  },
+  heroEyebrow: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginBottom: 2,
   },
   heroTitle: {
-    color: "#EAF2FF",
-    fontSize: 18,
+    color: COLORS.textPrimary,
+    fontSize: 22,
     fontWeight: "900",
+  },
+  heroSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
   },
   backButton: {
     alignSelf: "flex-start",
@@ -1125,5 +1241,17 @@ const styles = StyleSheet.create({
     color: COLORS.gold,
     fontSize: 12,
     fontWeight: "900",
+  },
+  metricSubsection: {
+    gap: 6,
+    marginTop: 8,
+  },
+  metricSubsectionTitle: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.55,
+    marginBottom: 2,
   },
 });
