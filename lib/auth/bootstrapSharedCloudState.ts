@@ -1,12 +1,9 @@
 import {
   supabase,
 } from "@/lib/supabase";
-import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
-import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
-import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
 import type { AuthProfile, AuthSession } from "@/store/useStore";
-import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
+import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 
 export function normalizeAuthSession(sessionLike: unknown): AuthSession {
   if (!sessionLike || typeof sessionLike !== "object") {
@@ -67,26 +64,5 @@ export async function loadAuthProfile(userId: string): Promise<AuthProfile> {
 }
 
 export async function loadHydratedSharedSnapshot(session: AuthSession) {
-  if (!session?.user?.id) {
-    throw new Error("Signed-in session required to hydrate the shared cloud snapshot.");
-  }
-
-  const [snapshot, registeredProfiles] = await Promise.all([
-    loadCloudSnapshot(session.user.id),
-    loadRegisteredProfiles().catch(() => []),
-  ]);
-  const statsSnapshot = await loadStatsSnapshot({
-    profileId: session.user.id,
-    groups: snapshot.groups,
-    games: snapshot.games,
-  });
-
-  return {
-    session,
-    snapshot: {
-      ...snapshot,
-      players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
-    },
-    statsSnapshot,
-  };
+  return loadHydratedCloudState(session);
 }
