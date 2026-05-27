@@ -28,6 +28,12 @@ function read(relPath) {
 }
 
 const { getLeaderboard } = require(path.join(projectRoot, "engine", "gameEngine.ts"));
+const {
+  PLAYER_STRIP_CARD_WIDTH,
+  PLAYER_STRIP_GAP,
+  PLAYER_STRIP_SIDE_INSET,
+  getCenteredLeaderboardOffset,
+} = require(path.join(projectRoot, "lib", "game-screen", "leaderboardStrip.ts"));
 
 const ranked = getLeaderboard(
   {
@@ -96,12 +102,71 @@ assert.deepEqual(
   "expected the in-game leaderboard to rank players by Points first, then Score on ties",
 );
 
+assert.equal(
+  getCenteredLeaderboardOffset({
+    activeIndex: 0,
+    entryCount: 4,
+    viewportWidth: 320,
+    cardWidth: PLAYER_STRIP_CARD_WIDTH,
+    gap: PLAYER_STRIP_GAP,
+    sideInset: PLAYER_STRIP_SIDE_INSET,
+  }),
+  0,
+  "expected the centered leaderboard offset to clamp the first card to the left edge",
+);
+
+const centeredMiddleOffset = getCenteredLeaderboardOffset({
+  activeIndex: 1,
+  entryCount: 4,
+  viewportWidth: 320,
+  cardWidth: PLAYER_STRIP_CARD_WIDTH,
+  gap: PLAYER_STRIP_GAP,
+  sideInset: PLAYER_STRIP_SIDE_INSET,
+});
+
+assert.equal(
+  centeredMiddleOffset,
+  38,
+  "expected the centered leaderboard offset to center a middle active card when space allows",
+);
+
+assert.equal(
+  getCenteredLeaderboardOffset({
+    activeIndex: 3,
+    entryCount: 4,
+    viewportWidth: 320,
+    cardWidth: PLAYER_STRIP_CARD_WIDTH,
+    gap: PLAYER_STRIP_GAP,
+    sideInset: PLAYER_STRIP_SIDE_INSET,
+  }),
+  202,
+  "expected the centered leaderboard offset to clamp the last card to the right edge",
+);
+
 const gameSource = read(path.join("app", "game.tsx"));
 
 assert.match(
   gameSource,
   /const leaderboardEntries = useMemo\(/,
   "expected the game screen to render the strip from ranked leaderboard entries",
+);
+
+assert.match(
+  gameSource,
+  /const activeIndex = entries\.findIndex\(\(entry\) => entry\.id === activePlayerId\);/,
+  "expected the compact leaderboard strip to track the active card index for centering",
+);
+
+assert.match(
+  gameSource,
+  /scrollTo\(\{\s*x: centeredOffset,\s*animated: hasCenteredStripRef\.current,\s*\}\)/,
+  "expected the compact leaderboard strip to scroll the active player card into the centered position",
+);
+
+assert.match(
+  gameSource,
+  /paddingHorizontal:\s*PLAYER_STRIP_SIDE_INSET,/,
+  "expected the leaderboard strip to use symmetric side padding instead of only trailing padding",
 );
 
 assert.match(
@@ -138,6 +203,12 @@ assert.doesNotMatch(
   gameSource,
   /Src \{/,
   "expected the compact leaderboard pill to stop rendering Src in place of Score",
+);
+
+assert.match(
+  gameSource,
+  /playerPill:\s*\{[\s\S]*width:\s*PLAYER_STRIP_CARD_WIDTH,[\s\S]*minHeight:\s*44,/,
+  "expected the compact leaderboard pill to use a slightly smaller fixed card width so the strip can center active players cleanly",
 );
 
 console.log("game-leaderboard-strip.test.cjs passed");

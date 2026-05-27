@@ -48,6 +48,12 @@ import {
   mixWithBlack,
   withAlpha,
 } from '@/utils/gameScreenTheme';
+import {
+  PLAYER_STRIP_CARD_WIDTH,
+  PLAYER_STRIP_GAP,
+  PLAYER_STRIP_SIDE_INSET,
+  getCenteredLeaderboardOffset,
+} from '@/lib/game-screen/leaderboardStrip';
 import { toNumber } from '@/utils/numbers';
 import { COLORS } from '@/utils/colors';
 import { remove } from '@/utils/storage/storage';
@@ -247,10 +253,34 @@ function CompactPlayerStrip({
   entries: LeaderboardEntry[];
   activePlayerId?: string;
 }) {
+  const playerStripRef = useRef<ScrollView | null>(null);
+  const hasCenteredStripRef = useRef(false);
+  const [stripViewportWidth, setStripViewportWidth] = useState(0);
+  const activeIndex = entries.findIndex((entry) => entry.id === activePlayerId);
+
+  useEffect(() => {
+    if (!playerStripRef.current || stripViewportWidth <= 0 || activeIndex < 0) return;
+
+    const centeredOffset = getCenteredLeaderboardOffset({
+      activeIndex,
+      entryCount: entries.length,
+      viewportWidth: stripViewportWidth,
+    });
+
+    playerStripRef.current.scrollTo({
+      x: centeredOffset,
+      animated: hasCenteredStripRef.current,
+    });
+
+    hasCenteredStripRef.current = true;
+  }, [activeIndex, entries.length, stripViewportWidth]);
+
   return (
     <ScrollView
+      ref={playerStripRef}
       horizontal
       showsHorizontalScrollIndicator={false}
+      onLayout={(event) => setStripViewportWidth(event.nativeEvent.layout.width)}
       contentContainerStyle={styles.playerStripRow}
     >
       {entries.map((entry, index) => (
@@ -1771,52 +1801,55 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   playerStripRow: {
-    gap: 4,
-    paddingRight: 8,
+    gap: PLAYER_STRIP_GAP,
+    paddingHorizontal: PLAYER_STRIP_SIDE_INSET,
     alignItems: 'center',
   },
   playerPill: {
-    minHeight: 48,
+    width: PLAYER_STRIP_CARD_WIDTH,
+    minHeight: 44,
     borderRadius: 10,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   playerPillRail: {
-    width: 8,
-    height: 28,
+    width: 7,
+    height: 24,
     borderRadius: 999,
   },
   playerPillBody: {
+    flex: 1,
     flexShrink: 1,
-    gap: 4,
+    minWidth: 0,
+    gap: 3,
   },
   playerPillName: {
     color: UI.text,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
-    maxWidth: 112,
+    maxWidth: 90,
   },
   playerPillMetrics: {
     flexDirection: 'row',
-    gap: 5,
+    gap: 4,
     alignItems: 'center',
     flexWrap: 'wrap',
   },
   metricChip: {
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     backgroundColor: UI.cardMuted,
     borderWidth: 1,
     borderColor: UI.line,
   },
   metricChipText: {
     color: UI.text,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
   },
   sectionCard: {
