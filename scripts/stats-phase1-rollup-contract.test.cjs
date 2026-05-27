@@ -157,6 +157,7 @@ for (const typedSurface of [
   "playerOptions?: AnalyticsCorrelationPlayerOption[]",
   "winLoseSplit?: AnalyticsCorrelationRow[]",
   "synergyPairs?: AnalyticsSynergyPairRow[]",
+  "relationships?: Record<string, unknown>",
   "correlations: InsightsCorrelationsPayload",
 ]) {
   assert.ok(
@@ -164,5 +165,10 @@ for (const typedSurface of [
     `expected analytics types to include ${typedSurface}`,
   );
 }
+
+assert.ok(
+  typesSource.includes("relationships?: Record<string, unknown>;"),
+  "expected the top-level insights relationships field to be optional or non-authoritative",
+);
 
 console.log("stats-phase1-rollup-contract.test.cjs passed");

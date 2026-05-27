@@ -142,6 +142,7 @@ export type InsightsCorrelationsPayload = Record<string, unknown> & {
   playerOptions?: AnalyticsCorrelationPlayerOption[];
   winLoseSplit?: AnalyticsCorrelationRow[];
   synergyPairs?: AnalyticsSynergyPairRow[];
+  relationships?: Record<string, unknown>;
   turnOrderSummary?: AnalyticsTurnOrderSummary | null;
   selectedKey?: string | null;
   summary?: string;
@@ -221,7 +222,7 @@ export type InsightsScreenPayload = {
   };
   cards: AnalyticsMetricCard[];
   topSignals: AnalyticsTopSignal[];
-  relationships: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
   correlations: InsightsCorrelationsPayload;
 };
 
