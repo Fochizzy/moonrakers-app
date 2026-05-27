@@ -548,7 +548,7 @@ begin
   current_elo        := coalesce(nullif(selected_summary->>'currentElo','')::integer,1000);
   peak_elo           := coalesce(nullif(selected_summary->>'peakElo','')::integer,current_elo);
 
-  -- #1: moonrakersIntel from rollup; #5: recent_games from extended rollup game history
+  -- #1: moonrakersIntel from rollup; #5: recent_games from the full finished-game history
   select psr.payload into rollup_payload
   from public.personal_stats_rollups as psr where psr.profile_id=selected_player_id;
 
@@ -558,11 +558,10 @@ begin
       total_games  := coalesce((rollup_payload->'statsScreen'->'players'->'detail'->'stats'->>'games')::int,0);
       total_wins   := coalesce((rollup_payload->'statsScreen'->'players'->'detail'->'stats'->>'wins')::int,0);
       win_rate     := case when total_games>0 then total_wins::numeric/total_games else 0 end;
-      recent_games := coalesce(rollup_payload->'statsScreen'->'games'->'items','[]'::jsonb);
     end if;
   end if;
 
-  -- Live path: opponent filter or missing rollup
+  -- Live totals path: opponent filter or missing rollup
   if selected_opponent_id is not null or rollup_payload is null then
     select count(*)::int, count(*) filter (where gp.is_winner)::int,
       coalesce(count(*) filter (where gp.is_winner)::numeric/nullif(count(*)::numeric,0),0)::numeric
@@ -577,25 +576,25 @@ begin
       select coalesce(nullif(p.display_name,''),p.player_name,'Player')
       into opponent_name from public.profiles as p where p.id=selected_opponent_id limit 1;
     end if;
-
-    select coalesce(jsonb_agg(jsonb_build_object(
-      'id',g.id,'gameId',g.id,'createdAt',g.created_at,'finishedAt',g.finished_at,
-      'winnerId',g.winner_profile_id,'groupId',g.group_id,'groupName',g.group_name_snapshot,
-      'players',coalesce(pp.players,'[]'::jsonb)
-    ) order by coalesce(g.finished_at,g.created_at) desc,g.id desc),'[]'::jsonb)
-    into recent_games
-    from public.games as g
-    join public.game_participants as focus_gp on focus_gp.game_id=g.id and focus_gp.profile_id=selected_player_id
-    left join lateral (
-      select jsonb_agg(jsonb_build_object('id',gp.profile_id,'profileId',gp.profile_id,'name',coalesce(nullif(gp.display_name_snapshot,''),gp.player_name_snapshot,'Player'),'color',gp.color_snapshot,'assignedCardArtIndex',gp.assigned_card_art_index_snapshot,'startOrder',gp.start_order,'isWinner',gp.is_winner,'totalPrestige',gp.total_prestige) order by gp.start_order asc,gp.profile_id asc) as players
-      from public.game_participants as gp where gp.game_id=g.id
-    ) as pp on true
-    where g.status='finished'
-      and (selected_opponent_id is null or exists (
-        select 1 from public.game_participants as ogp where ogp.game_id=g.id and ogp.profile_id=selected_opponent_id
-      ))
-    order by coalesce(g.finished_at,g.created_at) desc,g.id desc limit 60;
   end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',g.id,'gameId',g.id,'createdAt',g.created_at,'finishedAt',g.finished_at,
+    'winnerId',g.winner_profile_id,'groupId',g.group_id,'groupName',g.group_name_snapshot,
+    'players',coalesce(pp.players,'[]'::jsonb)
+  ) order by coalesce(g.finished_at,g.created_at) desc,g.id desc),'[]'::jsonb)
+  into recent_games
+  from public.games as g
+  join public.game_participants as focus_gp on focus_gp.game_id=g.id and focus_gp.profile_id=selected_player_id
+  left join lateral (
+    select jsonb_agg(jsonb_build_object('id',gp.profile_id,'profileId',gp.profile_id,'name',coalesce(nullif(gp.display_name_snapshot,''),gp.player_name_snapshot,'Player'),'color',gp.color_snapshot,'assignedCardArtIndex',gp.assigned_card_art_index_snapshot,'startOrder',gp.start_order,'isWinner',gp.is_winner,'totalPrestige',gp.total_prestige) order by gp.start_order asc,gp.profile_id asc) as players
+    from public.game_participants as gp where gp.game_id=g.id
+  ) as pp on true
+  where g.status='finished'
+    and (selected_opponent_id is null or exists (
+      select 1 from public.game_participants as ogp where ogp.game_id=g.id and ogp.profile_id=selected_opponent_id
+    ))
+  order by coalesce(g.finished_at,g.created_at) desc,g.id desc limit 60;
 
   if moonrakers_intel is null then
     moonrakers_intel:=jsonb_build_object('hasData',false,'emptyTitle','Not enough Moonrakers data yet','emptyBody','Finish a few more games to unlock player-specific playstyle reads.');

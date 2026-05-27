@@ -16,6 +16,7 @@ import {
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
 import ActionButton from "@/components/ui/ActionButton";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
@@ -38,8 +39,13 @@ import { toNumber } from "@/utils/numbers";
 import { normalizeId } from "@/utils/strings";
 import { resolvePreferredChartPlayerId } from "@/utils/charts";
 import { buildGameRowsByPlayer } from "@/utils/gameRowsByPlayer";
+import {
+  resolveEloInsightPayload,
+  resolveEloSectionPayload,
+  type EloMetricTabName,
+} from "@/utils/ratingTabFallbacks";
 
-type EloMetricTab = "Leaderboard" | "Momentum" | "Skills" | "Context" | "Projection";
+type EloMetricTab = EloMetricTabName;
 type StorePlayer = { id: string; name?: string; color?: string };
 
 const DEFAULT_ELO = 1000;
@@ -228,6 +234,13 @@ export default function EloScreen() {
       ),
     [analyticsPlayers, selectedPlayerId]
   );
+  const selectedOpponent = useMemo(
+    () =>
+      analyticsPlayers.find(
+        (player) => normalizeId(player.id) === normalizeId(selectedOpponentId),
+      ) || null,
+    [analyticsPlayers, selectedOpponentId],
+  );
 
   const selectedSummary = useMemo<EloSummary>(() => {
     const summary = payload?.summary;
@@ -272,59 +285,33 @@ export default function EloScreen() {
     }));
   }, [payload?.topCards]);
 
-  const activeSection = useMemo(() => {
-    const sections = payload?.sections;
-    const section =
-      sections && typeof sections === "object"
-        ? (sections as Record<string, any>)[activeTab]
-        : null;
+  const activeSection = useMemo(
+    () =>
+      resolveEloSectionPayload({
+        tab: activeTab,
+        summary: selectedSummary,
+        opponentName: selectedOpponent?.name ?? null,
+        sections:
+          payload?.sections && typeof payload.sections === "object"
+            ? (payload.sections as Record<string, unknown>)
+            : null,
+      }),
+    [activeTab, payload?.sections, selectedOpponent?.name, selectedSummary],
+  );
 
-    const cards = Array.isArray(section?.cards)
-      ? section.cards.map((card: any) => ({
-          key: String(card?.key ?? ""),
-          label: String(card?.label ?? ""),
-          value: String(card?.value ?? "0"),
-          sub:
-            typeof card?.sub === "string" && card.sub.trim()
-              ? card.sub.trim()
-              : undefined,
-          tone:
-            card?.tone === "accent" ||
-            card?.tone === "blue" ||
-            card?.tone === "green" ||
-            card?.tone === "danger"
-              ? card.tone
-              : "default",
-        }))
-      : [];
-
-    return {
-      title:
-        typeof section?.title === "string" && section.title.trim()
-          ? section.title.trim()
-          : "ELO Metrics",
-      cards,
-    };
-  }, [activeTab, payload?.sections]);
-
-  const activeInsight = useMemo(() => {
-    const insights = payload?.insights;
-    const insight =
-      insights && typeof insights === "object"
-        ? (insights as Record<string, any>)[activeTab]
-        : null;
-
-    return {
-      title:
-        typeof insight?.title === "string" && insight.title.trim()
-          ? insight.title.trim()
-          : `${activeTab} Insight`,
-      body:
-        typeof insight?.body === "string" && insight.body.trim()
-          ? insight.body.trim()
-          : "No server-authored ELO insight is available yet.",
-    };
-  }, [activeTab, payload?.insights]);
+  const activeInsight = useMemo(
+    () =>
+      resolveEloInsightPayload({
+        tab: activeTab,
+        summary: selectedSummary,
+        opponentName: selectedOpponent?.name ?? null,
+        insights:
+          payload?.insights && typeof payload.insights === "object"
+            ? (payload.insights as Record<string, unknown>)
+            : null,
+      }),
+    [activeTab, payload?.insights, selectedOpponent?.name, selectedSummary],
+  );
 
   const hasData = selectedSummary.gamesPlayed > 0;
 
@@ -391,7 +378,7 @@ export default function EloScreen() {
     recoveryState.kind === "no-players"
       ? "Set up your roster first so the published ELO payload has real players to rank."
       : recoveryState.kind === "no-games"
-        ? "Track or import games before expecting the shared ELO payload to populate."
+        ? "Track a few games before expecting the shared ELO payload to populate."
         : error
           ? error
           : emptyStateDescription;
@@ -408,7 +395,7 @@ export default function EloScreen() {
         headerAction={
           <ActionButton
             variant="ghost"
-            title="Back to Command"
+            title="Command"
             onPress={() => router.push(APP_ROUTES.home)}
             style={styles.backButton}
           />
@@ -609,16 +596,24 @@ export default function EloScreen() {
                 ]}
               >
                 <View style={styles.featuredSignalHeader}>
-                  <Text style={styles.featuredSignalLabel} numberOfLines={1}>
-                    {featuredCard.label}
-                  </Text>
-                  {featuredCard.key === "current-elo" ? (
-                    <DefinitionsJumpLink label="Definition" metric="elo_current" />
-                  ) : featuredCard.key === "peak-elo" ? (
-                    <DefinitionsJumpLink label="Definition" metric="elo_peak" />
-                  ) : (
-                    <DefinitionsJumpLink label="Definition" category="elo" />
-                  )}
+                  <DefinitionTermText
+                    label={featuredCard.label}
+                    metric={
+                      featuredCard.key === "current-elo"
+                        ? "elo_current"
+                        : featuredCard.key === "peak-elo"
+                          ? "elo_peak"
+                          : null
+                    }
+                    category={
+                      featuredCard.key !== "current-elo" &&
+                      featuredCard.key !== "peak-elo"
+                        ? "elo"
+                        : null
+                    }
+                    numberOfLines={1}
+                    style={styles.featuredSignalLabel}
+                  />
                 </View>
                 <Text
                   style={[
@@ -648,16 +643,24 @@ export default function EloScreen() {
                     ]}
                   >
                     <View style={styles.secondarySignalHeader}>
-                      <Text style={styles.metricLabelCompact} numberOfLines={1}>
-                        {card.label}
-                      </Text>
-                      {card.key === "current-elo" ? (
-                        <DefinitionsJumpLink label="Definition" metric="elo_current" />
-                      ) : card.key === "peak-elo" ? (
-                        <DefinitionsJumpLink label="Definition" metric="elo_peak" />
-                      ) : (
-                        <DefinitionsJumpLink label="Definition" category="elo" />
-                      )}
+                      <DefinitionTermText
+                        label={card.label}
+                        metric={
+                          card.key === "current-elo"
+                            ? "elo_current"
+                            : card.key === "peak-elo"
+                              ? "elo_peak"
+                              : null
+                        }
+                        category={
+                          card.key !== "current-elo" &&
+                          card.key !== "peak-elo"
+                            ? "elo"
+                            : null
+                        }
+                        numberOfLines={1}
+                        style={styles.metricLabelCompact}
+                      />
                     </View>
                     <Text
                       style={[

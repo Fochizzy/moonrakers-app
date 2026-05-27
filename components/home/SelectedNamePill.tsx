@@ -59,7 +59,7 @@ export function AnimatedSelectedNamePill({ name, color }: { name: string; color?
 
 const styles = StyleSheet.create({
   selectedNamePill: {
-    borderRadius: 999,
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,

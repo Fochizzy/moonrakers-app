@@ -6,10 +6,14 @@ import {
   TextStyle,
   ViewStyle,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 
 import Text from "@/components/ui/Text";
-import { buildDefinitionsRoute } from "@/utils/appRoutes";
+import {
+  buildDefinitionsRoute,
+  resolveDefinitionSourceLabel,
+} from "@/utils/appRoutes";
+import { resolveDefinitionTarget } from "@/utils/definitionTargets";
 
 type DefinitionsJumpLinkProps = {
   category?: string | null;
@@ -27,10 +31,14 @@ export default function DefinitionsJumpLink({
   textStyle,
 }: DefinitionsJumpLinkProps) {
   const router = useRouter();
-  const normalizedMetric = String(metric ?? "").trim();
-  const normalizedCategory = String(category ?? "").trim();
+  const pathname = usePathname();
+  const definitionTarget = resolveDefinitionTarget({
+    category,
+    metric,
+  });
+  const sourceLabel = resolveDefinitionSourceLabel(pathname);
 
-  if (!normalizedMetric && !normalizedCategory) {
+  if (!definitionTarget) {
     return null;
   }
 
@@ -39,8 +47,8 @@ export default function DefinitionsJumpLink({
       onPress={() =>
         router.push(
           buildDefinitionsRoute({
-            metric: normalizedMetric || null,
-            category: normalizedCategory || null,
+            ...definitionTarget,
+            sourceLabel: sourceLabel,
           }),
         )
       }

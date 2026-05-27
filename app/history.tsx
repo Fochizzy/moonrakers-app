@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Alert,
+  findNodeHandle,
   StyleSheet,
   Pressable,
   TextInput,
@@ -25,10 +26,10 @@ import HeroCard from '@/components/ui/HeroCard';
 import PageShell from '@/components/ui/PageShell';
 import SectionCard from '@/components/ui/SectionCard';
 import Text from '@/components/ui/Text';
+import { sortHistoryGames } from '@/lib/history/historyGameOrdering';
 import { useHistoryDataManager } from '@/lib/history/useHistoryDataManager';
-import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
 import { loadHydratedCloudState } from '@/lib/cloud/loadHydratedCloudState';
-import { importBackupFromPicker } from '@/lib/migration/importBackupFromPicker';
+import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
 import { APP_ROUTES, buildSummaryRoute } from '@/utils/appRoutes';
 
 import {
@@ -229,17 +230,13 @@ function HistoryTab({
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ intent?: string | string[] }>();
+  const params = useLocalSearchParams<{ gameId?: string | string[] }>();
 
   const authSession = useAuthSession();
   const authProfile = useAuthProfile();
   const rawPlayers = usePlayers();
   const rawGames = useGames();
   const hydrateCloudSnapshot = useHydrateCloudSnapshot();
-  const importIntent =
-    String(Array.isArray(params.intent) ? params.intent[0] : params.intent ?? '')
-      .trim()
-      .toLowerCase() === 'import';
 
   const players = useMemo<Player[]>(() => (Array.isArray(rawPlayers) ? rawPlayers : []), [rawPlayers]);
   const games = useMemo<StoredGame[]>(() => (Array.isArray(rawGames) ? rawGames : []), [rawGames]);
@@ -267,18 +264,21 @@ export default function HistoryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
   const [searchFocused, setSearchFocused] = useState(false);
+  const [focusedLayoutVersion, setFocusedLayoutVersion] = useState(0);
+  const scrollViewRef = React.useRef<ScrollView | null>(null);
+  const gameRowRefs = React.useRef<Record<string, View | null>>({});
+  const snappedGameIdRef = React.useRef<string>('');
   const {
-    importingBackup,
     deletingGameId,
     status: historyStatus,
     clearStatus: clearHistoryStatus,
-    importBackup,
-    removeGame,
   } = useHistoryDataManager({
     authSession,
-    authProfile,
     hydrateCloudSnapshot,
   });
+  const focusedGameId = normalizeHistoryId(
+    Array.isArray(params.gameId) ? params.gameId[0] : params.gameId ?? ''
+  );
 
   const availableHistoryGroups = useMemo(() => {
     const names = games
@@ -320,28 +320,7 @@ export default function HistoryScreen() {
       );
     });
 
-    filtered.sort((a, b) => {
-      const aTime = typeof a.createdAt === 'number' ? a.createdAt : 0;
-      const bTime = typeof b.createdAt === 'number' ? b.createdAt : 0;
-      const aWinner = players.find((p) => p.id === getWinnerId(a))?.name?.toLowerCase() ?? '';
-      const bWinner = players.find((p) => p.id === getWinnerId(b))?.name?.toLowerCase() ?? '';
-      const aRounds = getRoundsCount(a);
-      const bRounds = getRoundsCount(b);
-
-      switch (historySort) {
-        case 'oldest':
-          return aTime - bTime;
-        case 'winner':
-          return aWinner.localeCompare(bWinner) || bTime - aTime;
-        case 'rounds':
-          return bRounds - aRounds || bTime - aTime;
-        case 'newest':
-        default:
-          return bTime - aTime;
-      }
-    });
-
-    return filtered;
+    return sortHistoryGames(filtered, { sort: historySort, players });
   }, [games, historyFilter, historySort, searchQuery, players, selectedGroupName, signedInPlayerId]);
 
   useEffect(() => {
@@ -372,6 +351,46 @@ export default function HistoryScreen() {
       setSelectedGameId(undefined);
     }
   }, [displayedGames, selectedGameId]);
+
+  useEffect(() => {
+    if (!focusedGameId) {
+      snappedGameIdRef.current = '';
+      return;
+    }
+
+    if (!displayedGames.some((game) => normalizeHistoryId(game?.id) === focusedGameId)) {
+      return;
+    }
+
+    if (selectedGameId !== focusedGameId) {
+      setSelectedGameId(focusedGameId);
+      snappedGameIdRef.current = '';
+    }
+  }, [displayedGames, focusedGameId, selectedGameId]);
+
+  useEffect(() => {
+    if (!focusedGameId || selectedGameId !== focusedGameId) {
+      return;
+    }
+
+    const rowNode = gameRowRefs.current[focusedGameId];
+    const scrollNode = scrollViewRef.current ? findNodeHandle(scrollViewRef.current) : null;
+    if (!rowNode || !scrollNode || snappedGameIdRef.current === focusedGameId) {
+      return;
+    }
+
+    rowNode.measureLayout(
+      scrollNode,
+      (_x, y) => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(y - 18, 0),
+          animated: true,
+        });
+        snappedGameIdRef.current = focusedGameId;
+      },
+      () => {}
+    );
+  }, [focusedGameId, focusedLayoutVersion, selectedGameId]);
 
   const handleDeleteGame = (game: StoredGame, index: number) => {
     const normalizedGameId = normalizeHistoryId(game?.id);
@@ -463,7 +482,7 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView edges={[]} style={{ flex: 1 }}>
-    <PageShell density="compact">
+    <PageShell density="compact" scrollRef={scrollViewRef}>
       <HeroCard
         eyebrow="History"
         title="Mission Archive"
@@ -472,7 +491,7 @@ export default function HistoryScreen() {
         headerAction={
           <ActionButton
             variant="ghost"
-            title="Back to Command"
+            title="Command"
             onPress={() => router.push(APP_ROUTES.home)}
             style={styles.backButton}
           />
@@ -483,35 +502,6 @@ export default function HistoryScreen() {
         status={historyStatus}
         onDismiss={historyStatus ? clearHistoryStatus : null}
       />
-
-      <SectionCard
-        title="Backup Center"
-        subtitle="Import older Moonrakers backups into this cloud profile"
-        style={importIntent ? styles.sectionHighlighted : undefined}
-      >
-        <ActionButton
-          title={importingBackup ? 'Importing...' : 'Import backup'}
-          subtitle="Merge a local JSON backup into this signed-in profile"
-          onPress={() => {
-            void importBackupFromPicker({
-              signedInProfileId: authSession?.user?.id ?? '',
-              signedInPlayerName: authProfile?.player_name ?? '',
-              resolvedProfilesByName: {},
-            }).then(() => importBackup()).catch((error) => {
-              Alert.alert(
-                'Import failed',
-                error instanceof Error
-                  ? error.message
-                  : 'Something went wrong while importing that backup.',
-              );
-            });
-          }}
-          disabled={importingBackup}
-        />
-        <Text style={styles.backupCenterNote}>
-          Best for older local backup files you want reflected in History, Charts, and Stats.
-        </Text>
-      </SectionCard>
 
       <SectionCard title="Filter" subtitle={`${displayedGames.length} visible`}>
         <View style={styles.searchWrap}>
@@ -629,7 +619,7 @@ export default function HistoryScreen() {
         {displayedGames.length === 0 ? (
             <EmptyStateCard
               message="No matching mission logs."
-              hint="Try a different search or filter, or import a backup to populate history."
+              hint="Try a different search or filter, or finish a tracked game to populate history."
             />
           ) : (
             <View style={styles.historyList}>
@@ -640,32 +630,45 @@ export default function HistoryScreen() {
                 const accentColor = getWinnerColor(game, players);
                 const rounds = getRoundsCount(game);
                 const isSelected = !!game.id && game.id === selectedGameId;
+                const normalizedGameId = normalizeHistoryId(game?.id);
 
                 return (
-                  <Swipeable
+                  <View
                     key={gameKey}
-                    overshootRight={false}
-                    renderRightActions={() => (
-                      <View style={styles.swipeDeleteWrap}>
-                        <ScalePressable onPress={() => handleDeleteGame(game, index)}>
-                          <View style={styles.swipeDeleteAction}>
-                            <Text style={styles.swipeDeleteText}>Delete</Text>
-                          </View>
-                        </ScalePressable>
-                      </View>
-                    )}
+                    ref={(node) => {
+                      if (!normalizedGameId) return;
+                      gameRowRefs.current[normalizedGameId] = node;
+                    }}
+                    onLayout={(event) => {
+                      if (!normalizedGameId) return;
+                      if (normalizedGameId === focusedGameId) {
+                        setFocusedLayoutVersion((current) => current + 1);
+                      }
+                    }}
                   >
-                    <ScalePressable
-                      onPress={() => {
-                        if (!game?.id) {
-                          handleOpenGameSummary(game);
-                          return;
-                        }
-                        setSelectedGameId((current) => (current === game.id ? undefined : game.id));
-                      }}
+                    <Swipeable
+                      overshootRight={false}
+                      renderRightActions={() => (
+                        <View style={styles.swipeDeleteWrap}>
+                          <ScalePressable onPress={() => handleDeleteGame(game, index)}>
+                            <View style={styles.swipeDeleteAction}>
+                              <Text style={styles.swipeDeleteText}>Delete</Text>
+                            </View>
+                          </ScalePressable>
+                        </View>
+                      )}
                     >
-                      <View style={[styles.leaderboardRow, isSelected && styles.leaderboardRowSelected]}>
-                        <View style={[styles.gameCardAccent, { backgroundColor: accentColor }]} />
+                      <ScalePressable
+                        onPress={() => {
+                          if (!game?.id) {
+                            handleOpenGameSummary(game);
+                            return;
+                          }
+                          setSelectedGameId((current) => (current === game.id ? undefined : game.id));
+                        }}
+                      >
+                        <View style={[styles.leaderboardRow, isSelected && styles.leaderboardRowSelected]}>
+                          <View style={[styles.gameCardAccent, { backgroundColor: accentColor }]} />
 
                         <View style={styles.leaderboardLeft}>
                           <View style={[styles.rankBadge, isSelected && styles.rankBadgeSelected]}>
@@ -691,57 +694,58 @@ export default function HistoryScreen() {
                             </Text>
                           </View>
                         </View>
-                      </View>
-                    </ScalePressable>
-
-                    {isSelected ? (
-                      <View style={styles.expandedCard}>
-                        <Text style={styles.cardSummary}>
-                          Winner confirmed{game.groupName ? ` in ${game.groupName}` : ''}.
-                        </Text>
-
-                        <View style={styles.metricGridDense}>
-                          <ScalePressable style={styles.metricCardDense} onPress={() => handleOpenGameSummary(game)}>
-                            <View style={[styles.actionCard, { backgroundColor: COLORS.accentSoft }]}>
-                              <Text style={[styles.metricValueCompact, { color: COLORS.accent }]}>Summary</Text>
-                            </View>
-                          </ScalePressable>
-
-                          <ScalePressable
-                            style={styles.metricCardDense}
-                            onPress={() => {
-                              if (!game?.id) {
-                                Alert.alert(
-                                  'Replay unavailable',
-                                  'This game cannot be replayed because it has no saved id.'
-                                );
-                                return;
-                              }
-
-                              router.push({
-                                pathname: APP_ROUTES.replay as any,
-                                params: {
-                                  gameId: game.id,
-                                  selectedGameId: game.id,
-                                  source: 'history',
-                                },
-                              });
-                            }}
-                          >
-                            <View style={[styles.actionCard, { backgroundColor: COLORS.blueSoft }]}>
-                              <Text style={[styles.metricValueCompact, { color: COLORS.blue }]}>Replay</Text>
-                            </View>
-                          </ScalePressable>
-
-                          <ScalePressable style={styles.metricCardDense} onPress={() => handleDeleteGame(game, index)}>
-                            <View style={[styles.actionCard, { backgroundColor: COLORS.redSoft }]}>
-                              <Text style={[styles.metricValueCompact, { color: COLORS.red }]}>Delete</Text>
-                            </View>
-                          </ScalePressable>
                         </View>
-                      </View>
-                    ) : null}
-                  </Swipeable>
+                      </ScalePressable>
+
+                      {isSelected ? (
+                        <View style={styles.expandedCard}>
+                          <Text style={styles.cardSummary}>
+                            Winner confirmed{game.groupName ? ` in ${game.groupName}` : ''}.
+                          </Text>
+
+                          <View style={styles.metricGridDense}>
+                            <ScalePressable style={styles.metricCardDense} onPress={() => handleOpenGameSummary(game)}>
+                              <View style={[styles.actionCard, { backgroundColor: COLORS.accentSoft }]}>
+                                <Text style={[styles.metricValueCompact, { color: COLORS.accent }]}>Summary</Text>
+                              </View>
+                            </ScalePressable>
+
+                            <ScalePressable
+                              style={styles.metricCardDense}
+                              onPress={() => {
+                                if (!game?.id) {
+                                  Alert.alert(
+                                    'Replay unavailable',
+                                    'This game cannot be replayed because it has no saved id.'
+                                  );
+                                  return;
+                                }
+
+                                router.push({
+                                  pathname: APP_ROUTES.replay as any,
+                                  params: {
+                                    gameId: game.id,
+                                    selectedGameId: game.id,
+                                    source: 'history',
+                                  },
+                                });
+                              }}
+                            >
+                              <View style={[styles.actionCard, { backgroundColor: COLORS.blueSoft }]}>
+                                <Text style={[styles.metricValueCompact, { color: COLORS.blue }]}>Replay</Text>
+                              </View>
+                            </ScalePressable>
+
+                            <ScalePressable style={styles.metricCardDense} onPress={() => handleDeleteGame(game, index)}>
+                              <View style={[styles.actionCard, { backgroundColor: COLORS.redSoft }]}>
+                                <Text style={[styles.metricValueCompact, { color: COLORS.red }]}>Delete</Text>
+                              </View>
+                            </ScalePressable>
+                          </View>
+                        </View>
+                      ) : null}
+                    </Swipeable>
+                  </View>
                 );
               })}
             </View>
@@ -755,14 +759,6 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   backButton: {
     alignSelf: 'flex-start',
-  },
-  sectionHighlighted: {
-    borderColor: 'rgba(168,85,247,0.48)',
-  },
-  backupCenterNote: {
-    color: COLORS.muted,
-    fontSize: 10,
-    marginTop: 8,
   },
   searchWrap: {
     position: 'relative',

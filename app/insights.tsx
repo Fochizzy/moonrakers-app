@@ -11,6 +11,7 @@ import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection"
 import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
 import { buildAnalyticsPlayerDirectory } from "@/lib/cloud/analytics/analyticsPlayers";
 import ActionButton from "@/components/ui/ActionButton";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
@@ -20,12 +21,17 @@ import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQue
 import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
+import { buildInsightSummaryStatements } from "@/utils/insightSummaries";
 import {
   APP_ROUTES,
   buildChartsRoute,
   buildCompareRoute,
   buildPlayerProfileRoute,
 } from "@/utils/appRoutes";
+import {
+  prioritizeSignedInPlayerOptions,
+  resolveSignedInPlayerOptionId,
+} from "@/utils/charts";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 
 type PayloadRecord = Record<string, unknown>;
@@ -70,6 +76,28 @@ function toStringValue(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+function toFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function normalizeSummaryRows(value: unknown) {
+  return toArray(value).map((entry) => ({
+    label:
+      toStringValue(entry.label, "") ||
+      toStringValue(entry.title, "") ||
+      "Signal",
+    value: toFiniteNumber(entry.value),
+  }));
+}
+
+function normalizeSynergyPairs(value: unknown) {
+  return toArray(value).map((entry, index) => ({
+    a: toStringValue(entry.a, `pair-a-${index}`),
+    b: toStringValue(entry.b, `pair-b-${index}`),
+    score: toFiniteNumber(entry.score),
+  }));
+}
+
 function normalizePlayerOption(entry: PayloadRecord, index: number): PlayerOption {
   const label =
     toStringValue(entry.label, "") ||
@@ -85,12 +113,28 @@ function normalizePlayerOption(entry: PayloadRecord, index: number): PlayerOptio
   };
 }
 
+function buildPlayerOptionMeta(player: PlayerOption, authProfileId: string | null) {
+  const normalizedId = String(player.id ?? "").trim();
+  if (authProfileId && normalizedId === String(authProfileId).trim()) {
+    return "Signed-in player";
+  }
+
+  const primary = String(player.label ?? "").trim().toLowerCase();
+  const secondary = [player.playerName, player.displayName]
+    .map((value) => String(value ?? "").trim())
+    .find((value) => value && value.toLowerCase() !== primary);
+
+  return secondary || null;
+}
+
 export default function InsightsScreen() {
   const router = useRouter();
   const authSession = useStore((state: any) => state.authSession);
+  const authProfile = useStore((state: any) => state?.authProfile ?? null);
   const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
   const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
-  const authProfileId = String(authSession?.user?.id ?? "").trim() || null;
+  const authProfileId =
+    String(authProfile?.id ?? authSession?.user?.id ?? "").trim() || null;
   const [activeSectionTab, setActiveSectionTab] =
     useState<InsightSectionTab>("pairingCorrelations");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -130,6 +174,7 @@ export default function InsightsScreen() {
   const isStale = insightsQuery.isStale;
   const staleMessage = insightsQuery.staleMessage;
 
+  const metaPayload = useMemo(() => toRecord(payload?.meta), [payload]);
   const correlationPayload = toRecord(payload?.correlations);
   const canonicalGames = useMemo(() => games as any, [games]);
   const relationships = useMemo(() => toRecord(correlationPayload.relationships), [correlationPayload.relationships]);
@@ -137,8 +182,6 @@ export default function InsightsScreen() {
     () => buildAnalyticsPlayerDirectory({ players, games: games as any, groups: [] }),
     [players, games],
   );
-  const sourceKind = isStale ? "server-stale" : "server";
-  const sourceLabel = isStale ? "Stale server data" : "Server data";
   const staleSourceCaption = isStale
     ? `Showing the last successful Supabase insights payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
     : null;
@@ -149,36 +192,175 @@ export default function InsightsScreen() {
 
     return source.map(normalizePlayerOption);
   }, [correlationPayload.playerOptions, correlationPayload.players]);
+  const authProfilePlayerOption = useMemo<PlayerOption | null>(() => {
+    if (!authProfileId) {
+      return null;
+    }
+
+    const matchedPlayer = analyticsDirectory.players.find(
+      (player) => String(player?.id ?? "").trim() === authProfileId
+    );
+
+    return {
+      id: authProfileId,
+      label:
+        String(authProfile?.player_name ?? "").trim() ||
+        String(authProfile?.display_name ?? "").trim() ||
+        String(matchedPlayer?.name ?? "").trim() ||
+        "Player",
+      displayName:
+        String(authProfile?.player_name ?? "").trim() ||
+        String(authProfile?.display_name ?? "").trim(),
+      playerName:
+        String(authProfile?.player_name ?? "").trim() ||
+        String(matchedPlayer?.name ?? "").trim(),
+    };
+  }, [
+    analyticsDirectory.players,
+    authProfile?.display_name,
+    authProfile?.player_name,
+    authProfileId,
+  ]);
+  const orderedPlayerOptions = useMemo(() => {
+    const optionById = new Map<string, PlayerOption>();
+
+    for (const option of [
+      ...playerOptions,
+      ...(authProfilePlayerOption ? [authProfilePlayerOption] : []),
+    ]) {
+      const normalizedId = String(option.id ?? "").trim();
+      if (!normalizedId || optionById.has(normalizedId)) {
+        continue;
+      }
+
+      optionById.set(normalizedId, {
+        ...option,
+        id: normalizedId,
+      });
+    }
+
+    const signedInPlayerOptionId = resolveSignedInPlayerOptionId({
+      options: [...optionById.values()],
+      authProfileId: authProfile?.id,
+      authSessionUserId: authSession?.user?.id,
+      authProfilePlayer: authProfilePlayerOption
+        ? {
+            id: authProfilePlayerOption.id,
+            label: authProfilePlayerOption.label,
+            displayName: authProfilePlayerOption.displayName,
+            playerName: authProfilePlayerOption.playerName,
+          }
+        : null,
+    });
+    if (signedInPlayerOptionId && authProfilePlayerOption) {
+      const currentSignedInOption = optionById.get(signedInPlayerOptionId);
+      if (currentSignedInOption) {
+        optionById.set(signedInPlayerOptionId, {
+          ...currentSignedInOption,
+          label: authProfilePlayerOption.label || currentSignedInOption.label,
+          displayName:
+            authProfilePlayerOption.displayName || currentSignedInOption.displayName,
+          playerName:
+            authProfilePlayerOption.playerName || currentSignedInOption.playerName,
+        });
+      }
+    }
+
+    const playerById = new Map(
+      analyticsDirectory.players.map((player) => [String(player.id), player])
+    );
+    const prioritizedPlayers = prioritizeSignedInPlayerOptions({
+      players: [...optionById.values()].map((option) => {
+        const matchedPlayer = playerById.get(String(option.id));
+        return {
+          id: String(option.id),
+          name: option.label,
+          color:
+            matchedPlayer && typeof matchedPlayer.color === "string"
+              ? matchedPlayer.color
+              : undefined,
+          assignedCardArtIndex:
+            typeof matchedPlayer?.assignedCardArtIndex === "number"
+              ? matchedPlayer.assignedCardArtIndex
+              : null,
+        };
+      }),
+      games: canonicalGames as any,
+      authProfileId: authProfile?.id,
+      authSessionUserId: authSession?.user?.id,
+      authProfilePlayer: authProfilePlayerOption
+        ? {
+            id: authProfilePlayerOption.id,
+            name: authProfilePlayerOption.label,
+          }
+        : null,
+      commonPlayerLimit: 4,
+    });
+
+    const ordered: PlayerOption[] = [];
+    const seen = new Set<string>();
+
+    for (const player of prioritizedPlayers) {
+      const normalizedId = String(player?.id ?? "").trim();
+      const option = optionById.get(normalizedId);
+      if (!normalizedId || !option || seen.has(normalizedId)) {
+        continue;
+      }
+
+      seen.add(normalizedId);
+      ordered.push(option);
+    }
+
+    for (const option of optionById.values()) {
+      const normalizedId = String(option.id ?? "").trim();
+      if (!normalizedId || seen.has(normalizedId)) {
+        continue;
+      }
+
+      seen.add(normalizedId);
+      ordered.push(option);
+    }
+
+    return ordered;
+  }, [
+    analyticsDirectory.players,
+    authProfile?.id,
+    authProfileId,
+    authProfilePlayerOption,
+    authSession?.user?.id,
+    canonicalGames,
+    playerOptions,
+  ]);
 
   useEffect(() => {
-    if (!playerOptions.length) {
+    if (!orderedPlayerOptions.length) {
       return;
     }
 
     if (
       selectedProfileId &&
-      playerOptions.some((player) => player.id === selectedProfileId)
+      orderedPlayerOptions.some((player) => player.id === selectedProfileId)
     ) {
       return;
     }
 
     const fallbackId =
-      playerOptions.find((player) => player.id === authProfileId)?.id ??
-      playerOptions[0]?.id ??
+      orderedPlayerOptions.find((player) => player.id === authProfileId)?.id ??
+      orderedPlayerOptions[0]?.id ??
       null;
 
     if (fallbackId) {
       setSelectedProfileId(fallbackId);
     }
-  }, [authProfileId, playerOptions, selectedProfileId]);
+  }, [authProfileId, orderedPlayerOptions, selectedProfileId]);
 
   const normalizedQuery = deferredPlayerSearchQuery.trim().toLowerCase();
   const filteredPlayerOptions = useMemo(() => {
     if (!normalizedQuery) {
-      return playerOptions;
+      return orderedPlayerOptions;
     }
 
-    return playerOptions.filter((player) => {
+    return orderedPlayerOptions.filter((player) => {
       const searchTargets = [
         player.label,
         player.displayName,
@@ -189,12 +371,37 @@ export default function InsightsScreen() {
 
       return searchTargets.some((value) => value.includes(normalizedQuery));
     });
-  }, [normalizedQuery, playerOptions]);
+  }, [normalizedQuery, orderedPlayerOptions]);
 
   const selectedPlayer = useMemo(
     () =>
-      playerOptions.find((player) => player.id === selectedProfileId) ?? null,
-    [playerOptions, selectedProfileId],
+      orderedPlayerOptions.find((player) => player.id === selectedProfileId) ?? null,
+    [orderedPlayerOptions, selectedProfileId],
+  );
+  const summaryPersonalRows = useMemo(() => {
+    const personal = normalizeSummaryRows(correlationPayload.personal);
+    if (personal.length > 0) {
+      return personal;
+    }
+
+    const legacyWinLoseSplit = normalizeSummaryRows(correlationPayload.winLoseSplit);
+    if (legacyWinLoseSplit.length > 0) {
+      return legacyWinLoseSplit;
+    }
+
+    return normalizeSummaryRows(correlationPayload.items);
+  }, [correlationPayload.items, correlationPayload.personal, correlationPayload.winLoseSplit]);
+  const summaryPairingRows = useMemo(
+    () => normalizeSummaryRows(correlationPayload.pairing),
+    [correlationPayload.pairing],
+  );
+  const summaryMacroRows = useMemo(
+    () => normalizeSummaryRows(correlationPayload.macro),
+    [correlationPayload.macro],
+  );
+  const summarySynergyPairs = useMemo(
+    () => normalizeSynergyPairs(correlationPayload.synergyPairs),
+    [correlationPayload.synergyPairs],
   );
   const activeSectionLabel = useMemo(
     () =>
@@ -205,20 +412,44 @@ export default function InsightsScreen() {
 
   const correlationPlayers = useMemo(
     () =>
-      playerOptions.map((player) => ({
+      orderedPlayerOptions.map((player) => ({
         id: player.id,
         name: player.label,
       })),
-    [playerOptions],
+    [orderedPlayerOptions],
+  );
+  const summaryPlayers = useMemo(
+    () =>
+      analyticsDirectory.players.map((player) => ({
+        id: String(player?.id ?? "").trim(),
+        name: String(player?.name ?? "").trim(),
+      })),
+    [analyticsDirectory.players],
+  );
+  const summaryStatements = useMemo(
+    () =>
+      buildInsightSummaryStatements({
+        tab: activeSectionTab,
+        selectedPlayerLabel: selectedPlayer?.label ?? null,
+        metaGames: toFiniteNumber(metaPayload.games),
+        personalRows: summaryPersonalRows,
+        pairingRows: summaryPairingRows,
+        macroRows: summaryMacroRows,
+        synergyPairs: summarySynergyPairs,
+        players: summaryPlayers,
+      }),
+    [
+      activeSectionTab,
+      metaPayload.games,
+      selectedPlayer?.label,
+      summaryMacroRows,
+      summaryPairingRows,
+      summaryPersonalRows,
+      summaryPlayers,
+      summarySynergyPairs,
+    ],
   );
 
-  const heroSubtitle = error
-    ? error
-    : loading
-      ? "Loading Supabase-authored insights."
-      : selectedPlayer?.label
-        ? `Server-authored correlation clues and synergy trends for ${selectedPlayer.label}.`
-        : "Server-authored correlation clues and synergy trends.";
   const hasPlayerAwareActions = Boolean(selectedPlayer && activeProfileId);
   const {
     recoveryState,
@@ -246,7 +477,7 @@ export default function InsightsScreen() {
     recoveryState.kind === "no-players"
       ? "Set up your roster first so the correlation hub has real Moonrakers players to compare."
       : recoveryState.kind === "no-games"
-        ? "Track or import a few games before expecting the server-authored insights feed to populate."
+        ? "Track a few games before expecting the server-authored insights feed to populate."
         : error
           ? error
           : "Supabase has not published any player-aware correlation options for this screen yet.";
@@ -257,65 +488,16 @@ export default function InsightsScreen() {
         eyebrow="Analytics"
         headerAction={
           <ActionButton
-            title="Back to Command"
+            title="Command"
             variant="ghost"
             onPress={() => router.push(APP_ROUTES.home)}
             style={styles.heroActionButton}
           />
         }
-        subtitle={heroSubtitle}
         title="Insights Hub"
         size="compact"
       >
-        {hasPlayerAwareActions ? (
-          <View style={styles.contextActionGrid}>
-            <Pressable
-              style={styles.contextActionCard}
-              onPress={() =>
-                router.push(
-                  buildCompareRoute({
-                    mode: "players",
-                    ids: [activeProfileId],
-                  }),
-                )
-              }
-            >
-              <Text style={styles.contextActionTitle}>
-                Open compare for this player
-              </Text>
-              <Text style={styles.contextActionBody}>
-                Lock {selectedPlayer?.label || "this player"} as the focus and pick the rival on the compare screen.
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.contextActionCard}
-              onPress={() =>
-                router.push(
-                  buildChartsRoute({
-                    playerId: activeProfileId,
-                    setup: true,
-                  }),
-                )
-              }
-            >
-              <Text style={styles.contextActionTitle}>Open scoped charts</Text>
-              <Text style={styles.contextActionBody}>
-                Open chart setup with {selectedPlayer?.label || "this player"} already scoped in.
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.contextActionCard}
-              onPress={() => router.push(buildPlayerProfileRoute(activeProfileId))}
-            >
-              <Text style={styles.contextActionTitle}>View profile</Text>
-              <Text style={styles.contextActionBody}>
-                Jump straight into {selectedPlayer?.label || "this player's"} full profile breakdown.
-              </Text>
-            </Pressable>
-          </View>
-        ) : (
+        {!hasPlayerAwareActions ? (
           <View style={styles.linkRow}>
             <ActionButton
               title="Compare"
@@ -336,16 +518,12 @@ export default function InsightsScreen() {
               style={styles.linkActionButton}
             />
           </View>
-        )}
+        ) : null}
       </HeroCard>
 
       <AnalyticsControlRail
         title="Insight Lenses"
-        subtitle={
-          activeSectionTab === "pairingCorrelations"
-            ? "Pick the player whose server-authored correlation reads you want to inspect."
-            : "Switch between the published correlation lenses without leaving this route."
-        }
+        tabVariant="stacked"
         tabs={insightSectionTabs}
         activeTabKey={activeSectionTab}
         onTabChange={(key) => setActiveSectionTab(key as InsightSectionTab)}
@@ -359,18 +537,18 @@ export default function InsightsScreen() {
                 items: filteredPlayerOptions.map((player) => ({
                   id: player.id,
                   label: player.label,
+                  badge:
+                    player.id === authProfileId
+                      ? "You"
+                      : null,
                   meta:
-                    player.displayName ||
-                    player.playerName ||
-                    (player.id === authProfileId
-                      ? "Signed-in player"
-                      : "Shared-network player"),
+                    buildPlayerOptionMeta(player, authProfileId) ||
+                    "Shared-network player",
                 })),
                 selectedIds: selectedProfileId ? [selectedProfileId] : [],
                 onSelect: (id) => setSelectedProfileId(id),
                 emptyText: "No players match this search.",
-                helperText:
-                  "Select the player whose published personal correlations you want to inspect.",
+                helperText: "Pick a player to inspect personal correlations.",
                 variant: "list",
               }
             : null
@@ -381,37 +559,30 @@ export default function InsightsScreen() {
         eyebrow="Insights"
         title={activeSectionLabel}
         helpCategory="correlations"
-        subtitle={
-          activeSectionTab === "pairingCorrelations"
-            ? "Published personal correlations and synergy reads from the shared insights payload."
-            : "Published correlation trends and synergy reads from the shared insights payload."
-        }
         state={insightsState}
-        sourceKind={sourceKind}
-        sourceLabel={sourceLabel}
-        sourceCaption={
-          staleSourceCaption ||
-          (selectedPlayer?.label
-            ? `Showing published insight context for ${selectedPlayer.label}.`
-            : "Published insights from Supabase.")
-        }
         messageTitle={insightsMessageTitle}
         messageBody={insightsMessageBody}
         primaryAction={insightsPrimaryAction}
         secondaryAction={insightsSecondaryAction}
         tone={error ? "danger" : insightsState === "ready" ? "info" : "warning"}
       >
-        {activeSectionTab === "pairingCorrelations" ? (
-          <Text style={styles.sectionReadyHint}>
-            {selectedPlayer?.label
-              ? `Showing published personal correlations for ${selectedPlayer.label}.`
-              : "Choose a player above to focus the published personal correlation view."}
-          </Text>
-        ) : (
-          <Text style={styles.sectionReadyHint}>
-            The correlation breakdown below is live and stays server-authored so the same trend language can be reused across analytics surfaces.
-          </Text>
-        )}
+        <View style={styles.summaryList}>
+          {summaryStatements.map((statement) => (
+            <View key={statement} style={styles.summaryItem}>
+              <View style={styles.summaryBullet} />
+              <DefinitionRichText text={statement} style={styles.summaryText} />
+            </View>
+          ))}
+          {staleSourceCaption ? (
+            <View style={styles.summaryItem}>
+              <View style={styles.summaryBullet} />
+              <DefinitionRichText
+                text={staleSourceCaption}
+                style={styles.summaryText}
+              />
+            </View>
+          ) : null}
+        </View>
       </AnalyticsStateSection>
 
       {insightsState === "ready" && activeSectionTab === "pairingCorrelations" ? (
@@ -442,6 +613,47 @@ export default function InsightsScreen() {
           view="synergy"
         />
       ) : null}
+
+      {hasPlayerAwareActions ? (
+        <View style={styles.contextActionGrid}>
+          <Pressable
+            style={styles.contextActionCard}
+            onPress={() =>
+              router.push(
+                buildCompareRoute({
+                  mode: "players",
+                  ids: [activeProfileId],
+                }),
+              )
+            }
+          >
+            <Text style={styles.contextActionTitle}>
+              Open compare for this player
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.contextActionCard}
+            onPress={() =>
+              router.push(
+                buildChartsRoute({
+                  playerId: activeProfileId,
+                  setup: true,
+                }),
+              )
+            }
+          >
+            <Text style={styles.contextActionTitle}>Open scoped charts</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.contextActionCard}
+            onPress={() => router.push(buildPlayerProfileRoute(activeProfileId))}
+          >
+            <Text style={styles.contextActionTitle}>View profile</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </PageShell>
   );
 }
@@ -454,7 +666,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   heroActionButton: {
-    minWidth: 164,
+    minWidth: 136,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   linkActionButton: {
     flex: 1,
@@ -495,27 +709,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   contextActionGrid: {
-    gap: 8,
+    gap: 6,
+    marginTop: 2,
+    paddingBottom: 2,
   },
   contextActionCard: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#334155",
     backgroundColor: "#0f172a",
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 4,
   },
   contextActionTitle: {
     color: "#f8fafc",
     fontSize: 12,
     fontWeight: "900",
-  },
-  contextActionBody: {
-    color: "#94a3b8",
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: "700",
   },
   sectionTabRail: {
     paddingTop: 4,
@@ -558,10 +767,28 @@ const styles = StyleSheet.create({
   selectorShell: {
     gap: 10,
   },
-  sectionReadyHint: {
-    color: "#94a3b8",
+  summaryList: {
+    gap: 8,
+  },
+  summaryItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  summaryBullet: {
+    marginTop: 5,
+    width: 5,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "#67e8f9",
+    flexShrink: 0,
+  },
+  summaryText: {
+    flex: 1,
+    color: "#dbe7f6",
     fontSize: 11,
-    lineHeight: 17,
+    lineHeight: 16,
+    fontWeight: "800",
   },
   playerSearchInput: {
     minHeight: 42,

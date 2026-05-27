@@ -11,6 +11,12 @@ function expectIncludes(source, pattern, label) {
   }
 }
 
+function expectExcludes(source, pattern, label) {
+  if (source.includes(pattern)) {
+    throw new Error(`Unexpected ${label}: ${pattern}`);
+  }
+}
+
 function run(name, fn) {
   try {
     fn();
@@ -26,9 +32,11 @@ run("Stats and profile screens expose the new hierarchy markers", () => {
   const statsSource = read("app/stats.tsx");
   const profileSource = read("app/player-profile/[playerId].tsx");
 
-  expectIncludes(statsSource, "statsHeroHighlights", "stats hero highlight data");
+  expectIncludes(statsSource, 'eyebrow="Statistics"', "stats eyebrow");
+  expectIncludes(statsSource, "Command", "stats command action");
   expectIncludes(statsSource, "primaryTabPill", "primary tab pill styles");
-  expectIncludes(statsSource, "Mission Snapshot", "stats hero title");
+  expectExcludes(statsSource, "Mission Snapshot", "legacy stats hero title");
+  expectExcludes(statsSource, "statsHeroHighlights", "legacy stats hero highlight data");
 
   expectIncludes(profileSource, "stickyProfileTabShell", "sticky profile tab shell");
   expectIncludes(profileSource, "profileSummaryCards", "profile summary disclosure");
@@ -39,6 +47,7 @@ run("Creation, definitions, setup, and analytics screens expose the new browse p
   const addPlayersSource = read("app/add-players.tsx");
   const definitionsSource = read("app/definitions.tsx");
   const setupSource = read("app/game-setup.tsx");
+  const setupHelperSource = read("utils/gameSetupTurnOrder.ts");
   const analyticsSource = read("app/analytics.tsx");
 
   expectIncludes(addPlayersSource, "creationStepList", "creation step list");
@@ -51,7 +60,7 @@ run("Creation, definitions, setup, and analytics screens expose the new browse p
 
   expectIncludes(setupSource, "First Captain", "first captain emphasis");
   expectIncludes(setupSource, "Set the first captain and lock the table order.", "setup subtitle copy");
-  expectIncludes(setupSource, 'join("  /  ")', "setup launch separator cleanup");
+  expectIncludes(setupHelperSource, 'join("  /  ")', "setup launch separator cleanup");
 
   expectIncludes(analyticsSource, "ANALYTICS_CARD_TONES", "analytics tint map");
 });

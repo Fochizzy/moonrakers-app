@@ -343,8 +343,8 @@ function getVerdict(row: RivalryRow, playerAName: string): string {
   }
   if (Math.abs(row.prestigeMargin) < 0.35) return "Usually close";
   return row.prestigeMargin > 0
-    ? `${playerAName} edges on points`
-    : `${row.opponentName} edges on points`;
+    ? `${playerAName} edges on prestige`
+    : `${row.opponentName} edges on prestige`;
 }
 
 function getGameSortValue(game: Game, index: number): number {

@@ -82,13 +82,13 @@ assert.match(
 assert.match(
   source,
   /router\.push\(APP_ROUTES\.home\)/,
-  "expected the Elo screen to route Back to Command to the shared Command page",
+  "expected the Elo screen to route Command to the shared Command page",
 );
 
 assert.match(
   source,
-  /Back to Command/,
-  "expected the Elo screen to show a Back to Command control",
+  /Command/,
+  "expected the Elo screen to show a Command control",
 );
 
 console.log("elo-focus-player-controls.test.cjs passed");

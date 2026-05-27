@@ -265,7 +265,7 @@ function CaptainNameStrip({
 
 function TurnOrderRow({
   item,
-  index,
+  getIndex,
   drag,
   isActive,
   isStartingGame,
@@ -276,9 +276,10 @@ function TurnOrderRow({
   selectedPlayerId: string | null;
   onSelectPlayer: (playerId: string) => void;
 }) {
-  const accent = getAccentColor(item.color, index);
-  const displayName = resolveDisplayName(item, index);
-  const isFirstCaptain = index === 0;
+  const rowIndex = getIndex() ?? 0;
+  const accent = getAccentColor(item.color, rowIndex);
+  const displayName = resolveDisplayName(item, rowIndex);
+  const isFirstCaptain = rowIndex === 0;
   const isSelected = item.id === selectedPlayerId;
   const isHighlighted = isActive || isSelected;
 
@@ -311,7 +312,7 @@ function TurnOrderRow({
         >
           <View style={styles.rowHeader}>
             <View style={[styles.rowOrderPill, isFirstCaptain ? styles.rowOrderPillPrimary : null]}>
-              <Text style={styles.rowOrderPillText}>{index + 1}</Text>
+              <Text style={styles.rowOrderPillText}>{rowIndex + 1}</Text>
             </View>
 
             {isSelected ? (
@@ -759,7 +760,8 @@ export default function GameSetup() {
 const styles = StyleSheet.create({
   pageContent: {
     flex: 1,
-    paddingBottom: 16,
+    paddingTop: 0,
+    paddingBottom: 32,
   },
   mainContentWrap: {
     flex: 1,
@@ -767,7 +769,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   topActionRow: {
-    paddingTop: 2,
+    paddingTop: 0,
   },
   topActionButton: {
     width: "100%",
@@ -1129,9 +1131,7 @@ const styles = StyleSheet.create({
   tapSelectChip: {
     minWidth: 84,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     paddingHorizontal: 7,
     paddingVertical: 3,
     alignItems: "center",

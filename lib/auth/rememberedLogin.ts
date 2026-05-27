@@ -21,7 +21,7 @@ type RememberedLoginDependencies = {
 };
 
 const REMEMBERED_LOGIN_EMAIL_KEY = "moonrakers:remembered-login-email";
-const REMEMBERED_LOGIN_PASSWORD_KEY = "moonrakers:remembered-login-password";
+const REMEMBERED_LOGIN_PASSWORD_KEY = "moonrakers.remembered-login-password";
 
 const memoryStorageValues = new Map<string, string>();
 const memorySecureStorageValues = new Map<string, string>();

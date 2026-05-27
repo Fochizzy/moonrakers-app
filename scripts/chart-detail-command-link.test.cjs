@@ -16,14 +16,14 @@ assert.match(
 
 assert.match(
   source,
-  /<View style=\{styles\.heroActionRow\}>[\s\S]*Back to Adjust[\s\S]*Back to Command[\s\S]*<\/View>/,
-  "expected the chart detail hero actions to show Back to Command beside Back to Adjust"
+  /<View style=\{styles\.heroActionRow\}>[\s\S]*Back to Adjust[\s\S]*Command[\s\S]*<\/View>/,
+  "expected the chart detail hero actions to show Command beside Back to Adjust"
 );
 
 assert.match(
   source,
-  /<TouchableOpacity[\s\S]*style=\{styles\.secondaryButton\}[\s\S]*onPress=\{openCommandPage\}[\s\S]*Back to Command/,
-  "expected the Back to Command button to use the Command-page navigation helper"
+  /<TouchableOpacity[\s\S]*style=\{styles\.secondaryButton\}[\s\S]*onPress=\{openCommandPage\}[\s\S]*Command/,
+  "expected the Command button to use the Command-page navigation helper"
 );
 
 console.log("chart-detail-command-link.test.cjs passed");

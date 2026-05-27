@@ -32,3 +32,29 @@
 };
 
 export type PlayerCardFile = keyof typeof PLAYER_CARD_IMAGE_BY_FILE;
+
+export const PLAYER_CARD_FILES = Object.keys(
+  PLAYER_CARD_IMAGE_BY_FILE,
+).sort() as PlayerCardFile[];
+
+export function isValidPlayerCardAssetIndex(
+  value: unknown,
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value < PLAYER_CARD_FILES.length
+  );
+}
+
+export function getPlayerCardSourceByArtIndex(
+  artIndex?: number | null,
+) {
+  const normalizedIndex = isValidPlayerCardAssetIndex(artIndex)
+    ? artIndex
+    : 0;
+  const fileName =
+    PLAYER_CARD_FILES[normalizedIndex] ?? PLAYER_CARD_FILES[0];
+  return PLAYER_CARD_IMAGE_BY_FILE[fileName];
+}

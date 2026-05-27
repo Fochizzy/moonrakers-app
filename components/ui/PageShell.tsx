@@ -22,6 +22,7 @@ type PageShellProps = {
   density?: "default" | "compact";
   edges?: Edge[];
   preset?: ScreenBackgroundPreset;
+  scrollRef?: React.Ref<ScrollView>;
   scroll?: boolean;
   showsVerticalScrollIndicator?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -65,6 +66,7 @@ export default function PageShell({
   density = "default",
   edges = ["left", "right"],
   preset = "quiet",
+  scrollRef,
   scroll = true,
   showsVerticalScrollIndicator = false,
   style,
@@ -136,6 +138,7 @@ export default function PageShell({
 
       {shouldScroll ? (
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollGrow}
           showsVerticalScrollIndicator={showsVerticalScrollIndicator}
         >

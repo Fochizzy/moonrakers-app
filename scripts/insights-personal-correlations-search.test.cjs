@@ -9,12 +9,6 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /TextInput/,
-  "expected the insights route to import a TextInput for the personal correlations player search",
-);
-
-assert.match(
-  source,
   /const \[selectedProfileId,\s*setSelectedProfileId\] = useState<string \| null>\(null\);/,
   "expected the insights route to track the selected profile for Personal Correlations",
 );
@@ -45,14 +39,26 @@ assert.match(
 
 assert.match(
   source,
-  /placeholder="Search players"/,
-  "expected a Search players input above the Personal Correlations panel",
+  /placeholder:\s*"Search players"/,
+  "expected a Search players input to stay wired into the Personal Correlations control rail",
 );
 
 assert.match(
   source,
-  /activeSectionTab === "pairingCorrelations"[\s\S]*selectedProfileId === player\.id[\s\S]*onPress=\{\(\) => setSelectedProfileId\(player\.id\)\}/,
-  "expected Personal Correlations to render selectable player search results above the pairing panel",
+  /<AnalyticsControlRail[\s\S]*search=\{\s*activeSectionTab === "pairingCorrelations"[\s\S]*query:\s*playerSearchQuery,[\s\S]*onQueryChange:\s*setPlayerSearchQuery,[\s\S]*items:\s*filteredPlayerOptions\.map\(\(player\)\s*=>[\s\S]*selectedIds:\s*selectedProfileId \? \[selectedProfileId\] : \[\],[\s\S]*onSelect:\s*\(id\)\s*=>\s*setSelectedProfileId\(id\),[\s\S]*variant:\s*"list"/,
+  "expected Personal Correlations to drive the shared player search picker from the selected profile state",
+);
+
+assert.match(
+  source,
+  /badge:\s*player\.id === authProfileId\s*\?\s*"You"\s*:\s*null/,
+  "expected the Personal Correlations picker to badge the signed-in player as You",
+);
+
+assert.match(
+  source,
+  /buildPlayerOptionMeta\(player,\s*authProfileId\)/,
+  "expected the Personal Correlations picker to derive secondary text through the shared signed-in-safe meta helper",
 );
 
 console.log("insights-personal-correlations-search.test.cjs passed");

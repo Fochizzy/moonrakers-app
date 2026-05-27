@@ -24,6 +24,9 @@ for (const extension of [".ts", ".tsx"]) {
 const {
   resolvePreferredChartPlayerId,
   buildCommonOpponentOptions,
+  buildRecentGameOpponentOptions,
+  prioritizeSignedInPlayerOptions,
+  resolveSignedInPlayerOptionId,
 } = require(path.join(__dirname, "..", "utils", "charts.ts"));
 
 assert.equal(
@@ -36,6 +39,24 @@ assert.equal(
   typeof buildCommonOpponentOptions,
   "function",
   "expected utils/charts.ts to export buildCommonOpponentOptions for the chart focus-player setup",
+);
+
+assert.equal(
+  typeof buildRecentGameOpponentOptions,
+  "function",
+  "expected utils/charts.ts to export buildRecentGameOpponentOptions for server-history quick-pick fallback ordering",
+);
+
+assert.equal(
+  typeof prioritizeSignedInPlayerOptions,
+  "function",
+  "expected utils/charts.ts to export prioritizeSignedInPlayerOptions for signed-in player quick-pick ordering",
+);
+
+assert.equal(
+  typeof resolveSignedInPlayerOptionId,
+  "function",
+  "expected utils/charts.ts to export resolveSignedInPlayerOptionId so player pickers can reconcile the signed-in player across auth and analytics payloads",
 );
 
 const players = [
@@ -107,6 +128,95 @@ assert.deepEqual(
     { id: "zoe", gamesPlayed: 1 },
   ],
   "expected the chart focus helper to rank the top five common opponents by shared games",
+);
+
+assert.deepEqual(
+  buildRecentGameOpponentOptions({
+    playerId: "greg",
+    players,
+    recentGames: [
+      {
+        id: "rg1",
+        players: [{ id: "greg" }, { id: "james" }, { id: "izzy" }],
+      },
+      {
+        id: "rg2",
+        players: [{ id: "greg" }, { id: "james" }],
+      },
+      {
+        id: "rg3",
+        players: [{ id: "greg" }, { id: "ada" }],
+      },
+    ],
+    limit: 4,
+  }).map((entry) => ({
+    id: entry.id,
+    gamesPlayed: entry.gamesPlayed,
+  })),
+  [
+    { id: "james", gamesPlayed: 2 },
+    { id: "ada", gamesPlayed: 1 },
+    { id: "izzy", gamesPlayed: 1 },
+  ],
+  "expected the recent-game fallback helper to rank opponents from server-authored recent history when a dedicated quick-pick payload is unavailable",
+);
+
+assert.deepEqual(
+  prioritizeSignedInPlayerOptions({
+    players,
+    games,
+    authProfileId: "greg",
+    authSessionUserId: "session-user",
+    commonPlayerLimit: 4,
+  }).map((entry) => entry.id),
+  ["greg", "james", "izzy", "ada", "liam", "zoe"],
+  "expected signed-in quick picks to pin the logged-in player first and then rank the next four most common co-play partners before the remaining alphabetical options",
+);
+
+assert.deepEqual(
+  prioritizeSignedInPlayerOptions({
+    players,
+    games,
+    authProfileId: null,
+    authSessionUserId: "izzy",
+    commonPlayerLimit: 2,
+  }).map((entry) => entry.id),
+  ["izzy", "greg", "james", "ada", "liam", "zoe"],
+  "expected the session user id to drive the same signed-in quick-pick ordering when no auth profile id is available",
+);
+
+assert.deepEqual(
+  prioritizeSignedInPlayerOptions({
+    players: players.filter((entry) => entry.id !== "greg"),
+    games,
+    authProfileId: "greg",
+    authSessionUserId: null,
+    authProfilePlayer: {
+      id: "greg",
+      name: "Greg",
+    },
+    explicitPriorityPlayerIds: ["james", "izzy", "ada", "liam"],
+    commonPlayerLimit: 4,
+  }).map((entry) => entry.id),
+  ["greg", "james", "izzy", "ada", "liam", "zoe"],
+  "expected signed-in quick picks to inject the signed-in player when the leaderboard options miss them and then honor the server-authored top co-play order before the remaining alphabetical options",
+);
+
+assert.equal(
+  resolveSignedInPlayerOptionId({
+    options: [
+      { id: "legacy-fochizzy", name: "Fochizzy" },
+      { id: "james", name: "James" },
+    ],
+    authProfileId: "signed-in-uuid",
+    authSessionUserId: null,
+    authProfilePlayer: {
+      id: "signed-in-uuid",
+      name: "Fochizzy",
+    },
+  }),
+  "legacy-fochizzy",
+  "expected signed-in player resolution to fall back to canonical player-name matching when payload ids and auth ids differ",
 );
 
 console.log("chart-focus-player-data.test.cjs passed");

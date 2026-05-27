@@ -757,6 +757,12 @@ const games = [
   assert.match(componentSource, /Worst Condition/);
   assert.match(componentSource, /Base Discipline/);
   assert.match(componentSource, /Objective Profile/);
+  assert.match(componentSource, /Objective Prestige \/ Game/);
+  assert.match(componentSource, /Games scoring any objective prestige/);
+  assert.match(componentSource, /Wins without objective prestige/);
+  assert.match(componentSource, /Games with 2\+ objective prestige/);
+  assert.doesNotMatch(componentSource, /Objective Pts \/ Game/);
+  assert.doesNotMatch(componentSource, /objective points/);
   assert.match(componentSource, /Support Profile/);
   assert.match(componentSource, /Assist Context/);
   assert.match(componentSource, /Assist Gap to Target/);

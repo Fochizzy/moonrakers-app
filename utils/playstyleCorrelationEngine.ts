@@ -45,7 +45,7 @@ const METRICS: MetricDefinition[] = [
   },
   {
     key: 'objectivePoints',
-    label: 'Objective Points',
+    label: 'Objective Prestige',
     getValue: (sample) => sample.objectivePoints,
   },
   {

@@ -139,7 +139,7 @@ function hasMeaningfulConditionalDelta(rows: ConditionalEntityDelta[]): boolean 
 const SORT_ITEMS: Array<{ key: 'winRateDelta' | 'prestigeDelta' | 'scoreDelta' | 'synergyDelta'; label: string; sub: string }> = [
   { key: 'winRateDelta', label: 'Win Δ', sub: 'Outcome swing' },
   { key: 'prestigeDelta', label: 'Prestige Δ', sub: 'Scoring pace' },
-  { key: 'scoreDelta', label: 'Score Δ', sub: 'Point pressure' },
+  { key: 'scoreDelta', label: 'Score Δ', sub: 'Prestige pressure' },
   { key: 'synergyDelta', label: 'Synergy Δ', sub: 'Table fit' },
 ];
 
@@ -221,7 +221,7 @@ export default function ConditionalComparisonCard({
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>{title ?? 'Conditional'}</Text>
+          {title ? <Text style={styles.eyebrow}>{title}</Text> : null}
           <Text style={styles.title}>Live sentence</Text>
           {description ? <Text style={styles.subtitle}>{description}</Text> : null}
         </View>

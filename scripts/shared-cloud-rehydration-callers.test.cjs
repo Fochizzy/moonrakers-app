@@ -42,13 +42,13 @@ assert.doesNotMatch(
 );
 assert.match(
   historySource,
-  /loadRegisteredProfiles\(\)\.catch\(\(\) => \[\]\)/,
-  "expected history backup import to keep resolving registered profiles",
+  /args\.hydrateCloudSnapshot\(await loadHydratedCloudState\(activeSession as any\)\)/,
+  "expected history refresh to pass the shared helper payload straight into hydration",
 );
-assert.match(
+assert.doesNotMatch(
   historySource,
   /import\s*{\s*loadRegisteredProfiles\s*}\s*from\s*["']@\/lib\/cloud\/loadRegisteredProfiles["']/,
-  "expected history backup import to keep the registered-profiles dependency wired",
+  "expected history refresh to stop owning the registered-profile merge now that the shared helper does it",
 );
 
 const packageSource = read("package.json");

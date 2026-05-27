@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -27,6 +29,7 @@ import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
 
 type ActiveAction = "login" | "resend" | "reset" | null;
+const APP_ICON = require("@/assets/icon.png");
 
 function formatAuthMessage(error: unknown) {
   const message = formatSupabaseConfigError(error);
@@ -46,6 +49,7 @@ export default function LoginScreen() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -257,6 +261,10 @@ export default function LoginScreen() {
         style={styles.keyboard}
       >
         <View style={styles.stack}>
+          <View style={styles.brandIconWrap}>
+            <Image source={APP_ICON} style={styles.brandIcon} resizeMode="cover" />
+          </View>
+
           <View
             style={[
               styles.panel,
@@ -290,23 +298,50 @@ export default function LoginScreen() {
               onChangeText={setEmail}
             />
 
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="Password"
-              placeholderTextColor="#6E7F9D"
-              secureTextEntry
+            <View
               style={[
-                styles.input,
+                styles.passwordField,
                 {
                   backgroundColor: "rgba(15,25,48,0.72)",
                   borderColor: "rgba(59,130,246,0.24)",
-                  color: "#F8FBFF",
                 },
               ]}
-              value={password}
-              onChangeText={setPassword}
-            />
+            >
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Password"
+                placeholderTextColor="#6E7F9D"
+                secureTextEntry={!passwordVisible}
+                style={[
+                  styles.passwordInput,
+                  {
+                    color: "#F8FBFF",
+                  },
+                ]}
+                value={password}
+                onChangeText={setPassword}
+              />
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={passwordVisible ? "Hide password" : "Show password"}
+                hitSlop={8}
+                onPress={() => setPasswordVisible((current) => !current)}
+                style={({ pressed }) => [
+                  styles.passwordToggle,
+                  {
+                    opacity: pressed ? 0.78 : 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={passwordVisible ? "eye-off" : "eye"}
+                  size={20}
+                  color="#B7C8E6"
+                />
+              </Pressable>
+            </View>
 
             <Pressable
               accessibilityRole="checkbox"
@@ -401,6 +436,19 @@ const styles = StyleSheet.create({
   stack: {
     gap: 14,
   },
+  brandIconWrap: {
+    alignItems: "center",
+  },
+  brandIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 28,
+    shadowColor: "#020617",
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
   panel: {
     borderRadius: 30,
     borderWidth: 1,
@@ -440,6 +488,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 1,
     fontSize: 16,
+  },
+  passwordField: {
+    minHeight: 58,
+    borderRadius: 18,
+    paddingLeft: 16,
+    paddingRight: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passwordInput: {
+    flex: 1,
+    minHeight: 56,
+    fontSize: 16,
+    paddingRight: 10,
+  },
+  passwordToggle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
   },
   message: {
     fontSize: 13,

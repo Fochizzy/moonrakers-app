@@ -35,6 +35,20 @@ const cache = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
 const listeners = new Map<string, Set<Listener>>();
 
+const STORAGE_KEY_BY_SCHEMA_KEY: {
+  [K in keyof StorageSchema]: StorageKey;
+} = {
+  players: STORAGE_KEYS.PLAYERS,
+  games: STORAGE_KEYS.GAMES,
+  groups: STORAGE_KEYS.GROUPS,
+  settings: STORAGE_KEYS.SETTINGS,
+  gameDraft: STORAGE_KEYS.GAME_DRAFT,
+};
+
+function getStorageKey<K extends keyof StorageSchema>(key: K): StorageKey {
+  return STORAGE_KEY_BY_SCHEMA_KEY[key];
+}
+
 function emit(key: string, value: unknown) {
   listeners.get(key)?.forEach((cb) => cb(value));
 }
@@ -114,7 +128,7 @@ export function subscribe<K extends keyof StorageSchema, S = StorageSchema[K]>(
   callback: (slice: S) => void,
   isEqual: (a: S, b: S) => boolean = Object.is
 ) {
-  const storageKey = STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey;
+  const storageKey = getStorageKey(key);
 
   if (!listeners.has(storageKey)) {
     listeners.set(storageKey, new Set());
@@ -145,7 +159,7 @@ export async function save<K extends keyof StorageSchema>(
   value: StorageSchema[K],
   opts?: Options
 ): Promise<boolean> {
-  const storageKey = STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey;
+  const storageKey = getStorageKey(key);
 
   try {
     const wrapped = wrap(value, opts?.ttl);
@@ -167,7 +181,7 @@ export async function load<K extends keyof StorageSchema>(
   key: K,
   fallback: StorageSchema[K] | null = null
 ): Promise<StorageSchema[K] | null> {
-  const storageKey = STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey;
+  const storageKey = getStorageKey(key);
 
   if (cache.has(storageKey)) {
     return cache.get(storageKey) as StorageSchema[K] | null;
@@ -214,7 +228,7 @@ export async function load<K extends keyof StorageSchema>(
 export async function remove<K extends keyof StorageSchema>(
   key: K
 ): Promise<boolean> {
-  const storageKey = STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey;
+  const storageKey = getStorageKey(key);
 
   try {
     await AsyncStorage.removeItem(storageKey);
@@ -238,8 +252,7 @@ export async function transaction(
       keyof StorageSchema,
       StorageSchema[keyof StorageSchema]
     ][]) {
-      const storageKey =
-        STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey;
+      const storageKey = getStorageKey(key);
 
       const wrapped = wrap(value, opts?.ttl);
       batch.push([storageKey, serializer.stringify(wrapped)]);
@@ -251,8 +264,7 @@ export async function transaction(
       keyof StorageSchema,
       StorageSchema[keyof StorageSchema]
     ][]) {
-      const storageKey =
-        STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey;
+      const storageKey = getStorageKey(key);
 
       cache.set(storageKey, value);
       emit(storageKey, value);
@@ -266,9 +278,7 @@ export async function transaction(
 }
 
 export async function cleanup(keys: (keyof StorageSchema)[]) {
-  const storageKeys = keys.map(
-    (key) => STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey
-  );
+  const storageKeys = keys.map((key) => getStorageKey(key));
 
   const result = await AsyncStorage.multiGet(storageKeys);
   const removals: string[] = [];
@@ -298,7 +308,7 @@ export function preload<K extends keyof StorageSchema>(
   key: K,
   value: StorageSchema[K]
 ) {
-  const storageKey = STORAGE_KEYS[key.toUpperCase() as keyof typeof STORAGE_KEYS] as StorageKey;
+  const storageKey = getStorageKey(key);
   cache.set(storageKey, value);
 }
 

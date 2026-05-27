@@ -2,6 +2,7 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import type { MoonrakersIntelProfile } from "@/utils/playerProfileMoonrakers";
 import { buildDefinitionsRoute } from "@/utils/appRoutes";
 
@@ -80,7 +81,7 @@ function MetricCard({
         {ctaLabel ? <Text style={styles.metricCta}>{ctaLabel}</Text> : null}
       </View>
       <Text style={[styles.metricValue, { color: toneStyles.valueColor }]}>{value}</Text>
-      <Text style={styles.metricSub}>{sub}</Text>
+      <DefinitionRichText text={sub} style={styles.metricSub} />
     </Wrapper>
   );
 }
@@ -169,7 +170,10 @@ export default function MoonrakersIntelSection({
       <View style={styles.container}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>Moonrakers Intel</Text>
-          <Text style={styles.subtitle}>Playstyle and condition reads</Text>
+          <DefinitionRichText
+            text="Playstyle and condition reads"
+            style={styles.subtitle}
+          />
         </View>
 
         <View style={styles.emptyCard}>
@@ -184,7 +188,10 @@ export default function MoonrakersIntelSection({
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Moonrakers Intel</Text>
-        <Text style={styles.subtitle}>Playstyle and condition reads</Text>
+        <DefinitionRichText
+          text="Playstyle and condition reads"
+          style={styles.subtitle}
+        />
       </View>
 
       <SectionBlock title="Playstyle">
@@ -201,7 +208,7 @@ export default function MoonrakersIntelSection({
           tone="blue"
         />
         <MetricCard
-          label="Objective Pts / Game"
+          label="Objective Prestige / Game"
           value={profile.playstyle.objectivePointsPerGameLabel}
           sub="Bonus objective pace"
           tone="gold"
@@ -357,7 +364,7 @@ export default function MoonrakersIntelSection({
 
       <SectionBlock title="Objective Profile">
         <MetricCard
-          label="Objective Pts / Game"
+          label="Objective Prestige / Game"
           value={profile.objectiveProfile.objectivePointsPerGameLabel}
           sub="Average objective output"
           tone="gold"
@@ -365,7 +372,7 @@ export default function MoonrakersIntelSection({
         <MetricCard
           label="Games With Objectives"
           value={profile.objectiveProfile.gamesWithObjectivesLabel}
-          sub="Games scoring any objective points"
+          sub="Games scoring any objective prestige"
           tone="gold"
         />
         <MetricCard
@@ -377,7 +384,7 @@ export default function MoonrakersIntelSection({
         <MetricCard
           label="Win Rate Without Objectives"
           value={profile.objectiveProfile.winRateWithoutObjectivesLabel}
-          sub="Wins without objective points"
+          sub="Wins without objective prestige"
           tone="blue"
         />
         <MetricCard
@@ -389,7 +396,7 @@ export default function MoonrakersIntelSection({
         <MetricCard
           label="High Objective Games"
           value={profile.objectiveProfile.highObjectiveGamesLabel}
-          sub="Games with 2+ objective points"
+          sub="Games with 2+ objective prestige"
           tone="gold"
         />
       </SectionBlock>

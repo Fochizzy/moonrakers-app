@@ -21,7 +21,7 @@ import SectionCard from "@/components/ui/SectionCard";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
 import { buildSavedAuthProfile } from "@/lib/auth/registerFlow";
-import { resolveDraftResumeRoute } from "@/lib/game-draft/phase";
+import { canResumeDraft } from "@/lib/game-draft/phase";
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { deleteOwnProfile } from "@/lib/cloud/deleteOwnProfile";
@@ -333,10 +333,13 @@ export default function AddPlayersScreen() {
       ),
     [selectedGroupPlayerIds, sortedPlayers],
   );
-  const draftedPlayerIds = useMemo(
-    () => new Set(gameDraft?.selectedPlayerIds ?? []),
-    [gameDraft],
-  );
+  const draftedPlayerIds = useMemo(() => {
+    if (!canResumeDraft(gameDraft)) {
+      return new Set<string>();
+    }
+
+    return new Set(gameDraft.selectedPlayerIds);
+  }, [gameDraft]);
 
   const hasProfileChanges =
     favoriteColor !== currentFavoriteColor ||
@@ -484,8 +487,8 @@ export default function AddPlayersScreen() {
 
     if (draftedPlayerIds.has(signedInUserId)) {
       Alert.alert(
-        "Player used in unfinished draft",
-        "Discard or finish the unfinished draft before deleting this player.",
+        "Player used in active game",
+        "Finish or delete the active game before deleting this player.",
       );
       return;
     }
@@ -570,10 +573,10 @@ export default function AddPlayersScreen() {
       return;
     }
 
-    if (gameDraft?.selectedGroupId === group.id) {
+    if (canResumeDraft(gameDraft) && gameDraft.selectedGroupId === group.id) {
       Alert.alert(
-        "Group used in unfinished draft",
-        "Discard or finish the unfinished draft before deleting this group.",
+        "Group used in active game",
+        "Finish or delete the active game before deleting this group.",
       );
       return;
     }
@@ -618,7 +621,7 @@ export default function AddPlayersScreen() {
         variant="stat"
         actions={
           <ActionButton
-            title="Back to Command"
+            title="Command"
             variant="secondary"
             onPress={() => router.push(APP_ROUTES.home)}
           />
@@ -632,21 +635,6 @@ export default function AddPlayersScreen() {
       </HeroCard>
 
       <SegmentedControl items={TAB_ITEMS} value={tab} onChange={(next) => setTab(next)} />
-
-      {gameDraft ? (
-        <SectionCard
-          style={styles.panel}
-          eyebrow="Unfinished Draft"
-          title="Resume your in-progress setup"
-          subtitle="Roster edits are still available, but the current unfinished draft can be resumed at any time."
-        >
-          <ActionButton
-            title="Resume draft"
-            variant="secondary"
-            onPress={() => router.push(resolveDraftResumeRoute(gameDraft.phase) as any)}
-          />
-        </SectionCard>
-      ) : null}
 
       {tab === "players" ? (
         <ScrollView

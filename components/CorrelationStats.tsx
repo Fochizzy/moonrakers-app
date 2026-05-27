@@ -6,6 +6,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import DefinitionTermText from '@/components/ui/DefinitionTermText';
 import Text from '@/components/ui/Text';
 import InsightsSectionPanel from '@/components/insights/InsightsSectionPanel';
 import { chartColors, withAlpha } from '@/utils/chartTheme';
@@ -25,6 +26,32 @@ type CorrelationStatsProps = {
   serverOnly?: boolean;
   view?: 'all' | 'pairing' | 'macro' | 'synergy';
 };
+
+function normalizeServerCorrelationRows(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item: any) => item && typeof item === 'object')
+    .map((item: any) => {
+      const numericValue = Number(item.value);
+      const fallbackDelta = Number(item.delta);
+
+      return {
+        label: String(item.label ?? item.title ?? 'Correlation').trim() || 'Correlation',
+        value: Number.isFinite(numericValue)
+          ? numericValue
+          : Number.isFinite(fallbackDelta)
+            ? fallbackDelta
+            : 0,
+        strength:
+          typeof item.strength === 'string' && item.strength.trim()
+            ? item.strength.trim()
+            : undefined,
+      };
+    });
+}
 
 function formatCorrelation(value: number) {
   if (!Number.isFinite(value)) return '0.00';
@@ -290,14 +317,13 @@ function CorrelationCard({
       />
 
       <View style={[styles.metricHeader, compact && styles.metricHeaderCompact]}>
-        <Text
+        <DefinitionTermText
+          label={label}
           style={[styles.metricLabel, compact && styles.metricLabelCompact]}
           numberOfLines={1}
           adjustsFontSizeToFit={compact}
           minimumFontScale={0.7}
-        >
-          {label}
-        </Text>
+        />
 
         <View
           style={[
@@ -425,37 +451,22 @@ export default function CorrelationStats({
   const showOverviewChrome = view === 'all';
   const isTwoColumn = width >= 360 && (view === 'pairing' || view === 'macro');
   const serverPersonalCorrelations = useMemo(() => {
-    const personal = Array.isArray(serverData?.personal) ? serverData.personal : [];
-
-    return personal
-      .filter((item: any) => item && typeof item === 'object')
-      .map((item: any) => ({
-        label: String(item.label ?? item.title ?? "Personal").trim() || "Personal",
-        value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
-        strength:
-          typeof item.strength === 'string' && item.strength.trim()
-            ? item.strength.trim()
-            : undefined,
-      }));
+    return normalizeServerCorrelationRows(serverData?.personal).map((item) => ({
+      ...item,
+      label: item.label || 'Personal',
+    }));
   }, [serverData?.personal]);
   const serverPairingCorrelations = useMemo(() => {
-    const pairing = Array.isArray(serverData?.pairing)
-      ? serverData.pairing
-      : Array.isArray(serverData?.items)
-        ? serverData.items
-        : [];
+    return normalizeServerCorrelationRows(serverData?.pairing);
+  }, [serverData?.pairing]);
+  const serverLegacyCorrelationItems = useMemo(() => {
+    const winLoseSplit = normalizeServerCorrelationRows(serverData?.winLoseSplit);
+    if (winLoseSplit.length > 0) {
+      return winLoseSplit;
+    }
 
-    return pairing
-      .filter((item: any) => item && typeof item === 'object')
-      .map((item: any) => ({
-        label: String(item.label ?? item.title ?? "Correlation").trim() || "Correlation",
-        value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
-        strength:
-          typeof item.strength === 'string' && item.strength.trim()
-            ? item.strength.trim()
-            : undefined,
-      }));
-  }, [serverData?.items, serverData?.pairing]);
+    return normalizeServerCorrelationRows(serverData?.items);
+  }, [serverData?.items, serverData?.winLoseSplit]);
   const serverMacroCorrelations = useMemo(() => {
     const macro = Array.isArray(serverData?.macro) ? serverData.macro : [];
 
@@ -484,18 +495,22 @@ export default function CorrelationStats({
       }));
   }, [serverData?.synergyPairs]);
   const correlations = useMemo(() => {
+    if (serverPersonalCorrelations.length > 0 || serverPairingCorrelations.length > 0) {
+      return [...serverPersonalCorrelations, ...serverPairingCorrelations];
+    }
+
     if (
       serverOnly ||
-      serverPersonalCorrelations.length > 0 ||
-      serverPairingCorrelations.length > 0
+      serverLegacyCorrelationItems.length > 0
     ) {
-      return [...serverPersonalCorrelations, ...serverPairingCorrelations];
+      return serverLegacyCorrelationItems;
     }
 
     return buildCorrelationResults(games, relationships);
   }, [
     games,
     relationships,
+    serverLegacyCorrelationItems,
     serverOnly,
     serverPairingCorrelations,
     serverPersonalCorrelations,
@@ -570,18 +585,22 @@ export default function CorrelationStats({
           title="Personal Correlations"
           meta={`${correlations.length} metrics`}
         >
-          <Text style={styles.sectionDescription}>
-            Winner logic is based on Prestige. Secondary score data is not used
-            to determine final outcome here.
-          </Text>
+          {showOverviewChrome ? (
+            <Text style={styles.sectionDescription}>
+              Winner logic is based on Prestige. Secondary score data is not used
+              to determine final outcome here.
+            </Text>
+          ) : null}
 
           {correlations.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No personal correlations yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Supabase has not returned any personal correlation signals for this
-                view yet.
-              </Text>
+              <Text style={styles.emptyTitle}>No personal signals yet</Text>
+              {showOverviewChrome ? (
+                <Text style={styles.emptySubtitle}>
+                  Supabase has not returned any personal correlation signals for this
+                  view yet.
+                </Text>
+              ) : null}
             </View>
           ) : (
             <View style={isTwoColumn ? styles.metricListTwoColumn : styles.metricList}>
@@ -611,11 +630,13 @@ export default function CorrelationStats({
         >
           {globalMetaCorrelations.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No macro correlations yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Supabase has not returned any macro correlation signals for this
-                view yet.
-              </Text>
+              <Text style={styles.emptyTitle}>No macro signals yet</Text>
+              {showOverviewChrome ? (
+                <Text style={styles.emptySubtitle}>
+                  Supabase has not returned any macro correlation signals for this
+                  view yet.
+                </Text>
+              ) : null}
             </View>
           ) : (
             <View style={isTwoColumn ? styles.metricListTwoColumn : styles.metricList}>
@@ -644,11 +665,13 @@ export default function CorrelationStats({
         >
           {synergyPairs.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No alliance telemetry yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Play more games to surface repeat-winning pair chemistry and support
-                patterns.
-              </Text>
+              <Text style={styles.emptyTitle}>No synergy pairs yet</Text>
+              {showOverviewChrome ? (
+                <Text style={styles.emptySubtitle}>
+                  Play more games to surface repeat-winning pair chemistry and support
+                  patterns.
+                </Text>
+              ) : null}
             </View>
           ) : (
             <View style={styles.synergyList}>

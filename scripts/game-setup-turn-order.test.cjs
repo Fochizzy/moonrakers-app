@@ -87,7 +87,7 @@ assert.deepEqual(payload.map((player) => player.assignedCardArtIndex), [4, 7, nu
 
 assert.equal(payload[2]?.initials, "AD");
 
-assert.equal(buildTurnOrderSummary(reorderedPlayers), "1. Greg, 2. James, 3. Ada");
+assert.equal(buildTurnOrderSummary(reorderedPlayers), "1. Greg  /  2. James  /  3. Ada");
 
 const promoted = promoteTurnOrderPlayer(reorderedPlayers, "ada");
 
@@ -96,7 +96,7 @@ assert.deepEqual(
   ["ada", "greg", "james"]
 );
 
-assert.equal(buildTurnOrderSummary(promoted), "1. Ada, 2. Greg, 3. James");
+assert.equal(buildTurnOrderSummary(promoted), "1. Ada  /  2. Greg  /  3. James");
 
 assert.deepEqual(promoteTurnOrderPlayer(reorderedPlayers, "missing"), reorderedPlayers);
 

@@ -1,14 +1,19 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type StyleProp,
+  type ViewStyle,
   ScrollView,
   StyleSheet,
+  Platform,
   Pressable,
   TextInput,
   View,
   Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import AnalyticsSourceBadge from "@/components/analytics/AnalyticsSourceBadge";
 import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
@@ -17,26 +22,40 @@ import PlayerProfileMetricTabs from "@/components/player-profile/PlayerProfileMe
 import PlayerProfileRecentGames from "@/components/player-profile/PlayerProfileRecentGames";
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
+import { buildLocalPlayerProfileFallback } from "@/lib/cloud/analytics/buildLocalPlayerProfileFallback";
 import { getPlayerProfileScreen } from "@/lib/cloud/analytics/getPlayerProfileScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { useAuthSession, useGames, usePlayers } from "@/store/useStore";
+import { useAuthProfile, useAuthSession, useGames, usePlayers } from "@/store/useStore";
 import {
   APP_ROUTES,
   buildChartsRoute,
   buildCompareRoute,
   buildPlayerProfileRoute,
 } from "@/utils/appRoutes";
-import { buildCommonOpponentOptions } from "@/utils/charts";
+import {
+  buildCommonOpponentOptions,
+  buildRecentGameOpponentOptions,
+  prioritizeSignedInPlayerOptions,
+  resolveSignedInPlayerOptionId,
+} from "@/utils/charts";
 import { COLORS } from "@/utils/colors";
+import {
+  buildContextRows,
+  buildGameRowsByPlayer,
+  buildInsight as buildFallbackInsight,
+  buildSectionCards,
+  buildSummary as buildFallbackSummary,
+} from "@/utils/eloScreenAnalytics";
+import { getPlayerCardSourceByArtIndex } from "@/utils/playerCardAssets";
 import { resolveAssignedCardArtIndexForProfile } from "@/utils/profileAppearance";
 import { isValidPlayerCardArtIndex } from "@/utils/playerCards";
+import { canonicalizeSelectablePlayers } from "@/utils/registeredProfilePlayer";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 import { uiPolish } from "@/utils/uiPolish";
-
-const SHEET = require("@/assets/images/player-card-sheet.png");
 
 type StorePlayer = {
   id: string;
@@ -53,7 +72,13 @@ type EloMetricTab =
   | "Projection";
 
 type PayloadRecord = Record<string, unknown>;
-type ProfileMetricTone = "default" | "accent" | "blue" | "green" | "red";
+type ProfileMetricTone =
+  | "default"
+  | "accent"
+  | "blue"
+  | "green"
+  | "red"
+  | "danger";
 
 const PROFILE_TABS: EloMetricTab[] = [
   "Leaderboard",
@@ -62,13 +87,6 @@ const PROFILE_TABS: EloMetricTab[] = [
   "Context",
   "Projection",
 ];
-
-function cropPosition(index: number) {
-  return {
-    row: Math.floor(index / 5),
-    col: index % 5,
-  };
-}
 
 function getInitials(name?: string) {
   if (!name?.trim()) return "?";
@@ -104,6 +122,10 @@ function normalizeMetricTone(value: unknown): ProfileMetricTone {
     return value;
   }
 
+  if (value === "danger") {
+    return "red";
+  }
+
   return "default";
 }
 
@@ -116,20 +138,14 @@ function CropCardArt({
   width: number;
   height: number;
 }) {
-  const { row, col } = cropPosition(artIndex);
+  const source = getPlayerCardSourceByArtIndex(artIndex);
 
   return (
     <View style={[styles.cropWindow, { width, height }]}>
       <Image
-        source={SHEET}
-        resizeMode="stretch"
-        style={{
-          position: "absolute",
-          width: width * 5,
-          height: height * 6,
-          left: -(col * width),
-          top: -(row * height),
-        }}
+        source={source}
+        resizeMode="cover"
+        style={styles.cropImage}
       />
     </View>
   );
@@ -140,95 +156,350 @@ function getPlayerNameById(players: StorePlayer[], playerId?: string | null): st
   return players.find((player) => String(player.id) === String(playerId))?.name || null;
 }
 
+function normalizeStorePlayerOption(option: PayloadRecord): StorePlayer | null {
+  const id = String(option.id ?? option.playerId ?? "").trim();
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    name:
+      toStringValue(option.name, "") ||
+      toStringValue(option.label, "") ||
+      toStringValue(option.displayName, "") ||
+      toStringValue(option.playerName, "") ||
+      "Player",
+    color: toStringValue(option.color, "") || undefined,
+    assignedCardArtIndex:
+      typeof option.assignedCardArtIndex === "number"
+        ? option.assignedCardArtIndex
+        : null,
+  };
+}
+
+const ALL_PLAYERS_CHIP_ID = "__all_players__";
+
+type ProfileTabRailShellProps = {
+  activeTab: EloMetricTab;
+  onTabChange: (tab: EloMetricTab) => void;
+  opponentLabel: string;
+  signalsLabel: string;
+  onLayout?: (event: LayoutChangeEvent) => void;
+  style?: StyleProp<ViewStyle>;
+};
+
+function ProfileTabRailShell({
+  activeTab,
+  onTabChange,
+  opponentLabel,
+  signalsLabel,
+  onLayout,
+  style,
+}: ProfileTabRailShellProps) {
+  return (
+    <View style={[styles.stickyProfileTabShell, style]} onLayout={onLayout}>
+      <AnalyticsControlRail
+        title="Profile Tabs"
+        subtitle="Custom player breakdown"
+        tabs={PROFILE_TABS.map((tab) => ({ key: tab, label: tab }))}
+        activeTabKey={activeTab}
+        onTabChange={(key) => onTabChange(key as EloMetricTab)}
+        style={styles.profileTabsRail}
+      />
+
+      <View style={styles.profileSummaryCards}>
+        <View style={styles.profileSummaryCard}>
+          <Text style={styles.profileSummaryLabel}>View</Text>
+          <Text style={styles.profileSummaryValue}>{activeTab}</Text>
+        </View>
+        <View style={styles.profileSummaryCard}>
+          <Text style={styles.profileSummaryLabel}>Opponent</Text>
+          <Text style={styles.profileSummaryValue}>{opponentLabel}</Text>
+        </View>
+        <View style={styles.profileSummaryCard}>
+          <Text style={styles.profileSummaryLabel}>Signals</Text>
+          <Text style={styles.profileSummaryValue}>{signalsLabel}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function PlayerProfileDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ playerId?: string | string[] }>();
   const scrollViewRef = React.useRef<ScrollView | null>(null);
 
+  const authProfile = useAuthProfile();
   const authSession = useAuthSession();
   const games = useGames() ?? [];
   const players = usePlayers() ?? [];
 
   const profileId = String(authSession?.user?.id ?? "").trim();
   const playerId = Array.isArray(params.playerId) ? params.playerId[0] : params.playerId;
+  const canonicalPlayerDirectory = useMemo(
+    () => canonicalizeSelectablePlayers(players, []),
+    [players],
+  );
+  const canonicalStorePlayers = canonicalPlayerDirectory.players as StorePlayer[];
+  const resolvedPlayerId = useMemo(() => {
+    const normalizedRoutePlayerId = String(playerId ?? "").trim();
+    if (!normalizedRoutePlayerId) {
+      return "";
+    }
+
+    return String(
+      canonicalPlayerDirectory.aliases[normalizedRoutePlayerId] ?? normalizedRoutePlayerId,
+    ).trim();
+  }, [canonicalPlayerDirectory.aliases, playerId]);
   const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<EloMetricTab>("Leaderboard");
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const [opponentSearchQuery, setOpponentSearchQuery] = useState("");
   const [recentGamesAnchorY, setRecentGamesAnchorY] = useState(0);
   const [stickyShellHeight, setStickyShellHeight] = useState(0);
+  const [stickyShellAnchorY, setStickyShellAnchorY] = useState(0);
+  const [androidStickyProfileTabsVisible, setAndroidStickyProfileTabsVisible] = useState(false);
   const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
   const deferredOpponentSearchQuery = useDeferredValue(opponentSearchQuery);
+  const profileStickyHeaderIndices = Platform.OS === "android" ? undefined : [3];
+  const showAndroidStickyProfileTabs = Platform.OS === "android" && androidStickyProfileTabsVisible;
   const profileQuery = useLiveAnalyticsQuery({
-    enabled: Boolean(profileId && playerId),
-    queryKey: `player-profile:${profileId || "anon"}:${playerId || "none"}:${selectedOpponentId || "all"}`,
+    enabled: Boolean(profileId && resolvedPlayerId),
+    queryKey: `player-profile:${profileId || "anon"}:${resolvedPlayerId || "none"}:${selectedOpponentId || "all"}`,
     load: () =>
       getPlayerProfileScreen({
         profileId,
-        focusPlayerId: playerId || null,
+        focusPlayerId: resolvedPlayerId || null,
         opponentId: selectedOpponentId,
       }),
   });
   const payload = profileQuery.payload;
+  const payloadRecord =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : null;
   const isStale = profileQuery.isStale;
   const staleMessage = profileQuery.staleMessage;
   const sourceKind = isStale ? "server-stale" : "server";
   const sourceLabel = isStale ? "Stale server data" : "Server data";
   const hero = toRecord(payload?.hero);
+  const authProfilePlayerOption = useMemo<StorePlayer | null>(() => {
+    const id = String(authProfile?.id ?? authSession?.user?.id ?? "").trim();
+    if (!id) {
+      return null;
+    }
+
+    return {
+      id,
+      name:
+        String(authProfile?.player_name ?? "").trim() ||
+        String(authProfile?.display_name ?? "").trim() ||
+        "Player",
+      color: String(authProfile?.favorite_color ?? "").trim() || undefined,
+      assignedCardArtIndex:
+        typeof authProfile?.assigned_card_art_index === "number"
+          ? authProfile.assigned_card_art_index
+          : null,
+    };
+  }, [
+    authProfile?.assigned_card_art_index,
+    authProfile?.display_name,
+    authProfile?.favorite_color,
+    authProfile?.id,
+    authProfile?.player_name,
+    authSession?.user?.id,
+  ]);
+  const selectedHeroPlayerOption = useMemo<StorePlayer | null>(() => {
+    const id = String(hero.id ?? resolvedPlayerId ?? "").trim();
+    if (!id) {
+      return null;
+    }
+
+    return {
+      id,
+      name: toStringValue(hero.name, "Player"),
+      color: toStringValue(hero.color, "") || undefined,
+      assignedCardArtIndex:
+        typeof hero.assignedCardArtIndex === "number"
+          ? hero.assignedCardArtIndex
+          : null,
+    };
+  }, [hero.assignedCardArtIndex, hero.color, hero.id, hero.name, resolvedPlayerId]);
 
   const payloadPlayerOptions = useMemo<StorePlayer[]>(() => {
     const options = toArray(payload?.playerOptions);
 
     return options
-      .map((option) => ({
-        id: String(option.id ?? option.playerId ?? "").trim(),
-        name:
-          toStringValue(option.name, "") ||
-          toStringValue(option.label, "") ||
-          toStringValue(option.displayName, "") ||
-          toStringValue(option.playerName, "") ||
-          "Player",
-        color: toStringValue(option.color, "") || undefined,
-        assignedCardArtIndex:
-          typeof option.assignedCardArtIndex === "number"
-            ? option.assignedCardArtIndex
-            : null,
-      }))
-      .filter((option) => option.id.length > 0);
+      .map(normalizeStorePlayerOption)
+      .filter((option): option is StorePlayer => Boolean(option));
   }, [payload?.playerOptions]);
 
+  const signedInTopPlayerOptions = useMemo<StorePlayer[]>(() => {
+    const options = toArray(payloadRecord?.signedInTopPlayerOptions);
+
+    return options
+      .map(normalizeStorePlayerOption)
+      .filter((option): option is StorePlayer => Boolean(option));
+  }, [payloadRecord?.signedInTopPlayerOptions]);
+  const availablePlayerOptions = useMemo<StorePlayer[]>(() => {
+    const mergedPlayers = new Map<string, StorePlayer>();
+
+    for (const sourcePlayer of [
+      ...canonicalStorePlayers,
+      ...payloadPlayerOptions,
+      ...signedInTopPlayerOptions,
+      ...(selectedHeroPlayerOption ? [selectedHeroPlayerOption] : []),
+      ...(authProfilePlayerOption ? [authProfilePlayerOption] : []),
+    ]) {
+      const normalizedPlayerId = String(sourcePlayer?.id ?? "").trim();
+      if (!normalizedPlayerId) {
+        continue;
+      }
+
+      const currentPlayer = mergedPlayers.get(normalizedPlayerId);
+      if (!currentPlayer) {
+        mergedPlayers.set(normalizedPlayerId, {
+          ...sourcePlayer,
+          id: normalizedPlayerId,
+        });
+        continue;
+      }
+
+      mergedPlayers.set(normalizedPlayerId, {
+        ...currentPlayer,
+        name: currentPlayer.name || sourcePlayer.name,
+        color: currentPlayer.color ?? sourcePlayer.color,
+        assignedCardArtIndex:
+          currentPlayer.assignedCardArtIndex ?? sourcePlayer.assignedCardArtIndex ?? null,
+      });
+    }
+
+    const mergedOptions = [...mergedPlayers.values()];
+    const signedInOptionId = resolveSignedInPlayerOptionId({
+      options: mergedOptions,
+      authProfileId: authProfile?.id,
+      authSessionUserId: authSession?.user?.id,
+      authProfilePlayer: authProfilePlayerOption,
+    });
+
+    if (!signedInOptionId || !authProfilePlayerOption) {
+      return mergedOptions;
+    }
+
+    return mergedOptions.map((player) =>
+      String(player.id) === signedInOptionId
+        ? {
+            ...player,
+            name: authProfilePlayerOption.name || player.name,
+            color: authProfilePlayerOption.color ?? player.color,
+            assignedCardArtIndex:
+              authProfilePlayerOption.assignedCardArtIndex ??
+              player.assignedCardArtIndex ??
+              null,
+          }
+        : player,
+    );
+  }, [
+    authProfile?.id,
+    authProfilePlayerOption,
+    authSession?.user?.id,
+    canonicalStorePlayers,
+    payloadPlayerOptions,
+    selectedHeroPlayerOption,
+    signedInTopPlayerOptions,
+  ]);
+
   const sortedPlayers = useMemo<StorePlayer[]>(() => {
-    const source = payloadPlayerOptions.length ? payloadPlayerOptions : players;
+    const source = availablePlayerOptions.length ? availablePlayerOptions : canonicalStorePlayers;
 
     return [...source].sort((a: StorePlayer, b: StorePlayer) =>
       String(a?.name || "").localeCompare(String(b?.name || ""))
     );
-  }, [payloadPlayerOptions, players]);
+  }, [availablePlayerOptions, canonicalStorePlayers]);
+  const recentGamePriorityPlayerIds = useMemo(() => {
+    const signedInPlayerId = String(authProfilePlayerOption?.id ?? "").trim();
+    const selectedHeroId = String(selectedHeroPlayerOption?.id ?? "").trim();
+
+    if (!signedInPlayerId || signedInPlayerId !== selectedHeroId) {
+      return [];
+    }
+
+    return buildRecentGameOpponentOptions({
+      playerId: signedInPlayerId,
+      players: sortedPlayers as any,
+      recentGames: toArray(payloadRecord?.recentGames) as Array<Record<string, any>>,
+      limit: 4,
+    }).map((player) => String(player.id));
+  }, [
+    authProfilePlayerOption?.id,
+    payloadRecord?.recentGames,
+    selectedHeroPlayerOption?.id,
+    sortedPlayers,
+  ]);
+
+  const rankedPlayerOptions = useMemo<StorePlayer[]>(
+    () =>
+      prioritizeSignedInPlayerOptions({
+        players: sortedPlayers as any,
+        games: games as any,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+        authProfilePlayer: authProfilePlayerOption,
+        commonPlayerLimit: 4,
+        explicitPriorityPlayerIds:
+          signedInTopPlayerOptions.length > 0
+            ? signedInTopPlayerOptions.map((player) => player.id)
+            : recentGamePriorityPlayerIds,
+      }),
+    [
+      authProfile?.id,
+      authProfilePlayerOption,
+      authSession?.user?.id,
+      games,
+      recentGamePriorityPlayerIds,
+      signedInTopPlayerOptions,
+      sortedPlayers,
+    ],
+  );
 
   useEffect(() => {
     setSelectedOpponentId(null);
     setPlayerSearchQuery("");
     setOpponentSearchQuery("");
-  }, [playerId]);
+  }, [resolvedPlayerId]);
+
+  useEffect(() => {
+    if (!playerId || !resolvedPlayerId || String(playerId) === String(resolvedPlayerId)) {
+      return;
+    }
+
+    router.replace(buildPlayerProfileRoute(String(resolvedPlayerId)));
+  }, [playerId, resolvedPlayerId, router]);
 
   const openCommandPage = () => {
     router.push(APP_ROUTES.home);
   };
 
   const handleSelectPlayer = (nextPlayerId: string) => {
-    if (String(nextPlayerId) === String(playerId)) return;
+    if (nextPlayerId === ALL_PLAYERS_CHIP_ID) {
+      router.push(APP_ROUTES.playerDirectory);
+      return;
+    }
+    if (String(nextPlayerId) === String(resolvedPlayerId)) return;
     router.replace(buildPlayerProfileRoute(String(nextPlayerId)));
   };
 
   const openCompareLaunchpad = () => {
-    if (!playerId) return;
-    router.push(buildCompareRoute({ mode: "players", ids: [String(playerId)] }));
+    if (!resolvedPlayerId) return;
+    router.push(buildCompareRoute({ mode: "players", ids: [String(resolvedPlayerId)] }));
   };
 
   const openChartsLaunchpad = () => {
-    if (!playerId) return;
+    if (!resolvedPlayerId) return;
     router.push(buildChartsRoute({
-      playerId: String(playerId),
+      playerId: String(resolvedPlayerId),
       setup: true,
     }));
   };
@@ -240,16 +511,35 @@ export default function PlayerProfileDetailScreen() {
     });
   };
 
+  const handleProfileTabShellLayout = (event: LayoutChangeEvent) => {
+    const { height, y } = event.nativeEvent.layout;
+    setStickyShellHeight(height);
+    setStickyShellAnchorY(y);
+  };
+
+  const handleProfileScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const shouldShowStickyTabs =
+      stickyShellAnchorY > 0 && offsetY >= Math.max(stickyShellAnchorY - 1, 0);
+    setAndroidStickyProfileTabsVisible((currentVisible) =>
+      currentVisible === shouldShowStickyTabs ? currentVisible : shouldShowStickyTabs,
+    );
+  };
+
   const selectedPlayer = useMemo(() => {
     const matchedStorePlayer =
-      sortedPlayers.find((player) => String(player.id) === String(playerId)) || null;
+      sortedPlayers.find((player) => String(player.id) === String(resolvedPlayerId)) || null;
 
     if (!payload) {
       return matchedStorePlayer;
     }
 
-    return {
-      id: String(hero.id ?? playerId ?? matchedStorePlayer?.id ?? ""),
+    const nextPlayer = {
+      id: String(hero.id ?? resolvedPlayerId ?? matchedStorePlayer?.id ?? ""),
       name: toStringValue(hero.name, matchedStorePlayer?.name || "Player"),
       color: toStringValue(hero.color, matchedStorePlayer?.color || "") || undefined,
       assignedCardArtIndex:
@@ -257,16 +547,81 @@ export default function PlayerProfileDetailScreen() {
           ? hero.assignedCardArtIndex
           : matchedStorePlayer?.assignedCardArtIndex ?? null,
     };
-  }, [hero.assignedCardArtIndex, hero.color, hero.id, hero.name, payload, playerId, sortedPlayers]);
+    const signedInSelectedPlayerId = resolveSignedInPlayerOptionId({
+      options: [nextPlayer],
+      authProfileId: authProfile?.id,
+      authSessionUserId: authSession?.user?.id,
+      authProfilePlayer: authProfilePlayerOption,
+    });
+
+    if (
+      signedInSelectedPlayerId &&
+      String(nextPlayer.id) === signedInSelectedPlayerId &&
+      authProfilePlayerOption
+    ) {
+      return {
+        ...nextPlayer,
+        name: authProfilePlayerOption.name || nextPlayer.name,
+        color: authProfilePlayerOption.color ?? nextPlayer.color,
+        assignedCardArtIndex:
+          authProfilePlayerOption.assignedCardArtIndex ??
+          nextPlayer.assignedCardArtIndex ??
+          null,
+      };
+    }
+
+    return nextPlayer;
+  }, [
+    authProfile?.id,
+    authProfilePlayerOption,
+    authSession?.user?.id,
+    hero.assignedCardArtIndex,
+    hero.color,
+    hero.id,
+    hero.name,
+    payload,
+    resolvedPlayerId,
+    sortedPlayers,
+  ]);
 
   const filteredPlayerOptions = useMemo(() => {
     const normalizedQuery = deferredPlayerSearchQuery.trim().toLowerCase();
-    if (!normalizedQuery) return sortedPlayers;
+    if (!normalizedQuery) return rankedPlayerOptions;
 
-    return sortedPlayers.filter((player) =>
+    return rankedPlayerOptions.filter((player) =>
       String(player?.name || "").toLowerCase().includes(normalizedQuery)
     );
-  }, [sortedPlayers, deferredPlayerSearchQuery]);
+  }, [rankedPlayerOptions, deferredPlayerSearchQuery]);
+  const signedInPlayerChipId = useMemo(
+    () =>
+      resolveSignedInPlayerOptionId({
+        options: filteredPlayerOptions,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+        authProfilePlayer: authProfilePlayerOption,
+      }),
+    [
+      authProfile?.id,
+      authProfilePlayerOption,
+      authSession?.user?.id,
+      filteredPlayerOptions,
+    ],
+  );
+  const profileSearchItems = useMemo(
+    () => [
+      ...filteredPlayerOptions.map((player) => ({
+        id: String(player.id),
+        label: player.name || "Player",
+        badge: String(player.id) === String(signedInPlayerChipId ?? "").trim() ? "You" : null,
+      })),
+      {
+        id: ALL_PLAYERS_CHIP_ID,
+        label: "All players",
+        kind: "action" as const,
+      },
+    ],
+    [filteredPlayerOptions, signedInPlayerChipId],
+  );
 
   const selectedPlayerName = selectedPlayer?.name || "Player";
   const playerAccent = getPlayerAccentColor(selectedPlayer?.color);
@@ -297,8 +652,8 @@ export default function PlayerProfileDetailScreen() {
       }));
     }
 
-    return sortedPlayers.filter((p) => String(p.id) !== String(playerId));
-  }, [payload?.opponentOptions, playerId, sortedPlayers]);
+    return sortedPlayers.filter((p) => String(p.id) !== String(resolvedPlayerId));
+  }, [payload?.opponentOptions, resolvedPlayerId, sortedPlayers]);
 
   const topOpponentOptions = useMemo(
     () => {
@@ -316,13 +671,13 @@ export default function PlayerProfileDetailScreen() {
       }
 
       return buildCommonOpponentOptions({
-        playerId,
+        playerId: resolvedPlayerId,
         players: sortedPlayers as any,
         games: games as any,
         limit: 4,
       });
     },
-    [games, payload?.topOpponentOptions, playerId, sortedPlayers]
+    [games, payload?.topOpponentOptions, resolvedPlayerId, sortedPlayers]
   );
 
   const filteredOpponentOptions = useMemo(() => {
@@ -335,6 +690,12 @@ export default function PlayerProfileDetailScreen() {
   }, [opponentOptions, deferredOpponentSearchQuery]);
 
   const selectedOpponentName = getPlayerNameById(sortedPlayers, selectedOpponentId);
+  const selectedOpponentLabel =
+    selectedOpponentId
+      ? opponentOptions.find((player) => String(player.id) === String(selectedOpponentId))?.name ??
+        selectedOpponentName ??
+        "Focused"
+      : "All";
   const currentElo =
     typeof hero.currentElo === "number" ? hero.currentElo : 1000;
   const peakElo =
@@ -349,24 +710,52 @@ export default function PlayerProfileDetailScreen() {
       : totalGames > 0
         ? totalWins / totalGames
         : 0;
-
-  const recentGamesFallback = useMemo(() => {
-    const filteredGames = (games || []).filter((game: any) => {
-      const gamePlayers = Array.isArray(game?.players) ? game.players : [];
-      const includesPlayer = gamePlayers.some((p: any) => String(p?.id) === String(playerId));
-      if (!includesPlayer) return false;
-
-      if (!selectedOpponentId) return true;
-      return gamePlayers.some((p: any) => String(p?.id) === String(selectedOpponentId));
-    });
-
-    return filteredGames.reverse();
-  }, [games, playerId, selectedOpponentId]);
-  const recentGamesPayload = useMemo(
-    () => toArray(payload?.recentGames),
-    [payload?.recentGames],
+  const localProfilePlayers = useMemo(
+    () =>
+      sortedPlayers.map((player) => ({
+        id: String(player.id),
+        name: player.name || "Player",
+        color: player.color,
+        assignedCardArtIndex: player.assignedCardArtIndex ?? null,
+      })),
+    [sortedPlayers],
   );
-  const recentGames = recentGamesPayload.length ? recentGamesPayload : recentGamesFallback;
+
+  const localProfileFallback = useMemo(() => {
+    const fallbackMoonrakersIntel =
+      payload?.moonrakersIntel && typeof payload.moonrakersIntel === "object"
+        ? (payload.moonrakersIntel as any)
+        : {
+            hasData: false as const,
+            emptyTitle: "Not enough Moonrakers data yet",
+            emptyBody:
+              "Finish or import a few more games to unlock player-specific playstyle reads.",
+          };
+
+    if (!resolvedPlayerId) {
+      return {
+        recentGames: toArray(payload?.recentGames),
+        moonrakersIntel: fallbackMoonrakersIntel,
+      };
+    }
+
+    return buildLocalPlayerProfileFallback({
+      playerId: String(resolvedPlayerId),
+      opponentId: selectedOpponentId,
+      players: localProfilePlayers,
+      games,
+      recentGamesPayload: toArray(payload?.recentGames),
+      moonrakersIntelPayload: fallbackMoonrakersIntel,
+    });
+  }, [
+    games,
+    localProfilePlayers,
+    payload?.moonrakersIntel,
+    payload?.recentGames,
+    resolvedPlayerId,
+    selectedOpponentId,
+  ]);
+  const recentGames = localProfileFallback.recentGames;
 
   const topCards = useMemo(
     () =>
@@ -381,6 +770,40 @@ export default function PlayerProfileDetailScreen() {
   );
   const featuredCard = topCards[0] ?? null;
   const secondaryCards = topCards.slice(1, 3);
+  const stickySignalsLabel = featuredCard ? "Ready" : "Pending";
+
+  const rowsByPlayer = useMemo(
+    () => buildGameRowsByPlayer(games as any, sortedPlayers as any),
+    [games, sortedPlayers],
+  );
+  const fallbackRows = useMemo(
+    () => rowsByPlayer[String(resolvedPlayerId ?? "")] ?? [],
+    [resolvedPlayerId, rowsByPlayer],
+  );
+  const fallbackContextRows = useMemo(
+    () => buildContextRows(fallbackRows, selectedOpponentId),
+    [fallbackRows, selectedOpponentId],
+  );
+  const fallbackSummary = useMemo(() => {
+    const activePlayerId = String(resolvedPlayerId ?? "");
+    const baseSummary = buildFallbackSummary(
+      activePlayerId,
+      sortedPlayers as any,
+      rowsByPlayer,
+      { [activePlayerId]: currentElo },
+    );
+    const resolvedGames = totalGames > 0 ? totalGames : baseSummary.gamesPlayed;
+    const resolvedWins = totalGames > 0 ? totalWins : baseSummary.wins;
+
+    return {
+      ...baseSummary,
+      currentElo,
+      peakElo,
+      gamesPlayed: resolvedGames,
+      wins: resolvedWins,
+      losses: Math.max(resolvedGames - resolvedWins, 0),
+    };
+  }, [currentElo, peakElo, resolvedPlayerId, rowsByPlayer, sortedPlayers, totalGames, totalWins]);
 
   const tabs = toRecord(payload?.tabs);
   const activeSection = toRecord(tabs[activeTab]);
@@ -395,24 +818,38 @@ export default function PlayerProfileDetailScreen() {
       })),
     [activeSection.cards],
   );
-  const sectionTitle = toStringValue(activeSection.title, `${activeTab} Metrics`);
+  const fallbackSection = useMemo(
+    () =>
+      buildSectionCards(
+        activeTab,
+        fallbackSummary,
+        fallbackRows,
+        fallbackContextRows,
+        selectedOpponentName,
+      ),
+    [activeTab, fallbackContextRows, fallbackRows, fallbackSummary, selectedOpponentName],
+  );
+  const resolvedSectionCards = sectionCards.length > 0 ? sectionCards : fallbackSection.cards;
+  const sectionTitle = toStringValue(activeSection.title, fallbackSection.title);
   const sectionSubtitle =
     selectedOpponentName && activeTab === "Context"
       ? `Filtered to ${selectedOpponentName}`
       : selectedPlayerName;
   const tabInsights = toRecord(payload?.tabInsights);
   const activeInsight = toRecord(tabInsights[activeTab] ?? payload?.activeInsight);
+  const fallbackInsight = useMemo(
+    () =>
+      buildFallbackInsight(
+        activeTab,
+        fallbackSummary,
+        fallbackContextRows,
+        selectedOpponentName,
+      ),
+    [activeTab, fallbackContextRows, fallbackSummary, selectedOpponentName],
+  );
   const profileInsight = toRecord(payload?.profileInsight);
-  const hasData = totalGames > 0 || topCards.length > 0 || sectionCards.length > 0;
-  const moonrakersIntel =
-    payload?.moonrakersIntel && typeof payload.moonrakersIntel === "object"
-      ? (payload.moonrakersIntel as any)
-      : {
-          hasData: false as const,
-          emptyTitle: "Not enough Moonrakers data yet",
-          emptyBody:
-            "Finish or import a few more games to unlock player-specific playstyle reads.",
-        };
+  const hasData = totalGames > 0 || topCards.length > 0 || resolvedSectionCards.length > 0;
+  const moonrakersIntel = localProfileFallback.moonrakersIntel;
 
   if (!selectedPlayer) {
     return (
@@ -432,7 +869,7 @@ export default function PlayerProfileDetailScreen() {
             style={styles.backButton}
             onPress={openCommandPage}
           >
-            <Text style={styles.backButtonText}>Back to Command</Text>
+            <Text style={styles.backButtonText}>Command</Text>
           </Pressable>
         </View>
       </PageShell>
@@ -451,7 +888,9 @@ export default function PlayerProfileDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[4]}
+        onScroll={handleProfileScroll}
+        scrollEventThrottle={16}
+        stickyHeaderIndices={profileStickyHeaderIndices}
       >
         <View style={styles.headerCard}>
           <View style={styles.headerTextWrap}>
@@ -496,7 +935,7 @@ export default function PlayerProfileDetailScreen() {
             style={styles.headerBadge}
             onPress={openCommandPage}
           >
-            <Text style={styles.headerBadgeText}>Back to Command</Text>
+            <Text style={styles.headerBadgeText}>Command</Text>
           </Pressable>
         </View>
 
@@ -507,11 +946,8 @@ export default function PlayerProfileDetailScreen() {
             query: playerSearchQuery,
             onQueryChange: setPlayerSearchQuery,
             placeholder: "Search User",
-            items: filteredPlayerOptions.map((player) => ({
-              id: String(player.id),
-              label: player.name || "Player",
-            })),
-            selectedIds: playerId ? [String(playerId)] : [],
+            items: profileSearchItems,
+            selectedIds: resolvedPlayerId ? [String(resolvedPlayerId)] : [],
             onSelect: handleSelectPlayer,
             helperText:
               "Pick another player to reuse the same analytics layout with a different focus.",
@@ -530,7 +966,12 @@ export default function PlayerProfileDetailScreen() {
                     {getInitials(selectedPlayer.name)}
                   </Text>
                 </View>
-                <Text style={styles.metricLabel} numberOfLines={1}>Current ELO</Text>
+                <DefinitionTermText
+                  label="Current ELO"
+                  metric="elo_current"
+                  numberOfLines={1}
+                  style={styles.metricLabel}
+                />
               </View>
               <DefinitionsJumpLink label="Definition" metric="elo_current" />
             </View>
@@ -550,7 +991,12 @@ export default function PlayerProfileDetailScreen() {
                     {getInitials(selectedPlayer.name)}
                   </Text>
                 </View>
-                <Text style={styles.metricLabel} numberOfLines={1}>Peak</Text>
+                <DefinitionTermText
+                  label="Peak"
+                  metric="elo_peak"
+                  numberOfLines={1}
+                  style={styles.metricLabel}
+                />
               </View>
               <DefinitionsJumpLink label="Definition" metric="elo_peak" />
             </View>
@@ -570,7 +1016,12 @@ export default function PlayerProfileDetailScreen() {
                     {getInitials(selectedPlayer.name)}
                   </Text>
                 </View>
-                <Text style={styles.metricLabel} numberOfLines={1}>Win Rate</Text>
+                <DefinitionTermText
+                  label="Win Rate"
+                  category="elo"
+                  numberOfLines={1}
+                  style={styles.metricLabel}
+                />
               </View>
               <DefinitionsJumpLink label="Definition" category="elo" />
             </View>
@@ -583,68 +1034,13 @@ export default function PlayerProfileDetailScreen() {
           </View>
         </View>
 
-        <View style={styles.sectionCompact}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
-            <Text style={styles.sectionSub}>Jump into the next player workflow</Text>
-          </View>
-
-          <View style={styles.quickActionsGrid}>
-            <Pressable style={styles.quickActionCard} onPress={openCompareLaunchpad}>
-              <Text style={styles.quickActionTitle}>Compare with...</Text>
-              <Text style={styles.quickActionLabel}>
-                Lock {selectedPlayer.name || "this player"} and pick the rival on the compare screen.
-              </Text>
-            </Pressable>
-
-            <Pressable style={styles.quickActionCard} onPress={openChartsLaunchpad}>
-              <Text style={styles.quickActionTitle}>Open charts</Text>
-              <Text style={styles.quickActionLabel}>
-                Carry this player into chart setup and choose the view there.
-              </Text>
-            </Pressable>
-
-            <Pressable style={styles.quickActionCard} onPress={jumpToRecentGames}>
-              <Text style={styles.quickActionTitle}>Recent games</Text>
-              <Text style={styles.quickActionLabel}>
-                Jump straight to the existing history section lower on this profile.
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View
-          style={styles.stickyProfileTabShell}
-          onLayout={(event) => setStickyShellHeight(event.nativeEvent.layout.height)}
-        >
-          <AnalyticsControlRail
-            title="Profile Tabs"
-            subtitle="Custom player breakdown"
-            tabs={PROFILE_TABS.map((tab) => ({ key: tab, label: tab }))}
-            activeTabKey={activeTab}
-            onTabChange={(key) => setActiveTab(key as EloMetricTab)}
-            style={styles.profileTabsRail}
-          />
-
-          <View style={styles.profileSummaryCards}>
-            <View style={styles.profileSummaryCard}>
-              <Text style={styles.profileSummaryLabel}>View</Text>
-              <Text style={styles.profileSummaryValue}>{activeTab}</Text>
-            </View>
-            <View style={styles.profileSummaryCard}>
-              <Text style={styles.profileSummaryLabel}>Opponent</Text>
-              <Text style={styles.profileSummaryValue}>
-                {selectedOpponentId
-                  ? opponentOptions.find((player) => String(player.id) === String(selectedOpponentId))?.name ?? "Focused"
-                  : "All"}
-              </Text>
-            </View>
-            <View style={styles.profileSummaryCard}>
-              <Text style={styles.profileSummaryLabel}>Signals</Text>
-              <Text style={styles.profileSummaryValue}>{featuredCard ? "Ready" : "Pending"}</Text>
-            </View>
-          </View>
-        </View>
+        <ProfileTabRailShell
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          opponentLabel={selectedOpponentLabel}
+          signalsLabel={stickySignalsLabel}
+          onLayout={handleProfileTabShellLayout}
+        />
 
         {activeTab === "Context" ? (
           <View style={styles.sectionCompact}>
@@ -739,10 +1135,12 @@ export default function PlayerProfileDetailScreen() {
               profileInsight.body,
               "No server-authored profile insight is available yet.",
             )}
-            activeInsightBody={toStringValue(activeInsight.body, "") || null}
+            activeInsightBody={
+              toStringValue(activeInsight.body, fallbackInsight.body) || null
+            }
             sectionTitle={sectionTitle}
             sectionSubtitle={sectionSubtitle}
-            sectionCards={sectionCards}
+            sectionCards={resolvedSectionCards}
           />
         ) : (
           <EmptyStateCard
@@ -765,7 +1163,7 @@ export default function PlayerProfileDetailScreen() {
           </View>
 
           <PlayerProfileRecentGames
-            playerId={String(playerId)}
+            playerId={String(resolvedPlayerId)}
             recentGames={recentGames as Array<Record<string, unknown>>}
             renderBadge={() => (
               <View
@@ -788,8 +1186,40 @@ export default function PlayerProfileDetailScreen() {
           />
         </View>
 
+        <View style={styles.sectionCompact}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+          </View>
+
+          <View style={styles.quickActionsGrid}>
+            <Pressable style={styles.quickActionCard} onPress={openCompareLaunchpad}>
+              <Text style={styles.quickActionTitle}>Compare with...</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickActionCard} onPress={openChartsLaunchpad}>
+              <Text style={styles.quickActionTitle}>Open charts</Text>
+            </Pressable>
+
+            <Pressable style={styles.quickActionCard} onPress={jumpToRecentGames}>
+              <Text style={styles.quickActionTitle}>Recent games</Text>
+            </Pressable>
+          </View>
+        </View>
+
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {showAndroidStickyProfileTabs ? (
+        <View pointerEvents="box-none" style={styles.androidStickyProfileTabsOverlay}>
+          <ProfileTabRailShell
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            opponentLabel={selectedOpponentLabel}
+            signalsLabel={stickySignalsLabel}
+            style={styles.androidStickyProfileTabsOverlayShell}
+          />
+        </View>
+      ) : null}
     </PageShell>
   );
 }
@@ -814,6 +1244,22 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginBottom: 8,
     paddingBottom: 6,
+  },
+  androidStickyProfileTabsOverlay: {
+    position: "absolute",
+    top: 0,
+    right: uiPolish.spacing.sm,
+    left: uiPolish.spacing.sm,
+    zIndex: 30,
+    elevation: 30,
+  },
+  androidStickyProfileTabsOverlayShell: {
+    marginBottom: 0,
+    shadowColor: "#020617",
+    shadowOpacity: 0.36,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 24,
   },
   profileSummaryCards: {
     flexDirection: "row",
@@ -850,6 +1296,11 @@ const styles = StyleSheet.create({
     top: 0,
     overflow: "hidden",
     backgroundColor: "#111827",
+  },
+  cropImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
   },
   profileTitleRow: {
     flexDirection: "row",

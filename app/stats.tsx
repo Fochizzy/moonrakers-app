@@ -12,6 +12,7 @@ import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
 import PlaystyleSection from "@/components/stats/PlaystyleSection";
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
@@ -21,7 +22,7 @@ import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQue
 import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
-import { buildChartsRoute, buildHistoryRoute, buildHomeRoute, APP_ROUTES } from "@/utils/appRoutes";
+import { buildChartsRoute, buildHomeRoute, APP_ROUTES } from "@/utils/appRoutes";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 import { formatDate } from "@/utils/formatters";
 import { COLORS } from "@/utils/colors";
@@ -127,10 +128,12 @@ function normalizeTopSignals(value: unknown, generatedAt: unknown) {
 
 function StatPill({
   label,
+  metric = null,
   value,
   accent,
 }: {
   label: string;
+  metric?: string | null;
   value: string | number;
   accent?: string;
 }) {
@@ -143,7 +146,11 @@ function StatPill({
           : null,
       ]}
     >
-      <Text style={styles.statPillLabel}>{label}</Text>
+      <DefinitionTermText
+        label={label}
+        metric={metric}
+        style={styles.statPillLabel}
+      />
       <Text style={styles.statPillValue}>{value}</Text>
     </View>
   );
@@ -181,15 +188,19 @@ export default function StatsScreen() {
   const loading = analyticsQuery.loading;
   const isStale = analyticsQuery.isStale;
   const staleMessage = analyticsQuery.staleMessage;
+  const hiddenOverviewCardKeys = new Set(["players", "games", "takeaway"]);
 
   const overview = toRecord(payload?.overview);
   const hero = toRecord(overview.hero);
-  const heroHighlights = [
-    { label: "Players", value: toDisplayValue(hero.players, "0") },
-    { label: "Games", value: toDisplayValue(hero.games, "0") },
-    { label: "Takeaway", value: toStringValue(hero.takeaway, "Awaiting analytics") },
-  ];
-  const overviewCards = toArray(overview.cards);
+  const overviewCards = toArray(overview.cards).filter((card) => {
+    const cardKey = toStringValue(card.key, "").toLowerCase();
+    const cardLabel = toStringValue(card.title ?? card.label, "").toLowerCase();
+
+    return (
+      !hiddenOverviewCardKeys.has(cardKey) &&
+      !hiddenOverviewCardKeys.has(cardLabel)
+    );
+  });
   const topSignals = normalizeTopSignals(overview.topSignals, payload?.generatedAt);
   const halftimeProfile = toRecord(overview.halftimeProfile);
   const contractEfficiency = toRecord(payload?.contractEfficiency);
@@ -302,11 +313,7 @@ export default function StatsScreen() {
         label: "Start tracked game",
         onPress: () => router.push(buildHomeRoute("game")),
       },
-      secondaryAction: {
-        label: "Import backup",
-        variant: "secondary" as const,
-        onPress: () => router.push(buildHistoryRoute({ intent: "import" })),
-      },
+      secondaryAction: null,
       tone: "warning" as const,
     },
     "player-empty": {
@@ -345,11 +352,6 @@ export default function StatsScreen() {
     return (
       <AnalyticsStateSection
         eyebrow="Overview"
-        title={toStringValue(hero.title, "Mission Snapshot")}
-        subtitle={toStringValue(
-          hero.takeaway,
-          "Supabase is the source of truth for these summaries.",
-        )}
         actions={<DefinitionsJumpLink category="scoring" />}
         helpCategory="scoring"
         state={
@@ -381,27 +383,19 @@ export default function StatsScreen() {
         secondaryAction={recoveryProps?.secondaryAction}
         tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
-        <View style={styles.compactGrid}>
-          {overviewCards.length > 0 ? (
-            overviewCards.map((card, index) => (
+        {overviewCards.length > 0 ? (
+          <View style={styles.compactGrid}>
+            {overviewCards.map((card, index) => (
               <StatPill
                 key={toStringValue(card.key, `overview-card-${index}`)}
                 label={toStringValue(card.title ?? card.label, `Card ${index + 1}`)}
+                metric={toStringValue(card.key, "")}
                 value={toDisplayValue(card.value)}
                 accent={index % 2 === 0 ? COLORS.cyan : COLORS.blueGlow}
               />
-            ))
-          ) : (
-            heroHighlights.map((item) => (
-              <StatPill
-                key={item.label}
-                label={item.label}
-                value={item.value}
-                accent={COLORS.cyan}
-              />
-            ))
-          )}
-        </View>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.signalSection}>
           <Text style={styles.compactSectionTitle}>Top Signals</Text>
@@ -413,9 +407,11 @@ export default function StatsScreen() {
               >
                 <Text style={styles.signalRank}>#{index + 1}</Text>
                 <View style={styles.signalBody}>
-                  <Text style={styles.signalLabel}>
-                    {toStringValue(signal.label, `Signal ${index + 1}`)}
-                  </Text>
+                  <DefinitionTermText
+                    label={toStringValue(signal.label, `Signal ${index + 1}`)}
+                    metric={toStringValue(signal.key, "")}
+                    style={styles.signalLabel}
+                  />
                   <Text style={styles.signalValue}>{toDisplayValue(signal.value)}</Text>
                 </View>
               </View>
@@ -429,7 +425,7 @@ export default function StatsScreen() {
 
         {toNumberValue(halftimeProfile.totalGames) > 0 ? (
           <View style={styles.metricSubsection}>
-            <Text style={styles.metricSubsectionTitle}>Momentum</Text>
+            <DefinitionTermText label="Momentum" style={styles.metricSubsectionTitle} />
             <View style={styles.compactGrid}>
               <StatPill
                 label="Comeback rate"
@@ -456,7 +452,11 @@ export default function StatsScreen() {
         {toNumberValue(contractEfficiency.avgContractsPerGame) > 0 ||
         toNumberValue(contractEfficiency.contractConversion) > 0 ? (
           <View style={styles.metricSubsection}>
-            <Text style={styles.metricSubsectionTitle}>Contract Efficiency</Text>
+            <DefinitionTermText
+              label="Contract Efficiency"
+              category="efficiency"
+              style={styles.metricSubsectionTitle}
+            />
             <View style={styles.compactGrid}>
               <StatPill
                 label="Contracts / game"
@@ -621,6 +621,7 @@ export default function StatsScreen() {
                 <StatPill
                   key={item.key}
                   label={item.label}
+                  metric={item.key}
                   value={item.value}
                   accent={COLORS.purple}
                 />
@@ -713,9 +714,10 @@ export default function StatsScreen() {
               <View key={toStringValue(entry.key, `playstyle-${index}`)} style={styles.signalCard}>
                 <Text style={styles.signalRank}>#{index + 2}</Text>
                 <View style={styles.signalBody}>
-                  <Text style={styles.signalLabel}>
-                    {toStringValue(entry.label, `Highlight ${index + 2}`)}
-                  </Text>
+                  <DefinitionTermText
+                    label={toStringValue(entry.label, `Highlight ${index + 2}`)}
+                    style={styles.signalLabel}
+                  />
                   <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
                 </View>
               </View>
@@ -793,9 +795,10 @@ export default function StatsScreen() {
               <View key={toStringValue(entry.key, `correlation-${index}`)} style={styles.signalCard}>
                 <Text style={styles.signalRank}>#{index + 1}</Text>
                 <View style={styles.signalBody}>
-                  <Text style={styles.signalLabel}>
-                    {toStringValue(entry.label, `Correlation ${index + 1}`)}
-                  </Text>
+                  <DefinitionTermText
+                    label={toStringValue(entry.label, `Correlation ${index + 1}`)}
+                    style={styles.signalLabel}
+                  />
                   <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
                 </View>
               </View>
@@ -860,9 +863,10 @@ export default function StatsScreen() {
               <View key={toStringValue(entry.id ?? entry.key, `game-${index}`)} style={styles.signalCard}>
                 <Text style={styles.signalRank}>#{index + 1}</Text>
                 <View style={styles.signalBody}>
-                  <Text style={styles.signalLabel}>
-                    {toStringValue(entry.label ?? entry.title, `Game ${index + 1}`)}
-                  </Text>
+                  <DefinitionTermText
+                    label={toStringValue(entry.label ?? entry.title, `Game ${index + 1}`)}
+                    style={styles.signalLabel}
+                  />
                   <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
                 </View>
               </View>
@@ -879,38 +883,17 @@ export default function StatsScreen() {
 
   return (
     <PageShell preset="analytics">
-      <SectionCard>
-        <View style={styles.heroHeader}>
-          <View style={styles.heroTitleWrap}>
-            <Text style={styles.heroEyebrow}>Statistics</Text>
-            <Text style={styles.heroTitle}>Mission Snapshot</Text>
-            <Text style={styles.heroSubtitle}>
-              {error
-                ? error
-                : loading
-                  ? "Loading Supabase-authored statistics."
-                  : toStringValue(
-                      hero.takeaway,
-              "Supabase now authors the statistics payload for this screen.",
-                    )}
-            </Text>
-          </View>
+      <SectionCard
+        eyebrow="Statistics"
+        actions={
           <ActionButton
-            title="Back to Command"
+            title="Command"
             variant="ghost"
             onPress={() => router.push(APP_ROUTES.home)}
             style={styles.backActionButton}
           />
-        </View>
-        <View style={styles.statsHeroHighlights}>
-          {heroHighlights.map((item) => (
-            <View key={item.label} style={styles.heroHighlightPill}>
-              <Text style={styles.heroHighlightLabel}>{item.label}</Text>
-              <Text style={styles.heroHighlightValue}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
-      </SectionCard>
+        }
+      />
 
       <AnalyticsControlRail
         title="Browse Statistics"
@@ -930,74 +913,8 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  heroHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 8,
-    marginBottom: 10,
-  },
-  heroTitleWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  heroEyebrow: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    marginBottom: 2,
-  },
-  heroTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  heroSubtitle: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 4,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-  },
   backActionButton: {
     minWidth: 160,
-  },
-  backButtonText: {
-    color: "#7D9BC4",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  statsHeroHighlights: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginTop: 6,
-  },
-  heroHighlightPill: {
-    minWidth: 92,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: COLORS.borderStrong,
-    gap: 4,
-  },
-  heroHighlightLabel: {
-    color: COLORS.textSecondary,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
-  },
-  heroHighlightValue: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: "900",
   },
   primaryTabPill: {
     borderRadius: 999,

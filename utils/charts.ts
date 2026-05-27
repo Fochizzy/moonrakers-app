@@ -139,6 +139,14 @@ export type CommonOpponentOption = StorePlayer & {
   gamesPlayed: number;
 };
 
+type SignedInComparableOption = {
+  id?: unknown;
+  name?: unknown;
+  label?: unknown;
+  displayName?: unknown;
+  playerName?: unknown;
+};
+
 export type MetricOption = {
   key: SimpleMetricKey;
   label: string;
@@ -233,6 +241,15 @@ function normalizeId(value: unknown): string {
 
 function normalizeChartKey(chartKey?: string | null): string {
   return String(chartKey ?? "").trim().toLowerCase();
+}
+
+function collectComparableNameKeys(option: SignedInComparableOption | null | undefined) {
+  return [
+    normalizeLooseName(option?.name),
+    normalizeLooseName(option?.label),
+    normalizeLooseName(option?.displayName),
+    normalizeLooseName(option?.playerName),
+  ].filter(Boolean);
 }
 
 function getInitials(player: any): string {
@@ -468,6 +485,176 @@ export function resolvePreferredChartPlayerId(args: {
   return availablePlayers?.[0]?.id ? normalizeId(availablePlayers[0].id) : null;
 }
 
+export function resolveSignedInPlayerOptionId(args: {
+  options: SignedInComparableOption[];
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+  authProfilePlayer?: SignedInComparableOption | null;
+}) {
+  const {
+    options,
+    authProfileId,
+    authSessionUserId,
+    authProfilePlayer,
+  } = args;
+
+  const normalizedAuthIds = [
+    normalizeId(authProfileId),
+    normalizeId(authSessionUserId),
+    normalizeId(authProfilePlayer?.id),
+  ].filter(Boolean);
+
+  const matchedById = (options ?? []).find((option) =>
+    normalizedAuthIds.includes(normalizeId(option?.id))
+  );
+  if (matchedById) {
+    return normalizeId(matchedById.id);
+  }
+
+  const authNameKeys = collectComparableNameKeys(authProfilePlayer);
+  if (authNameKeys.length > 0) {
+    const matchedByName = (options ?? []).find((option) => {
+      const optionNameKeys = collectComparableNameKeys(option);
+      return optionNameKeys.some((optionNameKey) => authNameKeys.includes(optionNameKey));
+    });
+
+    if (matchedByName) {
+      return normalizeId(matchedByName.id);
+    }
+  }
+
+  return normalizedAuthIds[0] ?? null;
+}
+
+export function prioritizeSignedInPlayerOptions(args: {
+  players: StorePlayer[];
+  games: NormalizedGame[];
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
+  authProfilePlayer?: StorePlayer | null;
+  commonPlayerLimit?: number;
+  explicitPriorityPlayerIds?: Array<string | null | undefined>;
+}): StorePlayer[] {
+  const {
+    players,
+    games,
+    authProfileId,
+    authSessionUserId,
+    authProfilePlayer,
+    commonPlayerLimit = 4,
+    explicitPriorityPlayerIds = [],
+  } = args;
+
+  const signedInPlayerId = resolveSignedInPlayerOptionId({
+    options: players,
+    authProfileId,
+    authSessionUserId,
+    authProfilePlayer,
+  });
+
+  const playersById = new Map<string, StorePlayer>();
+  for (const player of players ?? []) {
+    const normalizedPlayerId = normalizeId(player?.id);
+    if (!normalizedPlayerId || playersById.has(normalizedPlayerId)) {
+      continue;
+    }
+
+    playersById.set(normalizedPlayerId, player);
+  }
+
+  if (
+    signedInPlayerId &&
+    !playersById.has(signedInPlayerId) &&
+    normalizeId(authProfilePlayer?.id) === signedInPlayerId
+  ) {
+    playersById.set(signedInPlayerId, {
+      ...authProfilePlayer,
+      id: signedInPlayerId,
+    });
+  }
+
+  const alphabetizedPlayers = [...playersById.values()].sort((left, right) =>
+    String(left?.name ?? "").localeCompare(String(right?.name ?? ""))
+  );
+
+  if (!signedInPlayerId) {
+    return alphabetizedPlayers;
+  }
+
+  const prioritizedIds = new Set<string>([signedInPlayerId]);
+  const explicitPriorityIds = explicitPriorityPlayerIds
+    .map((playerId) => normalizeId(playerId))
+    .filter(
+      (playerId, index, allIds) =>
+        Boolean(playerId) &&
+        playerId !== signedInPlayerId &&
+        playersById.has(playerId) &&
+        allIds.indexOf(playerId) === index,
+    );
+  const fallbackCommonPlayerIds = buildCommonOpponentOptions({
+    playerId: signedInPlayerId,
+    players: alphabetizedPlayers,
+    games,
+    limit: Math.max(0, commonPlayerLimit),
+  }).map((player) => normalizeId(player.id));
+  const commonPlayerIds = [...explicitPriorityIds];
+
+  for (const fallbackCommonPlayerId of fallbackCommonPlayerIds) {
+    if (
+      !fallbackCommonPlayerId ||
+      fallbackCommonPlayerId === signedInPlayerId ||
+      commonPlayerIds.includes(fallbackCommonPlayerId)
+    ) {
+      continue;
+    }
+
+    commonPlayerIds.push(fallbackCommonPlayerId);
+    if (commonPlayerIds.length >= Math.max(0, commonPlayerLimit)) {
+      break;
+    }
+  }
+
+  for (const commonPlayerId of commonPlayerIds) {
+    if (!commonPlayerId || prioritizedIds.has(commonPlayerId)) {
+      continue;
+    }
+
+    prioritizedIds.add(commonPlayerId);
+  }
+
+  const prioritizedPlayers = [
+    ...alphabetizedPlayers.filter((player) =>
+      prioritizedIds.has(normalizeId(player?.id))
+    ),
+  ].sort((left, right) => {
+    const leftId = normalizeId(left?.id);
+    const rightId = normalizeId(right?.id);
+
+    if (leftId === signedInPlayerId && rightId !== signedInPlayerId) {
+      return -1;
+    }
+
+    if (leftId !== signedInPlayerId && rightId === signedInPlayerId) {
+      return 1;
+    }
+
+    const leftIndex = commonPlayerIds.indexOf(leftId);
+    const rightIndex = commonPlayerIds.indexOf(rightId);
+
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+
+    return String(left?.name ?? "").localeCompare(String(right?.name ?? ""));
+  });
+
+  const remainingPlayers = alphabetizedPlayers.filter(
+    (player) => !prioritizedIds.has(normalizeId(player?.id))
+  );
+
+  return [...prioritizedPlayers, ...remainingPlayers];
+}
+
 export function buildCommonOpponentOptions(args: {
   playerId?: string | null;
   players: StorePlayer[];
@@ -522,6 +709,107 @@ export function buildCommonOpponentOptions(args: {
         opponentId,
         toNumber(opponentCounts.get(opponentId)) + 1,
       );
+    }
+  }
+
+  return [...opponentCounts.entries()]
+    .map(([id, gamesPlayed]): CommonOpponentOption | null => {
+      const player = playerMap.get(id);
+      return player
+        ? {
+            id: String(player.id ?? id),
+            name: player.name,
+            color: player.color,
+            initials: player.initials,
+            assignedCardArtIndex:
+              typeof player.assignedCardArtIndex === "number" &&
+              Number.isFinite(player.assignedCardArtIndex)
+                ? player.assignedCardArtIndex
+                : null,
+            artIndex:
+              typeof player.artIndex === "number" &&
+              Number.isFinite(player.artIndex)
+                ? player.artIndex
+                : null,
+            gamesPlayed,
+          }
+        : null;
+    })
+    .filter((player): player is CommonOpponentOption => player !== null)
+    .sort((left, right) => {
+      if (right.gamesPlayed !== left.gamesPlayed) {
+        return right.gamesPlayed - left.gamesPlayed;
+      }
+
+      const leftName = String(left.name ?? left.id ?? "").trim();
+      const rightName = String(right.name ?? right.id ?? "").trim();
+      return leftName.localeCompare(rightName);
+    })
+    .slice(0, Math.max(0, limit));
+}
+
+export function buildRecentGameOpponentOptions(args: {
+  playerId?: string | null;
+  players: StorePlayer[];
+  recentGames: Array<Record<string, any>>;
+  limit?: number;
+}): CommonOpponentOption[] {
+  const { playerId, players, recentGames, limit = 5 } = args;
+  const focusPlayerId = normalizeId(playerId);
+
+  if (!focusPlayerId) {
+    return [];
+  }
+
+  const playerMap = new Map<string, StorePlayer>();
+  for (const player of players ?? []) {
+    const normalizedId = normalizeId(player?.id);
+    if (!normalizedId || playerMap.has(normalizedId)) continue;
+    playerMap.set(normalizedId, player);
+  }
+
+  const opponentCounts = new Map<string, number>();
+
+  for (const game of recentGames ?? []) {
+    const gamePlayers = Array.isArray(game?.players) ? game.players : [];
+    const seenGamePlayerIds = new Set<string>();
+    let includesFocusPlayer = false;
+
+    for (const gamePlayer of gamePlayers) {
+      const normalizedId = normalizeId(gamePlayer?.id ?? gamePlayer?.profileId);
+      if (!normalizedId || seenGamePlayerIds.has(normalizedId)) {
+        continue;
+      }
+
+      seenGamePlayerIds.add(normalizedId);
+
+      if (!playerMap.has(normalizedId)) {
+        playerMap.set(normalizedId, {
+          id: normalizedId,
+          name:
+            String(gamePlayer?.name ?? gamePlayer?.displayName ?? gamePlayer?.playerName ?? "").trim() ||
+            "Player",
+          color: typeof gamePlayer?.color === "string" ? gamePlayer.color : undefined,
+          assignedCardArtIndex:
+            typeof gamePlayer?.assignedCardArtIndex === "number" &&
+            Number.isFinite(gamePlayer.assignedCardArtIndex)
+              ? gamePlayer.assignedCardArtIndex
+              : null,
+        });
+      }
+
+      if (normalizedId === focusPlayerId) {
+        includesFocusPlayer = true;
+      }
+    }
+
+    if (!includesFocusPlayer) {
+      continue;
+    }
+
+    seenGamePlayerIds.delete(focusPlayerId);
+    for (const opponentId of seenGamePlayerIds) {
+      opponentCounts.set(opponentId, toNumber(opponentCounts.get(opponentId)) + 1);
     }
   }
 

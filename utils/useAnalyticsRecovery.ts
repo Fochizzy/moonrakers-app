@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useRouter } from "expo-router";
 import { resolveAnalyticsRecoveryState } from "./analyticsRecoveryState";
-import { APP_ROUTES, buildHistoryRoute, buildHomeRoute } from "./appRoutes";
+import { APP_ROUTES, buildHomeRoute } from "./appRoutes";
 
 type UseAnalyticsRecoveryOptions = {
   loading: boolean;
@@ -83,8 +83,6 @@ export function useAnalyticsRecovery(
   const secondaryAction = useMemo<(RecoveryAction & { variant: "secondary" }) | null>(() => {
     if (recoveryState.kind === "no-players")
       return { label: "Profiles", variant: "secondary", onPress: () => router.push(APP_ROUTES.playerDirectory) };
-    if (recoveryState.kind === "no-games")
-      return { label: "Import backup", variant: "secondary", onPress: () => router.push(buildHistoryRoute({ intent: "import" })) };
     return null;
   }, [recoveryState.kind, router]);
 

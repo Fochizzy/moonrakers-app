@@ -23,20 +23,20 @@ interface ButtonProps {
 
 const variantStyles = {
   primary: {
-    backgroundColor: withAlpha(chartColors.purple, 0.18),
-    borderColor: withAlpha(chartColors.purple, 0.65),
+    backgroundColor: withAlpha(chartColors.purple, 0.28),
+    borderColor: withAlpha(chartColors.purple, 0.72),
     textColor: chartColors.textStrong,
     glowColor: chartColors.purple,
   },
   secondary: {
-    backgroundColor: withAlpha(chartColors.cyan, 0.14),
-    borderColor: withAlpha(chartColors.cyan, 0.55),
+    backgroundColor: withAlpha(chartColors.cyan, 0.24),
+    borderColor: withAlpha(chartColors.cyan, 0.62),
     textColor: chartColors.text,
     glowColor: chartColors.cyan,
   },
   ghost: {
-    backgroundColor: withAlpha(chartColors.surfaceBg, 0.6),
-    borderColor: withAlpha(chartColors.borderBright, 0.5),
+    backgroundColor: withAlpha(chartColors.surfaceBg, 0.8),
+    borderColor: withAlpha(chartColors.borderBright, 0.58),
     textColor: chartColors.subtext,
     glowColor: chartColors.blue,
   },
@@ -58,14 +58,13 @@ export default function Button({
       {
         backgroundColor: tone.backgroundColor,
         borderColor: tone.borderColor,
-        shadowColor: tone.glowColor,
       },
       (hovered || pressed) && !disabled
         ? {
             backgroundColor:
               variant === 'ghost'
-                ? withAlpha(chartColors.surfaceBg, 0.9)
-                : withAlpha(tone.glowColor, variant === 'secondary' ? 0.2 : 0.24),
+                ? withAlpha(chartColors.surfaceBg, 0.88)
+                : withAlpha(tone.glowColor, variant === 'secondary' ? 0.3 : 0.34),
             borderColor: withAlpha(tone.glowColor, 0.88),
             transform: [{ scale: pressed ? 0.985 : 1 }],
           }
@@ -103,9 +102,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
+    overflow: 'hidden',
   },
   disabled: {
     opacity: 0.58,
@@ -115,7 +112,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.3,
     textTransform: 'uppercase',
+    backgroundColor: 'transparent',
   },
 });
-
 

@@ -45,11 +45,11 @@ const ActionButton = memo(
         styles.buttonBase,
         {
           backgroundColor: isPrimary
-            ? 'rgba(59,130,246,0.20)'
-            : 'rgba(255,255,255,0.045)',
+            ? 'rgba(59,130,246,0.28)'
+            : 'rgba(255,255,255,0.08)',
           borderColor: isPrimary
-            ? 'rgba(59,130,246,0.38)'
-            : 'rgba(255,255,255,0.10)',
+            ? 'rgba(59,130,246,0.42)'
+            : 'rgba(255,255,255,0.18)',
           padding: t.spacing.lg,
           opacity: disabled ? 0.42 : pressed ? 0.9 : 1,
           transform: [{ scale: interactive && pressed ? 0.985 : 1 }],
@@ -72,8 +72,6 @@ const ActionButton = memo(
         accessibilityLabel={label}
         accessibilityState={{ disabled: !interactive }}
       >
-        <View style={styles.buttonOverlay} />
-
         <View style={styles.buttonContent}>
           <Text
             style={{
@@ -81,6 +79,7 @@ const ActionButton = memo(
               color: '#FFFFFF',
               fontWeight: '800',
               textAlign: 'center',
+              backgroundColor: 'transparent',
             }}
           >
             {label}
@@ -96,6 +95,7 @@ const ActionButton = memo(
                   : t.colors.text.secondary,
                 textAlign: 'center',
                 lineHeight: 18,
+                backgroundColor: 'transparent',
               }}
             >
               {subLabel}
@@ -196,15 +196,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 84,
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  buttonOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(8,15,30,0.14)',
   },
   buttonContent: {
     alignItems: 'center',
@@ -212,5 +203,4 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
 });
-
 

@@ -124,6 +124,12 @@ assert.match(
   "expected the Home game tab to render a Quick Launch section",
 );
 
+assert.doesNotMatch(
+  homeSource,
+  /eyebrow="Live Ranking"|title="ELO Leaders"|<CompactEloStrip/,
+  "expected the Home game tab to stop rendering the Live Ranking ELO leaders block",
+);
+
 assert.match(
   homeSource,
   /title="Compare"[\s\S]*title="Charts"[\s\S]*title="Profiles"[\s\S]*title="History"/s,
@@ -132,8 +138,8 @@ assert.match(
 
 assert.match(
   homeSource,
-  /<SectionCard[\s\S]*title="Quick Launch"[\s\S]*<SectionCard title="Players">/s,
-  "expected the Quick Launch section to appear before the Players section",
+  /<SectionCard[\s\S]*eyebrow="Selected Crew"[\s\S]*title="Quick Launch">/s,
+  "expected the Quick Launch section to appear after the Selected Crew block at the bottom of the Command page flow",
 );
 
 assert.match(

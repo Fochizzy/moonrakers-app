@@ -2,7 +2,6 @@ export type AppStatusScope =
   | "cloud_save"
   | "cloud_refresh"
   | "analytics_refresh"
-  | "history_import"
   | "history_delete"
   | "migration_health"
   | "game_draft";

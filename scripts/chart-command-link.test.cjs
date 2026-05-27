@@ -7,6 +7,10 @@ const source = fs.readFileSync(
   path.join(projectRoot, "app", "charts", "index.tsx"),
   "utf8"
 );
+const heroBarSource = fs.readFileSync(
+  path.join(projectRoot, "components", "charts", "ChartSetupHeroBar.tsx"),
+  "utf8"
+);
 
 assert.match(
   source,
@@ -16,8 +20,14 @@ assert.match(
 
 assert.match(
   source,
-  /<View style=\{styles\.heroActionRow\}>[\s\S]*label="Back to Command"[\s\S]*router\.push\(APP_ROUTES\.home\)/,
-  "expected the charts hub hero actions to include a Back to Command control that routes to the Command page"
+  /<ChartSetupHeroBar[\s\S]*onBackToCommand=\{\(\) => router\.push\(APP_ROUTES\.home\)\}/,
+  "expected the charts hub hero shell to wire the shared Command route into ChartSetupHeroBar"
+);
+
+assert.match(
+  heroBarSource,
+  /<ActionButton[\s\S]*title="Command"[\s\S]*onPress=\{onBackToCommand\}[\s\S]*\/>/,
+  "expected ChartSetupHeroBar to render a Command action button"
 );
 
 console.log("chart-command-link.test.cjs passed");

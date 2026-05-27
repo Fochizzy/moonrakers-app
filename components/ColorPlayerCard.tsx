@@ -23,8 +23,10 @@ import {
 import { getPlayerColors } from "@/utils/colors";
 import { buildPlayerIdentity } from "@/utils/playerIdentity";
 import { buildPlayerCardEloMap, resolvePlayerCardElo } from "@/utils/playerCardElo";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import ScreenBackground from "@/components/ui/ScreenBackground";
 import Text from "@/components/ui/Text";
+import { getPlayerCardSourceByArtIndex } from "@/utils/playerCardAssets";
 
 type PlayerStats = {
   prestige?: number;
@@ -106,8 +108,6 @@ type ResolvedPlayerStats = {
   assists: number;
 };
 
-const SHEET = require("@/assets/images/player-card-sheet.png");
-
 const localButtonSystem = {
   base: {
     minHeight: 48,
@@ -154,13 +154,6 @@ function getColorColumn(color?: string) {
   }
 }
 
-function cropPosition(index: number) {
-  return {
-    row: Math.floor(index / 5),
-    col: index % 5,
-  };
-}
-
 function buildCardArtIndex(color?: string, seed = 0) {
   const column = getColorColumn(color);
   const row = Math.abs(seed) % 6;
@@ -191,20 +184,14 @@ function CropCardArt({
   width: number;
   height: number;
 }) {
-  const { row, col } = cropPosition(artIndex);
+  const source = getPlayerCardSourceByArtIndex(artIndex);
 
   return (
     <View style={[styles.cropWindow, { width, height }]}>
       <Image
-        source={SHEET}
-        resizeMode="stretch"
-        style={{
-          position: "absolute",
-          width: width * 5,
-          height: height * 6,
-          left: -(col * width),
-          top: -(row * height),
-        }}
+        source={source}
+        resizeMode="cover"
+        style={styles.cropImage}
       />
     </View>
   );
@@ -468,16 +455,22 @@ function IdentityBadge({
 
 function StatTile({
   label,
+  metric = null,
   value,
   accent,
 }: {
   label: string;
+  metric?: string | null;
   value: string | number;
   accent: string;
 }) {
   return (
     <View style={[styles.statTile, { borderColor: `${accent}24` }]}>
-      <Text style={styles.statTileLabel}>{label}</Text>
+      <DefinitionTermText
+        label={label}
+        metric={metric}
+        style={styles.statTileLabel}
+      />
       <Text style={[styles.statTileValue, { color: accent }]} numberOfLines={1}>
         {value}
       </Text>
@@ -717,16 +710,20 @@ export function PlayerCard({
           </View>
 
           <View style={styles.grid}>
-            <StatTile label="Score" value={resolved.score} accent={accent} />
-            <StatTile label="Wins" value={resolved.wins} accent={accent} />
-            <StatTile label="Win Rate" value={`${winRate}%`} accent={accent} />
-            <StatTile label="Games" value={resolved.gamesPlayed} accent={accent} />
+            <StatTile label="Score" metric="score" value={resolved.score} accent={accent} />
+            <StatTile label="Wins" metric="wins" value={resolved.wins} accent={accent} />
+            <StatTile label="Win Rate" metric="winRate" value={`${winRate}%`} accent={accent} />
+            <StatTile label="Games" metric="games" value={resolved.gamesPlayed} accent={accent} />
             <StatTile
               label="Objectives"
               value={resolved.objectivesCompleted}
               accent={accent}
             />
-            <StatTile label="Direct" value={resolved.directPrestige} accent={accent} />
+            <StatTile
+              label="Direct"
+              value={resolved.directPrestige}
+              accent={accent}
+            />
             <StatTile
               label="Assist"
               value={resolved.assistPrestigeReceived}
@@ -739,16 +736,19 @@ export function PlayerCard({
             />
             <StatTile
               label="Efficiency"
+              metric="allContractsEfficiency"
               value={eff.allEff.toFixed(2)}
               accent={accent}
             />
             <StatTile
               label="Assist Eff"
+              metric="assistEfficiency"
               value={eff.assistEff.toFixed(2)}
               accent={accent}
             />
             <StatTile
               label="Direct Eff"
+              metric="directEfficiency"
               value={eff.directEff.toFixed(2)}
               accent={accent}
             />
@@ -1239,6 +1239,11 @@ const styles = StyleSheet.create({
     top: 0,
     overflow: "hidden",
     backgroundColor: "#111827",
+  },
+  cropImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
   },
   smallArtFrame: {
     borderRadius: 10,

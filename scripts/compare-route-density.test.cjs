@@ -71,6 +71,24 @@ assert.match(
   "expected the compare route to dispatch the explicit run-compare action"
 );
 
+assert.doesNotMatch(
+  compareRouteSource,
+  /title="Compare Lens"/,
+  "expected the compare rail to stop rendering the Compare Lens heading copy"
+);
+
+assert.doesNotMatch(
+  compareRouteSource,
+  /subtitle="Switch between the live condition builder and the full cohesion review\."/,
+  "expected the compare rail to stop rendering the old explanatory subtitle copy"
+);
+
+assert.doesNotMatch(
+  compareRouteSource,
+  /Select the side you want to compare on this page\./,
+  "expected the cohesion compare state to drop the side-selection helper copy"
+);
+
 assert.match(
   compareRouteSource,
   /const \[compareSetupCollapsed, setCompareSetupCollapsed\] = useState\(false\);/,

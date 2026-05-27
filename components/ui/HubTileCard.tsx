@@ -1,6 +1,7 @@
 import React from "react";
 import { Image, Pressable, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import Text from "@/components/ui/Text";
 import { APP_ICONS, type AppIconKey } from "@/utils/iconAccess";
 
@@ -94,7 +95,8 @@ export default function HubTileCard({
               : null,
           ]}
         >
-          <Text
+          <DefinitionRichText
+            text={title}
             variant="sectionTitle"
             style={[
               styles.title,
@@ -104,11 +106,10 @@ export default function HubTileCard({
                 ? styles.titleHorizontalGraphicLarge
                 : null,
             ]}
-          >
-            {title}
-          </Text>
+          />
           {description ? (
-            <Text
+            <DefinitionRichText
+              text={description}
               variant="caption"
               numberOfLines={2}
               style={[
@@ -122,9 +123,7 @@ export default function HubTileCard({
                   ? styles.descriptionHorizontalGraphicLarge
                   : null,
               ]}
-            >
-              {description}
-            </Text>
+            />
           ) : null}
         </View>
 

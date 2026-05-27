@@ -1,9 +1,9 @@
-import assert from "node:assert/strict";
+const assert = require("node:assert/strict");
 
-import {
+const {
   createAppStatusRecord,
   getAppStatusTone,
-} from "../lib/app-status/types.ts";
+} = require("../lib/app-status/types.ts");
 
 function main() {
   const saving = createAppStatusRecord({
@@ -19,13 +19,13 @@ function main() {
   assert.equal(getAppStatusTone(saving), "info");
 
   const warning = createAppStatusRecord({
-    scope: "history_import",
+    scope: "cloud_refresh",
     state: "success_with_warning",
-    title: "Backup imported with warnings",
-    detail: "Some player names still need mapping.",
+    title: "Cloud refresh completed with warnings",
+    detail: "Some shared payload sections are still using the last snapshot.",
   });
 
-  assert.equal(warning.detail, "Some player names still need mapping.");
+  assert.equal(warning.detail, "Some shared payload sections are still using the last snapshot.");
   assert.equal(getAppStatusTone(warning), "warning");
 
   const stale = createAppStatusRecord({

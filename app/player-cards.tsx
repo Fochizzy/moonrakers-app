@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { PlayerCard as ColorPlayerCard } from "@/components/ColorPlayerCard";
 import ActionButton from "@/components/ui/ActionButton";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
@@ -162,7 +163,7 @@ function MetricPill({
 }) {
   return (
     <View style={styles.metricPill}>
-      <Text variant="metricLabel">{label}</Text>
+      <DefinitionRichText text={label} variant="metricLabel" />
       <Text variant="metricValue">{value}</Text>
     </View>
   );

@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Text from '@/components/ui/Text';
+import { buildDefinitionsRoute } from '@/utils/appRoutes';
 import {
   CompareRow,
   MatrixLayout,
@@ -10,6 +12,7 @@ import {
 } from '@/utils/compareTypes';
 import { getMetricBestWorst, nearlyEqual } from '@/utils/compareHelpers';
 import { getDeltaColor } from '@/utils/compareDelta';
+import { resolveDefinitionTarget } from '@/utils/definitionTargets';
 import { getEfficiencyTier } from '@/utils/efficiencyUtils';
 
 type Props = {
@@ -271,6 +274,7 @@ export default function CompareMatrixCard({
   onOpenMetricInfo,
   onToggleGroupCollapse,
 }: Props) {
+  const router = useRouter();
   const baseline = rows[0];
   const displayEntries = useMemo(() => {
     const filteredEntries: VisibleMetricEntry[] = [];
@@ -338,13 +342,44 @@ export default function CompareMatrixCard({
           const metric = entry.metric;
           const bestWorst = getMetricBestWorst(metric, rows);
           const verdict = getMatchupVerdict(metric, rows, baseline);
+          const definitionTarget = resolveDefinitionTarget({
+            label: metric.label,
+            metric: String(metric.key),
+          });
 
           return (
             <View key={`metric-${String(metric.key)}`} style={styles.metricCard}>
-              <Pressable onPress={() => onMetricPress(metric)} onLongPress={() => onOpenMetricInfo(metric)}>
-                <Text style={styles.metricTitle}>{metric.label}</Text>
-                <Text style={styles.metricVerdict}>{verdict}</Text>
-              </Pressable>
+              <View style={styles.metricHeaderRow}>
+                <View style={styles.metricHeaderCopy}>
+                  {definitionTarget ? (
+                    <Pressable
+                      onPress={() =>
+                        router.push(buildDefinitionsRoute(definitionTarget))
+                      }
+                      style={styles.metricTitleButton}
+                    >
+                      <Text style={styles.metricTitle}>{metric.label}</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.metricTitle}>{metric.label}</Text>
+                  )}
+
+                  {definitionTarget ? (
+                    <Text style={styles.metricDefinitionHint}>Definition</Text>
+                  ) : null}
+
+                  <Text style={styles.metricVerdict}>{verdict}</Text>
+                </View>
+
+                <Pressable
+                  onPress={() => onMetricPress(metric)}
+                  onLongPress={() => onOpenMetricInfo(metric)}
+                  style={styles.metricSortButton}
+                >
+                  <Text style={styles.metricSortLabel}>Sort</Text>
+                  <Text style={styles.metricSortHint}>Hold for info</Text>
+                </Pressable>
+              </View>
 
               <View style={styles.rowStack}>
                 {rows.map((row) => {
@@ -465,16 +500,60 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(71,85,105,0.24)',
     gap: 6,
   },
+  metricHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  metricHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  metricTitleButton: {
+    alignSelf: 'flex-start',
+  },
   metricTitle: {
     color: '#F8FBFF',
     fontSize: 15,
     fontWeight: '900',
   },
-  metricVerdict: {
+  metricDefinitionHint: {
     marginTop: 2,
+    color: '#7DD3FC',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.24,
+    textTransform: 'uppercase',
+  },
+  metricVerdict: {
+    marginTop: 4,
     fontSize: 10,
     lineHeight: 14,
     color: '#93C5FD',
+    fontWeight: '700',
+  },
+  metricSortButton: {
+    minWidth: 64,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(125, 211, 252, 0.26)',
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  metricSortLabel: {
+    color: '#E0F2FE',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.28,
+  },
+  metricSortHint: {
+    color: '#94A3B8',
+    fontSize: 8,
     fontWeight: '700',
   },
   rowStack: {
@@ -530,5 +609,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
 

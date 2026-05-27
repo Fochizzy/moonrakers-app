@@ -16,14 +16,14 @@ assert.match(
 
 assert.match(
   source,
-  /<TouchableOpacity style=\{styles\.navPill\} onPress=\{\(\) => router\.push\(APP_ROUTES\.home\)\} activeOpacity=\{0\.9\}>[\s\S]*Back to Command[\s\S]*<\/TouchableOpacity>/,
-  "expected the top-left nav pill to route to Command and display Back to Command"
+  /<HeroCard[\s\S]*headerAction=\{[\s\S]*<ActionButton[\s\S]*title="Command"[\s\S]*onPress=\{\(\) => router\.push\(APP_ROUTES\.home\)\}[\s\S]*style=\{styles\.heroActionButton\}[\s\S]*\/>[\s\S]*\}/,
+  "expected the compare hero to route to Command and display Command in the header action"
 );
 
 assert.doesNotMatch(
   source,
-  /<Text style=\{styles\.navPillText\}>Home<\/Text>/,
-  "expected the old Home nav label to be removed from the conditional affect screen"
+  /title="Home"/,
+  "expected the old Home nav label to be removed from the compare screen"
 );
 
 console.log("chart-compare-command-link.test.cjs passed");

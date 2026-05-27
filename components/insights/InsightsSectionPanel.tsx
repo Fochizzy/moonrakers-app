@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import DefinitionRichText from '@/components/ui/DefinitionRichText';
 import Text from '@/components/ui/Text';
 
 type Props = {
@@ -24,7 +25,7 @@ export default function InsightsSectionPanel({
       <View style={styles.sectionHeader}>
         <View style={styles.sectionTitleWrap}>
           <Text style={styles.sectionEyebrow}>{eyebrow}</Text>
-          <Text style={styles.sectionTitle}>{title}</Text>
+          <DefinitionRichText text={title} style={styles.sectionTitle} />
         </View>
         {meta ? <Text style={styles.sectionMeta}>{meta}</Text> : null}
       </View>

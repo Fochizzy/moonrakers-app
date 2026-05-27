@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const source = fs.readFileSync(
-  path.join(__dirname, "..", "app", "definitions.tsx"),
+  path.join(__dirname, "..", "utils", "definitionCatalog.ts"),
   "utf8",
 );
 
@@ -24,7 +24,7 @@ for (const snippet of [
 ]) {
   assert.ok(
     source.includes(snippet),
-    `expected definitions.tsx to contain ${snippet}`,
+    `expected definitionCatalog.ts to contain ${snippet}`,
   );
 }
 

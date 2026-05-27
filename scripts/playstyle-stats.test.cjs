@@ -270,6 +270,10 @@ function read(relPath) {
     personal.find((row) => row.key === "objectivePoints").direction,
     "positive"
   );
+  assert.equal(
+    personal.find((row) => row.key === "objectivePoints").label,
+    "Objective Prestige"
+  );
   assert.equal(global.find((row) => row.key === "wins").status, "ok");
 }
 
@@ -299,7 +303,7 @@ function read(relPath) {
     globalRows: [
       {
         key: "objectivePoints",
-        label: "Objective Points",
+        label: "Objective Prestige",
         value: 0.28,
         direction: "positive",
         strength: "Weak",
@@ -333,12 +337,16 @@ function read(relPath) {
   assert.match(statsSource, /<PlaystyleSection/);
 
   const sectionSource = read(path.join("components", "stats", "PlaystyleSection.tsx"));
+  const correlationSource = read(path.join("utils", "playstyleCorrelationEngine.ts"));
   assert.match(sectionSource, /buildPlaystyleSamples/);
   assert.match(sectionSource, /buildPersonalPlaystyleCorrelations/);
   assert.match(sectionSource, /buildGlobalPlaystyleCorrelations/);
   assert.match(sectionSource, /buildPlaystyleInsights/);
   assert.match(sectionSource, /Stay at Base Profile/);
-  assert.match(sectionSource, /Objective Points/);
+  assert.match(sectionSource, /Objective Prestige/);
+  assert.doesNotMatch(sectionSource, /Objective Points/);
+  assert.match(correlationSource, /Objective Prestige/);
+  assert.doesNotMatch(correlationSource, /Objective Points/);
   assert.match(sectionSource, /Assists Given/);
   assert.match(sectionSource, /Assists Received/);
 }

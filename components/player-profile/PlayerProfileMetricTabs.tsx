@@ -2,6 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import Text from "@/components/ui/Text";
 import { COLORS } from "@/utils/colors";
 import { formatMetricValue } from "@/utils/formatters";
@@ -11,7 +12,7 @@ type PlayerProfileMetricCard = {
   label: string;
   value: string;
   sub?: string;
-  tone?: "default" | "accent" | "blue" | "green" | "red";
+  tone?: "default" | "accent" | "blue" | "green" | "red" | "danger";
 };
 
 type PlayerProfileMetricTabsProps = {
@@ -35,6 +36,7 @@ function toneStyles(tone?: PlayerProfileMetricCard["tone"]) {
     case "green":
       return { bg: COLORS.greenSoft, value: COLORS.green };
     case "red":
+    case "danger":
       return { bg: COLORS.redSoft, value: COLORS.red };
     default:
       return { bg: COLORS.whiteSoft, value: COLORS.text };
@@ -72,9 +74,13 @@ export default function PlayerProfileMetricTabs({
                 },
               ]}
             >
-              <Text style={styles.featuredSignalLabel} numberOfLines={1}>
-                {featuredCard.label}
-              </Text>
+              <DefinitionTermText
+                label={featuredCard.label}
+                metric={featuredCard.key}
+                category="elo"
+                numberOfLines={1}
+                style={styles.featuredSignalLabel}
+              />
               <Text
                 style={[
                   styles.featuredSignalValue,
@@ -98,9 +104,13 @@ export default function PlayerProfileMetricTabs({
                     key={card.key}
                     style={[styles.secondarySignalCard, { backgroundColor: tone.bg }]}
                   >
-                    <Text style={styles.metricLabelCompact} numberOfLines={1}>
-                      {card.label}
-                    </Text>
+                    <DefinitionTermText
+                      label={card.label}
+                      metric={card.key}
+                      category="elo"
+                      numberOfLines={1}
+                      style={styles.metricLabelCompact}
+                    />
                     <Text style={[styles.metricValueCompact, { color: tone.value }]}>
                       {card.value}
                     </Text>
@@ -150,9 +160,13 @@ export default function PlayerProfileMetricTabs({
                   key={card.key}
                   style={[styles.metricCardDense, { backgroundColor: tone.bg }]}
                 >
-                  <Text style={styles.metricLabelCompact} numberOfLines={2}>
-                    {card.label}
-                  </Text>
+                  <DefinitionTermText
+                    label={card.label}
+                    metric={card.key}
+                    category="elo"
+                    numberOfLines={2}
+                    style={styles.metricLabelCompact}
+                  />
                   <Text style={[styles.metricValueCompact, { color: tone.value }]}>
                     {formatMetricValue(card.value)}
                   </Text>

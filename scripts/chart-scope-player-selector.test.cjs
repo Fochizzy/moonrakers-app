@@ -45,14 +45,26 @@ assert.match(
 
 assert.match(
   source,
+  /badge:\s*String\(option\.key\) === signedInId \?\s*"You"\s*:\s*null/,
+  "expected the scope quick picks to badge the signed-in player as You",
+);
+
+assert.match(
+  source,
+  /key:\s*ALL_SCOPE_PLAYERS_CHIP_ID,[\s\S]*label:\s*"All players",[\s\S]*kind:\s*"action"/,
+  "expected the scope quick picks to append an All players action chip after the signed-in-first shortlist",
+);
+
+assert.match(
+  source,
   /placeholder="Player Search"/,
   "expected the Players in scope section to render a Player Search input under the quick picks",
 );
 
 assert.match(
   source,
-  /scopePlayerSearch\.trim\(\)\s*\?\s*\(?\s*filteredScopePlayerOptions\.length/s,
-  "expected the chart setup screen to only expand scope-player search results when a query exists",
+  /scopePlayerSearch\.trim\(\)\s*\|\|\s*showAllScopePlayerOptions/,
+  "expected the chart setup screen to expand scope-player browsing when the All players chip is opened or a search query exists",
 );
 
 console.log("chart-scope-player-selector.test.cjs passed");

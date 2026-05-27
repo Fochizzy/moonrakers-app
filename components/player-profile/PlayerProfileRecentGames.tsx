@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 import Text from "@/components/ui/Text";
 import { COLORS } from "@/utils/colors";
 import { formatDate } from "@/utils/formatters";
-import { buildSummaryRoute } from "@/utils/appRoutes";
+import { buildHistoryRoute, buildSummaryRoute } from "@/utils/appRoutes";
 
 type PlayerProfileRecentGamesProps = {
   emptyText?: string;
@@ -39,6 +39,9 @@ export default function PlayerProfileRecentGames({
     <View style={styles.gameList}>
       {recentGames.map((game, index) => {
         const gameId = String(game.id ?? game.gameId ?? "").trim();
+        const historyOrdinal = typeof game.historyOrdinal === "number" && Number.isFinite(game.historyOrdinal)
+          ? game.historyOrdinal
+          : recentGames.length - index;
         const participants = toArray(game.players);
         const participantNames = participants
           .map((participant) => String(participant.name ?? "Unknown"))
@@ -57,11 +60,14 @@ export default function PlayerProfileRecentGames({
             onPress={() => {
               if (gameId) router.push(buildSummaryRoute(gameId) as any);
             }}
+            onLongPress={() => {
+              if (gameId) router.push(buildHistoryRoute({ gameId }) as any);
+            }}
           >
             <View style={styles.gameLeft}>
               <View style={styles.gameTitleRow}>
                 {renderBadge()}
-                <Text style={styles.gameTitle}>Game {recentGames.length - index}</Text>
+                <Text style={styles.gameTitle}>Game {historyOrdinal}</Text>
               </View>
 
               <Text style={styles.gameMeta} numberOfLines={1}>

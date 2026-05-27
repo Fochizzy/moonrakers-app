@@ -15,8 +15,52 @@ assert.match(
 
 assert.match(
   source,
-  /<View\s+style=\{\[\s*styles\.heroStickyShell,[\s\S]*<Pressable[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*Back to Command[\s\S]*<\/View>\s*<ScrollView/s,
-  "expected the game screen to render a sticky hero shell above the main ScrollView with a Back to Command button",
+  /<View\s+style=\{\[\s*styles\.heroStickyShell,[\s\S]*<Pressable[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*>Command<[\s\S]*<\/View>\s*<ScrollView/s,
+  "expected the game screen to render a sticky hero shell above the main ScrollView with a Command button",
+);
+
+assert.doesNotMatch(
+  source,
+  /Back to Command/,
+  "expected the sticky game header action copy to drop the Back to wording and just say Command",
+);
+
+assert.doesNotMatch(
+  source,
+  /heroHeaderSpacer/,
+  "expected the sticky game header to stop reserving a blank spacer ahead of the active player copy",
+);
+
+assert.ok(
+  source.includes("<View style={styles.heroTopRow}>") &&
+    source.includes("<View style={styles.heroHeaderCopy}>") &&
+    source.includes("styles.roundBadge"),
+  "expected the sticky game header to keep the round badge and hero copy nested inside the hero top row",
+);
+
+assert.ok(
+  source.includes("styles.nameBadge") &&
+    source.includes("{currentPlayer.name}"),
+  "expected the sticky game header hero copy to include the active player name badge",
+);
+
+assert.ok(
+  source.includes("style={styles.commandButton}") &&
+    source.includes("router.push(APP_ROUTES.home)") &&
+    source.includes("<Text style={styles.commandButtonText}>Command</Text>"),
+  "expected the sticky game header to keep the Command action on the right side of the hero top row",
+);
+
+assert.match(
+  source,
+  /<Text[\s\S]*style=\{styles\.nameBadgeText\}[\s\S]*numberOfLines=\{1\}[\s\S]*adjustsFontSizeToFit[\s\S]*minimumFontScale=\{0\.75\}[\s\S]*>\s*\{currentPlayer\.name\}/,
+  "expected the active player name in the sticky game header to stay on one line and shrink to fit",
+);
+
+assert.match(
+  source,
+  /heroHeaderCopy:\s*\{[\s\S]*alignItems:\s*'center',/,
+  "expected the sticky game header copy column to keep its labels centered",
 );
 
 assert.match(
@@ -29,6 +73,18 @@ assert.match(
   source,
   /commandButton:\s*\{[\s\S]*alignSelf:\s*'flex-start',[\s\S]*borderRadius:\s*8,/,
   "expected the game screen to define a compact top-right command button style",
+);
+
+assert.match(
+  source,
+  /roundBadgeText:\s*\{[\s\S]*fontSize:\s*10,[\s\S]*fontWeight:\s*'700',/,
+  "expected the sticky game header round label to use the smaller compact text size",
+);
+
+assert.match(
+  source,
+  /commandButtonText:\s*\{[\s\S]*fontSize:\s*10,[\s\S]*fontWeight:\s*'700',/,
+  "expected the Command label to use the smaller compact text size",
 );
 
 console.log("game-sticky-header-command-link.test.cjs passed");

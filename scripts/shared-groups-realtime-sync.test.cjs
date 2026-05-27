@@ -9,6 +9,7 @@ function read(relPath) {
 }
 
 const layoutSource = read(path.join("app", "_layout.tsx"));
+const bootstrapSource = read(path.join("lib", "auth", "useSharedCloudBootstrap.ts"));
 const migrationSource = read(
   path.join(
     "supabase",
@@ -17,28 +18,34 @@ const migrationSource = read(
   ),
 );
 
-assert.match(
+assert.doesNotMatch(
   layoutSource,
-  /async function loadHydratedSharedSnapshot\(session: AuthSession\)/,
-  "expected _layout.tsx to centralize signed-in shared snapshot hydration for live refreshes",
+  /moonrakers-shared-cloud:\$\{/,
+  "expected _layout.tsx to delegate shared-cloud realtime wiring to useSharedCloudBootstrap",
 );
 
 assert.match(
-  layoutSource,
-  /\.channel\(`moonrakers-shared-cloud:\$\{authSession\.user\.id\}`\)/,
-  "expected _layout.tsx to subscribe signed-in clients to shared cloud changes",
+  bootstrapSource,
+  /const channelName = `moonrakers-shared-cloud:\$\{sharedCloudUserId\}`/,
+  "expected useSharedCloudBootstrap to own the shared-cloud realtime channel name",
 );
 
 assert.match(
-  layoutSource,
+  bootstrapSource,
   /table: "groups"/,
-  "expected _layout.tsx to watch group rows for shared refreshes",
+  "expected useSharedCloudBootstrap to watch group rows for shared refreshes",
 );
 
 assert.match(
-  layoutSource,
+  bootstrapSource,
   /table: "group_members"/,
-  "expected _layout.tsx to watch group membership rows for shared refreshes",
+  "expected useSharedCloudBootstrap to watch group membership rows for shared refreshes",
+);
+
+assert.match(
+  bootstrapSource,
+  /getChannels\(\)\s*\.filter\(\(existingChannel\) => existingChannel\.topic === channelTopic\)/,
+  "expected useSharedCloudBootstrap to evict cached shared-cloud channels before subscribing again",
 );
 
 assert.match(

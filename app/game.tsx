@@ -33,10 +33,8 @@ import {
   getNextTurnIndex,
   buildTotals,
   getLeaderboard,
-  getLeadingPlayerIds,
-  getTotalPrestigeFromTotals,
   type CurrentTurnStats,
-  type PlayerTotals,
+  type LeaderboardEntry,
 } from '@/engine/gameEngine';
 import {
   getPlayerAccentColor,
@@ -155,15 +153,13 @@ function buildEditStateFromRound(
 }
 
 function AnimatedLeaderboardPill({
-  player,
+  entry,
   rank,
   activePlayerId,
-  totals,
 }: {
-  player: Player;
+  entry: LeaderboardEntry;
   rank: number;
   activePlayerId?: string;
-  totals: Record<string, any>;
 }) {
   const motion = React.useRef(new Animated.Value(0)).current;
   const previousRankRef = React.useRef(rank);
@@ -186,10 +182,8 @@ function AnimatedLeaderboardPill({
     previousRankRef.current = rank;
   }, [rank, motion]);
 
-  const accent = getPlayerAccentColor(resolveStoredPlayerColor(player.color, rank));
-  const isActive = player.id === activePlayerId;
-  const totalPrestige = getTotalPrestigeFromTotals(totals[player.id] as PlayerTotals) || 0;
-  const direct = toNumber(totals[player.id]?.directPrestige);
+  const accent = getPlayerAccentColor(resolveStoredPlayerColor(entry.color, rank));
+  const isActive = entry.id === activePlayerId;
 
   return (
     <Animated.View
@@ -227,16 +221,18 @@ function AnimatedLeaderboardPill({
             { backgroundColor: withAlpha(accent, isActive ? 0.92 : 0.62) },
           ]}
         />
-        <Text style={styles.playerPillName} numberOfLines={1}>
-          {player.name}
-        </Text>
+        <View style={styles.playerPillBody}>
+          <Text style={styles.playerPillName} numberOfLines={1}>
+            {entry.name}
+          </Text>
 
-        <View style={styles.playerPillMetrics}>
-          <View style={styles.metricChip}>
-            <Text style={styles.metricChipText}>Pts {totalPrestige}</Text>
-          </View>
-          <View style={styles.metricChip}>
-            <Text style={styles.metricChipText}>Src {direct}</Text>
+          <View style={styles.playerPillMetrics}>
+            <View style={styles.metricChip}>
+              <Text style={styles.metricChipText}>P: {entry.totalPrestige}</Text>
+            </View>
+            <View style={styles.metricChip}>
+              <Text style={styles.metricChipText}>S: {entry.score}</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -245,13 +241,11 @@ function AnimatedLeaderboardPill({
 }
 
 function CompactPlayerStrip({
-  players,
+  entries,
   activePlayerId,
-  totals,
 }: {
-  players: Player[];
+  entries: LeaderboardEntry[];
   activePlayerId?: string;
-  totals: Record<string, any>;
 }) {
   return (
     <ScrollView
@@ -259,13 +253,12 @@ function CompactPlayerStrip({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.playerStripRow}
     >
-      {players.map((player, index) => (
+      {entries.map((entry, index) => (
         <AnimatedLeaderboardPill
-          key={player.id}
-          player={player}
+          key={entry.id}
+          entry={entry}
           rank={index}
           activePlayerId={activePlayerId}
-          totals={totals}
         />
       ))}
     </ScrollView>
@@ -329,10 +322,10 @@ function DirectPrestigeSection({
       style={[
         styles.sectionCard,
         {
-          borderColor: withAlpha(currentAccent, 0.42),
-          backgroundColor: mixWithBlack(currentAccent, 0.82),
+          borderColor: withAlpha(currentAccent, 0.36),
+          backgroundColor: mixWithBlack(currentAccent, 0.84),
         },
-        glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8),
+        glowStyle(withAlpha(currentAccent, 0.95), 0.16, 8, 6),
       ]}
     >
       <View
@@ -342,14 +335,14 @@ function DirectPrestigeSection({
           {
             backgroundColor: stayAtBaseSelected
               ? withAlpha(UI.gold, 0.05)
-              : withAlpha(currentAccent, 0.12),
+              : withAlpha(currentAccent, 0.09),
             borderColor: stayAtBaseSelected
-              ? withAlpha(UI.gold, 0.5)
-              : withAlpha(currentAccent, 0.5),
+              ? withAlpha(UI.gold, 0.44)
+              : withAlpha(currentAccent, 0.38),
           },
           stayAtBaseSelected
-            ? glowStyle(withAlpha(UI.gold, 0.92), 0.16, 8, 6)
-            : glowStyle(withAlpha(currentAccent, 0.95), 0.18, 8, 6),
+            ? glowStyle(withAlpha(UI.gold, 0.92), 0.12, 6, 4)
+            : glowStyle(withAlpha(currentAccent, 0.95), 0.1, 6, 4),
         ]}
       >
         <Text style={styles.sectionTitle}>Direct Prestige</Text>
@@ -595,16 +588,14 @@ function AssistSection({
                 <View
                   style={[
                     styles.playerRowCard,
-                    {
-                      backgroundColor: assistOn ? withAlpha(accent, 0.08) : UI.cardSoft,
-                      borderColor: assistOn ? withAlpha(accent, 0.45) : withAlpha(accent, 0.2),
+                    !assistOn && styles.playerRowCardQuiet,
+                    assistOn && {
+                      backgroundColor: withAlpha(accent, 0.08),
+                      borderColor: withAlpha(accent, 0.45),
                     },
-                    glowStyle(
-                      withAlpha(accent, 0.9),
-                      assistOn ? 0.2 : 0.12,
-                      assistOn ? 10 : 7,
-                      assistOn ? 7 : 4
-                    ),
+                    assistOn
+                      ? glowStyle(withAlpha(accent, 0.9), 0.2, 10, 7)
+                      : glowStyle(withAlpha(accent, 0.9), 0.06, 5, 2),
                   ]}
                 >
                   <View style={styles.assistSingleLine}>
@@ -617,14 +608,22 @@ function AssistSection({
                       }
                       style={[
                         styles.assistNameWrap,
-                        {
+                        !assistOn && styles.assistNameWrapQuiet,
+                        assistOn && {
                           backgroundColor: withAlpha(accent, 0.1),
                           borderColor: withAlpha(accent, 0.22),
                         },
                       ]}
                     >
-                      <View style={[styles.colorBullet, { backgroundColor: accent }]} />
-                      <Text style={styles.playerRowTitle}>{player.name}</Text>
+                      <View
+                        style={[
+                          styles.colorBullet,
+                          { backgroundColor: withAlpha(accent, assistOn ? 1 : 0.72) },
+                        ]}
+                      />
+                      <Text style={[styles.playerRowTitle, !assistOn && styles.playerRowTitleQuiet]}>
+                        {player.name}
+                      </Text>
                       <Text style={styles.chevron}>{rowCollapsed ? '▾' : '▴'}</Text>
                     </ScaleButton>
 
@@ -698,34 +697,44 @@ function ObjectiveRow({
   title,
   value,
   accent,
+  isCurrentPlayer,
   onChange,
 }: {
   title: string;
   value: number;
   accent: string;
+  isCurrentPlayer: boolean;
   onChange: (next: number) => void;
 }) {
+  const isEmphasized = isCurrentPlayer || value > 0;
+
   return (
     <View
       style={[
         styles.objectiveRowCard,
-        {
-          backgroundColor: value > 0 ? withAlpha(accent, 0.1) : UI.cardSoft,
-          borderColor: value > 0 ? withAlpha(accent, 0.45) : withAlpha(accent, 0.2),
+        !isEmphasized && styles.objectiveRowCardQuiet,
+        isEmphasized && {
+          backgroundColor: withAlpha(accent, 0.1),
+          borderColor: withAlpha(accent, 0.45),
         },
-        glowStyle(withAlpha(accent, 0.9), value > 0 ? 0.2 : 0.12, value > 0 ? 10 : 7, value > 0 ? 7 : 4),
+        isEmphasized
+          ? glowStyle(withAlpha(accent, 0.9), 0.2, 10, 7)
+          : glowStyle(withAlpha(accent, 0.9), 0.06, 5, 2),
       ]}
     >
       <View
         style={[
           styles.objectiveNameWrap,
-          {
+          !isEmphasized && styles.objectiveNameWrapQuiet,
+          isEmphasized && {
             backgroundColor: withAlpha(accent, 0.1),
             borderColor: withAlpha(accent, 0.22),
           },
         ]}
       >
-        <Text style={styles.objectiveName}>{title}</Text>
+        <Text style={[styles.objectiveName, !isEmphasized && styles.objectiveNameQuiet]}>
+          {title}
+        </Text>
       </View>
       <View style={styles.objectiveControlsRight}>
         <ScaleButton onPress={() => onChange(Math.max(0, value - 1))} style={styles.objectiveMiniButton}>
@@ -803,6 +812,7 @@ function ObjectivesSection({
                   ? currentAccent
                   : getPlayerAccentColor(resolveStoredPlayerColor(player.color, index))
               }
+              isCurrentPlayer={player.id === currentPlayerId}
               onChange={
                 player.id === currentPlayerId
                   ? onSetCurrentObjectiveCount
@@ -1022,14 +1032,11 @@ export default function Game() {
 
   const totals = useMemo(() => buildTotals(rounds as any, players as any), [rounds, players]);
 
-  const leaderboardPlayers = useMemo(
-    () => getLeaderboard(totals as any, players as any, rounds as any).map((entry) => entry.player as Player),
+  const leaderboardEntries = useMemo(
+    () => getLeaderboard(totals as any, players as any, rounds as any),
     [totals, players, rounds]
   );
-  const finishWinnerId = useMemo(
-    () => getLeaderboard(totals as any, players as any)[0]?.id ?? null,
-    [totals, players],
-  );
+  const finishWinnerId = leaderboardEntries[0]?.id ?? null;
   const {
     currentStatus,
     clearCurrentStatus,
@@ -1374,7 +1381,6 @@ export default function Game() {
       const nextTotals = validateNoNegativeTotalPrestige(candidate.nextRounds);
       if (!nextTotals) return;
 
-      const leaders = getLeadingPlayerIds(nextTotals, players as any);
       commitGameplayPatch({
         rounds: candidate.nextRounds,
         current: { ...initialCurrentState },
@@ -1535,39 +1541,42 @@ export default function Game() {
           ]}
         >
           <View style={styles.heroTopRow}>
-            <View style={styles.heroHeaderSpacer} />
+            <View
+              style={[
+                styles.roundBadge,
+                {
+                  backgroundColor: currentDarker,
+                  borderColor: withAlpha(currentAccent, 0.22),
+                },
+              ]}
+            >
+              <Text style={styles.roundBadgeText}>
+                Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
+              </Text>
+            </View>
 
             <View style={styles.heroHeaderCopy}>
               {editingRoundId ? (
                 <Text style={styles.heroEyebrow}>Editing Previous Turn</Text>
               ) : null}
 
-              <View style={styles.heroIdentityRow}>
-                <View
-                  style={[
-                    styles.nameBadge,
-                    {
-                      backgroundColor: currentDark,
-                      borderColor: withAlpha(currentAccent, 0.34),
-                    },
-                  ]}
+              <View
+                style={[
+                  styles.nameBadge,
+                  {
+                    backgroundColor: currentDark,
+                    borderColor: withAlpha(currentAccent, 0.34),
+                  },
+                ]}
+              >
+                <Text
+                  style={styles.nameBadgeText}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
                 >
-                  <Text style={styles.nameBadgeText}>{currentPlayer.name}</Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.roundBadge,
-                    {
-                      backgroundColor: currentDarker,
-                      borderColor: withAlpha(currentAccent, 0.22),
-                    },
-                  ]}
-                >
-                  <Text style={styles.roundBadgeText}>
-                    Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
-                  </Text>
-                </View>
+                  {currentPlayer.name}
+                </Text>
               </View>
             </View>
 
@@ -1575,7 +1584,7 @@ export default function Game() {
               style={styles.commandButton}
               onPress={() => router.push(APP_ROUTES.home)}
             >
-              <Text style={styles.commandButtonText}>Back to Command</Text>
+              <Text style={styles.commandButtonText}>Command</Text>
             </Pressable>
           </View>
         </View>
@@ -1592,7 +1601,7 @@ export default function Game() {
           },
         ]}
       >
-        <CompactPlayerStrip players={leaderboardPlayers} activePlayerId={currentPlayer.id} totals={totals} />
+        <CompactPlayerStrip entries={leaderboardEntries} activePlayerId={currentPlayer.id} />
 
         <AppStatusBanner
           status={currentStatus}
@@ -1701,14 +1710,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  heroHeaderSpacer: {
-    width: 128,
-  },
   heroHeaderCopy: {
     flex: 1,
     minWidth: 0,
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    paddingHorizontal: 6,
   },
   heroEyebrow: {
     color: UI.textMuted,
@@ -1716,49 +1723,50 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  heroIdentityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
   nameBadge: {
     borderRadius: 8,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 7,
   },
   nameBadgeText: {
     color: UI.text,
     fontSize: 16,
     fontWeight: '800',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   roundBadge: {
     borderRadius: 8,
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 7,
   },
   roundBadgeText: {
     color: UI.text,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   commandButton: {
-    minWidth: 128,
+    minWidth: 112,
     alignSelf: 'flex-start',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: withAlpha(UI.text, 0.16),
     backgroundColor: UI.cardMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
   commandButtonText: {
     color: UI.text,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -1768,7 +1776,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playerPill: {
-    minHeight: 40,
+    minHeight: 48,
     borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: 10,
@@ -1779,19 +1787,24 @@ const styles = StyleSheet.create({
   },
   playerPillRail: {
     width: 8,
-    height: 24,
+    height: 28,
     borderRadius: 999,
+  },
+  playerPillBody: {
+    flexShrink: 1,
+    gap: 4,
   },
   playerPillName: {
     color: UI.text,
     fontSize: 12,
     fontWeight: '800',
-    maxWidth: 96,
+    maxWidth: 112,
   },
   playerPillMetrics: {
     flexDirection: 'row',
     gap: 5,
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   metricChip: {
     borderRadius: 8,
@@ -1815,21 +1828,21 @@ const styles = StyleSheet.create({
   directPrestigeFrame: {
     borderRadius: 10,
     borderWidth: 1,
-    padding: 6,
-    gap: 4,
+    padding: 5,
+    gap: 3,
   },
   directPrestigeFrameMinimized: {
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   prestigeCounterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
+    gap: 6,
   },
   prestigeStepperButton: {
-    width: 42,
-    height: 42,
+    width: 38,
+    height: 38,
     borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
@@ -1837,18 +1850,18 @@ const styles = StyleSheet.create({
   },
   prestigeStepperText: {
     color: UI.text,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
   },
   prestigeCenterWrap: {
-    width: 108,
-    height: 48,
+    width: 96,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
   prestigeValueBox: {
-    width: 108,
-    height: 48,
+    width: 96,
+    height: 44,
     borderRadius: 8,
     backgroundColor: '#000000',
     borderWidth: 1.5,
@@ -1858,15 +1871,15 @@ const styles = StyleSheet.create({
   },
   prestigeValueText: {
     color: UI.text,
-    fontSize: 21,
+    fontSize: 19,
     fontWeight: '800',
   },
   contractRow: {
     flexDirection: 'row',
-    gap: 5,
+    gap: 4,
   },
   contractButton: {
-    height: 48,
+    height: 42,
     borderRadius: 8,
     borderWidth: 1.25,
     flexDirection: 'row',
@@ -1881,16 +1894,16 @@ const styles = StyleSheet.create({
     width: 56,
   },
   contractIcon: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
   },
   contractLabel: {
     color: UI.text,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   baseModeBoxElite: {
-    minHeight: 52,
+    minHeight: 46,
     borderRadius: 8,
     borderWidth: 1.5,
     borderColor: withAlpha(UI.gold, 0.72),
@@ -1900,7 +1913,7 @@ const styles = StyleSheet.create({
   },
   baseModeTextElite: {
     color: UI.gold,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
@@ -1992,6 +2005,11 @@ noneChip: {
     paddingVertical: 7,
     overflow: 'hidden',
   },
+  playerRowCardQuiet: {
+    backgroundColor: UI.cardMuted,
+    borderColor: UI.line,
+    opacity: 0.92,
+  },
   assistSingleLine: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2008,6 +2026,10 @@ noneChip: {
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 4,
+  },
+  assistNameWrapQuiet: {
+    backgroundColor: UI.cardMuted,
+    borderColor: UI.line,
   },
   assistInlineControls: {
     flexDirection: 'row',
@@ -2029,6 +2051,9 @@ noneChip: {
     color: UI.text,
     fontSize: 11,
     fontWeight: '700',
+  },
+  playerRowTitleQuiet: {
+    color: UI.textMuted,
   },
   choiceChip: {
     minWidth: 48,
@@ -2080,6 +2105,11 @@ noneChip: {
     justifyContent: 'space-between',
     gap: 6,
   },
+  objectiveRowCardQuiet: {
+    backgroundColor: UI.cardMuted,
+    borderColor: UI.line,
+    opacity: 0.92,
+  },
   objectiveNameWrap: {
     flex: 1,
     borderWidth: 1,
@@ -2088,10 +2118,17 @@ noneChip: {
     paddingVertical: 5,
     marginRight: 6,
   },
+  objectiveNameWrapQuiet: {
+    backgroundColor: UI.cardMuted,
+    borderColor: UI.line,
+  },
   objectiveName: {
     color: UI.text,
     fontSize: 12,
     fontWeight: '700',
+  },
+  objectiveNameQuiet: {
+    color: UI.textMuted,
   },
   objectiveControlsRight: {
     flexDirection: 'row',

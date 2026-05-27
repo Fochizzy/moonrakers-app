@@ -44,6 +44,7 @@ import {
   getVisibleMetricEntries,
   sortRowsByMetric,
 } from "@/utils/compareHelpers";
+import { prioritizeSignedInPlayerOptions } from "@/utils/charts";
 import {
   CompareMode,
   CompareStoreShape,
@@ -248,6 +249,36 @@ function buildConditionalQuickSelectPlayerIds(args: {
       name: normalizeComparePlayerName(player?.name),
     }))
     .filter((player) => player.id && player.name);
+  const loggedInPlayerId = resolveConditionalQuickSelectAuthPlayerId({
+    players,
+    authProfileId,
+    authSessionUserId,
+    authPlayerName,
+    authDisplayName,
+  });
+
+  if (loggedInPlayerId) {
+    const authProfilePlayer =
+      validPlayers.find((player) => player.id === loggedInPlayerId) ?? {
+        id: loggedInPlayerId,
+        name:
+          normalizeComparePlayerName(authPlayerName) ||
+          normalizeComparePlayerName(authDisplayName) ||
+          "Player",
+      };
+
+    return prioritizeSignedInPlayerOptions({
+      players: validPlayers as any,
+      games: games as any,
+      authProfileId,
+      authSessionUserId,
+      authProfilePlayer: authProfilePlayer as any,
+      commonPlayerLimit: 4,
+    })
+      .slice(0, 5)
+      .map((player) => normalizeComparePlayerId(player?.id))
+      .filter(Boolean);
+  }
 
   const validPlayerIds = new Set(validPlayers.map((player) => player.id));
   const appearanceCounts = new Map(validPlayers.map((player) => [player.id, 0]));
@@ -264,14 +295,6 @@ function buildConditionalQuickSelectPlayerIds(args: {
     }
   }
 
-  const loggedInPlayerId = resolveConditionalQuickSelectAuthPlayerId({
-    players,
-    authProfileId,
-    authSessionUserId,
-    authPlayerName,
-    authDisplayName,
-  });
-
   const rankedPlayerIds = [...validPlayers]
     .sort((left, right) => {
       const countDelta =
@@ -281,28 +304,10 @@ function buildConditionalQuickSelectPlayerIds(args: {
       }
       return left.name.localeCompare(right.name);
     })
-    .map((player) => player.id);
+    .map((player) => player.id)
+    .filter((playerId) => (appearanceCounts.get(playerId) ?? 0) > 0);
 
-  const quickSelectIds: string[] = [];
-
-  if (loggedInPlayerId) {
-    quickSelectIds.push(loggedInPlayerId);
-  }
-
-  for (const playerId of rankedPlayerIds) {
-    if (quickSelectIds.includes(playerId)) {
-      continue;
-    }
-    if ((appearanceCounts.get(playerId) ?? 0) <= 0) {
-      continue;
-    }
-    quickSelectIds.push(playerId);
-    if (quickSelectIds.length >= (loggedInPlayerId ? 6 : 5)) {
-      break;
-    }
-  }
-
-  return quickSelectIds;
+  return rankedPlayerIds.slice(0, 5);
 }
 
 export default function IndexScreen() {
@@ -635,35 +640,22 @@ export default function IndexScreen() {
       >
         <HeroCard
           eyebrow="Compare"
-          title={activeTab === "conditional" ? "Conditional Affect" : "Cohesion Affect"}
-          subtitle={
-            activeTab === "conditional"
-              ? liveSentenceSubtitle
-              : "Select the side you want to compare on this page."
-          }
+          title="Compare"
+          subtitle={activeTab === "conditional" ? liveSentenceSubtitle : undefined}
+          subtitleNumberOfLines={activeTab === "conditional" ? 1 : undefined}
+          subtitleStyle={activeTab === "conditional" ? styles.heroSubtitleSingleLine : undefined}
           size="compact"
           headerAction={
             <ActionButton
-              title="Back to Command"
+              title="Command"
               variant="ghost"
               onPress={() => router.push(APP_ROUTES.home)}
               style={styles.heroActionButton}
             />
           }
-        >
-          <View style={styles.heroActionsRow}>
-            <ActionButton
-              title="Stats"
-              variant="secondary"
-              onPress={() => router.push("/stats")}
-              style={styles.heroSecondaryAction}
-            />
-          </View>
-        </HeroCard>
+        />
 
         <AnalyticsControlRail
-          title="Compare Lens"
-          subtitle="Switch between the live condition builder and the full cohesion review."
           tabs={[
             { key: "conditional", label: "Conditional Affect" },
             { key: "cohesion", label: "Cohesion Affect" },
@@ -674,14 +666,15 @@ export default function IndexScreen() {
 
         <View style={styles.sectionCompact}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>
-              {activeTab === "conditional" ? "Conditional Affect" : "Cohesion Affect"}
-            </Text>
-            <Text style={styles.sectionSub}>
-              {activeTab === "conditional"
-                ? liveSentenceSubtitle
-                : "Select the side you want to compare on this page."}
-            </Text>
+            {activeTab === "conditional" ? (
+              <Text numberOfLines={1} style={[styles.sectionSub, styles.sectionSubFullWidth]}>
+                {liveSentenceSubtitle}
+              </Text>
+            ) : (
+              <Text numberOfLines={1} style={styles.sectionTitle}>
+                Cohesion Affect
+              </Text>
+            )}
           </View>
 
           <View style={styles.underlineSelectorRow}>
@@ -707,14 +700,13 @@ export default function IndexScreen() {
         {activeTab === "conditional" ? (
           <View style={styles.sectionCompact}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Conditional Builder</Text>
-              <Text style={styles.sectionSub}>
-                Keep the sentence structure and live build behavior
+              <Text numberOfLines={1} style={styles.sectionTitle}>
+                Conditional Builder
               </Text>
             </View>
 
             <ConditionalComparisonCard
-              title="Conditional Affect"
+              title=""
               description=""
               players={players}
               groups={groups}
@@ -912,12 +904,9 @@ const styles = StyleSheet.create({
   heroActionButton: {
     minWidth: 164,
   },
-  heroActionsRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  heroSecondaryAction: {
-    minWidth: 132,
+  heroSubtitleSingleLine: {
+    fontSize: 11,
+    lineHeight: 15,
   },
 
   headerCard: {
@@ -1024,6 +1013,9 @@ const styles = StyleSheet.create({
     fontSize: 9,
     textAlign: "right",
     flexShrink: 1,
+  },
+  sectionSubFullWidth: {
+    flex: 1,
   },
   summarySubtext: {
     color: COLORS.sub,

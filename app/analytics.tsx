@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
@@ -13,7 +14,7 @@ import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard"
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { getAnalyticsHubCards } from "@/utils/appHubs";
-import { APP_ROUTES, buildHistoryRoute, buildHomeRoute } from "@/utils/appRoutes";
+import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
 import { APP_ICONS } from "@/utils/iconAccess";
 
@@ -64,31 +65,6 @@ const ANALYTICS_CARD_TONES: Record<
   },
 };
 
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function toCount(value: unknown, fallback = 0) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function StatBlock({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <View style={styles.statBlock}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
 function CroppedHubIcon({
   iconKey,
   accent,
@@ -138,7 +114,10 @@ function AnalyticsCard({
 
           <View style={styles.cardWideContent}>
             <View style={styles.cardWideTitleWrap}>
-              <Text style={[styles.cardTitle, styles.cardTitleWide]}>{card.title}</Text>
+              <DefinitionRichText
+                text={card.title}
+                style={[styles.cardTitle, styles.cardTitleWide]}
+              />
             </View>
           </View>
         </View>
@@ -149,7 +128,7 @@ function AnalyticsCard({
           </View>
 
           <View style={styles.cardBody}>
-            <Text style={styles.cardTitle}>{card.title}</Text>
+            <DefinitionRichText text={card.title} style={styles.cardTitle} />
           </View>
         </>
       )}
@@ -182,12 +161,8 @@ export default function AnalyticsScreen() {
       setError(null);
     }
   }, [analyticsQuery.error]);
-  const payload = toRecord(analyticsQuery.payload);
   const loading = analyticsQuery.loading;
   const isStale = analyticsQuery.isStale;
-  const staleMessage = analyticsQuery.staleMessage;
-
-  const hero = toRecord(payload?.hero);
   const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
   const recoveryState = useMemo(
@@ -216,8 +191,6 @@ export default function AnalyticsScreen() {
   const analyticsSecondaryAction = useMemo(() => {
     if (recoveryState.kind === "no-players")
       return { label: "Profiles", variant: "secondary" as const, onPress: () => router.push(APP_ROUTES.playerDirectory) };
-    if (recoveryState.kind === "no-games")
-      return { label: "Import backup", variant: "secondary" as const, onPress: () => router.push(buildHistoryRoute({ intent: "import" })) };
     return null;
   }, [recoveryState.kind, router]);
   const analyticsSectionTitle =
@@ -236,13 +209,6 @@ export default function AnalyticsScreen() {
         : error
           ? error
           : "Syncing the analytics hub surface from the published Supabase payload.";
-  const heroMessage = error
-    ? error
-    : loading
-      ? "Syncing Supabase-authored analytics."
-      : isStale
-        ? `Showing the last successful server payload because the latest refresh failed${staleMessage ? `: ${staleMessage}` : "."}`
-      : "Counts on this screen come from Supabase analytics payloads.";
 
   return (
     <PageShell preset="analytics" density="compact" contentContainerStyle={styles.pageContent}>
@@ -253,21 +219,14 @@ export default function AnalyticsScreen() {
             style={styles.commandButton}
             onPress={() => router.push(APP_ROUTES.home)}
           >
-            <Text style={styles.commandButtonText}>Back to Command</Text>
+            <Text style={styles.commandButtonText}>Command</Text>
           </Pressable>
         }
         title="Analytics"
         size="compact"
         variant="stat"
         style={styles.heroCard}
-      >
-        <View style={styles.statsRow}>
-          <StatBlock label="Players" value={toCount(hero.players)} />
-          <StatBlock label="Games" value={toCount(hero.games)} />
-          <StatBlock label="Views" value={toCount(hero.views, cards.length)} />
-        </View>
-        <Text style={styles.heroMeta}>{heroMessage}</Text>
-      </HeroCard>
+      />
 
       {recoveryState.kind !== "none" && !loading && !error ? (
         <AnalyticsRecoveryCard
@@ -283,15 +242,9 @@ export default function AnalyticsScreen() {
       <AnalyticsStateSection
         eyebrow="Directory"
         title="Analytics Destinations"
-        subtitle="Open the published Moonrakers analytics surfaces from one shared command deck."
         state={analyticsSectionState}
         sourceKind={isStale ? "server-stale" : "server"}
         sourceLabel={isStale ? "Stale server data" : "Server data"}
-        sourceCaption={
-          isStale
-            ? `Counts above and readiness for this destination deck are showing the last successful Supabase payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
-            : "Counts above and readiness for this destination deck come from the shared Supabase analytics payload."
-        }
         messageTitle={analyticsSectionTitle}
         messageBody={analyticsSectionBody}
         primaryAction={analyticsPrimaryAction}
@@ -350,39 +303,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.35,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  heroMeta: {
-    color: "#BBD2F6",
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 8,
-  },
-  statBlock: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.035)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 2,
-  },
-  statLabel: {
-    color: "#D7E7FF",
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-  statValue: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
   },
   grid: {
     flexDirection: "row",

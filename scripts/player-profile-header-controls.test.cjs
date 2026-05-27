@@ -15,6 +15,12 @@ assert.match(
 
 assert.match(
   source,
+  /useAuthProfile/,
+  "expected the player profile screen to read authProfile so the quick player chips can anchor on the signed-in Moonrakers profile",
+);
+
+assert.match(
+  source,
   /TextInput/,
   "expected the player profile screen to import a TextInput for player search",
 );
@@ -23,6 +29,42 @@ assert.match(
   source,
   /from "@\/utils\/appRoutes"/,
   "expected the player profile screen to import shared app route helpers",
+);
+
+assert.match(
+  source,
+  /prioritizeSignedInPlayerOptions/,
+  "expected the player profile screen to reuse the shared signed-in quick-pick ordering helper",
+);
+
+assert.match(
+  source,
+  /signedInTopPlayerOptions/,
+  "expected the player profile screen to read the signed-in player quick-pick priorities from the server-authored profile payload when available",
+);
+
+assert.match(
+  source,
+  /buildRecentGameOpponentOptions/,
+  "expected the player profile screen to fall back to recent-game opponent ordering when the signed-in quick-pick payload is unavailable",
+);
+
+assert.match(
+  source,
+  /ALL_PLAYERS_CHIP_ID/,
+  "expected the player profile screen to keep a dedicated All players quick-chip id",
+);
+
+assert.match(
+  source,
+  /label:\s*"All players"/,
+  "expected the player profile screen to render an All players quick chip",
+);
+
+assert.match(
+  source,
+  /badge:\s*[\s\S]*\?\s*"You"/,
+  "expected the player profile screen to mark the signed-in player chip with a You badge",
 );
 
 assert.match(
@@ -39,7 +81,7 @@ assert.match(
 
 assert.match(
   source,
-  /placeholder="Search User"/,
+  /placeholder:\s*"Search User"/,
   "expected the player profile header to expose a Search User input beneath the player name",
 );
 
@@ -51,14 +93,20 @@ assert.match(
 
 assert.match(
   source,
-  /router\.push\(APP_ROUTES\.home\)/,
-  "expected the player profile header action to route Back to Command to the shared Command page",
+  /router\.push\(APP_ROUTES\.playerDirectory\)/,
+  "expected the All players quick chip to open the shared player directory route",
 );
 
 assert.match(
   source,
-  /Back to Command/,
-  "expected the player profile header to display Back to Command instead of Back",
+  /router\.push\(APP_ROUTES\.home\)/,
+  "expected the player profile header action to route Command to the shared Command page",
+);
+
+assert.match(
+  source,
+  /Command/,
+  "expected the player profile header to display Command instead of Back",
 );
 
 assert.doesNotMatch(

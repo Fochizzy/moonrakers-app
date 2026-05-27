@@ -57,14 +57,26 @@ assert.match(
 
 assert.match(
   source,
+  /badge:\s*String\(option\.key\) === signedInId \?\s*"You"\s*:\s*null/,
+  "expected the focus-player quick picks to badge the signed-in player as You",
+);
+
+assert.match(
+  source,
+  /key:\s*ALL_FOCUS_PLAYERS_CHIP_ID,[\s\S]*label:\s*"All players",[\s\S]*kind:\s*"action"/,
+  "expected the focus-player quick picks to append an All players action chip after the signed-in-first shortlist",
+);
+
+assert.match(
+  source,
   /placeholder="Search for Player"/,
   "expected the chart setup screen to render a Search for Player input underneath the quick picks",
 );
 
 assert.match(
   source,
-  /focusPlayerSearch\.trim\(\)\s*\?\s*\(?\s*filteredFocusPlayerOptions\.length/s,
-  "expected the chart setup screen to only expand search results when a focus-player query exists",
+  /focusPlayerSearch\.trim\(\)\s*\|\|\s*showAllFocusPlayerOptions/,
+  "expected the chart setup screen to expand focus-player browsing when the All players chip is opened or a search query exists",
 );
 
 console.log("chart-focus-player-selector.test.cjs passed");

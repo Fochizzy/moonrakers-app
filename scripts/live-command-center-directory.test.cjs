@@ -39,4 +39,10 @@ run("Command and player directory surfaces still read from the shared player sto
 
   expectIncludes(homeSource, "const rawPlayers = usePlayers()", "home players selector");
   expectIncludes(playerDirectorySource, "const rawPlayers = usePlayers()", "player directory players selector");
+  expectIncludes(playerDirectorySource, "const rawGroups = useGroups()", "player directory groups selector");
+  expectIncludes(
+    playerDirectorySource,
+    "canonicalizeSelectablePlayers(rawPlayers, rawGroups)",
+    "player directory canonical player collapse",
+  );
 });

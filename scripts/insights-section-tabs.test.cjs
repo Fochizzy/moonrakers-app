@@ -24,6 +24,18 @@ assert.match(
   "expected insights screen to relabel the pairing tab to Personal Correlations"
 );
 
+assert.match(
+  screenSource,
+  /<AnalyticsControlRail[\s\S]*title="Insight Lenses"[\s\S]*tabVariant="stacked"/,
+  "expected the insights screen to render the insight lens controls as a stacked vertical button list"
+);
+
+assert.doesNotMatch(
+  screenSource,
+  /Switch between the published correlation lenses without leaving this route\.|Pick the player whose server-authored correlation reads you want to inspect\./,
+  "expected the old Insight Lenses helper copy to be removed from the live insights screen"
+);
+
 assert.doesNotMatch(
   screenSource,
   /label: ["']Global Meta["']|title=["']Global Meta["']|activeSectionTab === ["']globalMeta["']|label: ["']Individual Insights["']|title=["']Individual Insights["']|activeSectionTab === ["']individualInsights["']/,

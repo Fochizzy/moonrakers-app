@@ -10,6 +10,7 @@ function read(relPath) {
 
 const routesSource = read(path.join("utils", "appRoutes.ts"));
 const definitionsSource = read(path.join("app", "definitions.tsx"));
+const catalogSource = read(path.join("utils", "definitionCatalog.ts"));
 
 assert.match(
   routesSource,
@@ -31,8 +32,8 @@ assert.match(
 
 assert.match(
   definitionsSource,
-  /useLocalSearchParams<\{\s*metric\?: string(?: \| string\[\])?;\s*category\?: string(?: \| string\[\])?\s*\}>/,
-  "expected the Definitions screen to read both metric and category params",
+  /useLocalSearchParams<\{[\s\S]*metric\?: string(?: \| string\[\])?;[\s\S]*category\?: string(?: \| string\[\])?;[\s\S]*\}>/s,
+  "expected the Definitions screen to read both metric and category params, even with extra route context",
 );
 
 assert.match(
@@ -54,15 +55,15 @@ assert.match(
 );
 
 assert.match(
-  definitionsSource,
+  catalogSource,
   /key: "elo"/,
-  "expected the Definitions catalog to expose an ELO category",
+  "expected the shared Definitions catalog to expose an ELO category",
 );
 
 assert.match(
-  definitionsSource,
+  catalogSource,
   /key: "correlations"/,
-  "expected the Definitions catalog to expose a correlations category",
+  "expected the shared Definitions catalog to expose a correlations category",
 );
 
 console.log("definitions-route-categories.test.cjs passed");

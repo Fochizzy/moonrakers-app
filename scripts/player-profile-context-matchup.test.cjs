@@ -9,7 +9,7 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /buildCommonOpponentOptions\(\{[\s\S]*playerId,\s*players:\s*sortedPlayers as any,\s*games:\s*games as any,\s*limit:\s*4[\s\S]*\}\)/,
+  /buildCommonOpponentOptions\(\{[\s\S]*playerId:\s*resolvedPlayerId,\s*players:\s*sortedPlayers as any,\s*games:\s*games as any,\s*limit:\s*4[\s\S]*\}\)/,
   "expected Context Matchup to derive a top-four shared-opponent strip for the selected player",
 );
 

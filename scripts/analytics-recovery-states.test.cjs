@@ -6,14 +6,22 @@ const ts = require("typescript");
 
 const projectRoot = path.resolve(__dirname, "..");
 const helperPath = path.join(projectRoot, "utils", "analyticsRecoveryState.ts");
+const recoveryHookPath = path.join(projectRoot, "utils", "useAnalyticsRecovery.ts");
 const analyticsPath = path.join(projectRoot, "app", "analytics.tsx");
 const statsPath = path.join(projectRoot, "app", "stats.tsx");
+const eloPath = path.join(projectRoot, "app", "elo.tsx");
+const insightsPath = path.join(projectRoot, "app", "insights.tsx");
+const playerProfileIndexPath = path.join(projectRoot, "app", "player-profile", "index.tsx");
 
 const helperSource = fs.existsSync(helperPath)
   ? fs.readFileSync(helperPath, "utf8")
   : "";
+const recoveryHookSource = fs.readFileSync(recoveryHookPath, "utf8");
 const analyticsSource = fs.readFileSync(analyticsPath, "utf8");
 const statsSource = fs.readFileSync(statsPath, "utf8");
+const eloSource = fs.readFileSync(eloPath, "utf8");
+const insightsSource = fs.readFileSync(insightsPath, "utf8");
+const playerProfileIndexSource = fs.readFileSync(playerProfileIndexPath, "utf8");
 
 const originalResolveFilename = Module._resolveFilename;
 
@@ -160,20 +168,20 @@ assert.match(
 
 assert.match(
   analyticsSource,
-  /Start tracked game[\s\S]*Import backup/s,
-  "expected the analytics hub recovery actions to cover the no-games state",
-);
-
-assert.match(
-  analyticsSource,
   /Start tracked game[\s\S]*buildHomeRoute\("game"\)/s,
   "expected the analytics hub no-games primary action to use the shared game home route",
 );
 
-assert.match(
+assert.doesNotMatch(
   analyticsSource,
-  /Import backup[\s\S]*buildHistoryRoute\(\{\s*intent:\s*"import"\s*\}\)/s,
-  "expected the analytics hub no-games secondary action to use the History import route",
+  /Import backup|buildHistoryRoute\(\{\s*intent:\s*"import"\s*\}\)/s,
+  "expected the analytics hub no-games state to remove the import backup secondary action",
+);
+
+assert.doesNotMatch(
+  recoveryHookSource,
+  /Import backup|buildHistoryRoute/,
+  "expected shared analytics recovery helpers to stop offering a History import route",
 );
 
 assert.match(
@@ -182,10 +190,10 @@ assert.match(
   "expected the stats shared no-games primary action to use the shared game home route",
 );
 
-assert.match(
+assert.doesNotMatch(
   statsSource,
-  /Import backup[\s\S]*buildHistoryRoute\(\{\s*intent:\s*"import"\s*\}\)/s,
-  "expected the stats shared no-games secondary action to use the History import route",
+  /Import backup|buildHistoryRoute\(\{\s*intent:\s*"import"\s*\}\)/s,
+  "expected the stats shared no-games recovery state to remove the import backup secondary action",
 );
 
 assert.match(
@@ -222,6 +230,24 @@ assert.match(
   statsSource,
   /function renderGamesTab\(\)[\s\S]*overviewRecoveryState\.kind === "no-players" \|\| overviewRecoveryState\.kind === "no-games"[\s\S]*renderSharedRecoveryCard\(overviewRecoveryState\.kind\)/s,
   "expected the games tab to reuse the shared no-players and no-games recovery handling",
+);
+
+assert.doesNotMatch(
+  eloSource,
+  /Track or import games/,
+  "expected the ELO empty-state copy to stop suggesting backup import",
+);
+
+assert.doesNotMatch(
+  insightsSource,
+  /Track or import a few games/,
+  "expected the Insights empty-state copy to stop suggesting backup import",
+);
+
+assert.doesNotMatch(
+  playerProfileIndexSource,
+  /import a backup/i,
+  "expected the player directory empty-state copy to stop suggesting backup import",
 );
 
 console.log("analytics-recovery-states.test.cjs passed");

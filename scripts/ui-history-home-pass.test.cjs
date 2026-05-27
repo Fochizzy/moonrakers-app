@@ -27,7 +27,7 @@ run("History and home surfaces expose the new control language", () => {
   const indexSource = read("app/index.tsx");
   const appRoutesSource = read("utils/appRoutes.ts");
 
-  expectIncludes(historySource, "Back to Command", "history command escape hatch");
+  expectIncludes(historySource, "Command", "history command escape hatch");
   expectIncludes(historySource, "router.push(APP_ROUTES.home)", "history command route wiring");
   expectIncludes(historySource, "Sort By", "history sort heading");
   expectIncludes(historySource, "function HistoryTab(", "history underline tab helper");

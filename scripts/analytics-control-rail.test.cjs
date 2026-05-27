@@ -26,6 +26,30 @@ assert.match(
   "expected AnalyticsControlRail to render shared tab controls from a tabs collection",
 );
 
+assert.match(
+  railSource,
+  /numberOfLines=\{tabVariant === "stacked" \? 3 : 1\}/,
+  "expected stacked analytics rails to allow up to three lines for narrow labels"
+);
+
+assert.match(
+  railSource,
+  /tabRailStacked:\s*\{[\s\S]*?flexDirection:\s*"column",[\s\S]*?flexWrap:\s*"nowrap",[\s\S]*?gap:\s*4,/,
+  "expected stacked analytics rails to stay on three vertical rows without wrapping into a second column"
+);
+
+assert.match(
+  railSource,
+  /tabButtonStacked:\s*\{[\s\S]*?alignSelf:\s*"stretch",[\s\S]*?paddingHorizontal:\s*10,[\s\S]*?paddingVertical:\s*8,[\s\S]*?gap:\s*3,/,
+  "expected stacked analytics buttons to use the tighter compact padding"
+);
+
+assert.match(
+  railSource,
+  /tabButtonTextStacked:\s*\{[\s\S]*?fontSize:\s*13,[\s\S]*?lineHeight:\s*16,/,
+  "expected stacked analytics buttons to use smaller text for long labels"
+);
+
 for (const [label, source] of [
   ["stats", statsSource],
   ["insights", insightsSource],

@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from "react-native";
 import { useTheme } from "@/theme";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import Text from "@/components/ui/Text";
 
 type SectionCardProps = {
@@ -62,8 +63,12 @@ export default function SectionCard({
 
               <View style={styles.copy}>
                 {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
-                {title ? <Text variant="sectionTitle">{title}</Text> : null}
-                {subtitle ? <Text variant="caption">{subtitle}</Text> : null}
+                {title ? (
+                  <DefinitionRichText text={title} variant="sectionTitle" />
+                ) : null}
+                {subtitle ? (
+                  <DefinitionRichText text={subtitle} variant="caption" />
+                ) : null}
               </View>
             </View>
           </View>

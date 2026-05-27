@@ -30,6 +30,8 @@ tmp-codex-*.txt
 tmp-*.png
 tmp-*.xml
 tmp-*.txt
+.codex-task4-stage/
+.supabase/
 recovered-*.xml
 *.aab
 *-upload-cert.pem

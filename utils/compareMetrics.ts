@@ -62,7 +62,7 @@ export const METRICS: MetricDescriptor[] = [
   {
     key: 'closeGameRate',
     label: 'Close-Game Rate',
-    description: 'Share of games where the top two prestige totals finished within 3 points.',
+    description: 'Share of games where the top two prestige totals finished within 3 prestige.',
     group: 'outcomes',
     kind: 'percent',
     direction: 'higher',

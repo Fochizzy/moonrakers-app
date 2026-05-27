@@ -825,7 +825,7 @@ export default function ChartKeyScreen() {
               style={styles.secondaryButton}
               onPress={openCommandPage}
             >
-              <Text style={styles.secondaryButtonText}>Back to Command</Text>
+              <Text style={styles.secondaryButtonText}>Command</Text>
             </TouchableOpacity>
           </View>
         ) : null}

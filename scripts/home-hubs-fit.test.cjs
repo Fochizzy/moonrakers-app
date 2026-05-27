@@ -35,7 +35,7 @@ function run(name, fn) {
   }
 }
 
-run("Hubs tab keeps all five hub cards on one fit-screen layout", () => {
+run("Hubs tab keeps the four bridge cards visible in a mobile 2x2 fit-screen layout", () => {
   const indexSource = read("app/index.tsx");
 
   expectIncludes(indexSource, 'viewport="fit"', "fit home viewport");
@@ -50,16 +50,20 @@ run("Hubs tab keeps all five hub cards on one fit-screen layout", () => {
     "full-width hub list for the bottom action row"
   );
   expectIncludes(indexSource, "layout={card.layout ?? (card.iconKey ? \"graphic\" : \"text\")}", "shared hub layout hint");
+  expectIncludes(indexSource, 'emphasis="large"', "large hubs emphasis");
   expectIncludes(indexSource, "style={[styles.hubTileBase, styles.hubTileHalf]}", "compact hubs tile style");
   expectIncludes(indexSource, "style={[styles.hubTileBase, styles.hubTileFullWidth]}", "wide profile management tile style");
-  expectNotIncludes(indexSource, 'emphasis="large"', "oversized hubs emphasis");
   expectIncludes(indexSource, 'hubGrid: {', "hubs grid style");
   expectIncludes(indexSource, 'hubWideStack: {', "bottom hub action row");
   expectIncludes(indexSource, 'flex: 1,', "screen-filling hubs flex layout");
-  expectIncludes(indexSource, 'alignContent: "space-between"', "space-filling hub rows");
-  expectIncludes(indexSource, 'height: "48.5%"', "screen-filling half-tile height");
+  expectIncludes(indexSource, 'alignContent: "flex-start"', "top-aligned hub rows");
+  expectIncludes(indexSource, "gap: 10", "tighter mobile hub tile spacing");
+  expectIncludes(indexSource, 'width: "47%"', "narrower half-tile width so two cards fit per row");
+  expectIncludes(indexSource, "minHeight: 184", "shorter half-tile minimum height for above-the-fold fit");
   expectIncludes(indexSource, 'width: "100%"', "full-width bottom tile width");
-  expectNotIncludes(indexSource, "minHeight: 176", "short fixed hub tiles");
+  expectNotIncludes(indexSource, 'width: "48.5%"', "old overly wide half-tile width");
+  expectNotIncludes(indexSource, "minHeight: 224", "old tall half-tile minimum height");
+  expectNotIncludes(indexSource, 'height: "48.5%"', "old percentage-sized half-tile height");
   expectNotIncludes(indexSource, "marginBottom: 10", "old stacked hub gap");
 });
 

@@ -67,7 +67,7 @@ export default function ChartSetupHeroBar({
           style={styles.actionButton}
         />
         <ActionButton
-          title="Back to Command"
+          title="Command"
           variant="ghost"
           onPress={onBackToCommand}
           style={styles.actionButton}

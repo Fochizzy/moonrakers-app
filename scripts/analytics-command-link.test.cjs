@@ -20,8 +20,8 @@ assert.match(
 
 assert.match(
   analyticsSource,
-  /<HeroCard[\s\S]*headerAction=\{[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*Back to Command[\s\S]*\}/,
-  "expected the analytics hero to pass a top-right Back to Command action into the shared hero card"
+  /<HeroCard[\s\S]*headerAction=\{[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*Command[\s\S]*\}/,
+  "expected the analytics hero to pass a top-right Command action into the shared hero card"
 );
 
 assert.match(
@@ -32,7 +32,7 @@ assert.match(
 
 assert.match(
   heroCardSource,
-  /<View style=\{styles\.headerRow\}>[\s\S]*<View style=\{styles\.headerCopy\}>[\s\S]*<Text variant=\"pageTitle\">\{title\}<\/Text>[\s\S]*headerAction[\s\S]*<\/View>/,
+  /<View style=\{styles\.headerRow\}>[\s\S]*<View style=\{styles\.headerCopy\}>[\s\S]*<DefinitionRichText text=\{title\} variant="pageTitle" \/>[\s\S]*<View style=\{styles\.headerAction\}>\{headerAction\}<\/View>/,
   "expected HeroCard to render the title block and optional header action in a shared top row"
 );
 

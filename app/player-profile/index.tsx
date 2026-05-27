@@ -8,9 +8,10 @@ import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
-import { usePlayers } from "@/store/useStore";
+import { useGroups, usePlayers } from "@/store/useStore";
 import { APP_ROUTES, buildPlayerProfileRoute } from "@/utils/appRoutes";
 import { COLORS } from "@/utils/colors";
+import { canonicalizeSelectablePlayers } from "@/utils/registeredProfilePlayer";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 
 type Player = {
@@ -25,16 +26,22 @@ type Player = {
 export default function PlayerIndexScreen() {
   const router = useRouter();
   const rawPlayers = usePlayers() ?? [];
+  const rawGroups = useGroups() ?? [];
   const [playerSearch, setPlayerSearch] = useState("");
+
+  const playerDirectory = useMemo(
+    () => canonicalizeSelectablePlayers(rawPlayers, rawGroups),
+    [rawGroups, rawPlayers],
+  );
 
   const players = useMemo<Player[]>(
     () =>
-      rawPlayers
+      playerDirectory.players
         .filter((player: any) => player?.id)
         .sort((a: any, b: any) =>
           String(a?.name ?? "").localeCompare(String(b?.name ?? ""))
         ),
-    [rawPlayers]
+    [playerDirectory.players]
   );
 
   const normalizedSearch = playerSearch.trim().toLowerCase();
@@ -52,7 +59,7 @@ export default function PlayerIndexScreen() {
 
   const resultsSubtitle = players.length
     ? `${filteredPlayers.length} shown${normalizedSearch ? ` for "${playerSearch.trim()}"` : ""}.`
-    : "Add players or import a backup to populate this page.";
+    : "Add players to populate this page.";
 
   return (
     <PageShell preset="quiet" density="compact">
@@ -70,14 +77,6 @@ export default function PlayerIndexScreen() {
           />
         }
       >
-        <View style={styles.heroMetaRow}>
-          <MetricPill label="Players" value={players.length} />
-          <MetricPill label="Results" value={filteredPlayers.length} />
-          <MetricPill
-            label="Search"
-            value={normalizedSearch ? "Filtered" : "All"}
-          />
-        </View>
       </HeroCard>
 
       <SectionCard
@@ -98,8 +97,7 @@ export default function PlayerIndexScreen() {
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No players found</Text>
             <Text style={styles.emptyText}>
-              Add players or import a backup, then come back here to open a full
-              profile.
+              Add players, then come back here to open a full profile.
             </Text>
             <ActionButton
               title="Open roster"
@@ -182,37 +180,7 @@ export default function PlayerIndexScreen() {
   );
 }
 
-function MetricPill({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <View style={styles.metricPill}>
-      <Text variant="metricLabel">{label}</Text>
-      <Text variant="metricValue">{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  heroMetaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  metricPill: {
-    minWidth: 92,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    gap: 4,
-  },
   searchInput: {
     minHeight: 48,
     borderRadius: 16,
@@ -238,21 +206,19 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
+    flexDirection: "column",
     gap: 12,
   },
   card: {
-    width: "48.2%",
-    minHeight: 188,
+    width: "100%",
+    minHeight: 144,
     borderRadius: 18,
     paddingHorizontal: 12,
-    paddingTop: 14,
-    paddingBottom: 12,
+    paddingVertical: 12,
     backgroundColor: COLORS.cardAlt,
     borderWidth: 1,
     overflow: "hidden",
+    flexDirection: "row",
     alignItems: "center",
     gap: 12,
     shadowOpacity: 0.22,
@@ -281,7 +247,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 999,
   },
   iconWrap: {
-    marginTop: 2,
     padding: 6,
     borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.03)",
@@ -289,8 +254,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.whiteSoft,
   },
   nameBlock: {
-    width: "100%",
-    alignItems: "center",
+    flex: 1,
+    alignItems: "flex-start",
+    justifyContent: "center",
     gap: 8,
   },
   cardName: {
@@ -298,8 +264,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
     lineHeight: 20,
-    textAlign: "center",
-    paddingHorizontal: 4,
+    textAlign: "left",
   },
   cardPill: {
     minHeight: 28,
@@ -309,6 +274,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "flex-start",
   },
   cardMeta: {
     fontSize: 11,

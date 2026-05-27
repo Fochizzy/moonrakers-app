@@ -90,10 +90,14 @@ export function buildChartsRoute(input?: {
   } as const;
 }
 
-export function buildHistoryRoute(input?: { intent?: "import" | null }) {
+export function buildHistoryRoute(input?: {
+  gameId?: string | null;
+}) {
+  const gameId = String(input?.gameId ?? "").trim();
+
   return {
     pathname: APP_ROUTES.history,
-    params: input?.intent ? { intent: input.intent } : undefined,
+    params: gameId ? { gameId } : undefined,
   } as const;
 }
 
@@ -122,9 +126,16 @@ export function buildDefinitionsRoute(metric: string);
 export function buildDefinitionsRoute(input: {
   metric?: string | null;
   category?: string | null;
+  sourceLabel?: string | null;
 });
 export function buildDefinitionsRoute(
-  input: string | { metric?: string | null; category?: string | null }
+  input:
+    | string
+    | {
+        metric?: string | null;
+        category?: string | null;
+        sourceLabel?: string | null;
+      }
 ) {
   if (typeof input === "string") {
     const metric = input.trim();
@@ -136,12 +147,33 @@ export function buildDefinitionsRoute(
 
   const metric = String(input?.metric ?? "").trim();
   const category = String(input?.category ?? "").trim();
+  const sourceLabel = String(input?.sourceLabel ?? "").trim();
 
   return {
     pathname: APP_ROUTES.definitions,
     params: {
       ...(metric ? { metric } : {}),
       ...(category ? { category } : {}),
+      ...(sourceLabel ? { sourceLabel } : {}),
     },
   } as const;
+}
+
+export function resolveDefinitionSourceLabel(pathname: string | null | undefined) {
+  const normalized = String(pathname ?? "").trim().toLowerCase();
+
+  if (!normalized) return null;
+  if (normalized === "/" || normalized.startsWith("/?")) return "Command";
+  if (normalized.startsWith("/analytics")) return "Analytics";
+  if (normalized.startsWith("/stats")) return "Stats";
+  if (normalized.startsWith("/elo")) return "ELO";
+  if (normalized.startsWith("/insights")) return "Insights";
+  if (normalized.startsWith("/player-cards")) return "Player Cards";
+  if (normalized.startsWith("/player-profile")) return "Player Profile";
+  if (normalized.startsWith("/summary")) return "Summary";
+  if (normalized.startsWith("/charts/compare")) return "Compare";
+  if (normalized.startsWith("/charts")) return "Charts";
+  if (normalized.startsWith("/players")) return "Players";
+
+  return null;
 }

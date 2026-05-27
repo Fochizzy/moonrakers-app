@@ -169,10 +169,8 @@ export function HomeLeaderboardTab({
         <AnalyticsStateSection
           eyebrow="Home"
           title="Leaderboard"
-          subtitle={`Shared ELO ranking sorted by ${sortLabel(sortBy)}.`}
           state={leaderboardState}
           sourceKind="server"
-          sourceCaption="This home leaderboard uses the same published ELO payload as the dedicated ELO screen."
           messageTitle={leaderboardMessageTitle}
           messageBody={leaderboardMessageBody}
           primaryAction={leaderboardPrimaryAction}

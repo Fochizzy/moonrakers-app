@@ -2,9 +2,19 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const source = fs.readFileSync(
+const definitionsSource = fs.readFileSync(
   path.join(__dirname, "..", "app", "definitions.tsx"),
   "utf8",
+);
+const catalogSource = fs.readFileSync(
+  path.join(__dirname, "..", "utils", "definitionCatalog.ts"),
+  "utf8",
+);
+
+assert.match(
+  definitionsSource,
+  /DEFINITION_GROUPS/,
+  "expected the Definitions screen to read from the shared definition catalog",
 );
 
 for (const snippet of [
@@ -50,8 +60,8 @@ for (const snippet of [
   'title: "Closer"',
 ]) {
   assert.ok(
-    source.includes(snippet),
-    `expected definitions.tsx to contain ${snippet}`,
+    catalogSource.includes(snippet),
+    `expected definitionCatalog.ts to contain ${snippet}`,
   );
 }
 

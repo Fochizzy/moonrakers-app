@@ -56,10 +56,28 @@ assert.doesNotMatch(
   "expected the analytics landing to keep the compact stats row and shorter hero copy"
 );
 
-assert.match(
+assert.doesNotMatch(
   analyticsSource,
-  /Players[\s\S]*Games[\s\S]*Views/,
-  "expected the analytics landing to keep the Players / Games / Views summary row"
+  /<StatBlock label="Players"[\s\S]*<StatBlock label="Games"[\s\S]*<StatBlock label="Views"/,
+  "expected the analytics landing hero to drop the Players / Games / Views summary row"
+);
+
+assert.doesNotMatch(
+  analyticsSource,
+  /Counts on this screen come from Supabase analytics payloads\./,
+  "expected the analytics landing hero to drop the Supabase counts helper copy"
+);
+
+assert.doesNotMatch(
+  analyticsSource,
+  /Open the published Moonrakers analytics surfaces from one shared command deck\./,
+  "expected the analytics destinations section to drop the old deck subtitle copy"
+);
+
+assert.doesNotMatch(
+  analyticsSource,
+  /Counts above and readiness for this destination deck come from the shared Supabase analytics payload\./,
+  "expected the analytics destinations section to drop the shared payload provenance caption"
 );
 
 const { getAnalyticsHubCards } = require("../utils/appHubs.ts");

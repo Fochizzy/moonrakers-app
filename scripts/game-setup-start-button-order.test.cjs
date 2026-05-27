@@ -26,7 +26,7 @@ assert.match(
 
 assert.match(
   actionButtonSource,
-  /subtitle \? <Text style=\{styles\.subtitle\}>\{subtitle\}<\/Text> : null/,
+  /subtitle \?\s*\(\s*<Text style=\{\[styles\.subtitle,\s*\{\s*color:\s*tone\.subtitleColor\s*\}\]\}>\s*\{subtitle\}\s*<\/Text>\s*\)\s*:\s*null/s,
   "expected ActionButton to render the subtitle when provided"
 );
 

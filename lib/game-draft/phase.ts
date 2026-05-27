@@ -20,5 +20,5 @@ export function isGameplayDraftPhase(phase: GameDraftPhase) {
 }
 
 export function canResumeDraft(draft: GameDraft | null) {
-  return Boolean(draft && draft.selectedPlayerIds.length >= 2);
+  return Boolean(draft && isGameplayDraftPhase(draft.phase));
 }

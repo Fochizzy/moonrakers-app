@@ -53,11 +53,14 @@ export function useSharedCloudBootstrap() {
 
   const bootstrapIdRef = useRef(0);
   const sharedRefreshIdRef = useRef(0);
+  const sharedCloudChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const sharedCloudChannelUserIdRef = useRef<string | null>(null);
 
   const isPublicAuthRoute = PUBLIC_AUTH_ROUTES.has(pathname);
   const showBlockingOverlay =
     !isPublicAuthRoute &&
     (authBootstrapStatus === "loading" || authBootstrapStatus === "error");
+  const sharedCloudUserId = authSession?.user?.id ?? null;
 
   useEffect(() => {
     let active = true;
@@ -151,18 +154,27 @@ export function useSharedCloudBootstrap() {
   ]);
 
   useEffect(() => {
-    if (authBootstrapStatus !== "ready" || !authSession?.user?.id || !authProfile?.player_name) {
+    if (authBootstrapStatus !== "ready" || !sharedCloudUserId || !authProfile?.player_name) {
       return;
     }
 
     let active = true;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const channelName = `moonrakers-shared-cloud:${sharedCloudUserId}`;
+    const channelTopic = `realtime:${channelName}`;
+    const refreshSession = {
+      user: {
+        id: sharedCloudUserId,
+        email: null,
+      },
+    };
 
     async function refreshSharedSnapshot() {
       const requestId = ++sharedRefreshIdRef.current;
 
       try {
-        const hydratedSnapshot = await loadHydratedSharedSnapshot(authSession);
+        const hydratedSnapshot = await loadHydratedSharedSnapshot(refreshSession);
         if (!active || requestId !== sharedRefreshIdRef.current) {
           return;
         }
@@ -187,32 +199,73 @@ export function useSharedCloudBootstrap() {
       }, 150);
     }
 
-    const channel = supabase
-      .channel(`moonrakers-shared-cloud:${authSession.user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "groups" },
-        scheduleRefresh,
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "group_members" },
-        scheduleRefresh,
-      )
-      .subscribe();
+    if (
+      sharedCloudChannelRef.current &&
+      sharedCloudChannelUserIdRef.current === sharedCloudUserId
+    ) {
+      return;
+    }
+
+    async function attachSharedCloudChannel() {
+      const existingChannels = supabase
+        .getChannels()
+        .filter((existingChannel) => existingChannel.topic === channelTopic);
+
+      for (const existingChannel of existingChannels) {
+        if (sharedCloudChannelRef.current === existingChannel) {
+          sharedCloudChannelRef.current = null;
+          sharedCloudChannelUserIdRef.current = null;
+        }
+
+        await supabase.removeChannel(existingChannel);
+        if (!active) {
+          return;
+        }
+      }
+
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "groups" },
+          scheduleRefresh,
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "group_members" },
+          scheduleRefresh,
+        )
+        .subscribe();
+
+      if (!active) {
+        void supabase.removeChannel(channel);
+        return;
+      }
+
+      sharedCloudChannelRef.current = channel;
+      sharedCloudChannelUserIdRef.current = sharedCloudUserId;
+    }
+
+    void attachSharedCloudChannel();
 
     return () => {
       active = false;
       if (refreshTimer) {
         clearTimeout(refreshTimer);
       }
-      void supabase.removeChannel(channel);
+      if (channel && sharedCloudChannelRef.current === channel) {
+        sharedCloudChannelRef.current = null;
+        sharedCloudChannelUserIdRef.current = null;
+      }
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
     };
   }, [
     authBootstrapStatus,
     authProfile?.player_name,
-    authSession,
     hydrateCloudSnapshot,
+    sharedCloudUserId,
   ]);
 
   useEffect(() => {

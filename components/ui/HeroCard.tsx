@@ -4,10 +4,12 @@ import {
   ImageSourcePropType,
   StyleProp,
   StyleSheet,
+  TextStyle,
   View,
   ViewStyle,
 } from "react-native";
 import { useTheme } from "@/theme";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import Text from "@/components/ui/Text";
 
 type HeroCardProps = {
@@ -19,6 +21,8 @@ type HeroCardProps = {
   size?: "default" | "compact";
   style?: StyleProp<ViewStyle>;
   subtitle?: string;
+  subtitleNumberOfLines?: number;
+  subtitleStyle?: StyleProp<TextStyle>;
   title: string;
   variant?: "default" | "minimal" | "stat";
 };
@@ -32,6 +36,8 @@ export default function HeroCard({
   size = "default",
   style,
   subtitle,
+  subtitleNumberOfLines,
+  subtitleStyle,
   title,
   variant = "default",
 }: HeroCardProps) {
@@ -53,17 +59,24 @@ export default function HeroCard({
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
             {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
-            <Text variant="pageTitle">{title}</Text>
+            <DefinitionRichText text={title} variant="pageTitle" />
           </View>
           <View style={styles.headerAction}>{headerAction}</View>
         </View>
       ) : (
         <>
           {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
-          <Text variant="pageTitle">{title}</Text>
+          <DefinitionRichText text={title} variant="pageTitle" />
         </>
       )}
-      {subtitle ? <Text variant="heroSubtitle">{subtitle}</Text> : null}
+      {subtitle ? (
+        <DefinitionRichText
+          text={subtitle}
+          variant="heroSubtitle"
+          numberOfLines={subtitleNumberOfLines}
+          style={subtitleStyle}
+        />
+      ) : null}
       {children}
       {actions ? <View style={[styles.actions, compact ? styles.actionsCompact : null]}>{actions}</View> : null}
     </View>

@@ -15,51 +15,18 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import Text from "@/components/ui/Text";
-import { supabase } from "@/lib/supabase";
 import {
   hasAuthCallbackPayload,
   isAuthCallbackUrl,
 } from "@/lib/auth/handleAuthCallback";
 import { useSharedCloudBootstrap } from "@/lib/auth/useSharedCloudBootstrap";
-import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
-import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
 import { useStore } from "@/store/useStore";
-import type { AuthSession } from "@/store/useStore";
 import { ThemeProvider, useTheme } from "@/theme";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-
-async function loadHydratedSharedSnapshot(session: AuthSession) {
-  if (!session?.user?.id) {
-    throw new Error("Signed-in session required.");
-  }
-  const [snapshot, registeredProfiles] = await Promise.all([
-    loadCloudSnapshot(session.user.id),
-    loadRegisteredProfiles().catch(() => []),
-  ]);
-  await supabase
-    .from("profiles")
-    .select("id")
-    .is("deleted_at", null)
-    .eq("id", session.user.id)
-    .maybeSingle();
-  const statsSnapshot = await loadStatsSnapshot({
-    profileId: session.user.id,
-    groups: snapshot.groups,
-    games: snapshot.games,
-  });
-  return {
-    session,
-    snapshot: {
-      ...snapshot,
-      players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
-    },
-    statsSnapshot,
-  };
-}
 
 const STAR_POSITIONS = [
   { top: 28, left: 24, size: 2, opacity: 0.55 },
@@ -181,7 +148,6 @@ function AppNavigator() {
   const setGroups = useStore((state) => state.setGroups);
   const setGames = useStore((state) => state.setGames);
   const hydrateAuthBootstrap = useStore((state) => state.hydrateAuthBootstrap);
-  const hydrateCloudSnapshot = useStore((state) => state.hydrateCloudSnapshot);
 
   useEffect(() => {
     if (authBootstrapStatus !== "ready") return;
@@ -202,20 +168,6 @@ function AppNavigator() {
       return;
     }
   }, [authBootstrapStatus, authSession, authProfile, clearAuthState, hydrateAuthBootstrap, setPlayers, setGroups, setGames]);
-
-  useEffect(() => {
-    if (!authSession?.user?.id || authBootstrapStatus !== "ready") return;
-    const channel = supabase
-      .channel(`moonrakers-shared-cloud:${authSession.user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "groups" }, () => {
-        void loadHydratedSharedSnapshot(authSession).then((s) => hydrateCloudSnapshot(s as any)).catch((err) => { console.error("[layout] groups realtime refresh failed:", err); });
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "group_members" }, () => {
-        void loadHydratedSharedSnapshot(authSession).then((s) => hydrateCloudSnapshot(s as any)).catch((err) => { console.error("[layout] group_members realtime refresh failed:", err); });
-      })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [authSession, authBootstrapStatus, hydrateCloudSnapshot]);
 
   useEffect(() => {
     if (authBootstrapStatus !== "ready") return;

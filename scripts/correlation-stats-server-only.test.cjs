@@ -37,8 +37,8 @@ assert.match(
 
 assert.match(
   correlationSource,
-  /serverOnly\s*\|\|\s*serverPersonalCorrelations\.length > 0\s*\|\|\s*serverPairingCorrelations\.length > 0/,
-  "expected personal correlations to avoid local fallback when serverOnly is enabled",
+  /if \(serverPersonalCorrelations.length > 0 \|\| serverPairingCorrelations.length > 0\) \{\s*return \[\.\.\.serverPersonalCorrelations, \.\.\.serverPairingCorrelations\];\s*\}\s*if \(\s*serverOnly\s*\|\|\s*serverLegacyCorrelationItems.length > 0\s*\) \{\s*return serverLegacyCorrelationItems;\s*\}\s*return buildCorrelationResults\(games, relationships\);/s,
+  "expected personal correlations to prefer newer server arrays, then legacy server rows, and only use local fallback when serverOnly is off",
 );
 
 assert.match(

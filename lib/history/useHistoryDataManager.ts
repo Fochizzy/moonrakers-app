@@ -2,9 +2,7 @@ import { useMemo, useState } from "react";
 
 import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/app-status/store";
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
-import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
 import { deleteCompletedGame } from "@/lib/game-save/deleteCompletedGame";
-import { importBackupFromPicker } from "@/lib/migration/importBackupFromPicker";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 
 type AuthSessionLike = {
@@ -13,15 +11,8 @@ type AuthSessionLike = {
   } | null;
 } | null;
 
-type AuthProfileLike = {
-  id?: string | null;
-  player_name?: string | null;
-  display_name?: string | null;
-} | null;
-
 type HookArgs = {
   authSession: AuthSessionLike;
-  authProfile: AuthProfileLike;
   hydrateCloudSnapshot: (input: {
     session: AuthSessionLike;
     snapshot: unknown;
@@ -30,7 +21,6 @@ type HookArgs = {
 };
 
 export function useHistoryDataManager(args: HookArgs) {
-  const [importingBackup, setImportingBackup] = useState(false);
   const [deletingGameId, setDeletingGameId] = useState<string | null>(null);
   const clearStatus = useClearAppStatus();
   const currentStatus = useCurrentAppStatus();
@@ -41,97 +31,6 @@ export function useHistoryDataManager(args: HookArgs) {
     }
 
     args.hydrateCloudSnapshot(await loadHydratedCloudState(activeSession as any));
-  }
-
-  async function importBackup() {
-    const signedInProfileId = String(args.authSession?.user?.id ?? "").trim();
-    const signedInPlayerName =
-      String(args.authProfile?.player_name ?? "").trim() ||
-      String(args.authProfile?.display_name ?? "").trim();
-
-    if (!signedInProfileId || !signedInPlayerName) {
-      const detail = "Finish login and profile setup before importing a backup.";
-      publishAppStatus({
-        scope: "history_import",
-        state: "failed",
-        title: "Profile required",
-        detail,
-      });
-      throw new Error(detail);
-    }
-
-    setImportingBackup(true);
-    publishAppStatus({
-      scope: "history_import",
-      state: "running",
-      title: "Importing backup",
-      detail: "Reading the selected JSON backup and merging it into this cloud profile.",
-    });
-
-    try {
-      const registeredProfiles = await loadRegisteredProfiles().catch(() => []);
-      const resolvedProfilesByName = Object.fromEntries(
-        registeredProfiles.flatMap((profile: any) => {
-          const name = String(profile?.name ?? "").trim();
-          const displayName = String(profile?.displayName ?? "").trim();
-          const value = { id: String(profile?.id ?? "").trim(), player_name: name };
-
-          return [name, displayName]
-            .map((candidate) => candidate.trim().toLowerCase())
-            .filter(Boolean)
-            .map((candidate) => [candidate, value] as const);
-        }),
-      );
-
-      const result = await importBackupFromPicker({
-        signedInProfileId,
-        signedInPlayerName,
-        resolvedProfilesByName,
-      });
-
-      if (!result.imported) {
-        publishAppStatus({
-          scope: "history_import",
-          state: "idle",
-          title: "Import cancelled",
-          detail: "No backup file was selected.",
-        });
-        return result;
-      }
-
-      try {
-        await refreshCloudHistoryState();
-        publishAppStatus({
-          scope: "history_import",
-          state: "success",
-          title: "Backup imported",
-          detail: `Imported ${result.importedGroups} groups and ${result.importedGames} games.`,
-        });
-      } catch (refreshError) {
-        console.error("Backup imported, but cloud refresh failed:", refreshError);
-        publishAppStatus({
-          scope: "history_import",
-          state: "success_with_warning",
-          title: "Backup imported with refresh pending",
-          detail: `Imported ${result.importedGroups} groups and ${result.importedGames} games, but the local view could not refresh yet.`,
-        });
-      }
-
-      return result;
-    } catch (error) {
-      const detail =
-        formatSupabaseConfigError(error) ||
-        "Something went wrong while importing that backup.";
-      publishAppStatus({
-        scope: "history_import",
-        state: "failed",
-        title: "Import failed",
-        detail,
-      });
-      throw new Error(detail);
-    } finally {
-      setImportingBackup(false);
-    }
   }
 
   async function removeGame(gameId: string, activeSession: AuthSessionLike = args.authSession) {
@@ -184,22 +83,15 @@ export function useHistoryDataManager(args: HookArgs) {
   }
 
   return {
-    importingBackup,
     deletingGameId,
     status: useMemo(
-      () =>
-        currentStatus &&
-        (currentStatus.scope === "history_import" || currentStatus.scope === "history_delete")
-          ? currentStatus
-          : null,
+      () => (currentStatus && currentStatus.scope === "history_delete" ? currentStatus : null),
       [currentStatus],
     ),
     clearStatus: () => {
-      clearStatus("history_import");
       clearStatus("history_delete");
     },
     refreshCloudHistoryState,
-    importBackup,
     removeGame,
   };
 }

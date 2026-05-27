@@ -242,6 +242,7 @@ export type PlayerProfileScreenPayload = {
   selectedPlayerId: string | null;
   selectedOpponentId: string | null;
   playerOptions: EloPlayerOption[];
+  signedInTopPlayerOptions?: EloPlayerOption[];
   hero: {
     id: string | null;
     name: string;

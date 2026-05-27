@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import PlaystyleScatterCard, {
   type PlaystyleScatterPoint,
 } from "@/components/stats/PlaystyleScatterCard";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import Text from "@/components/ui/Text";
 import {
   buildGlobalPlaystyleCorrelations,
@@ -67,7 +68,7 @@ function getMetricLabel(key: PlaystyleCorrelationKey) {
     case "prestige":
       return "Prestige";
     case "objectivePoints":
-      return "Objective Points";
+      return "Objective Prestige";
     case "assistsGiven":
       return "Assists Given";
     case "assistsReceived":
@@ -163,7 +164,10 @@ function SummaryCard({
         },
       ]}
     >
-      <Text style={[styles.summaryLabel, { color: accent }]}>{label}</Text>
+      <DefinitionTermText
+        label={label}
+        style={[styles.summaryLabel, { color: accent }]}
+      />
       <Text style={styles.summaryValue}>{value}</Text>
       {meta ? <Text style={styles.summaryMeta}>{meta}</Text> : null}
     </View>
@@ -188,7 +192,7 @@ function CorrelationCard({
   return (
     <View style={[styles.correlationCard, { borderColor: `${accent}55` }]}>
       <View style={styles.correlationHeader}>
-        <Text style={styles.correlationLabel}>{row.label}</Text>
+        <DefinitionTermText label={row.label} style={styles.correlationLabel} />
         <View
           style={[
             styles.correlationBadge,
@@ -437,7 +441,7 @@ export default function PlaystyleSection({
           accent={COLORS.blueGlow}
         />
         <SummaryCard
-          label="Objective Points / Game"
+          label="Objective Prestige / Game"
           value={formatNumber(personalObjectives)}
           meta={`Global ${formatNumber(globalObjectives)}`}
           accent={COLORS.gold}

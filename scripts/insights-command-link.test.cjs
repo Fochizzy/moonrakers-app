@@ -16,14 +16,8 @@ assert.match(
 
 assert.match(
   source,
-  /<View style=\{styles\.heroHeader\}>[\s\S]*<Text style=\{styles\.title\}>Insights Hub<\/Text>[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*Back to Command/,
-  "expected the Insights hero header to include a top-right Back to Command control",
-);
-
-assert.match(
-  source,
-  /heroHeader:\s*\{[\s\S]*flexDirection:\s*"row",[\s\S]*justifyContent:\s*"space-between",/,
-  "expected the insights hero header to lay out the title and Back to Command button across the top row",
+  /<HeroCard[\s\S]*headerAction=\{[\s\S]*<ActionButton[\s\S]*title="Command"[\s\S]*onPress=\{\(\) => router\.push\(APP_ROUTES\.home\)\}[\s\S]*style=\{styles\.heroActionButton\}/,
+  "expected the Insights hero to include a Command header action wired to the shared Command route",
 );
 
 console.log("insights-command-link.test.cjs passed");

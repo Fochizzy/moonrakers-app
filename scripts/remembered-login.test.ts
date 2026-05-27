@@ -24,10 +24,11 @@ function createMemoryStorage(): KeyValueStorage {
   };
 }
 
-function createMemorySecureStorage(): SecureKeyValueStorage {
+function createMemorySecureStorage() {
   const values = new Map<string, string>();
 
   return {
+    values,
     async getItemAsync(key) {
       return values.get(key) ?? null;
     },
@@ -63,6 +64,11 @@ await writeRememberedLogin(
 );
 
 assert.deepEqual(
+  Array.from(secureStorage.values.keys()),
+  ["moonrakers.remembered-login-password"],
+);
+
+assert.deepEqual(
   await readRememberedLogin({
     storage,
     secureStorage,
@@ -71,6 +77,11 @@ assert.deepEqual(
     email: "admiral@moonrakers.app",
     password: "starsecret",
   },
+);
+
+assert.equal(
+  Array.from(secureStorage.values.keys()).some((key) => key.includes(":")),
+  false,
 );
 
 await clearRememberedLogin({

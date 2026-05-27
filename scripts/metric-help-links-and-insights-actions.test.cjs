@@ -75,6 +75,30 @@ assert.match(
   "expected Insights to expose a player-aware profile action",
 );
 
+assert.doesNotMatch(
+  insightsSource,
+  /Server-authored correlation clues and synergy trends/,
+  "expected the Insights hero to drop the old subtitle copy",
+);
+
+assert.doesNotMatch(
+  insightsSource,
+  /Lock .* as the focus and pick the rival on the compare screen\./,
+  "expected the player-aware compare action to remove the explanatory body copy",
+);
+
+assert.doesNotMatch(
+  insightsSource,
+  /Open chart setup with .* already scoped in\./,
+  "expected the player-aware charts action to remove the explanatory body copy",
+);
+
+assert.doesNotMatch(
+  insightsSource,
+  /Jump straight into .* full profile breakdown\./,
+  "expected the player-aware profile action to remove the explanatory body copy",
+);
+
 assert.match(
   insightsSource,
   /buildCompareRoute\(\{[\s\S]*mode:\s*"players"[\s\S]*ids:\s*\[activeProfileId\]/s,
@@ -95,8 +119,20 @@ assert.match(
 
 assert.match(
   insightsSource,
+  /heroActionButton:\s*\{[\s\S]*minWidth:\s*136,[\s\S]*paddingHorizontal:\s*12,[\s\S]*paddingVertical:\s*10,/,
+  "expected the Insights hero command button to tighten so the title can stay on one line",
+);
+
+assert.match(
+  insightsSource,
   /<DefinitionsJumpLink[\s\S]*category="correlations"/s,
   "expected Insights help links to target the correlations Definitions category",
+);
+
+assert.ok(
+  insightsSource.indexOf("Open compare for this player") >
+    insightsSource.lastIndexOf('view="synergy"'),
+  "expected the player-aware action cards to move below the main Insights content",
 );
 
 assert.match(
@@ -131,14 +167,14 @@ assert.match(
 
 assert.match(
   eloSource,
-  /<DefinitionsJumpLink[\s\S]*metric="elo_current"/s,
-  "expected ELO to deep-link the Current ELO headline card to its definition",
+  /<DefinitionTermText[\s\S]*featuredCard\.key === "current-elo"[\s\S]*"elo_current"/s,
+  "expected ELO to make the Current ELO headline term itself deep-link to its definition",
 );
 
 assert.match(
   eloSource,
-  /<DefinitionsJumpLink[\s\S]*metric="elo_peak"/s,
-  "expected ELO to deep-link the Peak headline card to its definition",
+  /<DefinitionTermText[\s\S]*featuredCard\.key === "peak-elo"[\s\S]*"elo_peak"/s,
+  "expected ELO to make the Peak headline term itself deep-link to its definition",
 );
 
 assert.match(

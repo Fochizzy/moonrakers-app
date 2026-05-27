@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import ActionButton from "@/components/ui/ActionButton";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
@@ -173,7 +174,7 @@ function MetricPill({
 }) {
   return (
     <View style={styles.metricPill}>
-      <Text variant="metricLabel">{label}</Text>
+      <DefinitionTermText label={label} variant="metricLabel" />
       <Text variant="metricValue">{value}</Text>
     </View>
   );
@@ -568,9 +569,11 @@ function ScoreMetric({
 }) {
   return (
     <View style={styles.scoreMetricPill}>
-      <Text style={styles.scoreMetricLabel} numberOfLines={1}>
-        {label}
-      </Text>
+      <DefinitionTermText
+        label={label}
+        numberOfLines={1}
+        style={styles.scoreMetricLabel}
+      />
       <Text style={styles.scoreMetricValue}>{value}</Text>
     </View>
   );
@@ -585,7 +588,7 @@ function ReplayMetric({
 }) {
   return (
     <View style={styles.replayMetricPill}>
-      <Text style={styles.replayMetricLabel}>{label}</Text>
+      <DefinitionTermText label={label} style={styles.replayMetricLabel} />
       <Text style={styles.replayMetricValue}>{value}</Text>
     </View>
   );

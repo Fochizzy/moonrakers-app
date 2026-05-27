@@ -7,6 +7,7 @@ const suites = {
     "scripts/analytics-provenance-fallback.test.cjs",
     "scripts/playstyle-spotlight-definitions.test.cjs",
     "scripts/player-card-elo-helper.test.cjs",
+    "scripts/insights-live-correlation-overlay-fix.test.cjs",
   ],
   ui: [
     "scripts/action-button-hierarchy.test.cjs",

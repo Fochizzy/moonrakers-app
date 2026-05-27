@@ -43,7 +43,7 @@ export function buildTurnOrderSummary(players: GameSetupTurnOrderPlayer[]) {
 
   return players
     .map((player, index) => `${index + 1}. ${resolveTurnOrderPlayerName(player, index)}`)
-    .join(", ");
+    .join("  /  ");
 }
 
 export function promoteTurnOrderPlayer(

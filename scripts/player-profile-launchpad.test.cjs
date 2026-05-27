@@ -114,15 +114,33 @@ assert.match(
   "expected the player-profile launchpad to expose Recent games",
 );
 
+assert.doesNotMatch(
+  source,
+  /Jump into the next player workflow/,
+  "expected the Quick Actions header to drop the old helper subtitle",
+);
+
+for (const snippet of [
+  /Lock .* and pick the rival on the compare screen\./,
+  /Carry this player into chart setup and choose the view there\./,
+  /Jump straight to the existing history section lower on this profile\./,
+]) {
+  assert.doesNotMatch(
+    source,
+    snippet,
+    "expected the player-profile quick action cards to drop the old descriptive helper copy",
+  );
+}
+
 assert.match(
   source,
-  /router\.push\(buildCompareRoute\(\{\s*mode:\s*"players",\s*ids:\s*\[String\(playerId\)\]/s,
+  /router\.push\(buildCompareRoute\(\{\s*mode:\s*"players",\s*ids:\s*\[String\(resolvedPlayerId\)\]/s,
   "expected Compare with... to push the shared compare route with the current player locked as the focused id",
 );
 
 assert.match(
   source,
-  /router\.push\(buildChartsRoute\(\{\s*playerId:\s*String\(playerId\),\s*setup:\s*true,\s*\}\)\)/s,
+  /router\.push\(buildChartsRoute\(\{\s*playerId:\s*String\(resolvedPlayerId\),\s*setup:\s*true,\s*\}\)\)/s,
   "expected Open charts to push the shared charts route with the current player in setup mode",
 );
 
@@ -152,8 +170,14 @@ assert.match(
 
 assert.match(
   source,
-  /<View\s+style=\{styles\.stickyProfileTabShell\}\s+onLayout=\{\(event\) => setStickyShellHeight\(event\.nativeEvent\.layout\.height\)\}/s,
-  "expected the sticky profile tab shell wrapper to capture its rendered height",
+  /const handleProfileTabShellLayout = \(event: LayoutChangeEvent\) => \{[\s\S]*setStickyShellHeight\(height\);[\s\S]*setStickyShellAnchorY\(y\);[\s\S]*\};/,
+  "expected the sticky profile tab shell layout handler to capture both the rendered height and sticky anchor position",
+);
+
+assert.match(
+  source,
+  /<ProfileTabRailShell[\s\S]*onLayout=\{handleProfileTabShellLayout\}/s,
+  "expected the extracted sticky profile tab shell to report its layout through the shared handler",
 );
 
 assert.match(
@@ -170,8 +194,8 @@ assert.match(
 
 assert.match(
   source,
-  /<View style=\{styles\.metricGridTop\}>[\s\S]*Quick Actions[\s\S]*stickyProfileTabShell/s,
-  "expected the Quick Actions block to render high on the page after the top metric cards",
+  /stickyProfileTabShell[\s\S]*Recent Games[\s\S]*Quick Actions[\s\S]*bottomSpacer/s,
+  "expected Quick Actions to render near the bottom of the page after the main profile content and recent games",
 );
 
 assert.match(
