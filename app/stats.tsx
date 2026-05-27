@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
 import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
 import PlaystyleSection from "@/components/stats/PlaystyleSection";
+import TurnOrderSummarySection from "@/components/stats/TurnOrderSummarySection";
 import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
 import DefinitionTermText from "@/components/ui/DefinitionTermText";
@@ -123,6 +124,71 @@ function normalizeTopSignals(value: unknown, generatedAt: unknown) {
   ];
 }
 
+function isRateLikeMetric(metric: PayloadRecord) {
+  const metricKey = toStringValue(metric.metricKey ?? metric.key, "").toLowerCase();
+  return metricKey.includes("rate") || metricKey.includes("conversion");
+}
+
+function formatClusterMetricValue(metric: PayloadRecord) {
+  const value = metric.value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (isRateLikeMetric(metric) && value >= 0 && value <= 1) {
+      return `${Math.round(value * 100)}%`;
+    }
+
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+
+  return toDisplayValue(value);
+}
+
+function hasClusterContent(cluster: PayloadRecord) {
+  return (
+    Boolean(toStringValue(cluster.label, "")) ||
+    Boolean(toStringValue(cluster.summary, "")) ||
+    toArray(cluster.metrics).length > 0
+  );
+}
+
+function MetricClusterSection({
+  title,
+  cluster,
+  emptyText,
+  accent,
+}: {
+  title: string;
+  cluster: PayloadRecord;
+  emptyText: string;
+  accent: string;
+}) {
+  const clusterLabel = toStringValue(cluster.label, "");
+  const clusterSummary = toStringValue(cluster.summary, "");
+  const metrics = toArray(cluster.metrics);
+
+  return (
+    <View style={styles.metricSubsection}>
+      <DefinitionTermText label={title} style={styles.metricSubsectionTitle} />
+      {clusterLabel ? <Text style={styles.clusterLabel}>{clusterLabel}</Text> : null}
+      {clusterSummary ? <Text style={styles.clusterSummary}>{clusterSummary}</Text> : null}
+      {metrics.length > 0 ? (
+        <View style={styles.compactGrid}>
+          {metrics.map((metric, index) => (
+            <StatPill
+              key={toStringValue(metric.key, `cluster-metric-${index}`)}
+              label={toStringValue(metric.label, `Metric ${index + 1}`)}
+              metric={toStringValue(metric.metricKey ?? metric.key, "")}
+              value={formatClusterMetricValue(metric)}
+              accent={accent}
+            />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.emptyInlineText}>{emptyText}</Text>
+      )}
+    </View>
+  );
+}
+
 function StatPill({
   label,
   metric = null,
@@ -188,6 +254,7 @@ export default function StatsScreen() {
 
   const overview = toRecord(payload?.overview);
   const hero = toRecord(overview.hero);
+  const overviewFormClosing = toRecord(overview.formClosing);
   const overviewCards = toArray(overview.cards).filter((card) => {
     const cardKey = toStringValue(card.key, "").toLowerCase();
     const cardLabel = toStringValue(card.title ?? card.label, "").toLowerCase();
@@ -249,9 +316,11 @@ export default function StatsScreen() {
       label: selectedPlayer?.label ?? "Selected player",
       summary: "This Supabase payload does not yet expose a separate detail card for the selected player.",
       stats: {},
+      synthetic: true,
     };
   }, [playerOptions, playersSection.detail, selectedPlayerId]);
 
+  const pressureContext = toRecord(selectedPlayerDetail.pressureContext);
   const playstyleHighlights = toArray(playstyleSection.highlights);
   const correlationItems = [
     ...toArray(correlationsSection.items),
@@ -259,13 +328,40 @@ export default function StatsScreen() {
     ...toArray(correlationsSection.macro),
   ];
   const gamesItems = toArray(gamesSection.items);
+  const overviewFormClosingMetrics = toArray(overviewFormClosing.metrics);
   const detailStats = normalizeStatsList(selectedPlayerDetail.stats);
+  const pressureContextMetrics = toArray(pressureContext.metrics);
+  const turnOrderOverviewRows = toArray(gamesSection.turnOrderOverview);
+  const turnOrderByTableSize = toArray(gamesSection.turnOrderByTableSize);
+  const overviewFormClosingTitle = "Form & Closing";
+  const pressureContextTitle = "Pressure & Context";
+  const supportContextHighlight = (() => {
+    const highlightKey = toStringValue(pressureContext.highlightKey, "");
+    if (!highlightKey) {
+      return null;
+    }
+
+    return (
+      pressureContextMetrics.find((metric) => {
+        const metricKey = toStringValue(metric.key, "");
+        const glossaryMetricKey = toStringValue(metric.metricKey, "");
+        return metricKey === highlightKey || glossaryMetricKey === highlightKey;
+      }) ?? null
+    );
+  })();
+  const selectedPlayerDetailIsSynthetic = selectedPlayerDetail.synthetic === true;
+  const hasOverviewFormClosing = hasClusterContent(overviewFormClosing);
+  const hasPressureContext = hasClusterContent(pressureContext);
+  const hasTurnOrderSections =
+    turnOrderOverviewRows.length > 0 || turnOrderByTableSize.length > 0;
   const hasLeagueData =
     overviewCards.length > 0 ||
     topSignals.length > 0 ||
+    overviewFormClosingMetrics.length > 0 ||
     playstyleHighlights.length > 0 ||
     correlationItems.length > 0 ||
     gamesItems.length > 0 ||
+    hasTurnOrderSections ||
     toNumberValue(hero.games) > 0;
   const {
     recoveryState: overviewRecoveryState,
@@ -283,7 +379,7 @@ export default function StatsScreen() {
     gamesCount: games.length,
     playerOptionsCount: playerOptions.length,
     hasLeagueData,
-    selectedPlayerHasDetail: detailStats.length > 0,
+    selectedPlayerHasDetail: detailStats.length > 0 || hasPressureContext,
     context: "stats",
   });
 
@@ -418,6 +514,15 @@ export default function StatsScreen() {
             </Text>
           )}
         </View>
+
+        {hasOverviewFormClosing ? (
+          <MetricClusterSection
+            title={overviewFormClosingTitle}
+            cluster={overviewFormClosing}
+            emptyText="Supabase has not returned any form-and-closing metrics yet."
+            accent={COLORS.purple}
+          />
+        ) : null}
 
         {toNumberValue(halftimeProfile.totalGames) > 0 ? (
           <View style={styles.metricSubsection}>
@@ -628,6 +733,17 @@ export default function StatsScreen() {
               No detailed player stats were returned in the current Supabase payload.
             </Text>
           )}
+
+          <MetricClusterSection
+            title={pressureContextTitle}
+            cluster={pressureContext}
+            emptyText={
+              selectedPlayerDetailIsSynthetic
+                ? "This fallback player card does not include a real pressure-context payload yet."
+                : "Supabase has not returned any pressure-context metrics for this player yet."
+            }
+            accent={COLORS.green}
+          />
         </AnalyticsStateSection>
       </View>
     );
@@ -690,10 +806,10 @@ export default function StatsScreen() {
         secondaryAction={recoveryProps?.secondaryAction}
         tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
-        {playstyleHighlights.length > 0 ? (
+        {playstyleHighlights.length > 0 || supportContextHighlight ? (
           <View style={styles.signalSection}>
             <Text style={styles.playstyleLead}>
-              Stay-at-base tempo, base-rate share, and style read are now treated like first-pass scouting clues instead of background stats.
+              Stay-at-base tempo, base-rate share, style read, and support load are now treated like first-pass scouting clues instead of background stats.
             </Text>
             {spotlightEntry ? (
               <View style={styles.playstyleSpotlightCard}>
@@ -704,6 +820,27 @@ export default function StatsScreen() {
                 <Text style={styles.playstyleSpotlightValue}>
                   {toDisplayValue(spotlightEntry.value)}
                 </Text>
+              </View>
+            ) : null}
+            {supportContextHighlight ? (
+              <View style={styles.playstyleSupportCard}>
+                <Text style={styles.playstyleSupportEyebrow}>Support Context Spotlight</Text>
+                <DefinitionTermText
+                  label={toStringValue(supportContextHighlight.label, "Support Context")}
+                  metric={toStringValue(
+                    supportContextHighlight.metricKey ?? supportContextHighlight.key,
+                    "",
+                  )}
+                  style={styles.playstyleSupportLabel}
+                />
+                <Text style={styles.playstyleSupportValue}>
+                  {formatClusterMetricValue(supportContextHighlight)}
+                </Text>
+                {toStringValue(pressureContext.summary, "") ? (
+                  <Text style={styles.playstyleSupportSummary}>
+                    {toStringValue(pressureContext.summary, "")}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
             {supportingEntries.map((entry, index) => (
@@ -869,11 +1006,15 @@ export default function StatsScreen() {
               </View>
             ))}
           </View>
-        ) : (
+        ) : !hasTurnOrderSections ? (
           <Text style={styles.emptyInlineText}>
             No game-specific analytics items were returned in the current payload.
           </Text>
-        )}
+        ) : null}
+        <TurnOrderSummarySection
+          overviewRows={turnOrderOverviewRows}
+          tableSizeGroups={turnOrderByTableSize}
+        />
       </AnalyticsStateSection>
     );
   }
@@ -1088,6 +1229,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
   },
+  clusterLabel: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
+  },
+  clusterSummary: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    lineHeight: 17,
+  },
   sectionActions: {
     alignItems: "flex-end",
     gap: 8,
@@ -1122,6 +1275,37 @@ const styles = StyleSheet.create({
     color: COLORS.gold,
     fontSize: 12,
     fontWeight: "900",
+  },
+  playstyleSupportCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(34,211,238,0.24)",
+    backgroundColor: "rgba(8,20,34,0.94)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  playstyleSupportEyebrow: {
+    color: COLORS.cyan,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  playstyleSupportLabel: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  playstyleSupportValue: {
+    color: COLORS.gold,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  playstyleSupportSummary: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    lineHeight: 16,
   },
   metricSubsection: {
     gap: 6,
