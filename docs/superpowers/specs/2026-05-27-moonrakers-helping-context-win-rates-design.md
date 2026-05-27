@@ -230,6 +230,29 @@ Each surfaced row should show the same shape as the player-profile version:
 - neutral evidence line,
 - recommendation line.
 
+### Glossary and page linking
+
+Any new surfaced helping terms introduced by this rollout must be added to the glossary and linked on the page.
+
+Concretely:
+
+- add any new glossary terms and copy bodies to `utils/definitionCatalog.ts`,
+- add any necessary label or metric aliases so those terms resolve through `resolveDefinitionTarget`,
+- make the new surfaced labels glossary-aware on both surfaces instead of rendering them as plain static text.
+
+At minimum, this should cover any new user-facing helping labels that do not already exist in the glossary, such as:
+
+- the new helping outcome section title if it becomes a glossary term,
+- helper/helped win-rate labels if they are newly introduced as glossary-backed terms,
+- any new split labels that are meant to behave like glossary terms rather than plain bucket copy.
+
+On-page linking should follow the existing app pattern:
+
+- use `DefinitionTermText` for tappable glossary-backed labels where the label itself appears on the surface,
+- or route through `buildDefinitionsRoute` when the interaction is attached to a larger pressable card or dedicated definitions action.
+
+The goal is that the new helping analytics do not introduce disconnected language that cannot be opened from the surface.
+
 ### Shared wording expectations
 
 The copy should deliberately carry both modes:
@@ -263,6 +286,16 @@ The local Moonrakers player-profile fallback, including `buildMoonrakersIntelPro
 
 The `Stats` route should continue the current display-helper direction by normalizing any new helping-context rows in a helper module instead of packing row-shaping logic directly into `app/stats.tsx`.
 
+### Definitions alignment
+
+The implementation should treat glossary support as part of the feature, not as optional polish after the analytics rows work.
+
+That means:
+
+- new helping terminology should ship with matching definition catalog entries when needed,
+- the new stats/player-profile labels should be wired to the definitions flow in the same implementation pass,
+- the definitions catalog and surface wiring should stay consistent with the final visible labels used on the page.
+
 ## Testing
 
 Add or extend targeted tests for:
@@ -278,6 +311,9 @@ Add or extend targeted tests for:
 - minimum-sample gating
 - player-profile Moonrakers output shape for the new helping outcome block
 - stats-screen display normalization for the new helping rows
+- definition catalog coverage for any newly introduced helping terms
+- definition-target resolution or label-alias coverage for the new surfaced helping labels
+- surface wiring coverage confirming the new glossary-backed labels are linked from the player-profile and stats surfaces
 
 The intent is to verify:
 
