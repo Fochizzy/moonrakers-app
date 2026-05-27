@@ -105,8 +105,20 @@ assert.match(
 
 assert.match(
   migrationSource,
-  /with existing_rows as \([\s\S]*jsonb_array_elements\(coalesce\(existing_macro_rows,\s*'\[\]'::jsonb\)\)/i,
+  /jsonb_array_elements\(coalesce\(existing_macro_rows,\s*'\[\]'::jsonb\)\)[\s\S]*jsonb_array_elements\(coalesce\(featured_macro_rows,\s*'\[\]'::jsonb\)\)/i,
   "expected the migration to reconcile existing macro rows before appending featured overlays",
+);
+
+assert.match(
+  migrationSource,
+  /coalesce\([\s\S]*regexp_replace\(trim\([^)]*->>'key'\),\s*'[^']+',\s*'',\s*'g'\)[\s\S]*regexp_replace\(trim\([^)]*->>'label'\),\s*'[^']+',\s*'',\s*'g'\)/i,
+  "expected macro reconciliation to match rows by normalized key or normalized label",
+);
+
+assert.match(
+  migrationSource,
+  /format\('__legacy__:%s:%s',\s*[^,]+sort_bucket,\s*[^)]+ordinal\)/i,
+  "expected macro reconciliation to preserve rows without a safe identity instead of collapsing them",
 );
 
 assert.equal(
@@ -123,6 +135,8 @@ for (const typeExport of [
   "AnalyticsMetricCluster",
   "AnalyticsTurnOrderSummary",
   "AnalyticsCorrelationRow",
+  "AnalyticsCorrelationPlayerOption",
+  "AnalyticsSynergyPairRow",
   "InsightsCorrelationsPayload",
 ]) {
   assert.match(
@@ -139,6 +153,10 @@ for (const typedSurface of [
   "turnOrderByTableSize?: AnalyticsTurnOrderGroup[]",
   "turnOrderSummary?: AnalyticsTurnOrderSummary | null",
   "macro?: AnalyticsCorrelationRow[]",
+  "players?: AnalyticsCorrelationPlayerOption[]",
+  "playerOptions?: AnalyticsCorrelationPlayerOption[]",
+  "winLoseSplit?: AnalyticsCorrelationRow[]",
+  "synergyPairs?: AnalyticsSynergyPairRow[]",
   "correlations: InsightsCorrelationsPayload",
 ]) {
   assert.ok(

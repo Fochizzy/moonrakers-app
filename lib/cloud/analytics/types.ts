@@ -108,7 +108,7 @@ export type AnalyticsTurnOrderSummary = {
 };
 
 export type AnalyticsCorrelationRow = {
-  key: string;
+  key?: string;
   label: string;
   value?: number | string | null;
   strength?: string;
@@ -120,12 +120,28 @@ export type AnalyticsCorrelationRow = {
   description?: string;
 };
 
+export type AnalyticsCorrelationPlayerOption = {
+  id: string;
+  label: string;
+  displayName?: string;
+  playerName?: string;
+};
+
+export type AnalyticsSynergyPairRow = {
+  a: string;
+  b: string;
+  score: number;
+};
+
 export type InsightsCorrelationsPayload = Record<string, unknown> & {
   macro?: AnalyticsCorrelationRow[];
   pairing?: AnalyticsCorrelationRow[];
   items?: AnalyticsCorrelationRow[];
   personal?: AnalyticsCorrelationRow[];
-  synergyPairs?: AnalyticsCorrelationRow[];
+  players?: AnalyticsCorrelationPlayerOption[];
+  playerOptions?: AnalyticsCorrelationPlayerOption[];
+  winLoseSplit?: AnalyticsCorrelationRow[];
+  synergyPairs?: AnalyticsSynergyPairRow[];
   turnOrderSummary?: AnalyticsTurnOrderSummary | null;
   selectedKey?: string | null;
   summary?: string;

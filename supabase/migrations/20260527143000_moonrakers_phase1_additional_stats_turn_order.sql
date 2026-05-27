@@ -508,21 +508,43 @@ returns jsonb
 language sql
 stable
 as $$
-  with existing_rows as (
+  with existing_source as (
     select
       row_value,
-      coalesce(row_value->>'key', '') as row_key,
       0 as sort_bucket,
       row_number() over () as ordinal
     from jsonb_array_elements(coalesce(existing_macro_rows, '[]'::jsonb)) as row_value
   ),
-  featured_rows as (
+  existing_rows as (
+    select
+      existing_source.row_value,
+      existing_source.sort_bucket,
+      existing_source.ordinal,
+      coalesce(
+        nullif(lower(regexp_replace(trim(existing_source.row_value->>'key'), '[^a-z0-9]+', '', 'g')), ''),
+        nullif(lower(regexp_replace(trim(existing_source.row_value->>'label'), '[^a-z0-9]+', '', 'g')), ''),
+        format('__legacy__:%s:%s', existing_source.sort_bucket, existing_source.ordinal)
+      ) as row_identity
+    from existing_source
+  ),
+  featured_source as (
     select
       row_value,
-      coalesce(row_value->>'key', '') as row_key,
       1 as sort_bucket,
       row_number() over () as ordinal
     from jsonb_array_elements(coalesce(featured_macro_rows, '[]'::jsonb)) as row_value
+  ),
+  featured_rows as (
+    select
+      featured_source.row_value,
+      featured_source.sort_bucket,
+      featured_source.ordinal,
+      coalesce(
+        nullif(lower(regexp_replace(trim(featured_source.row_value->>'key'), '[^a-z0-9]+', '', 'g')), ''),
+        nullif(lower(regexp_replace(trim(featured_source.row_value->>'label'), '[^a-z0-9]+', '', 'g')), ''),
+        format('__legacy__:%s:%s', featured_source.sort_bucket, featured_source.ordinal)
+      ) as row_identity
+    from featured_source
   ),
   ranked_rows as (
     select
@@ -530,7 +552,7 @@ as $$
       merged.sort_bucket,
       merged.ordinal,
       row_number() over (
-        partition by merged.row_key
+        partition by merged.row_identity
         order by merged.sort_bucket desc, merged.ordinal asc
       ) as row_rank
     from (
