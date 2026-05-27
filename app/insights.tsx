@@ -560,6 +560,10 @@ export default function InsightsScreen() {
         title={activeSectionLabel}
         helpCategory="correlations"
         state={insightsState}
+        sourceCaption={
+          staleSourceCaption ||
+          "This hub uses the published Supabase correlations payload, so each lens stays aligned with the shared analytics view."
+        }
         messageTitle={insightsMessageTitle}
         messageBody={insightsMessageBody}
         primaryAction={insightsPrimaryAction}
@@ -573,15 +577,6 @@ export default function InsightsScreen() {
               <DefinitionRichText text={statement} style={styles.summaryText} />
             </View>
           ))}
-          {staleSourceCaption ? (
-            <View style={styles.summaryItem}>
-              <View style={styles.summaryBullet} />
-              <DefinitionRichText
-                text={staleSourceCaption}
-                style={styles.summaryText}
-              />
-            </View>
-          ) : null}
         </View>
       </AnalyticsStateSection>
 

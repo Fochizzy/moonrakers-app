@@ -28,18 +28,28 @@ function run(name, fn) {
   }
 }
 
-run("Legacy full-screen routes keep an explicit safe-area wrapper", () => {
+run("Legacy full-screen routes keep explicit safe-area wrappers where needed", () => {
   const safeAreaRoutes = [
     "app/add-players.tsx",
-    "app/charts/compare/index.tsx",
     "app/elo.tsx",
     "app/history.tsx",
-    "app/player-profile/[playerId].tsx",
   ];
 
   for (const relPath of safeAreaRoutes) {
     const source = read(relPath);
     expectIncludes(source, "SafeAreaView", `${relPath} SafeAreaView usage`);
+  }
+});
+
+run("Shared-shell full-screen routes rely on PageShell for safe-area coverage", () => {
+  const pageShellRoutes = [
+    "app/charts/compare/index.tsx",
+    "app/player-profile/[playerId].tsx",
+  ];
+
+  for (const relPath of pageShellRoutes) {
+    const source = read(relPath);
+    expectIncludes(source, "PageShell", `${relPath} PageShell usage`);
   }
 });
 
