@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
 import AnalyticsSourceBadge from "@/components/analytics/AnalyticsSourceBadge";
 import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
 import MoonrakersIntelSection from "@/components/player/MoonrakersIntelSection";
@@ -29,6 +30,7 @@ import Text from "@/components/ui/Text";
 import { getPlayerProfileScreen } from "@/lib/cloud/analytics/getPlayerProfileScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useAuthProfile, useAuthSession, useGames, usePlayers } from "@/store/useStore";
+import { buildAnalyticsFreshnessPresentation } from "@/utils/analyticsFreshness";
 import {
   APP_ROUTES,
   buildChartsRoute,
@@ -271,10 +273,30 @@ export default function PlayerProfileDetailScreen() {
     payload && typeof payload === "object"
       ? (payload as Record<string, unknown>)
       : null;
-  const isStale = profileQuery.isStale;
-  const staleMessage = profileQuery.staleMessage;
-  const sourceKind = isStale ? "server-stale" : "server";
-  const sourceLabel = isStale ? "Stale server data" : "Server data";
+  const freshness = useMemo(
+    () =>
+      buildAnalyticsFreshnessPresentation({
+        error: profileQuery.error,
+        isStale: profileQuery.isStale,
+        lastSuccessAt: profileQuery.lastSuccessAt,
+        refresh: profileQuery.refresh,
+        retryLabel: "Retry profile",
+        staleEntityLabel: "player profile payload",
+        staleMessage: profileQuery.staleMessage,
+      }),
+    [
+      profileQuery.error,
+      profileQuery.isStale,
+      profileQuery.lastSuccessAt,
+      profileQuery.refresh,
+      profileQuery.staleMessage,
+    ],
+  );
+  const showProfileRecoveryCard = Boolean(profileQuery.error || profileQuery.isStale);
+  const profileRecoveryTitle =
+    profileQuery.error && profileQuery.lastSuccessAt === null
+      ? "Profile analytics unavailable"
+      : "Showing saved profile analytics";
   const hero = toRecord(payload?.hero);
   const authProfilePlayerOption = useMemo<StorePlayer | null>(() => {
     const id = String(authProfile?.id ?? authSession?.user?.id ?? "").trim();
@@ -803,14 +825,21 @@ export default function PlayerProfileDetailScreen() {
               </Text>
             </View>
 
-            <View style={styles.headerMetaRow}>
-              <AnalyticsSourceBadge kind={sourceKind} label={sourceLabel} />
-              <Text style={styles.headerMetaText}>
-                {isStale
-                  ? `Latest refresh failed${staleMessage ? `: ${staleMessage}` : "."}`
-                  : "Full profile analytics are now coming from the published Supabase contract."}
-              </Text>
-            </View>
+            {!showProfileRecoveryCard ? (
+              <View style={styles.headerMetaRow}>
+                {freshness.sourceKind ? (
+                  <AnalyticsSourceBadge
+                    kind={freshness.sourceKind}
+                    label={freshness.sourceLabel}
+                  />
+                ) : null}
+                <Text style={styles.headerMetaText}>
+                  {freshness.sourceCaption(
+                    "Full profile analytics are now coming from the published Supabase contract.",
+                  )}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <Pressable
@@ -820,6 +849,27 @@ export default function PlayerProfileDetailScreen() {
             <Text style={styles.headerBadgeText}>Command</Text>
           </Pressable>
         </View>
+
+        {showProfileRecoveryCard ? (
+          <AnalyticsRecoveryCard
+            title={profileRecoveryTitle}
+            body={freshness.sourceCaption(
+              "Full profile analytics are now coming from the published Supabase contract.",
+            )}
+            tone={
+              profileQuery.error && profileQuery.lastSuccessAt === null ? "danger" : "warning"
+            }
+            sourceKind={freshness.sourceKind}
+            sourceLabel={freshness.sourceLabel}
+            primaryAction={freshness.retryAction}
+            secondaryAction={{
+              label: "Command",
+              onPress: openCommandPage,
+              variant: "secondary",
+            }}
+            compact
+          />
+        ) : null}
 
         <AnalyticsControlRail
           title="Player Search"

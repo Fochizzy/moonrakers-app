@@ -26,6 +26,7 @@ import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { APP_ROUTES, buildPlayerProfileRoute } from "@/utils/appRoutes";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
+import { useAnalyticsPresentation } from "@/utils/useAnalyticsPresentation";
 import { COLORS } from "@/utils/colors";
 import {
   type EloMetricCard,
@@ -98,9 +99,12 @@ export default function EloScreen() {
       ? (eloQuery.payload as Record<string, unknown>)
       : null;
   const loading = eloQuery.loading;
-  const error = eloQuery.error;
-  const isStale = eloQuery.isStale;
-  const staleMessage = eloQuery.staleMessage;
+  const { error, freshness } = useAnalyticsPresentation({
+    fallbackMessage: "Failed to load ELO.",
+    query: eloQuery,
+    retryLabel: "Retry ELO",
+    staleEntityLabel: "ELO payload",
+  });
 
   const rawPlayerOptions = useMemo<StorePlayer[]>(() => {
     const source = Array.isArray(payload?.playerOptions)
@@ -215,14 +219,6 @@ export default function EloScreen() {
       ),
     [analyticsPlayers, selectedPlayerId]
   );
-  const selectedOpponent = useMemo(
-    () =>
-      analyticsPlayers.find(
-        (player) => normalizeId(player.id) === normalizeId(selectedOpponentId),
-      ) || null,
-    [analyticsPlayers, selectedOpponentId],
-  );
-
   const selectedSummary = useMemo<EloSummary>(() => {
     const summary = payload?.summary;
     return {
@@ -349,11 +345,6 @@ export default function EloScreen() {
     String((payload?.emptyState as any)?.description).trim()
       ? String((payload?.emptyState as any)?.description).trim()
       : "No server-authored ELO data is available yet.");
-  const sourceKind = isStale ? "server-stale" : "server";
-  const sourceLabel = isStale ? "Stale server data" : "Server data";
-  const staleSourceCaption = isStale
-    ? `Showing the last successful Supabase ELO payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
-    : null;
   const {
     recoveryState,
     sectionState: baseSectionState,
@@ -578,14 +569,14 @@ export default function EloScreen() {
         actions={<DefinitionsJumpLink category="elo" />}
         helpCategory="elo"
         state={sharedSectionState}
-        sourceKind={sourceKind}
-        sourceLabel={sourceLabel}
-        sourceCaption={
-          staleSourceCaption ||
-          "This focus view uses the published Supabase ELO payload, so its top signals stay aligned with the shared leaderboard."
-        }
+        sourceKind={freshness.sourceKind}
+        sourceLabel={freshness.sourceLabel}
+        sourceCaption={freshness.sourceCaption(
+          "This focus view uses the published Supabase ELO payload, so its top signals stay aligned with the shared leaderboard.",
+        )}
         messageTitle={emptyStateTitle}
         messageBody={loading ? "Loading server-authored ELO metrics." : emptyStateBody}
+        primaryAction={freshness.retryAction}
         tone={error ? "danger" : sharedSectionState === "ready" ? "info" : "warning"}
       >
         {sharedSectionState === "ready" ? (
@@ -697,14 +688,14 @@ export default function EloScreen() {
           title="Leaderboard"
           subtitle="All players ranked by current ELO"
           state={leaderboardSectionState}
-          sourceKind={sourceKind}
-          sourceLabel={sourceLabel}
-          sourceCaption={
-            staleSourceCaption ||
-            "This leaderboard uses the same published ELO source as the home leaderboard tab."
-          }
+          sourceKind={freshness.sourceKind}
+          sourceLabel={freshness.sourceLabel}
+          sourceCaption={freshness.sourceCaption(
+            "This leaderboard uses the same published ELO source as the home leaderboard tab.",
+          )}
           messageTitle={emptyStateTitle}
           messageBody={loading ? "Loading server-authored leaderboard." : emptyStateBody}
+          primaryAction={freshness.retryAction}
           tone={error ? "danger" : leaderboardSectionState === "ready" ? "info" : "warning"}
           helpCategory="elo"
         >
@@ -768,14 +759,14 @@ export default function EloScreen() {
         actions={<DefinitionsJumpLink category="elo" />}
         helpCategory="elo"
         state={sharedSectionState}
-        sourceKind={sourceKind}
-        sourceLabel={sourceLabel}
-        sourceCaption={
-          staleSourceCaption ||
-          `Published ${activeTab.toLowerCase()} metrics from the shared ELO payload.`
-        }
+        sourceKind={freshness.sourceKind}
+        sourceLabel={freshness.sourceLabel}
+        sourceCaption={freshness.sourceCaption(
+          `Published ${activeTab.toLowerCase()} metrics from the shared ELO payload.`,
+        )}
         messageTitle={emptyStateTitle}
         messageBody={loading ? "Loading server-authored section metrics." : emptyStateBody}
+        primaryAction={freshness.retryAction}
         tone={error ? "danger" : sharedSectionState === "ready" ? "info" : "warning"}
       >
         {sharedSectionState === "ready" ? (

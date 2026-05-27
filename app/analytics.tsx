@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -10,12 +10,12 @@ import Text from "@/components/ui/Text";
 import { getAnalyticsHome } from "@/lib/cloud/analytics/getAnalyticsHome";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
-import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { getAnalyticsHubCards } from "@/utils/appHubs";
 import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 import { resolveAnalyticsRecoveryState } from "@/utils/analyticsRecoveryState";
 import { APP_ICONS } from "@/utils/iconAccess";
+import { useAnalyticsPresentation } from "@/utils/useAnalyticsPresentation";
 
 const ANALYTICS_CARD_TONES: Record<
   string,
@@ -155,7 +155,6 @@ export default function AnalyticsScreen() {
   const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
   const cards = useMemo(() => getAnalyticsHubCards(), []);
   const profileId = String(authSession?.user?.id ?? "").trim();
-  const [error, setError] = useState<string | null>(null);
   const analyticsQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),
     queryKey: `analytics-home:${profileId || "anon"}`,
@@ -164,15 +163,14 @@ export default function AnalyticsScreen() {
         profileId,
       }),
   });
-  useEffect(() => {
-    const nextError = analyticsQuery.error;
-    if (nextError !== null) {
-      setError(formatSupabaseConfigError(nextError) || "Failed to load analytics.");
-    } else {
-      setError(null);
-    }
-  }, [analyticsQuery.error]);
   const loading = analyticsQuery.loading;
+  const { error, freshness } = useAnalyticsPresentation({
+    fallbackMessage: "Failed to load analytics.",
+    query: analyticsQuery,
+    retryLabel: "Retry analytics",
+    showSourceBadgeWhenReady: false,
+    staleEntityLabel: "analytics directory payload",
+  });
   const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
   const recoveryState = useMemo(
@@ -254,10 +252,13 @@ export default function AnalyticsScreen() {
         title="Analytics Destinations"
         state={analyticsSectionState}
         style={styles.directorySection}
+        sourceCaption={freshness.sourceCaption(
+          "This directory stays aligned with the published Supabase analytics hub payload.",
+        )}
         messageTitle={analyticsSectionTitle}
-        messageBody={analyticsSectionBody}
-        primaryAction={analyticsPrimaryAction}
-        secondaryAction={analyticsSecondaryAction}
+        messageBody={error ? freshness.sourceCaption(analyticsSectionBody) : analyticsSectionBody}
+        primaryAction={freshness.retryAction ?? analyticsPrimaryAction}
+        secondaryAction={freshness.retryAction ? null : analyticsSecondaryAction}
         tone={error ? "danger" : recoveryState.kind === "none" ? "info" : "warning"}
       >
         <View style={styles.grid}>

@@ -1,3 +1,5 @@
+import { buildAnalyticsFreshnessPresentation } from "@/utils/analyticsFreshness";
+
 export type ChartDetailProvenanceInput = {
   hasServerPayload: boolean;
   isStale: boolean;
@@ -15,18 +17,21 @@ export function resolveChartDetailProvenance(
   input: ChartDetailProvenanceInput,
 ): ChartDetailProvenance {
   if (input.hasServerPayload) {
-    if (input.isStale) {
-      return {
-        kind: "server-stale",
-        label: "Server stale",
-        caption: `Showing the last successful Supabase chart dataset because the latest refresh failed${input.staleMessage ? `: ${input.staleMessage}` : "."}`,
-      };
-    }
+    const freshness = buildAnalyticsFreshnessPresentation({
+      error: null,
+      isStale: input.isStale,
+      refresh: () => undefined,
+      sourceLabel: "Server data",
+      staleEntityLabel: "chart dataset",
+      staleMessage: input.staleMessage ?? null,
+    });
 
     return {
-      kind: "server",
-      label: "Server",
-      caption: "Rendering the published Supabase chart dataset for this view.",
+      kind: input.isStale ? "server-stale" : "server",
+      label: freshness.sourceLabel ?? "Server data",
+      caption: freshness.sourceCaption(
+        "Rendering the published Supabase chart dataset for this view.",
+      ),
     };
   }
 

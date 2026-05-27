@@ -165,6 +165,12 @@ run("Assist network overview source includes strict exact-scope empty-state copy
     /These older exact-match games only saved aggregate assist totals, not which teammate gave each assist on the turn\./,
     "expected the overview to explain when older exact-match games have assist activity but no saved assist direction"
   );
+
+  assert.match(
+    overviewSource,
+    /Two-player games are excluded from the relationship chart\./,
+    "expected the overview to call out that two-player games are excluded from the relationship chart"
+  );
 });
 
 run("Assist network details card source keeps strongest-link helper copy tied to the filtered sample", () => {
@@ -214,8 +220,8 @@ run("Assist network overview expects unified games instead of legacy data and re
 
   assert.match(
     source,
-    /buildAssistNetworkDataset\(\{[\s\S]*games:\s*safeGames,[\s\S]*scopedPlayerIds,[\s\S]*exactScopePlayerIds[\s\S]*\}\)/,
-    "expected AssistNetworkOverview to derive its graph dataset from unified games, scoped ids, and exact-scope ids"
+    /buildAssistNetworkDataset\(\{[\s\S]*games:\s*eligibleGames,[\s\S]*scopedPlayerIds,[\s\S]*exactScopePlayerIds[\s\S]*\}\)/,
+    "expected AssistNetworkOverview to derive its graph dataset from the eligible unified games plus the scoped ids"
   );
 });
 
@@ -514,5 +520,124 @@ run("Assist network overview replaces the graph with a strict warning when exact
         entry.type.name === "AssistNetworkImpactSection"
     ),
     "expected the impact section to remain visible under the strict warning"
+  );
+});
+
+run("Assist network overview excludes two-player games from the relationship sample and shows the note", () => {
+  React.useMemo = (fn) => fn();
+  React.useState = (initial) => [
+    typeof initial === "function" ? initial() : initial,
+    () => {},
+  ];
+  React.useEffect = () => {};
+
+  const overviewModule = require(path.join(
+    projectRoot,
+    "components",
+    "charts",
+    "AssistNetworkOverview",
+    "AssistNetworkOverview.tsx"
+  ));
+  const AssistNetworkOverview = overviewModule.default;
+
+  const tree = AssistNetworkOverview({
+    players: [
+      { id: "james", name: "James", color: "sky" },
+      { id: "greg", name: "Greg", color: "purple" },
+      { id: "izzy", name: "Izzy", color: "green" },
+    ],
+    games: [
+      {
+        id: "two-player",
+        players: [
+          { id: "james", name: "James" },
+          { id: "greg", name: "Greg" },
+        ],
+        rounds: [
+          {
+            id: "r1",
+            playerId: "james",
+            assistRecipients: { greg: 1 },
+            assistPrestigeRecipients: { greg: 9 },
+          },
+          {
+            id: "r2",
+            playerId: "james",
+            assistRecipients: { greg: 1 },
+            assistPrestigeRecipients: { greg: 3 },
+          },
+        ],
+      },
+      {
+        id: "three-player",
+        players: [
+          { id: "james", name: "James" },
+          { id: "greg", name: "Greg" },
+          { id: "izzy", name: "Izzy" },
+        ],
+        rounds: [
+          {
+            id: "r3",
+            playerId: "james",
+            assistRecipients: { greg: 1 },
+            assistPrestigeRecipients: { greg: 4 },
+          },
+        ],
+      },
+    ],
+    scopedPlayerIds: ["james", "greg", "izzy"],
+  });
+
+  const nodes = flatten(tree);
+  const relationshipGraphEntry = nodes.find(
+    (entry) =>
+      typeof entry.type === "function" && entry.type.name === "RelationshipGraph"
+  );
+  const impactSectionEntry = nodes.find(
+    (entry) =>
+      typeof entry.type === "function" &&
+      entry.type.name === "AssistNetworkImpactSection"
+  );
+
+  assert.ok(
+    nodes.some(
+      (entry) =>
+        entry.type === "Text" &&
+        String(entry.props?.children ?? "").includes(
+          "Two-player games are excluded from the relationship chart."
+        )
+    ),
+    "expected the overview to render the two-player exclusion note"
+  );
+
+  assert.ok(
+    relationshipGraphEntry,
+    "expected the relationship graph to stay visible when multi-player games remain"
+  );
+
+  assert.deepEqual(
+    relationshipGraphEntry.props.relationships.map((edge) => ({
+      sourceId: edge.sourceId,
+      targetId: edge.targetId,
+      assistCount: edge.assistCount,
+      assistPrestige: edge.assistPrestige,
+      assistFrequencyPerGame: edge.assistFrequencyPerGame,
+    })),
+    [
+      {
+        sourceId: "greg",
+        targetId: "james",
+        assistCount: 1,
+        assistPrestige: 4,
+        assistFrequencyPerGame: 1,
+      },
+    ],
+    "expected the overview to exclude two-player relationships from the visible graph sample"
+  );
+
+  assert.equal(
+    impactSectionEntry?.props?.sampleGameCount,
+    1,
+    "expected the impact section to use only the remaining multi-player sample"
   );
 });

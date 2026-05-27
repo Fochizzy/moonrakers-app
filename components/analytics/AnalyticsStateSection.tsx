@@ -8,6 +8,7 @@ import AnalyticsRecoveryCard, {
 import AnalyticsSourceBadge, {
   type AnalyticsSourceKind,
 } from "@/components/analytics/AnalyticsSourceBadge";
+import ActionButton from "@/components/ui/ActionButton";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 
@@ -50,6 +51,8 @@ export default function AnalyticsStateSection({
   title,
   tone = "info",
 }: AnalyticsStateSectionProps) {
+  const showReadyStateActions =
+    state === "ready" && (primaryAction || secondaryAction);
   const headerActions =
     sourceKind || actions ? (
       <View style={styles.headerActions}>
@@ -72,6 +75,26 @@ export default function AnalyticsStateSection({
         <>
           {sourceCaption ? (
             <Text style={styles.sourceCaption}>{sourceCaption}</Text>
+          ) : null}
+          {showReadyStateActions ? (
+            <View style={styles.readyActions}>
+              {primaryAction ? (
+                <ActionButton
+                  title={primaryAction.label}
+                  onPress={primaryAction.onPress}
+                  variant={primaryAction.variant ?? "secondary"}
+                  style={styles.readyAction}
+                />
+              ) : null}
+              {secondaryAction ? (
+                <ActionButton
+                  title={secondaryAction.label}
+                  onPress={secondaryAction.onPress}
+                  variant={secondaryAction.variant ?? "ghost"}
+                  style={styles.readyAction}
+                />
+              ) : null}
+            </View>
           ) : null}
           {children}
         </>
@@ -103,5 +126,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     marginTop: -2,
+  },
+  readyActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  readyAction: {
+    flexGrow: 1,
+    flexBasis: "48%",
   },
 });

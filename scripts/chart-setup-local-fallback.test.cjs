@@ -50,8 +50,20 @@ assert.match(
 
 assert.match(
   chartHubSource,
-  /setupError && !effectiveSetupPayload/,
-  "expected the charts hub to keep the hard error card only when no fallback setup payload exists",
+  /loadRegisteredProfiles/,
+  "expected the charts hub to load registered Supabase profiles for chart-setup fallback",
+);
+
+assert.match(
+  chartHubSource,
+  /loadRegisteredProfiles\(\)/,
+  "expected the charts hub to request fallback player options from the Supabase registry",
+);
+
+assert.match(
+  chartHubSource,
+  /players:\s*supabaseSetupFallbackPlayers/,
+  "expected the local chart-setup fallback builder to use Supabase-sourced player options",
 );
 
 const {

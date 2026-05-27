@@ -28,14 +28,20 @@ assert.match(
 
 assert.match(
   chartRouteSource,
-  /players:\s*localFallbackPlayers[\s\S]*games:\s*localFallbackGames/,
-  "expected the chart detail route to build fallback chart state from either store data or cloud snapshot data",
+  /players:\s*rpcFallbackPlayers\.length\s*\?\s*rpcFallbackPlayers\s*:\s*cloudFallbackPlayers[\s\S]*games:\s*rpcFallbackGames\.length\s*\?\s*rpcFallbackGames\s*:\s*cloudFallbackGames/,
+  "expected the chart detail route to prefer Supabase source history from the chart RPC before falling back to the shared cloud snapshot",
 );
 
 assert.match(
   chartRouteSource,
   /Supabase game history/i,
   "expected the chart detail route to explain when it is rendering cloud-backed fallback history",
+);
+
+assert.doesNotMatch(
+  chartRouteSource,
+  /saved history data|games saved on this device|Device fallback/i,
+  "expected the chart detail route to stop advertising device-local analytics fallback copy",
 );
 
 console.log("chart-cloud-fallback.test.cjs passed");

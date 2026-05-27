@@ -23,6 +23,36 @@ type Props = {
 };
 
 type WeightedRelationships = Record<string, Record<string, number>>;
+const RELATIONSHIP_EXCLUSION_NOTE =
+  "Two-player games are excluded from the relationship chart.";
+
+function normalizePlayerId(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function countGamePlayers(game: NormalizedGame) {
+  const playerIds = new Set<string>();
+
+  for (const player of game?.players ?? []) {
+    const playerId = normalizePlayerId(player?.id);
+    if (playerId) {
+      playerIds.add(playerId);
+    }
+  }
+
+  for (const playerIdRaw of Object.keys(game?.totals ?? {})) {
+    const playerId = normalizePlayerId(playerIdRaw);
+    if (playerId) {
+      playerIds.add(playerId);
+    }
+  }
+
+  return playerIds.size;
+}
+
+function filterRelationshipEligibleGames(games: NormalizedGame[]) {
+  return games.filter((game) => countGamePlayers(game) >= 3);
+}
 
 function buildWeightedRelationships(
   links: Array<{ source: string; target: string; value: number }>
@@ -49,6 +79,10 @@ export default function AssistNetworkOverview({
 }: Props) {
   const safeGames = Array.isArray(games) ? games : [];
   const safePlayers = Array.isArray(players) ? players : [];
+  const eligibleGames = useMemo(
+    () => filterRelationshipEligibleGames(safeGames),
+    [safeGames]
+  );
   const visiblePlayers = useMemo(() => {
     if (!scopedPlayerIds?.length) return safePlayers;
     const allowed = new Set(scopedPlayerIds.map(String));
@@ -58,11 +92,11 @@ export default function AssistNetworkOverview({
   const dataset = useMemo(
     () =>
       buildAssistNetworkDataset({
-        games: safeGames,
+        games: eligibleGames,
         scopedPlayerIds,
         exactScopePlayerIds,
       }),
-    [exactScopePlayerIds, safeGames, scopedPlayerIds]
+    [eligibleGames, exactScopePlayerIds, scopedPlayerIds]
   );
   const layout = useMemo(
     () => buildAssistNetworkLayout(dataset.edges, visiblePlayers),
@@ -79,10 +113,10 @@ export default function AssistNetworkOverview({
   const impact = useMemo(
     () =>
       buildAssistNetworkImpact({
-        games: safeGames,
+        games: eligibleGames,
         exactScopePlayerIds,
       }),
-    [exactScopePlayerIds, safeGames]
+    [eligibleGames, exactScopePlayerIds]
   );
 
   const topLink = layout.links[0] ?? null;
@@ -109,6 +143,10 @@ export default function AssistNetworkOverview({
   if (dataset.exactScopeApplied && dataset.gameCount === 0) {
     return (
       <View style={styles.wrap}>
+        <View style={styles.noteCard}>
+          <Text style={styles.noteLabel}>Sample Note</Text>
+          <Text style={styles.noteBody}>{RELATIONSHIP_EXCLUSION_NOTE}</Text>
+        </View>
         <Text style={styles.emptyText}>
           No exact-match games found for this table.
         </Text>
@@ -118,6 +156,11 @@ export default function AssistNetworkOverview({
 
   return (
     <View style={styles.wrap}>
+      <View style={styles.noteCard}>
+        <Text style={styles.noteLabel}>Sample Note</Text>
+        <Text style={styles.noteBody}>{RELATIONSHIP_EXCLUSION_NOTE}</Text>
+      </View>
+
       {showZeroLinkState ? (
         <View style={styles.warningCard}>
           <Text style={styles.warningTitle}>{zeroLinkTitle}</Text>
@@ -158,6 +201,25 @@ export default function AssistNetworkOverview({
 const styles = StyleSheet.create({
   wrap: {
     gap: 12,
+  },
+  noteCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.24)",
+    backgroundColor: "rgba(15,23,42,0.4)",
+    padding: 12,
+    gap: 4,
+  },
+  noteLabel: {
+    color: "#CBD5F5",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  noteBody: {
+    color: "#E2E8F0",
+    fontSize: 12,
+    lineHeight: 18,
   },
   emptyText: {
     color: "#94A3B8",

@@ -13,8 +13,20 @@ const correlationSource = read(path.join("components", "CorrelationStats.tsx"));
 
 assert.match(
   screenSource,
-  /<CorrelationStats[\s\S]*games=\{canonicalGames\}[\s\S]*players=\{players\}[\s\S]*relationships=\{relationships\}/,
-  "expected app/insights.tsx to pass stable derived data into CorrelationStats"
+  /<CorrelationStats[\s\S]*players=\{correlationPlayers\}[\s\S]*serverData=\{correlationPayload\}[\s\S]*serverOnly/,
+  "expected app/insights.tsx to drive CorrelationStats from server-authored correlation payloads"
+);
+
+assert.doesNotMatch(
+  screenSource,
+  /<CorrelationStats[\s\S]*games=\{/,
+  "expected app/insights.tsx to stop passing local game history into the server-only correlation surface"
+);
+
+assert.doesNotMatch(
+  screenSource,
+  /<CorrelationStats[\s\S]*relationships=\{/,
+  "expected app/insights.tsx to stop passing locally-derived relationship maps into the server-only correlation surface"
 );
 
 assert.doesNotMatch(

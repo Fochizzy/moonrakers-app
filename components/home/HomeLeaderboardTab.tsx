@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -7,10 +7,11 @@ import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import RankBadge from "@/components/RankBadge";
 import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import Text from "@/components/ui/Text";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import type { EloScreenParams, EloScreenPayload } from "@/lib/cloud/analytics/types";
+import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
+import { buildAnalyticsFreshnessPresentation } from "@/utils/analyticsFreshness";
 import { buildPlayerProfileRoute } from "@/utils/appRoutes";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 import { getInitials, n, normalizeId, normalizeName, sortLabel } from "./homeUtils";
@@ -49,10 +50,67 @@ export function HomeLeaderboardTab({
   const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
   const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
   const [sortBy, setSortBy] = useState<SortMetric>("elo");
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
-  const [sorted, setSorted] = useState<EnrichedPlayer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const leaderboardQuery = useLiveAnalyticsQuery({
+    enabled: Boolean(profileId),
+    queryKey: `home-leaderboard:${profileId || "anon"}:${sortBy}`,
+    load: () =>
+      fetchEloScreen({
+        profileId: String(profileId ?? "").trim(),
+        focusPlayerId: null,
+        opponentId: null,
+        sortKey: sortBy,
+      }),
+  });
+  const loading = leaderboardQuery.loading;
+  const error = useMemo(() => {
+    const nextError = leaderboardQuery.error;
+    return nextError !== null
+      ? formatSupabaseConfigError(nextError) || "Failed to load leaderboard data."
+      : null;
+  }, [leaderboardQuery.error]);
+  const freshness = useMemo(
+    () =>
+      buildAnalyticsFreshnessPresentation({
+        error,
+        isStale: leaderboardQuery.isStale,
+        lastSuccessAt: leaderboardQuery.lastSuccessAt,
+        refresh: leaderboardQuery.refresh,
+        retryLabel: "Retry leaderboard",
+        staleEntityLabel: "leaderboard payload",
+        staleMessage: leaderboardQuery.staleMessage,
+      }),
+    [
+      error,
+      leaderboardQuery.isStale,
+      leaderboardQuery.lastSuccessAt,
+      leaderboardQuery.refresh,
+      leaderboardQuery.staleMessage,
+    ],
+  );
+  const sorted = useMemo<EnrichedPlayer[]>(() => {
+    const rows = Array.isArray(leaderboardQuery.payload?.leaderboardRows)
+      ? leaderboardQuery.payload.leaderboardRows
+      : [];
+
+    return rows.map((row: any) => ({
+      id: normalizeId(row?.playerId ?? row?.id),
+      name: normalizeName(row?.name) || "Unknown",
+      color: normalizeName(row?.color) || undefined,
+      initials: getInitials(normalizeName(row?.name) || "Unknown"),
+      assignedCardArtIndex:
+        typeof row?.assignedCardArtIndex === "number" &&
+        Number.isFinite(row.assignedCardArtIndex)
+          ? row.assignedCardArtIndex
+          : null,
+      elo: n(row?.currentElo) || 1000,
+      wins: n(row?.wins),
+      gamesPlayed: n(row?.gamesPlayed),
+      score: n(row?.score),
+      prestige: n(row?.prestige),
+      efficiency: n(row?.efficiency),
+      avgPrestige: n(row?.avgPrestige),
+    }));
+  }, [leaderboardQuery.payload?.leaderboardRows]);
   const {
     recoveryState,
     messageTitle: leaderboardMessageTitle,
@@ -74,72 +132,6 @@ export function HomeLeaderboardTab({
         : recoveryState.kind === "no-players" || recoveryState.kind === "no-games" || !sorted.length
           ? "empty"
           : ("ready" as const);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      if (!profileId) {
-        if (!cancelled) {
-          setSorted([]);
-          setError(null);
-          setLoading(false);
-        }
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const payload = await fetchEloScreen({
-          profileId,
-          focusPlayerId: null,
-          opponentId: null,
-          sortKey: sortBy,
-        });
-
-        if (cancelled) return;
-
-        const rows = Array.isArray(payload?.leaderboardRows) ? payload.leaderboardRows : [];
-
-        setSorted(
-          rows.map((row: any) => ({
-            id: normalizeId(row?.playerId ?? row?.id),
-            name: normalizeName(row?.name) || "Unknown",
-            color: normalizeName(row?.color) || undefined,
-            initials: getInitials(normalizeName(row?.name) || "Unknown"),
-            assignedCardArtIndex:
-              typeof row?.assignedCardArtIndex === "number" &&
-              Number.isFinite(row.assignedCardArtIndex)
-                ? row.assignedCardArtIndex
-                : null,
-            elo: n(row?.currentElo) || 1000,
-            wins: n(row?.wins),
-            gamesPlayed: n(row?.gamesPlayed),
-            score: n(row?.score),
-            prestige: n(row?.prestige),
-            efficiency: n(row?.efficiency),
-            avgPrestige: n(row?.avgPrestige),
-          })),
-        );
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(
-            formatSupabaseConfigError(loadError) || "Failed to load leaderboard data.",
-          );
-          setSorted([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [analyticsRefreshTick, profileId, sortBy]);
 
   return (
     <View style={styles.inlineLeaderboardRoot}>
@@ -171,11 +163,15 @@ export function HomeLeaderboardTab({
           eyebrow="Home"
           title="Leaderboard"
           state={leaderboardState}
-          sourceKind="server"
+          sourceKind={freshness.sourceKind}
+          sourceLabel={freshness.sourceLabel}
+          sourceCaption={freshness.sourceCaption(
+            "This leaderboard uses the same published ELO feed as the dedicated analytics surfaces.",
+          )}
           messageTitle={leaderboardMessageTitle}
           messageBody={leaderboardMessageBody}
-          primaryAction={leaderboardPrimaryAction}
-          secondaryAction={leaderboardSecondaryAction}
+          primaryAction={freshness.retryAction ?? leaderboardPrimaryAction}
+          secondaryAction={freshness.retryAction ? null : leaderboardSecondaryAction}
           tone={error ? "danger" : leaderboardState === "ready" ? "info" : "warning"}
           helpCategory="elo"
         >

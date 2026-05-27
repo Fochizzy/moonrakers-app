@@ -24,10 +24,10 @@ assert.match(
   "expected app/insights.tsx to subscribe to the games slice directly"
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
-  /buildAnalyticsPlayerDirectory\(\{[\s\S]*games:\s*games as any[\s\S]*\}\)/,
-  "expected app/insights.tsx to build analytics data from the stable games slice"
+  /buildAnalyticsPlayerDirectory\(/,
+  "expected app/insights.tsx to stop rebuilding the insights player directory from local analytics state"
 );
 
 assert.doesNotMatch(

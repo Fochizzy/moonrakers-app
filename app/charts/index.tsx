@@ -47,11 +47,10 @@ import {
   resolveChartSetupRailState,
   type ChartSetupStageKey,
 } from "@/components/charts/chartSetupRailModel";
+import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
 import { buildLocalChartSetupPayload } from "@/lib/cloud/analytics/buildLocalChartSetupPayload";
 import { getChartSetup } from "@/lib/cloud/analytics/getChartSetup";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
-import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES, buildDefinitionsRoute } from "@/utils/appRoutes";
 import {
@@ -59,6 +58,7 @@ import {
   getPreferredScopeIdsForChart,
 } from "@/utils/chartHubRouteState";
 import { buildAnalyticsPlayerDirectory } from "@/utils/analyticsPlayers";
+import { useAnalyticsPresentation } from "@/utils/useAnalyticsPresentation";
 import {
   buildCommonOpponentOptions,
   prioritizeSignedInPlayerOptions,
@@ -584,8 +584,6 @@ export default function ChartsIndexScreen() {
     () => resolveChartCatalogEntry(selectedChartKey),
     [selectedChartKey]
   );
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
-  const [setupError, setSetupError] = useState<string | null>(null);
   const chartSetupQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),
     queryKey: `chart-setup:${profileId || "anon"}:${selectedChart.key}`,
@@ -595,30 +593,68 @@ export default function ChartsIndexScreen() {
         profileId,
       }),
   });
-  useEffect(() => {
-    const nextError = chartSetupQuery.error;
-    if (nextError !== null) {
-      setSetupError(formatSupabaseConfigError(nextError) || "Failed to load chart setup.");
-    } else {
-      setSetupError(null);
-    }
-  }, [chartSetupQuery.error]);
   const setupPayload =
     chartSetupQuery.payload && typeof chartSetupQuery.payload === "object"
       ? (chartSetupQuery.payload as Record<string, unknown>)
       : null;
   const setupLoading = chartSetupQuery.loading;
-  const setupIsStale = chartSetupQuery.isStale;
-  const setupStaleMessage = chartSetupQuery.staleMessage;
+  const { error: setupError, freshness: setupFreshness } = useAnalyticsPresentation({
+    fallbackMessage: "Failed to load chart setup.",
+    query: chartSetupQuery,
+    retryLabel: "Retry setup",
+    showSourceBadgeWhenReady: false,
+    staleEntityLabel: "chart setup payload",
+  });
+  const [supabaseSetupFallbackPlayers, setSupabaseSetupFallbackPlayers] = useState<any[]>([]);
+  const [supabaseSetupFallbackLoading, setSupabaseSetupFallbackLoading] = useState(false);
   const analyticsDirectory = useMemo(
     () => buildAnalyticsPlayerDirectory({ players, games, groups }),
     [players, games, groups]
   );
+  useEffect(() => {
+    if (!profileId || setupPayload || !setupError || supabaseSetupFallbackLoading) {
+      return;
+    }
+
+    if (supabaseSetupFallbackPlayers.length > 0) {
+      return;
+    }
+
+    let cancelled = false;
+    setSupabaseSetupFallbackLoading(true);
+
+    void loadRegisteredProfiles()
+      .then((profiles) => {
+        if (!cancelled) {
+          setSupabaseSetupFallbackPlayers(Array.isArray(profiles) ? profiles : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSupabaseSetupFallbackPlayers([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSupabaseSetupFallbackLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    profileId,
+    setupError,
+    setupPayload,
+    supabaseSetupFallbackLoading,
+    supabaseSetupFallbackPlayers.length,
+  ]);
   const localSetupFallbackPayload = useMemo(
     () =>
       buildLocalChartSetupPayload({
         chartKey: selectedChart.key,
-        players: analyticsDirectory.players as any,
+        players: supabaseSetupFallbackPlayers as any,
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
         routePlayerId: routePlayerId ?? null,
@@ -630,7 +666,6 @@ export default function ChartsIndexScreen() {
         routeOpponentId: routeOpponentId ?? null,
       }),
     [
-      analyticsDirectory.players,
       authProfile?.id,
       authSession?.user?.id,
       routeCompareId,
@@ -641,6 +676,7 @@ export default function ChartsIndexScreen() {
       routeOpponentId,
       routePlayerId,
       selectedChart.key,
+      supabaseSetupFallbackPlayers,
     ]
   );
   const effectiveSetupPayload =
@@ -648,9 +684,11 @@ export default function ChartsIndexScreen() {
   const usingLocalSetupFallback = Boolean(
     !setupPayload && setupError && effectiveSetupPayload
   );
-  const showSetupErrorCard = Boolean(setupError && !effectiveSetupPayload);
+  const showSetupErrorCard = Boolean(
+    setupError && !effectiveSetupPayload && !supabaseSetupFallbackLoading
+  );
   const setupRecoveryMessage = usingLocalSetupFallback
-    ? `Using synced roster data for chart setup because Supabase analytics setup is unavailable: ${setupError}`
+    ? "The published chart setup is unavailable right now, so these options are using Supabase roster data instead."
     : null;
   const focusPlayerOptions = useMemo(
     () => toSetupOptions(effectiveSetupPayload?.focusPlayerOptions),
@@ -1584,9 +1622,9 @@ export default function ChartsIndexScreen() {
                   {setupRecoveryMessage ? (
                     <Text style={styles.emptyText}>{setupRecoveryMessage}</Text>
                   ) : null}
-                  {setupIsStale ? (
+                  {chartSetupQuery.isStale ? (
                     <Text style={styles.emptyText}>
-                      Showing the last successful chart-setup payload because the latest refresh failed{setupStaleMessage ? `: ${setupStaleMessage}` : "."}
+                      {setupFreshness.sourceCaption("Published chart setup is live.")}
                     </Text>
                   ) : null}
                   <View style={styles.guidedRailStack}>

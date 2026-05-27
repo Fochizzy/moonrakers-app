@@ -23,10 +23,10 @@ import {
   normalizeStatsPlayerCountSummaryRows,
 } from "@/lib/cloud/analytics/statsScreenDisplay";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { buildChartsRoute, buildHomeRoute, APP_ROUTES } from "@/utils/appRoutes";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
+import { useAnalyticsPresentation } from "@/utils/useAnalyticsPresentation";
 import { formatDate } from "@/utils/formatters";
 import { COLORS } from "@/utils/colors";
 import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
@@ -185,7 +185,6 @@ export default function StatsScreen() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
-  const [error, setError] = useState<string | null>(null);
   const analyticsQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),
     queryKey: `stats-screen:${profileId || "anon"}`,
@@ -194,18 +193,14 @@ export default function StatsScreen() {
         profileId,
       }),
   });
-  useEffect(() => {
-    const nextError = analyticsQuery.error;
-    if (nextError !== null) {
-      setError(formatSupabaseConfigError(nextError) || "Failed to load stats.");
-    } else {
-      setError(null);
-    }
-  }, [analyticsQuery.error]);
   const payload = toRecord(analyticsQuery.payload);
   const loading = analyticsQuery.loading;
-  const isStale = analyticsQuery.isStale;
-  const staleMessage = analyticsQuery.staleMessage;
+  const { error, freshness } = useAnalyticsPresentation({
+    fallbackMessage: "Failed to load stats.",
+    query: analyticsQuery,
+    retryLabel: "Retry stats",
+    staleEntityLabel: "stats payload",
+  });
   const hiddenOverviewCardKeys = new Set(["players", "games", "takeaway"]);
 
   const overview = toRecord(payload?.overview);
@@ -229,11 +224,6 @@ export default function StatsScreen() {
   const correlationsSection = toRecord(payload?.correlations);
   const gamesSection = toRecord(payload?.games);
   const playerOptions = toArray(playersSection.options).map(normalizePlayerOption);
-  const sourceKind = isStale ? "server-stale" : "server";
-  const sourceLabel = isStale ? "Stale server data" : "Server data";
-  const staleSourceCaption = isStale
-    ? `Showing the last successful Supabase stats payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
-    : null;
 
   useEffect(() => {
     const preferredPlayerId = toStringValue(playersSection.selectedPlayerId, "");
@@ -402,12 +392,11 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={sourceKind}
-        sourceLabel={sourceLabel}
-        sourceCaption={
-          staleSourceCaption ||
-          "League totals, overview cards, and top signals now come from the published Supabase stats payload."
-        }
+        sourceKind={freshness.sourceKind}
+        sourceLabel={freshness.sourceLabel}
+        sourceCaption={freshness.sourceCaption(
+          "League totals, overview cards, and top signals now come from the published Supabase stats payload.",
+        )}
         messageTitle={
           loading ? "Loading stats" : error ? "Stats unavailable" : recoveryProps?.title
         }
@@ -418,8 +407,8 @@ export default function StatsScreen() {
               ? error
               : recoveryProps?.body
         }
-        primaryAction={recoveryProps?.primaryAction}
-        secondaryAction={recoveryProps?.secondaryAction}
+        primaryAction={freshness.retryAction ?? recoveryProps?.primaryAction}
+        secondaryAction={freshness.retryAction ? null : recoveryProps?.secondaryAction}
         tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
         {overviewCards.length > 0 ? (
@@ -612,9 +601,11 @@ export default function StatsScreen() {
           actions={<DefinitionsJumpLink category="efficiency" />}
           helpCategory="efficiency"
           state={loading ? "loading" : error ? "error" : "empty"}
-          sourceKind={sourceKind}
-          sourceLabel={sourceLabel}
-          sourceCaption={staleSourceCaption}
+          sourceKind={freshness.sourceKind}
+          sourceLabel={freshness.sourceLabel}
+          sourceCaption={freshness.sourceCaption(
+            "Published player analytics from the shared Supabase stats payload.",
+          )}
           messageTitle={
             loading
               ? "Loading player analytics"
@@ -629,8 +620,8 @@ export default function StatsScreen() {
                 ? error
                 : recoveryProps?.body
           }
-          primaryAction={recoveryProps?.primaryAction ?? null}
-          secondaryAction={recoveryProps?.secondaryAction ?? null}
+          primaryAction={freshness.retryAction ?? recoveryProps?.primaryAction ?? null}
+          secondaryAction={freshness.retryAction ? null : recoveryProps?.secondaryAction ?? null}
           tone={error ? "danger" : recoveryProps?.tone ?? "warning"}
         />
       );
@@ -667,12 +658,11 @@ export default function StatsScreen() {
           actions={<DefinitionsJumpLink category="efficiency" />}
           helpCategory="efficiency"
           state="ready"
-          sourceKind={sourceKind}
-          sourceLabel={sourceLabel}
-          sourceCaption={
-            staleSourceCaption ||
-            "This detail card is published from the shared stats payload, so the same player read can be reused across analytics surfaces."
-          }
+          sourceKind={freshness.sourceKind}
+          sourceLabel={freshness.sourceLabel}
+          sourceCaption={freshness.sourceCaption(
+            "This detail card is published from the shared stats payload, so the same player read can be reused across analytics surfaces.",
+          )}
         >
           {detailStats.length > 0 ? (
             <View style={styles.compactGrid}>
@@ -729,12 +719,11 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={sourceKind}
-        sourceLabel={sourceLabel}
-        sourceCaption={
-          staleSourceCaption ||
-          "Playstyle spotlight is published from Supabase so stay-at-base tempo and style read stay consistent with the deeper player intel surfaces."
-        }
+        sourceKind={freshness.sourceKind}
+        sourceLabel={freshness.sourceLabel}
+        sourceCaption={freshness.sourceCaption(
+          "Playstyle spotlight is published from Supabase so stay-at-base tempo and style read stay consistent with the deeper player intel surfaces.",
+        )}
         messageTitle={
           loading
             ? "Loading playstyle"
@@ -749,8 +738,8 @@ export default function StatsScreen() {
               ? error
               : recoveryProps?.body
         }
-        primaryAction={recoveryProps?.primaryAction}
-        secondaryAction={recoveryProps?.secondaryAction}
+        primaryAction={freshness.retryAction ?? recoveryProps?.primaryAction}
+        secondaryAction={freshness.retryAction ? null : recoveryProps?.secondaryAction}
         tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
         {playstyleHighlights.length > 0 ? (
@@ -825,12 +814,11 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={sourceKind}
-        sourceLabel={sourceLabel}
-        sourceCaption={
-          staleSourceCaption ||
-          "Correlation entries below are served from the Supabase insights payload instead of route-local math."
-        }
+        sourceKind={freshness.sourceKind}
+        sourceLabel={freshness.sourceLabel}
+        sourceCaption={freshness.sourceCaption(
+          "Correlation entries below are served from the Supabase insights payload instead of route-local math.",
+        )}
         messageTitle={
           loading
             ? "Loading correlations"
@@ -845,8 +833,8 @@ export default function StatsScreen() {
               ? error
               : recoveryProps?.body
         }
-        primaryAction={recoveryProps?.primaryAction}
-        secondaryAction={recoveryProps?.secondaryAction}
+        primaryAction={freshness.retryAction ?? recoveryProps?.primaryAction}
+        secondaryAction={freshness.retryAction ? null : recoveryProps?.secondaryAction}
         tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
         {correlationItems.length > 0 ? (
@@ -898,12 +886,11 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={sourceKind}
-        sourceLabel={sourceLabel}
-        sourceCaption={
-          staleSourceCaption ||
-          "This game summary is published from Supabase so it stays aligned with the other analytics hubs."
-        }
+        sourceKind={freshness.sourceKind}
+        sourceLabel={freshness.sourceLabel}
+        sourceCaption={freshness.sourceCaption(
+          "This game summary is published from Supabase so it stays aligned with the other analytics hubs.",
+        )}
         messageTitle={
           loading
             ? "Loading game summaries"
@@ -918,8 +905,8 @@ export default function StatsScreen() {
               ? error
               : recoveryProps?.body
         }
-        primaryAction={recoveryProps?.primaryAction}
-        secondaryAction={recoveryProps?.secondaryAction}
+        primaryAction={freshness.retryAction ?? recoveryProps?.primaryAction}
+        secondaryAction={freshness.retryAction ? null : recoveryProps?.secondaryAction}
         tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
         {playerCountSummaryItems.length > 0 ? (

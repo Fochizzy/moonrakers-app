@@ -37,6 +37,7 @@ import PrestigeOverTimeChart from "@/components/charts/PrestigeOverTimeChart";
 import RadarChart from "@/components/charts/RadarChart";
 import ReplayChart from "@/components/charts/ReplayChart";
 import RivalryGraph from "@/components/charts/RivalryGraph";
+import RelationshipGraph from "@/components/charts/RelationshipGraph";
 import Sparkline from "@/components/charts/Sparkline";
 import StackedBarChart from "@/components/charts/StackedBarChart";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
@@ -102,6 +103,24 @@ function toArray(value: unknown): PayloadRecord[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is PayloadRecord => Boolean(entry) && typeof entry === "object")
     : [];
+}
+
+function toList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .map((entry) => String(entry ?? "").trim())
+        .filter(Boolean)
+    : [];
+}
+
+function toOptionalRecord(value: unknown): PayloadRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as PayloadRecord)
+    : null;
 }
 
 
@@ -194,8 +213,6 @@ function DatasetStat({
 export default function ChartKeyScreen() {
   const router = useRouter();
   const authSession = useStore((state: any) => state.authSession);
-  const rawPlayers = useStore((state: any) => state.players);
-  const rawGames = useStore((state: any) => state.games);
   const params = useLocalSearchParams<{
     chartKey?: string | string[];
     playerId?: string | string[];
@@ -222,31 +239,6 @@ export default function ChartKeyScreen() {
   const routeOpponentId = getParam(params.opponentId);
   const setupChartKey = useMemo(() => resolveSetupChartKey(chartKey), [chartKey]);
   const profileId = String(authSession?.user?.id ?? "").trim();
-  const storePlayers = Array.isArray(rawPlayers) ? rawPlayers : [];
-  const storeGames = Array.isArray(rawGames) ? rawGames : [];
-  const storeChartData = useMemo(
-    () =>
-      buildLocalChartDetailState({
-        chartKey,
-        players: storePlayers,
-        games: storeGames,
-        routePlayerId: routePlayerId ?? null,
-        routeCompareId: routeCompareId ?? null,
-        routeSelectedGameId: routeSelectedGameId ?? null,
-        routeIds,
-        routeMetric: routeMetric ?? null,
-      }),
-    [
-      chartKey,
-      storeGames,
-      storePlayers,
-      routeCompareId,
-      routeIdsKey,
-      routeMetric,
-      routePlayerId,
-      routeSelectedGameId,
-    ],
-  );
   const [cloudFallbackSnapshot, setCloudFallbackSnapshot] =
     useState<CloudFallbackSnapshot | null>(null);
   const [cloudFallbackLoading, setCloudFallbackLoading] = useState(false);
@@ -304,6 +296,25 @@ export default function ChartKeyScreen() {
   const datasetMeta = toRecord(datasetData.meta);
   const datasetPoints = toArray(datasetData.points);
   const datasetSeries = toArray(datasetData.series);
+  const serverPlayers = toArray(datasetData.players) as any[];
+  const serverGames = toArray(datasetData.games) as any[];
+  const serverChartData = toList(datasetData.data);
+  const serverReplayData = toList(datasetData.replay);
+  const serverComparisonData = toList(datasetData.comparisonData);
+  const serverMetricOptions = toList(datasetData.metricOptions);
+  const serverMetricDataMap = toRecord(datasetData.metricDataMap);
+  const serverSelectedPlayerIds = toStringArray(datasetData.selectedPlayerIds);
+  const serverScopedPlayerIds = toStringArray(datasetData.scopedPlayerIds);
+  const serverPrimaryRadar = toOptionalRecord(datasetData.primary);
+  const serverComparisonRadar = toOptionalRecord(datasetData.comparison);
+  const rpcFallbackPlayers = toArray(datasetData.sourcePlayers) as any[];
+  const rpcFallbackGames = toArray(datasetData.sourceGames) as any[];
+  const serverChartPlayers = serverPlayers.length ? serverPlayers : rpcFallbackPlayers;
+  const serverChartGames = serverGames.length ? serverGames : rpcFallbackGames;
+  const serverRelationshipPlayers = serverPlayers;
+  const serverRelationshipEdges = toArray(
+    datasetData.relationships ?? datasetData.edges,
+  ) as any[];
   const emptyState = toRecord(dataset?.emptyState);
   const summaryChips = [
     routeMetric ? `Metric: ${routeMetric}` : null,
@@ -313,22 +324,16 @@ export default function ChartKeyScreen() {
   ].filter(Boolean) as string[];
   const pointCount = toNumberValue(datasetMeta.pointCount, datasetPoints.length);
   const hasData = Boolean(datasetMeta.hasData) || pointCount > 0 || datasetSeries.length > 0;
+  const hasRpcFallbackSourceData =
+    rpcFallbackGames.length > 0 || rpcFallbackPlayers.length > 0;
   const cloudFallbackPlayers = cloudFallbackSnapshot?.players ?? [];
   const cloudFallbackGames = cloudFallbackSnapshot?.games ?? [];
-  const localFallbackPlayers = storeChartData.hasData
-    ? storePlayers
-    : cloudFallbackPlayers;
-  const localFallbackGames = storeChartData.hasData
-    ? storeGames
-    : cloudFallbackGames;
-  const unifiedGames = localFallbackGames;
-  const resolvedPlayers = localFallbackPlayers;
   const localChartData = useMemo(
     () =>
       buildLocalChartDetailState({
         chartKey,
-        players: localFallbackPlayers,
-        games: localFallbackGames,
+        players: rpcFallbackPlayers.length ? rpcFallbackPlayers : cloudFallbackPlayers,
+        games: rpcFallbackGames.length ? rpcFallbackGames : cloudFallbackGames,
         routePlayerId: routePlayerId ?? null,
         routeCompareId: routeCompareId ?? null,
         routeSelectedGameId: routeSelectedGameId ?? null,
@@ -337,8 +342,10 @@ export default function ChartKeyScreen() {
       }),
     [
       chartKey,
-      localFallbackGames,
-      localFallbackPlayers,
+      cloudFallbackGames,
+      cloudFallbackPlayers,
+      rpcFallbackGames,
+      rpcFallbackPlayers,
       routeCompareId,
       routeIdsKey,
       routeMetric,
@@ -346,30 +353,141 @@ export default function ChartKeyScreen() {
       routeSelectedGameId,
     ],
   );
+  const serverMetricKey = toStringValue(
+    datasetData.statKey ?? datasetData.metricKey ?? datasetData.activeMetricKey,
+    localChartData.metricKey,
+  );
+  const serverLineMode = toStringValue(datasetData.mode, routeLineMode);
+  const serverActiveMetricKey = toStringValue(
+    datasetData.activeMetricKey,
+    serverMetricKey,
+  );
+  const serverScopeIds =
+    serverScopedPlayerIds.length > 0 ? serverScopedPlayerIds : routeIds;
+  const serverSelectedIds =
+    serverSelectedPlayerIds.length > 0
+      ? serverSelectedPlayerIds
+      : serverScopeIds;
+  const serverFocusPlayerId = useMemo(() => {
+    const candidate = toStringValue(
+      datasetData.playerId ?? datasetMeta.focusPlayerId,
+      routePlayerId ?? "",
+    ).trim();
+    return candidate.length > 0 ? candidate : null;
+  }, [datasetData.playerId, datasetMeta.focusPlayerId, routePlayerId]);
+  const serverComparePlayerId = useMemo(() => {
+    const candidate = toStringValue(
+      datasetData.compareId ?? datasetMeta.comparePlayerId,
+      routeCompareId ?? "",
+    ).trim();
+    return candidate.length > 0 ? candidate : null;
+  }, [datasetData.compareId, datasetMeta.comparePlayerId, routeCompareId]);
+  const serverPlayerDirectory = useMemo(() => {
+    const directory = new Map<string, any>();
+    [...serverChartPlayers, ...rpcFallbackPlayers].forEach((player) => {
+      const id = String(player?.id ?? "").trim();
+      if (!id || directory.has(id)) {
+        return;
+      }
+      directory.set(id, player);
+    });
+    return directory;
+  }, [rpcFallbackPlayers, serverChartPlayers]);
+  const serverFocusPlayer = serverFocusPlayerId
+    ? serverPlayerDirectory.get(serverFocusPlayerId) ?? null
+    : null;
+  const serverComparePlayer = serverComparePlayerId
+    ? serverPlayerDirectory.get(serverComparePlayerId) ?? null
+    : null;
   const scopedPlayerIds = localChartData.scopedPlayerIds;
+  const hasRenderableServerChart = useMemo(() => {
+    switch (chartKey) {
+      case "relationship_graph":
+        return (
+          serverChartPlayers.length > 0 && serverRelationshipEdges.length > 0
+        );
+      case "radar":
+        return Boolean(serverPrimaryRadar);
+      case "sparkline":
+        return serverChartData.length > 0 || serverComparisonData.length > 0;
+      case "head_to_head":
+        return (
+          serverChartPlayers.length >= 2 &&
+          (serverChartData.length > 0 || serverChartGames.length > 0)
+        );
+      case "rivalry_graph":
+        return (
+          Boolean(serverFocusPlayerId) &&
+          serverChartGames.length > 0 &&
+          serverChartPlayers.length > 0
+        );
+      case "elo":
+        return serverChartGames.length > 0 && serverChartPlayers.length > 0;
+      case "replay_chart":
+        return serverReplayData.length > 0 && serverChartPlayers.length > 0;
+      case "stacked_bar_chart":
+        return (
+          serverChartData.length > 0 ||
+          Object.keys(serverMetricDataMap).length > 0
+        );
+      case "line_chart":
+      case "line":
+      case "multi_line_chart":
+      case "multi-line-chart":
+      case "multi-line":
+      case "prestige_over_time":
+      case "bar_chart":
+      case "bar":
+      case "bump_chart":
+      case "consistency_band":
+      case "heatmap":
+      case "efficiency_failure_scatter":
+        return serverChartData.length > 0 && serverChartPlayers.length > 0;
+      default:
+        return false;
+    }
+  }, [
+    chartKey,
+    serverChartData.length,
+    serverChartGames.length,
+    serverChartPlayers.length,
+    serverComparisonData.length,
+    serverFocusPlayerId,
+    serverPrimaryRadar,
+    serverRelationshipEdges.length,
+    serverReplayData.length,
+    serverMetricDataMap,
+  ]);
+  const hasServerPayload = hasData || hasRenderableServerChart;
   const shouldUseLocalChartFallback =
-    localChartData.hasData && !loading && (Boolean(error) || !hasData);
-  const usingCloudFallbackData =
-    shouldUseLocalChartFallback &&
-    !storeChartData.hasData &&
-    localChartData.hasData;
+    localChartData.hasData && !loading && !hasServerPayload;
+  const usingCloudFallbackData = shouldUseLocalChartFallback && localChartData.hasData;
+  const shouldSkipCloudFallbackBecauseRpcSource =
+    hasServerPayload || hasRpcFallbackSourceData;
   const shouldLoadCloudFallback =
     Boolean(profileId) &&
-    !storeChartData.hasData &&
     !cloudFallbackSnapshot &&
     !cloudFallbackAttempted &&
     !cloudFallbackLoading &&
     !loading &&
-    (Boolean(error) || !hasData);
+    !hasServerPayload &&
+    !shouldSkipCloudFallbackBecauseRpcSource;
   const provenance = useMemo(
     () =>
       resolveChartDetailProvenance({
-        hasServerPayload: hasData && !shouldUseLocalChartFallback,
+        hasServerPayload: hasServerPayload && !shouldUseLocalChartFallback,
         isStale,
         usingCloudFallbackData,
         staleMessage,
       }),
-    [hasData, isStale, shouldUseLocalChartFallback, staleMessage, usingCloudFallbackData],
+    [
+      hasData,
+      hasServerPayload,
+      isStale,
+      shouldUseLocalChartFallback,
+      staleMessage,
+      usingCloudFallbackData,
+    ],
   );
   const heroSubtitle = shouldUseLocalChartFallback
     ? provenance.caption
@@ -447,8 +565,8 @@ export default function ChartKeyScreen() {
       case "relationship_graph":
         return (
           <AssistNetworkOverview
-            games={unifiedGames as any}
-            players={resolvedPlayers as any}
+            games={cloudFallbackGames as any}
+            players={cloudFallbackPlayers as any}
             scopedPlayerIds={routeIds.length ? routeIds : scopedPlayerIds}
             exactScopePlayerIds={routeIds.length >= 2 ? routeIds : undefined}
             mode={routeMode}
@@ -591,6 +709,244 @@ export default function ChartKeyScreen() {
     }
   }
 
+  function renderServerRelationshipGraph() {
+    if (!hasRenderableServerChart || chartKey !== "relationship_graph") {
+      return null;
+    }
+
+    return (
+      <RelationshipGraph
+        players={serverRelationshipPlayers as any}
+        relationships={serverRelationshipEdges as any}
+        scopedPlayerIds={routeIds.length ? routeIds : undefined}
+        variant="assist_network"
+        mode={routeMode}
+        title="Assist Network"
+        subtitle="Directed assist flow across the published Supabase analytics dataset."
+        showHeader={false}
+        showReadoutCards={false}
+      />
+    );
+  }
+
+  function renderServerChart() {
+    switch (chartKey) {
+      case "relationship_graph":
+        return renderServerRelationshipGraph();
+      case "radar":
+        if (!serverPrimaryRadar) {
+          return null;
+        }
+        return (
+          <RadarChart
+            primary={serverPrimaryRadar as any}
+            comparison={serverComparisonRadar ? (serverComparisonRadar as any) : undefined}
+            primaryLabel={serverFocusPlayer?.name ?? "Player"}
+            comparisonLabel={serverComparePlayer?.name ?? "Comparison"}
+            title="Player Radar"
+            showHeader={false}
+          />
+        );
+      case "sparkline":
+        if (!serverChartData.length && !serverComparisonData.length) {
+          return null;
+        }
+        return (
+          <Sparkline
+            data={serverChartData as any}
+            comparisonData={serverComparisonData as any}
+            defaultMetricKey={serverMetricKey}
+            primaryLabel={toStringValue(
+              datasetData.primaryLabel,
+              serverFocusPlayer?.name ?? "Player",
+            )}
+            comparisonLabel={toStringValue(
+              datasetData.comparisonLabel,
+              serverComparePlayer?.name ?? "Comparison",
+            )}
+            showHowItWorks={false}
+          />
+        );
+      case "head_to_head":
+        if (
+          serverChartPlayers.length < 2 ||
+          (!serverChartData.length && !serverChartGames.length)
+        ) {
+          return null;
+        }
+        return (
+          <HeadToHeadChart
+            data={serverChartData as any}
+            games={serverChartGames as any}
+            players={serverChartPlayers as any}
+            scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
+            playerId={serverFocusPlayerId}
+            compareId={serverComparePlayerId}
+            showHeader={false}
+          />
+        );
+      case "rivalry_graph":
+        if (
+          !serverFocusPlayerId ||
+          !serverChartGames.length ||
+          !serverChartPlayers.length
+        ) {
+          return null;
+        }
+        return (
+          <RivalryGraph
+            playerId={serverFocusPlayerId}
+            games={serverChartGames as any}
+            players={serverChartPlayers as any}
+          />
+        );
+      case "line_chart":
+      case "line":
+      case "multi_line_chart":
+      case "multi-line-chart":
+      case "multi-line":
+        if (!serverChartData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <LineChart
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            statKey={serverMetricKey}
+            scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
+            selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
+            mode={serverLineMode as any}
+            showModeSelector={false}
+            showHeader={false}
+          />
+        );
+      case "prestige_over_time":
+        if (!serverChartData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <PrestigeOverTimeChart
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
+          />
+        );
+      case "stacked_bar_chart":
+        if (
+          !serverChartData.length &&
+          Object.keys(serverMetricDataMap).length === 0
+        ) {
+          return null;
+        }
+        return (
+          <StackedBarChart
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            metricDataMap={serverMetricDataMap as any}
+            metricOptions={serverMetricOptions as any}
+            activeMetricKey={serverActiveMetricKey}
+            selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
+            showMetricSelector={false}
+            showCategorySelector={false}
+            showHeader={false}
+          />
+        );
+      case "bar_chart":
+      case "bar":
+        if (!serverChartData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <BarChart
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            statKey={serverMetricKey}
+            scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
+            showHeader={false}
+          />
+        );
+      case "heatmap":
+        if (!serverChartData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <Heatmap
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            statKey={serverMetricKey}
+            scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
+            showHeader={false}
+          />
+        );
+      case "elo":
+        if (!serverChartGames.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <EloChart
+            games={serverChartGames as any}
+            players={serverChartPlayers as any}
+            primaryPlayerId={serverFocusPlayerId}
+            showHeader={false}
+          />
+        );
+      case "efficiency_failure_scatter":
+        if (!serverChartData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <EfficiencyFailureScatter
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
+          />
+        );
+      case "bump_chart":
+        if (!serverChartData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <BumpChart
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            statKey={serverMetricKey}
+            scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
+            selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
+            showHeader={false}
+          />
+        );
+      case "consistency_band":
+        if (!serverChartData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <ConsistencyBandChart
+            data={serverChartData as any}
+            players={serverChartPlayers as any}
+            statKey={serverMetricKey}
+            scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
+            selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
+            showHeader={false}
+          />
+        );
+      case "replay_chart":
+        if (!serverReplayData.length || !serverChartPlayers.length) {
+          return null;
+        }
+        return (
+          <ReplayChart
+            replay={serverReplayData as any}
+            players={serverChartPlayers as any}
+            statKey={serverMetricKey as any}
+            title="Replay Chart"
+            showHeader={false}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
   function openChartSetup() {
     if (!setupChartKey) return;
 
@@ -623,31 +979,19 @@ export default function ChartKeyScreen() {
         return (
           <ChartSurface
             eyebrow={provenance.label}
-            title={
-              usingCloudFallbackData
-                ? "Showing Supabase game history"
-                : "Showing saved history data"
-            }
+            title="Showing Supabase game history"
             subtitle={provenance.caption}
           >
             <AnalyticsRecoveryCard
-              title={
-                usingCloudFallbackData
-                  ? "Showing Supabase game history"
-                  : "Showing saved history data"
-              }
+              title="Showing Supabase game history"
               body={
                 error
-                  ? usingCloudFallbackData
-                    ? "The published chart dataset is unavailable right now, so this view is using Supabase game history directly."
-                    : "The published chart dataset is unavailable right now, so this view is using the games saved on this device."
-                  : usingCloudFallbackData
-                    ? "The published chart dataset has no rows yet, so this view is using Supabase game history directly."
-                    : "The published chart dataset has no rows yet, so this view is using the games saved on this device."
+                  ? "The published chart dataset is unavailable right now, so this view is using Supabase game history directly."
+                  : "The published chart dataset has no rows yet, so this view is using Supabase game history directly."
               }
               tone="warning"
-              sourceKind={usingCloudFallbackData ? "supabase-fallback" : "device-fallback"}
-              sourceLabel={usingCloudFallbackData ? "Supabase fallback" : "Device fallback"}
+              sourceKind="supabase-fallback"
+              sourceLabel="Supabase fallback"
               primaryAction={
                 canAdjustChartFromHub(chartKey)
                   ? {
@@ -674,6 +1018,27 @@ export default function ChartKeyScreen() {
           </ChartSurface>
         );
       }
+    }
+
+    const serverChart = renderServerChart();
+    if (serverChart) {
+      return (
+        <ChartSurface
+          eyebrow={provenance.label}
+          title={toStringValue(dataset?.title, resolveChartTitle(chartKey))}
+          subtitle={provenance.caption}
+        >
+          {summaryChips.length ? (
+            <View style={styles.surfaceChipRow}>
+              {summaryChips.map((chip) => (
+                <ChartMetricChip key={chip} label={chip} />
+              ))}
+            </View>
+          ) : null}
+          <ChartInsightStrip label="Source" value={provenance.label} />
+          {serverChart}
+        </ChartSurface>
+      );
     }
 
     if (loading) {

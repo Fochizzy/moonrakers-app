@@ -9,7 +9,6 @@ import { useRouter } from "expo-router";
 import CorrelationStats from "@/components/CorrelationStats";
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
 import AnalyticsControlRail from "@/components/analytics/AnalyticsControlRail";
-import { buildAnalyticsPlayerDirectory } from "@/lib/cloud/analytics/analyticsPlayers";
 import ActionButton from "@/components/ui/ActionButton";
 import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
@@ -18,7 +17,6 @@ import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { getInsightsScreen } from "@/lib/cloud/analytics/getInsightsScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { buildInsightSummaryStatements } from "@/utils/insightSummaries";
 import {
@@ -28,10 +26,10 @@ import {
   buildPlayerProfileRoute,
 } from "@/utils/appRoutes";
 import {
-  prioritizeSignedInPlayerOptions,
   resolveSignedInPlayerOptionId,
 } from "@/lib/cloud/analytics/signedInPlayerOptions";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
+import { useAnalyticsPresentation } from "@/utils/useAnalyticsPresentation";
 
 type PayloadRecord = Record<string, unknown>;
 
@@ -150,7 +148,6 @@ export default function InsightsScreen() {
   }, [authProfileId]);
 
   const activeProfileId = String(selectedProfileId ?? authProfileId ?? "").trim();
-  const [error, setError] = useState<string | null>(null);
   const insightsQuery = useLiveAnalyticsQuery({
     enabled: Boolean(activeProfileId),
     queryKey: `insights-screen:${activeProfileId || "anon"}`,
@@ -159,30 +156,18 @@ export default function InsightsScreen() {
         profileId: activeProfileId,
       }),
   });
-  useEffect(() => {
-    const nextError = insightsQuery.error;
-    if (nextError !== null) {
-      setError(formatSupabaseConfigError(nextError) || "Failed to load insights.");
-    } else {
-      setError(null);
-    }
-  }, [insightsQuery.error]);
   const payload = toRecord(insightsQuery.payload);
   const loading = insightsQuery.loading;
-  const isStale = insightsQuery.isStale;
-  const staleMessage = insightsQuery.staleMessage;
+  const { error, freshness } = useAnalyticsPresentation({
+    fallbackMessage: "Failed to load insights.",
+    query: insightsQuery,
+    retryLabel: "Retry insights",
+    showSourceBadgeWhenReady: false,
+    staleEntityLabel: "insights payload",
+  });
 
   const metaPayload = useMemo(() => toRecord(payload?.meta), [payload]);
   const correlationPayload = toRecord(payload?.correlations);
-  const canonicalGames = useMemo(() => games as any, [games]);
-  const relationships = useMemo(() => toRecord(correlationPayload.relationships), [correlationPayload.relationships]);
-  const analyticsDirectory = useMemo(
-    () => buildAnalyticsPlayerDirectory({ players, games: games as any, groups: [] }),
-    [players, games],
-  );
-  const staleSourceCaption = isStale
-    ? `Showing the last successful Supabase insights payload.${staleMessage ? ` Latest refresh failure: ${staleMessage}` : ""}`
-    : null;
   const playerOptions = useMemo(() => {
     const source = toArray(correlationPayload.players).length
       ? toArray(correlationPayload.players)
@@ -195,26 +180,19 @@ export default function InsightsScreen() {
       return null;
     }
 
-    const matchedPlayer = analyticsDirectory.players.find(
-      (player) => String(player?.id ?? "").trim() === authProfileId
-    );
-
     return {
       id: authProfileId,
       label:
         String(authProfile?.player_name ?? "").trim() ||
         String(authProfile?.display_name ?? "").trim() ||
-        String(matchedPlayer?.name ?? "").trim() ||
         "Player",
       displayName:
         String(authProfile?.player_name ?? "").trim() ||
         String(authProfile?.display_name ?? "").trim(),
       playerName:
-        String(authProfile?.player_name ?? "").trim() ||
-        String(matchedPlayer?.name ?? "").trim(),
+        String(authProfile?.player_name ?? "").trim(),
     };
   }, [
-    analyticsDirectory.players,
     authProfile?.display_name,
     authProfile?.player_name,
     authProfileId,
@@ -263,70 +241,21 @@ export default function InsightsScreen() {
         });
       }
     }
+    return [...optionById.values()].sort((left, right) => {
+      const leftSignedIn = signedInPlayerOptionId && left.id === signedInPlayerOptionId ? 0 : 1;
+      const rightSignedIn = signedInPlayerOptionId && right.id === signedInPlayerOptionId ? 0 : 1;
+      if (leftSignedIn !== rightSignedIn) {
+        return leftSignedIn - rightSignedIn;
+      }
 
-    const playerById = new Map(
-      analyticsDirectory.players.map((player) => [String(player.id), player])
-    );
-    const prioritizedPlayers = prioritizeSignedInPlayerOptions({
-      players: [...optionById.values()].map((option) => {
-        const matchedPlayer = playerById.get(String(option.id));
-        return {
-          id: String(option.id),
-          name: option.label,
-          color:
-            matchedPlayer && typeof matchedPlayer.color === "string"
-              ? matchedPlayer.color
-              : undefined,
-          assignedCardArtIndex:
-            typeof matchedPlayer?.assignedCardArtIndex === "number"
-              ? matchedPlayer.assignedCardArtIndex
-              : null,
-        };
-      }),
-      games: canonicalGames as any,
-      authProfileId: authProfile?.id,
-      authSessionUserId: authSession?.user?.id,
-      authProfilePlayer: authProfilePlayerOption
-        ? {
-            id: authProfilePlayerOption.id,
-            name: authProfilePlayerOption.label,
-          }
-        : null,
-      commonPlayerLimit: 4,
+      return left.label.localeCompare(right.label, undefined, {
+        sensitivity: "base",
+      });
     });
-
-    const ordered: PlayerOption[] = [];
-    const seen = new Set<string>();
-
-    for (const player of prioritizedPlayers) {
-      const normalizedId = String(player?.id ?? "").trim();
-      const option = optionById.get(normalizedId);
-      if (!normalizedId || !option || seen.has(normalizedId)) {
-        continue;
-      }
-
-      seen.add(normalizedId);
-      ordered.push(option);
-    }
-
-    for (const option of optionById.values()) {
-      const normalizedId = String(option.id ?? "").trim();
-      if (!normalizedId || seen.has(normalizedId)) {
-        continue;
-      }
-
-      seen.add(normalizedId);
-      ordered.push(option);
-    }
-
-    return ordered;
   }, [
-    analyticsDirectory.players,
     authProfile?.id,
-    authProfileId,
     authProfilePlayerOption,
     authSession?.user?.id,
-    canonicalGames,
     playerOptions,
   ]);
 
@@ -417,12 +346,8 @@ export default function InsightsScreen() {
     [orderedPlayerOptions],
   );
   const summaryPlayers = useMemo(
-    () =>
-      analyticsDirectory.players.map((player) => ({
-        id: String(player?.id ?? "").trim(),
-        name: String(player?.name ?? "").trim(),
-      })),
-    [analyticsDirectory.players],
+    () => correlationPlayers,
+    [correlationPlayers],
   );
   const summaryStatements = useMemo(
     () =>
@@ -558,14 +483,13 @@ export default function InsightsScreen() {
         title={activeSectionLabel}
         helpCategory="correlations"
         state={insightsState}
-        sourceCaption={
-          staleSourceCaption ||
-          "This hub uses the published Supabase correlations payload, so each lens stays aligned with the shared analytics view."
-        }
+        sourceCaption={freshness.sourceCaption(
+          "This hub uses the published Supabase correlations payload, so each lens stays aligned with the shared analytics view.",
+        )}
         messageTitle={insightsMessageTitle}
         messageBody={insightsMessageBody}
-        primaryAction={insightsPrimaryAction}
-        secondaryAction={insightsSecondaryAction}
+        primaryAction={freshness.retryAction ?? insightsPrimaryAction}
+        secondaryAction={freshness.retryAction ? null : insightsSecondaryAction}
         tone={error ? "danger" : insightsState === "ready" ? "info" : "warning"}
       >
         <View style={styles.summaryList}>
@@ -580,9 +504,7 @@ export default function InsightsScreen() {
 
       {insightsState === "ready" && activeSectionTab === "pairingCorrelations" ? (
         <CorrelationStats
-          games={canonicalGames}
-          players={players}
-          relationships={relationships}
+          players={correlationPlayers}
           serverData={correlationPayload}
           serverOnly
           view="pairing"

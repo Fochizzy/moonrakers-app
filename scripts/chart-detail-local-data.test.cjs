@@ -353,7 +353,7 @@ const chartDetailSource = fs.readFileSync(
 assert.match(
   chartDetailSource,
   /buildLocalChartDetailState\(/,
-  "expected chart detail route to build local fallback state from saved games",
+  "expected chart detail route to build a chart fallback state from synced games",
 );
 
 assert.match(
@@ -364,7 +364,13 @@ assert.match(
 
 assert.match(
   chartDetailSource,
-  /case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*scopedPlayerIds=\{localChartData\.scopedPlayerIds\}/,
+  /players:\s*rpcFallbackPlayers\.length\s*\?\s*rpcFallbackPlayers\s*:\s*cloudFallbackPlayers[\s\S]*games:\s*rpcFallbackGames\.length\s*\?\s*rpcFallbackGames\s*:\s*cloudFallbackGames/,
+  "expected the chart fallback state to derive from Supabase-published source history before falling back to the shared cloud snapshot",
+);
+
+assert.match(
+  chartDetailSource,
+  /case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*scopedPlayerIds=\{routeIds\.length \? routeIds : scopedPlayerIds\}/,
   "expected the relationship chart fallback to pass the filtered selected-player scope into AssistNetworkOverview",
 );
 
