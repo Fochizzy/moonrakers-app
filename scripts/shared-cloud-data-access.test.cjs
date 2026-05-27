@@ -17,6 +17,7 @@ const migrationSource = read(
   ),
 );
 const registerSource = read(path.join("app", "register.tsx"));
+const addPlayersSource = read(path.join("app", "add-players.tsx"));
 
 assert.doesNotMatch(
   cloudSnapshotSource,
@@ -32,14 +33,38 @@ assert.match(
 
 assert.match(
   registerSource,
-  /loadCloudSnapshot\(authSession\.user\.id\)/,
-  "expected finish-profile registration to reload the shared cloud snapshot after creating the profile row",
+  /loadHydratedCloudState|loadHydratedSharedSnapshot/,
+  "expected finish-profile registration to use the shared cloud rehydration helper",
 );
 
 assert.match(
   registerSource,
-  /hydrateCloudSnapshot\(\{/,
-  "expected finish-profile registration to hydrate the shared store immediately instead of waiting for a later auth refresh",
+  /hydrateCloudSnapshot\(\s*hydratedSnapshot\s*\)/,
+  "expected finish-profile registration to hydrate the shared store from the shared helper payload",
+);
+
+assert.doesNotMatch(
+  registerSource,
+  /loadCloudSnapshot\(authSession\.user\.id\)/,
+  "expected finish-profile registration to stop reloading the cloud snapshot inline",
+);
+
+assert.match(
+  addPlayersSource,
+  /loadHydratedCloudState|loadHydratedSharedSnapshot/,
+  "expected add-players shared-group refreshes to use the shared cloud rehydration helper",
+);
+
+assert.match(
+  addPlayersSource,
+  /hydrateCloudSnapshot\(\s*hydratedSnapshot\s*\)/,
+  "expected add-players shared-group refreshes to hydrate from the shared helper payload",
+);
+
+assert.doesNotMatch(
+  addPlayersSource,
+  /loadCloudSnapshot\(signedInUserId\)/,
+  "expected add-players shared-group refreshes to stop reloading the cloud snapshot inline",
 );
 
 for (const policyName of [

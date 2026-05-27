@@ -24,9 +24,8 @@ import {
   getImmediateProfileUserId,
 } from "@/lib/auth/registerFlow";
 import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
-import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
+import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
-import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import {
   buildSupabaseRedirectUrl,
@@ -42,7 +41,6 @@ import {
   normalizePreferredProfileColor,
   resolveAssignedCardArtIndexForProfile,
 } from "@/utils/profileAppearance";
-import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
 
 function normalizePlayerName(value: string) {
   return value.trim();
@@ -184,27 +182,8 @@ export default function RegisterScreen() {
         };
 
         try {
-          const [snapshot, registeredProfiles] = await Promise.all([
-            loadCloudSnapshot(authSession.user.id),
-            loadRegisteredProfiles().catch(() => []),
-          ]);
-          const statsSnapshot = await loadStatsSnapshot({
-            profileId: authSession.user.id,
-            groups: snapshot.groups,
-            games: snapshot.games,
-          });
-
-          hydrateCloudSnapshot({
-            session: authSession,
-            snapshot: {
-              ...snapshot,
-              players: mergeRegisteredProfilesIntoPlayers(
-                snapshot.players,
-                registeredProfiles,
-              ),
-            },
-            statsSnapshot,
-          });
+          const hydratedSnapshot = await loadHydratedCloudState(authSession as any);
+          hydrateCloudSnapshot(hydratedSnapshot);
         } catch {
           setAuthProfile(savedProfile);
           upsertRegisteredProfile(savedRegisteredProfile);

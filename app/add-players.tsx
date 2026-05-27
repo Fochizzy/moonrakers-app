@@ -23,9 +23,7 @@ import Text from "@/components/ui/Text";
 import { buildSavedAuthProfile } from "@/lib/auth/registerFlow";
 import { resolveDraftResumeRoute } from "@/lib/game-draft/phase";
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
-import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
-import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
-import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
+import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { deleteOwnProfile } from "@/lib/cloud/deleteOwnProfile";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import { createSharedGroup, deleteSharedGroup } from "@/lib/cloud/sharedGroups";
@@ -42,7 +40,6 @@ import {
 import {
   canonicalizeSelectablePlayers,
   isLikelyRegisteredProfileId,
-  mergeRegisteredProfilesIntoPlayers,
 } from "@/utils/registeredProfilePlayer";
 import {
   buildProfileAppearanceSavePayload,
@@ -367,27 +364,8 @@ export default function AddPlayersScreen() {
       return;
     }
 
-    const [snapshot, registeredProfiles] = await Promise.all([
-      loadCloudSnapshot(signedInUserId),
-      loadRegisteredProfiles().catch(() => []),
-    ]);
-    const statsSnapshot = await loadStatsSnapshot({
-      profileId: signedInUserId,
-      groups: snapshot.groups,
-      games: snapshot.games,
-    });
-
-    hydrateCloudSnapshot({
-      session: authSession,
-      snapshot: {
-        ...snapshot,
-        players: mergeRegisteredProfilesIntoPlayers(
-          snapshot.players,
-          registeredProfiles,
-        ),
-      },
-      statsSnapshot,
-    });
+    const hydratedSnapshot = await loadHydratedCloudState(authSession as any);
+    hydrateCloudSnapshot(hydratedSnapshot);
   }
 
   function ensureSharedGroupAccess() {

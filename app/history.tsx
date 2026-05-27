@@ -27,11 +27,8 @@ import SectionCard from '@/components/ui/SectionCard';
 import Text from '@/components/ui/Text';
 import { useHistoryDataManager } from '@/lib/history/useHistoryDataManager';
 import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
-import { loadCloudSnapshot } from '@/lib/cloud/loadCloudSnapshot';
-import { loadRegisteredProfiles } from '@/lib/cloud/loadRegisteredProfiles';
-import { loadStatsSnapshot } from '@/lib/cloud/loadStatsSnapshot';
+import { loadHydratedCloudState } from '@/lib/cloud/loadHydratedCloudState';
 import { importBackupFromPicker } from '@/lib/migration/importBackupFromPicker';
-import { mergeRegisteredProfilesIntoPlayers } from '@/utils/registeredProfilePlayer';
 import { APP_ROUTES, buildSummaryRoute } from '@/utils/appRoutes';
 
 import {
@@ -437,23 +434,8 @@ export default function HistoryScreen() {
                   setSelectedGameId(undefined);
                 }
 
-                const [snapshot, registeredProfiles] = await Promise.all([
-                  loadCloudSnapshot(activeSession?.user?.id ?? ''),
-                  loadRegisteredProfiles().catch(() => []),
-                ]);
-                const statsSnapshot = await loadStatsSnapshot({
-                  profileId: activeSession?.user?.id ?? '',
-                  groups: snapshot.groups,
-                  games: snapshot.games,
-                });
-                hydrateCloudSnapshot({
-                  session: activeSession,
-                  snapshot: {
-                    ...snapshot,
-                    players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
-                  },
-                  statsSnapshot,
-                });
+                const hydratedSnapshot = await loadHydratedCloudState(activeSession as any);
+                hydrateCloudSnapshot(hydratedSnapshot);
               } catch (error) {
                 console.error('Delete Game failed:', error);
                 Alert.alert(

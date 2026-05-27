@@ -42,10 +42,7 @@ import {
   getPlayerAccentColor,
   getPlayerBackgroundColor,
 } from '@/utils/turnTheme';
-import { loadCloudSnapshot } from '@/lib/cloud/loadCloudSnapshot';
-import { loadRegisteredProfiles } from '@/lib/cloud/loadRegisteredProfiles';
-import { loadStatsSnapshot } from '@/lib/cloud/loadStatsSnapshot';
-import { mergeRegisteredProfilesIntoPlayers } from '@/utils/registeredProfilePlayer';
+import { loadHydratedCloudState } from '@/lib/cloud/loadHydratedCloudState';
 import { APP_ROUTES } from '@/utils/appRoutes';
 import {
   glowStyle,
@@ -1483,24 +1480,11 @@ export default function Game() {
             await commitFinishGame();
             if (authSession?.user?.id) {
               try {
-                const [snapshot, registeredProfiles] = await Promise.all([
-                  loadCloudSnapshot(authSession.user.id),
-                  loadRegisteredProfiles().catch(() => []),
-                ]);
-                const statsSnapshot = await loadStatsSnapshot({
-                  profileId: authSession.user.id,
-                  groups: snapshot.groups,
-                  games: snapshot.games,
-                });
-                hydrateCloudSnapshot({
-                  session: authSession,
-                  snapshot: {
-                    ...snapshot,
-                    players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
-                  },
-                  statsSnapshot,
-                });
-              } catch {}
+                const hydratedSnapshot = await loadHydratedCloudState(authSession as any);
+                hydrateCloudSnapshot(hydratedSnapshot);
+              } catch {
+                // Keep the finish flow intact if the post-submit refresh misses.
+              }
             }
           })();
         },

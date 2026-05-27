@@ -24,26 +24,26 @@ assert.match(
 
 assert.match(
   historySource,
-  /loadCloudSnapshot\(/,
-  "expected app/history.tsx to reload games from Supabase after deleting a finished game",
+  /loadHydratedCloudState|loadHydratedSharedSnapshot/,
+  "expected app/history.tsx to rehydrate through the shared helper after deleting or importing history",
 );
 
-assert.match(
+assert.doesNotMatch(
+  historySource,
+  /loadCloudSnapshot\(/,
+  "expected app/history.tsx to stop reloading games from Supabase inline after deleting or importing history",
+);
+
+assert.doesNotMatch(
   historySource,
   /loadRegisteredProfiles\(/,
-  "expected app/history.tsx to merge registered profiles into the refreshed cloud snapshot after deleting a game",
+  "expected app/history.tsx to stop merging registered profiles inline after deleting or importing history",
 );
 
-assert.match(
+assert.doesNotMatch(
   historySource,
   /loadStatsSnapshot\(/,
-  "expected app/history.tsx to refresh stats after deleting a finished game",
-);
-
-assert.match(
-  historySource,
-  /hydrateCloudSnapshot\(\{/,
-  "expected app/history.tsx to rehydrate the shared cloud snapshot after deleting a finished game",
+  "expected app/history.tsx to stop rebuilding stats inline after deleting or importing history",
 );
 
 console.log("history-delete-supabase-only-wireup.test.cjs passed");

@@ -24,20 +24,26 @@ assert.match(
 
 assert.match(
   gameSource,
-  /loadCloudSnapshot\(/,
-  "expected app/game.tsx to reload finished-game data from Supabase",
+  /loadHydratedCloudState|loadHydratedSharedSnapshot/,
+  "expected app/game.tsx to refresh finished-game data through the shared hydration helper",
 );
 
-assert.match(
+assert.doesNotMatch(
+  gameSource,
+  /loadCloudSnapshot\(/,
+  "expected app/game.tsx to stop reloading finished-game data inline from Supabase",
+);
+
+assert.doesNotMatch(
   gameSource,
   /loadRegisteredProfiles\(/,
-  "expected app/game.tsx to merge registered profiles back into the refreshed Supabase snapshot",
+  "expected app/game.tsx to stop merging registered profiles inline after finishing a game",
 );
 
-assert.match(
+assert.doesNotMatch(
   gameSource,
   /loadStatsSnapshot\(/,
-  "expected app/game.tsx to refresh the stats snapshot from Supabase after finishing a game",
+  "expected app/game.tsx to stop rebuilding the stats snapshot inline after finishing a game",
 );
 
 console.log("finish-game-supabase-only-wireup.test.cjs passed");
