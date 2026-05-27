@@ -1,14 +1,11 @@
 import { Alert } from "react-native";
 
 import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/app-status/store";
+import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { createSharedGroup } from "@/lib/cloud/sharedGroups";
-import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
-import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
-import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
 import { resolveCloudGameSaveState } from "@/lib/game-save/resolveCloudGameSave";
 import { saveCompletedGame } from "@/lib/game-save/saveCompletedGame";
 import { formatSupabaseConfigError } from "@/lib/supabase";
-import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
 
 import { prepareFinishGameState, type SessionRound } from "./gameSessionController.ts";
 
@@ -134,27 +131,8 @@ export function useGameSessionController(args: HookArgs) {
           detail: "Pulling the latest Supabase snapshot and analytics into this device.",
         });
 
-        const [snapshot, registeredProfiles] = await Promise.all([
-          loadCloudSnapshot(args.authSession.user.id!),
-          loadRegisteredProfiles().catch(() => []),
-        ]);
-        const statsSnapshot = await loadStatsSnapshot({
-          profileId: args.authSession.user.id!,
-          groups: snapshot.groups,
-          games: snapshot.games,
-        });
-
-        args.hydrateCloudSnapshot({
-          session: args.authSession,
-          snapshot: {
-            ...snapshot,
-            players: mergeRegisteredProfilesIntoPlayers(
-              snapshot.players,
-              registeredProfiles,
-            ),
-          },
-          statsSnapshot,
-        });
+        const hydratedSnapshot = await loadHydratedCloudState(args.authSession as any);
+        args.hydrateCloudSnapshot(hydratedSnapshot);
 
         publishAppStatus({
           scope: "cloud_save",

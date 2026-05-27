@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 
 import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/app-status/store";
-import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
-import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
-import { loadStatsSnapshot } from "@/lib/cloud/loadStatsSnapshot";
+import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { deleteCompletedGame } from "@/lib/game-save/deleteCompletedGame";
 import { importBackupFromPicker } from "@/lib/migration/importBackupFromPicker";
 import { formatSupabaseConfigError } from "@/lib/supabase";
-import { mergeRegisteredProfilesIntoPlayers } from "@/utils/registeredProfilePlayer";
 
 type AuthSessionLike = {
   user?: {
@@ -42,24 +39,7 @@ export function useHistoryDataManager(args: HookArgs) {
       return;
     }
 
-    const [snapshot, registeredProfiles] = await Promise.all([
-      loadCloudSnapshot(activeSession.user.id),
-      loadRegisteredProfiles().catch(() => []),
-    ]);
-    const statsSnapshot = await loadStatsSnapshot({
-      profileId: activeSession.user.id,
-      groups: snapshot.groups,
-      games: snapshot.games,
-    });
-
-    args.hydrateCloudSnapshot({
-      session: activeSession,
-      snapshot: {
-        ...snapshot,
-        players: mergeRegisteredProfilesIntoPlayers(snapshot.players, registeredProfiles),
-      },
-      statsSnapshot,
-    });
+    args.hydrateCloudSnapshot(await loadHydratedCloudState(activeSession as any));
   }
 
   async function importBackup() {
