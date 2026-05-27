@@ -101,7 +101,14 @@ function buildPlayerCountBuckets(value: unknown): PlayerCountBucket[] {
     const avgAssists = toNumberValue(splitEntry.avgAssists);
     const avgFailures = toNumberValue(splitEntry.avgFailures);
 
-    if (playerCount === null || games === null || wins === null || games <= 0 || playerCount < 2) {
+    if (
+      playerCount === null ||
+      games === null ||
+      wins === null ||
+      games <= 0 ||
+      !Number.isInteger(playerCount) ||
+      (playerCount !== 2 && playerCount < 3)
+    ) {
       continue;
     }
 

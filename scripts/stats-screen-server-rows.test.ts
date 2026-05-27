@@ -191,4 +191,50 @@ assert.deepEqual(
   ],
 );
 
+assert.deepEqual(
+  normalizeStatsPlayerCountOverviewRows([
+    {
+      playerCount: 4,
+      games: 3,
+      wins: 2,
+      winRate: 0.667,
+      avgPrestige: 30,
+      avgAssists: 1,
+      avgFailures: 0.5,
+    },
+    {
+      playerCount: 2.5,
+      games: 2,
+      wins: 1,
+      winRate: 0.5,
+      avgPrestige: 26,
+      avgAssists: 1.2,
+      avgFailures: 0.4,
+    },
+    {
+      playerCount: 2,
+      games: 4,
+      wins: 3,
+      winRate: 0.75,
+      avgPrestige: 28,
+      avgAssists: 1.5,
+      avgFailures: 0.5,
+    },
+  ]),
+  [
+    {
+      key: "two-player-overview",
+      label: "2-player",
+      value: "75% win rate",
+      detail: "4 games tracked | 3 wins | 28 avg prestige",
+    },
+    {
+      key: "three-plus-overview",
+      label: "3+ players",
+      value: "67% win rate",
+      detail: "3 games tracked | 2 wins | 30 avg prestige",
+    },
+  ],
+);
+
 console.log("stats-screen-server-rows.test.ts passed");
