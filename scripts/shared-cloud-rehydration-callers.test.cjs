@@ -28,12 +28,34 @@ assert.doesNotMatch(
   /loadCloudSnapshot\(args\.authSession\.user\.id!\)/,
   "expected game-session refresh to stop inlining loadCloudSnapshot",
 );
+assert.match(
+  gameSessionSource,
+  /hydrateCloudSnapshot\(hydratedSnapshot\)/,
+  "expected game-session refresh to hydrate through the shared helper result",
+);
 
 const historySource = read(path.join("lib", "history", "useHistoryDataManager.ts"));
 assert.doesNotMatch(
   historySource,
   /loadCloudSnapshot\(activeSession\.user\.id\)/,
   "expected history refresh to stop inlining loadCloudSnapshot",
+);
+assert.match(
+  historySource,
+  /loadRegisteredProfiles\(\)\.catch\(\(\) => \[\]\)/,
+  "expected history backup import to keep resolving registered profiles",
+);
+assert.match(
+  historySource,
+  /import\s*{\s*loadRegisteredProfiles\s*}\s*from\s*["']@\/lib\/cloud\/loadRegisteredProfiles["']/,
+  "expected history backup import to keep the registered-profiles dependency wired",
+);
+
+const packageSource = read("package.json");
+assert.match(
+  packageSource,
+  /shared-cloud-rehydration-callers\.test\.cjs/,
+  "expected a normal npm script entrypoint to include the shared cloud rehydration guard",
 );
 
 console.log("shared-cloud-rehydration-callers.test.cjs passed");

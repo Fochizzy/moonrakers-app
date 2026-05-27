@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/app-status/store";
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
+import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
 import { deleteCompletedGame } from "@/lib/game-save/deleteCompletedGame";
 import { importBackupFromPicker } from "@/lib/migration/importBackupFromPicker";
 import { formatSupabaseConfigError } from "@/lib/supabase";

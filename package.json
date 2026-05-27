@@ -12,7 +12,7 @@
     "lint": "node scripts/run-focused-lint.cjs",
     "lint:all": "eslint . --ext .js,.cjs,.ts,.tsx",
     "typecheck": "tsc --noEmit --pretty false --skipLibCheck --incremental false",
-    "test:analytics": "node scripts/run-focused-suite.cjs analytics",
+    "test:analytics": "node scripts/run-focused-suite.cjs analytics && node scripts/shared-cloud-rehydration-callers.test.cjs",
     "test:ui": "node scripts/run-focused-suite.cjs ui",
     "test:critical-path": "node scripts/critical-path-smoke.test.cjs",
     "release:patch": "npm version patch --no-git-tag-version",
