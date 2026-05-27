@@ -73,6 +73,40 @@ export type AnalyticsMetricCard = {
   metricKey?: string;
 };
 
+export type AnalyticsTurnOrderRow = {
+  seat: number;
+  label: string;
+  appearances: number;
+  wins: number;
+  winRate: number;
+  avgPrestige: number;
+  tableSize?: number | null;
+  correlation?: number | null;
+};
+
+export type AnalyticsTurnOrderGroup = {
+  tableSize: number;
+  label: string;
+  summary?: string;
+  rows: AnalyticsTurnOrderRow[];
+};
+
+export type AnalyticsMetricCluster = {
+  key: string;
+  label: string;
+  summary: string;
+  highlightKey?: string | null;
+  metrics: AnalyticsMetricCard[];
+};
+
+export type AnalyticsTurnOrderSummary = {
+  totalGames: number;
+  turnOrderWinCorrelation: number;
+  bestSeat: AnalyticsTurnOrderRow | null;
+  worstSeat: AnalyticsTurnOrderRow | null;
+  summary: string;
+};
+
 export type AnalyticsTopSignal = {
   key: string;
   label: string;
@@ -99,6 +133,15 @@ export type AnalyticsHomePayload = {
   cards: AnalyticsMetricCard[];
 };
 
+export type AnalyticsPlayerDetail = {
+  playerId: string;
+  label: string;
+  summary: string;
+  stats: Record<string, unknown>;
+  pressureContext?: AnalyticsMetricCluster;
+  [key: string]: unknown;
+};
+
 export type StatsScreenPayload = {
   generatedAt: string;
   overview: {
@@ -111,15 +154,21 @@ export type StatsScreenPayload = {
     topSignals: AnalyticsTopSignal[];
     halftimeProfile?: Record<string, unknown>;
     playerCountSplit?: Record<string, unknown>[];
+    formClosing?: AnalyticsMetricCluster;
   };
   players: {
     options: AnalyticsPlayerOption[];
     selectedPlayerId: string | null;
-    detail: Record<string, unknown> | null;
+    detail: AnalyticsPlayerDetail | null;
   };
   playstyle: Record<string, unknown>;
-  correlations: Record<string, unknown>;
-  games: Record<string, unknown>;
+  correlations: Record<string, unknown> & {
+    turnOrderSummary?: AnalyticsTurnOrderSummary | null;
+  };
+  games: Record<string, unknown> & {
+    turnOrderOverview?: AnalyticsTurnOrderRow[];
+    turnOrderByTableSize?: AnalyticsTurnOrderGroup[];
+  };
   contractEfficiency?: Record<string, unknown>;
   groupMeta?: Record<string, unknown>;
   headToHead?: Record<string, unknown>[];
