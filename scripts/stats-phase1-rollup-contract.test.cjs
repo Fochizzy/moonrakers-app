@@ -97,6 +97,18 @@ assert.match(
   "expected the insights payload to publish correlations.macro",
 );
 
+assert.match(
+  migrationSource,
+  /target_profile_id uuid := coalesce\(profile_id,\s*auth\.uid\(\)\)/i,
+  "expected the stats wrapper to normalize a null profile_id before applying overlays",
+);
+
+assert.match(
+  migrationSource,
+  /with existing_rows as \([\s\S]*jsonb_array_elements\(coalesce\(existing_macro_rows,\s*'\[\]'::jsonb\)\)/i,
+  "expected the migration to reconcile existing macro rows before appending featured overlays",
+);
+
 assert.equal(
   fs.existsSync(typesPath),
   true,
@@ -110,6 +122,8 @@ for (const typeExport of [
   "AnalyticsTurnOrderGroup",
   "AnalyticsMetricCluster",
   "AnalyticsTurnOrderSummary",
+  "AnalyticsCorrelationRow",
+  "InsightsCorrelationsPayload",
 ]) {
   assert.match(
     typesSource,
@@ -124,6 +138,8 @@ for (const typedSurface of [
   "turnOrderOverview?: AnalyticsTurnOrderRow[]",
   "turnOrderByTableSize?: AnalyticsTurnOrderGroup[]",
   "turnOrderSummary?: AnalyticsTurnOrderSummary | null",
+  "macro?: AnalyticsCorrelationRow[]",
+  "correlations: InsightsCorrelationsPayload",
 ]) {
   assert.ok(
     typesSource.includes(typedSurface),

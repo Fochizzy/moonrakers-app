@@ -107,6 +107,30 @@ export type AnalyticsTurnOrderSummary = {
   summary: string;
 };
 
+export type AnalyticsCorrelationRow = {
+  key: string;
+  label: string;
+  value?: number | string | null;
+  strength?: string;
+  meaning?: string;
+  whenWin?: number;
+  whenLose?: number;
+  delta?: number;
+  direction?: string;
+  description?: string;
+};
+
+export type InsightsCorrelationsPayload = Record<string, unknown> & {
+  macro?: AnalyticsCorrelationRow[];
+  pairing?: AnalyticsCorrelationRow[];
+  items?: AnalyticsCorrelationRow[];
+  personal?: AnalyticsCorrelationRow[];
+  synergyPairs?: AnalyticsCorrelationRow[];
+  turnOrderSummary?: AnalyticsTurnOrderSummary | null;
+  selectedKey?: string | null;
+  summary?: string;
+};
+
 export type AnalyticsTopSignal = {
   key: string;
   label: string;
@@ -182,7 +206,7 @@ export type InsightsScreenPayload = {
   cards: AnalyticsMetricCard[];
   topSignals: AnalyticsTopSignal[];
   relationships: Record<string, unknown>;
-  correlations: Record<string, unknown>;
+  correlations: InsightsCorrelationsPayload;
 };
 
 export type ChartDatasetPayload = {

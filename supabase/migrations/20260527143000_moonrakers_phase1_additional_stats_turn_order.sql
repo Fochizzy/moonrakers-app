@@ -500,6 +500,53 @@ as $$
   from correlation_rollup;
 $$;
 
+create or replace function private.phase1_merge_macro_rows(
+  existing_macro_rows jsonb,
+  featured_macro_rows jsonb
+)
+returns jsonb
+language sql
+stable
+as $$
+  with existing_rows as (
+    select
+      row_value,
+      coalesce(row_value->>'key', '') as row_key,
+      0 as sort_bucket,
+      row_number() over () as ordinal
+    from jsonb_array_elements(coalesce(existing_macro_rows, '[]'::jsonb)) as row_value
+  ),
+  featured_rows as (
+    select
+      row_value,
+      coalesce(row_value->>'key', '') as row_key,
+      1 as sort_bucket,
+      row_number() over () as ordinal
+    from jsonb_array_elements(coalesce(featured_macro_rows, '[]'::jsonb)) as row_value
+  ),
+  ranked_rows as (
+    select
+      merged.row_value,
+      merged.sort_bucket,
+      merged.ordinal,
+      row_number() over (
+        partition by merged.row_key
+        order by merged.sort_bucket desc, merged.ordinal asc
+      ) as row_rank
+    from (
+      select * from existing_rows
+      union all
+      select * from featured_rows
+    ) as merged
+  )
+  select coalesce(
+    jsonb_agg(ranked_rows.row_value order by ranked_rows.sort_bucket asc, ranked_rows.ordinal asc),
+    '[]'::jsonb
+  )
+  from ranked_rows
+  where ranked_rows.row_rank = 1;
+$$;
+
 create or replace function public.get_stats_screen(profile_id uuid default auth.uid())
 returns jsonb
 language plpgsql
@@ -508,7 +555,7 @@ security invoker
 set search_path = public
 as $$
 declare
-  target_profile_id uuid := profile_id;
+  target_profile_id uuid := coalesce(profile_id, auth.uid());
   base_payload jsonb;
   turn_order_overview jsonb := '[]'::jsonb;
   turn_order_by_table_size jsonb := '[]'::jsonb;
@@ -578,7 +625,10 @@ begin
   base_payload := jsonb_set(
     base_payload,
     '{correlations,macro}',
-    coalesce(base_payload->'correlations'->'macro', '[]'::jsonb) || featured_macro_rows,
+    private.phase1_merge_macro_rows(
+      base_payload->'correlations'->'macro',
+      featured_macro_rows
+    ),
     true
   );
 
