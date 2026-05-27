@@ -55,8 +55,20 @@ assert.match(
 
 assert.match(
   statsSource,
+  /renderOverviewTab[\s\S]*overviewRecoveryState\.kind === "no-players"[\s\S]*!hasOverviewServerData/,
+  "expected Overview to stop blindly blocking on no-players when server-authored overview data exists",
+);
+
+assert.match(
+  statsSource,
   /renderOverviewTab[\s\S]*overviewRecoveryState\.kind === "no-games"[\s\S]*!hasOverviewServerData/,
   "expected Overview to stop blindly blocking on no-games when server-authored overview data exists",
+);
+
+assert.match(
+  statsSource,
+  /renderGamesTab[\s\S]*overviewRecoveryState\.kind === "no-players"[\s\S]*!hasGamesServerData/,
+  "expected Games to stop blindly blocking on no-players when server-authored game data exists",
 );
 
 assert.match(

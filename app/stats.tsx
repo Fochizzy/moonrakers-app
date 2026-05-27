@@ -382,8 +382,9 @@ export default function StatsScreen() {
 
   function renderOverviewTab() {
     const recoveryProps =
-      overviewRecoveryState.kind === "no-players" ||
-      (overviewRecoveryState.kind === "no-games" && !hasOverviewServerData)
+      (overviewRecoveryState.kind === "no-players" ||
+      overviewRecoveryState.kind === "no-games") &&
+      !hasOverviewServerData
         ? renderSharedRecoveryCard(overviewRecoveryState.kind)
         : null;
 
@@ -877,8 +878,9 @@ export default function StatsScreen() {
 
   function renderGamesTab() {
     const recoveryProps =
-      overviewRecoveryState.kind === "no-players" ||
-      (overviewRecoveryState.kind === "no-games" && !hasGamesServerData)
+      (overviewRecoveryState.kind === "no-players" ||
+      overviewRecoveryState.kind === "no-games") &&
+      !hasGamesServerData
         ? renderSharedRecoveryCard(overviewRecoveryState.kind)
         : null;
 
