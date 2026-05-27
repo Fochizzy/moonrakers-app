@@ -51,7 +51,7 @@ type StorePlayer = { id: string; name?: string; color?: string };
 const DEFAULT_ELO = 1000;
 
 function toneStyles(
-  tone?: "default" | "accent" | "blue" | "green" | "danger"
+  tone?: "default" | "accent" | "blue" | "green" | "danger" | "amber"
 ) {
   switch (tone) {
     case "accent":
@@ -62,6 +62,8 @@ function toneStyles(
       return { bg: COLORS.greenSoft, value: COLORS.green };
     case "danger":
       return { bg: COLORS.dangerSoft, value: COLORS.danger };
+    case "amber":
+      return { bg: "rgba(45,212,191,0.16)", value: COLORS.gold };
     default:
       return { bg: COLORS.whiteSoft, value: COLORS.text };
   }
@@ -279,6 +281,7 @@ export default function EloScreen() {
         card?.tone === "accent" ||
         card?.tone === "blue" ||
         card?.tone === "green" ||
+        card?.tone === "amber" ||
         card?.tone === "danger"
           ? card.tone
           : "default",

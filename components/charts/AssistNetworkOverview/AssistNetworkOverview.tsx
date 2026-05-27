@@ -167,13 +167,13 @@ const styles = StyleSheet.create({
   warningCard: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(249,115,22,0.34)",
-    backgroundColor: "rgba(127,29,29,0.18)",
+    borderColor: "rgba(45,212,191,0.34)",
+    backgroundColor: "rgba(4,47,46,0.18)",
     padding: 12,
     gap: 6,
   },
   warningTitle: {
-    color: "#FDBA74",
+    color: "#99F6E4",
     fontSize: 12,
     fontWeight: "800",
   },

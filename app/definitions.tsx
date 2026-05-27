@@ -297,7 +297,7 @@ export default function DefinitionsScreen() {
                       />
                       {relatedTermKeys.length > 0 ? (
                         <View style={styles.relatedTermsWrap}>
-                          <Text style={styles.relatedTermsLabel}>Related Terms</Text>
+                          <Text style={styles.relatedTermsLabel}>Related</Text>
                           <View style={styles.relatedTermsRail}>
                             {relatedTermKeys.map((relatedKey) => {
                               const relatedItem = getDefinitionItem(relatedKey);
@@ -305,24 +305,41 @@ export default function DefinitionsScreen() {
                                 return null;
                               }
 
+                              const isCurrentTerm = relatedItem.key === targetMetric;
+
                               return (
                                 <Pressable
                                   key={`${item.key}-${relatedItem.key}`}
+                                  disabled={isCurrentTerm}
+                                  accessibilityState={{
+                                    disabled: isCurrentTerm,
+                                    selected: isCurrentTerm,
+                                  }}
                                   style={({ pressed }) => [
                                     styles.relatedTermChip,
+                                    isCurrentTerm && styles.relatedTermChipCurrent,
                                     pressed && styles.relatedTermChipPressed,
                                   ]}
-                                  onPress={() =>
+                                  onPress={() => {
+                                    if (isCurrentTerm) {
+                                      return;
+                                    }
+
                                     router.replace(
                                       buildDefinitionsRoute({
                                         metric: relatedItem.key,
                                         category: group.key,
                                         sourceLabel,
                                       }),
-                                    )
-                                  }
+                                    );
+                                  }}
                                 >
-                                  <Text style={styles.relatedTermChipText}>
+                                  <Text
+                                    style={[
+                                      styles.relatedTermChipText,
+                                      isCurrentTerm && styles.relatedTermChipTextCurrent,
+                                    ]}
+                                  >
                                     {relatedItem.title}
                                   </Text>
                                 </Pressable>
@@ -424,17 +441,19 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sourceContextChip: {
-    borderRadius: 999,
-    borderWidth: 1,
+    ...buttonSystem.rectBase,
+    minHeight: 34,
+    borderRadius: 10,
     borderColor: "rgba(96,165,250,0.34)",
     backgroundColor: "rgba(37,99,235,0.14)",
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
   },
   sourceContextChipText: {
     color: "#E8F1FF",
     fontSize: 11,
     fontWeight: "800",
+    textAlign: "center",
   },
   categoryTab: {
     minWidth: 72,
@@ -473,7 +492,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    gap: 6,
+    gap: 4,
   },
   definitionCardHighlight: {
     backgroundColor: "rgba(96,165,250,0.12)",
@@ -491,8 +510,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   relatedTermsWrap: {
-    gap: 8,
-    marginTop: 4,
+    gap: 6,
+    marginTop: 2,
   },
   relatedTermsLabel: {
     color: "#9FB6D8",
@@ -505,15 +524,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(103,232,249,0.14)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 8,
   },
   relatedTermChip: {
     ...buttonSystem.rectBase,
     minHeight: 38,
+    flexBasis: "48%",
+    flexGrow: 1,
+    minWidth: 118,
     borderRadius: 10,
     borderColor: "rgba(103,232,249,0.22)",
     backgroundColor: "rgba(12, 30, 44, 0.9)",
     paddingHorizontal: 12,
     paddingVertical: 7,
+  },
+  relatedTermChipCurrent: {
+    borderColor: "rgba(125,211,252,0.5)",
+    backgroundColor: "rgba(37,99,235,0.24)",
   },
   relatedTermChipPressed: {
     opacity: 0.78,
@@ -522,5 +553,9 @@ const styles = StyleSheet.create({
     color: "#DFF7FF",
     fontSize: 11,
     fontWeight: "800",
+    textAlign: "center",
+  },
+  relatedTermChipTextCurrent: {
+    color: "#F8FBFF",
   },
 });

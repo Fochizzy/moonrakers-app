@@ -44,6 +44,9 @@ const {
   buildPersonalPlaystyleCorrelations,
 } = require("../utils/playstyleCorrelationEngine.ts");
 const { buildPlaystyleInsights } = require("../utils/playstyleInsights.ts");
+const {
+  rankPlaystyleLeaderboard,
+} = require("../components/stats/playstyleLeaderboard.ts");
 
 function read(relPath) {
   return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
@@ -328,6 +331,36 @@ function read(relPath) {
 }
 
 {
+  const ordered = rankPlaystyleLeaderboard({
+    leaderboard: [
+      { id: "james", name: "James", color: "#1D4ED8" },
+      { id: "greg", name: "Greg", color: "#9333EA" },
+      { id: "izzy", name: "Izzy", color: "#7C3AED" },
+      { id: "corey", name: "Corey", color: "#0F766E" },
+      { id: "alex", name: "Alex", color: "#16A34A" },
+    ],
+    authProfileId: "izzy",
+    samples: [
+      { playerId: "greg" },
+      { playerId: "greg" },
+      { playerId: "greg" },
+      { playerId: "greg" },
+      { playerId: "corey" },
+      { playerId: "corey" },
+      { playerId: "corey" },
+      { playerId: "james" },
+      { playerId: "james" },
+      { playerId: "alex" },
+    ],
+  });
+
+  assert.deepEqual(
+    ordered.map((player) => player.id),
+    ["izzy", "greg", "corey", "james", "alex"],
+  );
+}
+
+{
   const statsSource = read(path.join("app", "stats.tsx"));
   assert.match(
     statsSource,
@@ -335,16 +368,23 @@ function read(relPath) {
   );
   assert.match(statsSource, /label="Playstyle"/);
   assert.match(statsSource, /<PlaystyleSection/);
+  assert.match(statsSource, /authProfileId=\{profileId \|\| null\}/);
 
   const sectionSource = read(path.join("components", "stats", "PlaystyleSection.tsx"));
+  const leaderboardHelperSource = read(
+    path.join("components", "stats", "playstyleLeaderboard.ts"),
+  );
   const correlationSource = read(path.join("utils", "playstyleCorrelationEngine.ts"));
   assert.match(sectionSource, /buildPlaystyleSamples/);
+  assert.match(sectionSource, /rankPlaystyleLeaderboard/);
   assert.match(sectionSource, /buildPersonalPlaystyleCorrelations/);
   assert.match(sectionSource, /buildGlobalPlaystyleCorrelations/);
   assert.match(sectionSource, /buildPlaystyleInsights/);
   assert.match(sectionSource, /Stay at Base Profile/);
   assert.match(sectionSource, /Objective Prestige/);
   assert.doesNotMatch(sectionSource, /Objective Points/);
+  assert.match(leaderboardHelperSource, /authProfileId/);
+  assert.match(leaderboardHelperSource, /playCount/);
   assert.match(correlationSource, /Objective Prestige/);
   assert.doesNotMatch(correlationSource, /Objective Points/);
   assert.match(sectionSource, /Assists Given/);

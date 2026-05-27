@@ -3,7 +3,7 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
-import DefinitionRichText from "@/components/ui/DefinitionRichText";
+import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
@@ -93,6 +93,13 @@ function AnalyticsCard({
   onPress: () => void;
   tone: (typeof ANALYTICS_CARD_TONES)[string];
 }) {
+  const glossaryTarget =
+    card.key === "stats"
+      ? { category: "scoring" as const, label: "Glossary" }
+      : card.key === "elo"
+        ? { category: "elo" as const, label: "What is ELO?" }
+        : null;
+
   return (
     <Pressable
       onPress={onPress}
@@ -113,10 +120,7 @@ function AnalyticsCard({
 
           <View style={styles.cardWideContent}>
             <View style={styles.cardWideTitleWrap}>
-              <DefinitionRichText
-                text={card.title}
-                style={[styles.cardTitle, styles.cardTitleWide]}
-              />
+              <Text style={[styles.cardTitle, styles.cardTitleWide]}>{card.title}</Text>
             </View>
           </View>
         </View>
@@ -127,7 +131,16 @@ function AnalyticsCard({
           </View>
 
           <View style={styles.cardBody}>
-            <DefinitionRichText text={card.title} style={styles.cardTitle} />
+            <View style={styles.cardBodyCopy}>
+              <Text style={styles.cardTitle}>{card.title}</Text>
+              {glossaryTarget ? (
+                <DefinitionsJumpLink
+                  category={glossaryTarget.category}
+                  label={glossaryTarget.label}
+                  textStyle={styles.cardGlossaryText}
+                />
+              ) : null}
+            </View>
           </View>
         </>
       )}
@@ -160,7 +173,6 @@ export default function AnalyticsScreen() {
     }
   }, [analyticsQuery.error]);
   const loading = analyticsQuery.loading;
-  const isStale = analyticsQuery.isStale;
   const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
   const recoveryState = useMemo(
@@ -241,8 +253,7 @@ export default function AnalyticsScreen() {
         eyebrow="Directory"
         title="Analytics Destinations"
         state={analyticsSectionState}
-        sourceKind={isStale ? "server-stale" : "server"}
-        sourceLabel={isStale ? "Stale server data" : "Server data"}
+        style={styles.directorySection}
         messageTitle={analyticsSectionTitle}
         messageBody={analyticsSectionBody}
         primaryAction={analyticsPrimaryAction}
@@ -302,6 +313,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.35,
   },
+  directorySection: {
+    padding: 14,
+    gap: 10,
+  },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -314,9 +329,9 @@ const styles = StyleSheet.create({
     gap: 8,
     overflow: "hidden",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 3,
   },
   cardStandard: {
     width: "48.5%",
@@ -344,13 +359,13 @@ const styles = StyleSheet.create({
   cardWideContent: {
     flex: 1,
     minWidth: 0,
-    justifyContent: "center",
+    justifyContent: "flex-end",
     position: "relative",
     paddingRight: 8,
   },
   iconShell: {
-    width: 128,
-    height: 104,
+    width: 116,
+    height: 96,
     borderRadius: 28,
     borderWidth: 1,
     padding: 6,
@@ -359,8 +374,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconPreviewFrame: {
-    width: 92,
-    height: 92,
+    width: 84,
+    height: 84,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -368,16 +383,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.03)",
   },
   iconImage: {
-    width: 80,
-    height: 80,
+    width: 72,
+    height: 72,
   },
   cardBody: {
     flex: 1,
+    minHeight: 52,
     justifyContent: "flex-end",
+  },
+  cardBodyCopy: {
+    gap: 4,
+  },
+  cardGlossaryText: {
+    color: "#DFF6FF",
   },
   cardWideTitleWrap: {
     flex: 1,
-    justifyContent: "center",
+    minHeight: 52,
+    justifyContent: "flex-end",
     alignItems: "center",
   },
   cardTitle: {

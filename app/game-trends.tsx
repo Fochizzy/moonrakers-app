@@ -3,6 +3,8 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import ActionButton from "@/components/ui/ActionButton";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
+import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
@@ -111,6 +113,32 @@ function MiniTag({ label }: { label: string }) {
   return (
     <View style={styles.miniTag}>
       <Text style={styles.miniTagText}>{label}</Text>
+    </View>
+  );
+}
+
+function GlossaryMiniTag({
+  category = null,
+  label,
+  metric = null,
+  value,
+}: {
+  category?: string | null;
+  label: string;
+  metric?: string | null;
+  value: string | number;
+}) {
+  return (
+    <View style={styles.miniTag}>
+      <View style={styles.miniTagRow}>
+        <DefinitionTermText
+          category={category}
+          label={label}
+          metric={metric}
+          style={styles.miniTagText}
+        />
+        <Text style={styles.miniTagText}>{value}</Text>
+      </View>
     </View>
   );
 }
@@ -337,9 +365,10 @@ export default function GameTrendsScreen() {
               value={Math.max(0, ...playerCardRows.map((row) => row.totalPrestige))}
             />
           </View>
-          <Text style={styles.heroNote}>
-            Follow one saved game through pace, seat order, contract pressure, and winner projection.
-          </Text>
+          <DefinitionRichText
+            text="Follow one saved game through Tempo, Pressure, and Projection."
+            style={styles.heroNote}
+          />
         </HeroCard>
 
         <SectionCard
@@ -439,9 +468,9 @@ export default function GameTrendsScreen() {
                 </View>
 
                 <View style={styles.inlineStats}>
-                  <MiniTag label={`Direct ${row.directPrestige}`} />
-                  <MiniTag label={`Assist ${row.assistPrestige}`} />
-                  <MiniTag label={`Score ${row.score}`} />
+                  <GlossaryMiniTag label="Direct" metric="directPrestige" value={row.directPrestige} />
+                  <GlossaryMiniTag label="Assist" metric="assistPrestigeReceived" value={row.assistPrestige} />
+                  <GlossaryMiniTag label="Score" metric="score" value={row.score} />
                 </View>
               </View>
             ))}
@@ -553,10 +582,10 @@ export default function GameTrendsScreen() {
                 </View>
 
                 <View style={styles.inlineStats}>
-                  <MiniTag label={`Prestige ${row.totalPrestige}`} />
-                  <MiniTag label={`Direct ${row.directPrestige}`} />
-                  <MiniTag label={`Assist ${row.assistPrestige}`} />
-                  <MiniTag label={`Score ${row.score}`} />
+                  <GlossaryMiniTag label="Prestige" metric="totalPrestige" value={row.totalPrestige} />
+                  <GlossaryMiniTag label="Direct" metric="directPrestige" value={row.directPrestige} />
+                  <GlossaryMiniTag label="Assist" metric="assistPrestigeReceived" value={row.assistPrestige} />
+                  <GlossaryMiniTag label="Score" metric="score" value={row.score} />
                   <MiniTag label={`Contracts ${row.contracts}`} />
                   <MiniTag label={`Failures ${row.failures}`} />
                 </View>
@@ -669,6 +698,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
+  miniTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 4,
+  },
   statPill: {
     minWidth: 92,
     borderRadius: 12,
@@ -708,7 +743,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34,197,94,0.18)",
   },
   predictionBadgeMiss: {
-    color: "#FDE68A",
+    color: "#99F6E4",
     backgroundColor: "rgba(59,130,246,0.18)",
   },
   playerCard: {

@@ -143,7 +143,7 @@ export const COLORS = {
   redSoft: "rgba(239,68,68,0.16)",
   danger: "#EF4444",
   dangerSoft: "rgba(239,68,68,0.16)",
-  gold: "#FBBF24",
+  gold: "#2DD4BF",
   cyan: "#67E8F9",
   border: "rgba(255,255,255,0.08)",
   borderSoft: "rgba(148,163,184,0.18)",

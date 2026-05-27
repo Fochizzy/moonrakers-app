@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import RankBadge from "@/components/RankBadge";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import Text from "@/components/ui/Text";
 import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import type { EloScreenParams, EloScreenPayload } from "@/lib/cloud/analytics/types";
@@ -192,10 +193,10 @@ export function HomeLeaderboardTab({
 
                   <View style={styles.lbPlayerInfo}>
                     <Text style={styles.lbName}>{player.name}</Text>
-                    <Text style={styles.lbSub}>
-                      {player.wins} wins | {player.gamesPlayed} games | Eff{" "}
-                      {(player.efficiency * 100).toFixed(0)}%
-                    </Text>
+                    <DefinitionRichText
+                      text={`${player.wins} Wins | ${player.gamesPlayed} Games Played | Efficiency ${(player.efficiency * 100).toFixed(0)}%`}
+                      style={styles.lbSub}
+                    />
                   </View>
 
                   <RankBadge rating={player.elo} size="sm" />
@@ -205,10 +206,22 @@ export function HomeLeaderboardTab({
                   <Text style={index === 0 ? styles.metaRankTop : styles.metaRank}>
                     #{index + 1}
                   </Text>
-                  <Text style={styles.metaElo}>ELO {Math.round(player.elo)}</Text>
-                  <Text style={styles.metaScore}>Score {Math.round(player.score)}</Text>
-                  <Text style={styles.metaPrestige}>Prestige {Math.round(player.prestige)}</Text>
-                  <Text style={styles.metaAvg}>Avg {player.avgPrestige.toFixed(1)}</Text>
+                  <DefinitionRichText
+                    text={`ELO ${Math.round(player.elo)}`}
+                    style={styles.metaElo}
+                  />
+                  <DefinitionRichText
+                    text={`Score ${Math.round(player.score)}`}
+                    style={styles.metaScore}
+                  />
+                  <DefinitionRichText
+                    text={`Total Prestige ${Math.round(player.prestige)}`}
+                    style={styles.metaPrestige}
+                  />
+                  <DefinitionRichText
+                    text={`Prestige / Game ${player.avgPrestige.toFixed(1)}`}
+                    style={styles.metaAvg}
+                  />
                 </View>
               </Pressable>
             ))
@@ -306,8 +319,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   metaRankTop: {
-    color: "#FACC15",
-    textShadowColor: "#FACC15",
+    color: "#5EEAD4",
+    textShadowColor: "#5EEAD4",
     textShadowRadius: 6,
     fontSize: 10,
     fontWeight: "900",

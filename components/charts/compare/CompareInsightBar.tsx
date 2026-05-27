@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
+import DefinitionRichText from '@/components/ui/DefinitionRichText';
 import Text from '@/components/ui/Text';
 import { styles } from '@/utils/compareStyles';
 import { CompareRow } from '@/utils/compareTypes';
@@ -59,9 +60,9 @@ function formatPercent(value: number): string {
 function focusLabel(group: FocusGroup): string {
   switch (group) {
     case 'prestige':
-      return 'Prestige';
+      return 'Total Prestige';
     case 'assists':
-      return 'Team Play';
+      return 'Assist Context';
     case 'objectives':
       return 'Objectives';
     case 'efficiency':
@@ -97,15 +98,15 @@ function buildInterpretation(rows: CompareRow[], activeFocusGroup: FocusGroup): 
     const spread = Math.abs(toNumber(winLeader.winRate) - toNumber(winTrailer.winRate));
     if (spread >= 15) {
       lines.push(
-        `${winLeader.label} is clearly outperforming the field on results, with a win-rate gap of ${formatFixed(spread, 1)} points over ${winTrailer.label}.`
+        `${winLeader.label} is clearly outperforming the field on results, with a Win Rate gap of ${formatFixed(spread, 1)} points over ${winTrailer.label}.`
       );
     } else if (spread >= 7) {
       lines.push(
-        `The win rates are separated, but not by a huge amount. ${winLeader.label} has the edge over ${winTrailer.label} by ${formatFixed(spread, 1)} points.`
+        `The Win Rates are separated, but not by a huge amount. ${winLeader.label} has the edge over ${winTrailer.label} by ${formatFixed(spread, 1)} points.`
       );
     } else {
       lines.push(
-        `This comparison is fairly tight on wins. The spread from best to worst is only ${formatFixed(spread, 1)} points, so secondary metrics matter more here.`
+        `This comparison is fairly tight on Wins. The spread from best to worst is only ${formatFixed(spread, 1)} points, so secondary metrics matter more here.`
       );
     }
   }
@@ -113,7 +114,7 @@ function buildInterpretation(rows: CompareRow[], activeFocusGroup: FocusGroup): 
   if (activeFocusGroup === 'prestige' && prestigeLeader) {
     const prestige = getMetric(prestigeLeader, ['avgPrestigePerGame', 'avgPrestige']);
     lines.push(
-      `${prestigeLeader.label} is setting the pace economically. A prestige rate of ${formatFixed(prestige, 1)} per game usually means they are converting turns into scoring pressure more consistently than the rest.`
+      `${prestigeLeader.label} is setting the pace economically. A Prestige / Game rate of ${formatFixed(prestige, 1)} usually means they are converting turns into scoring pressure more consistently than the rest.`
     );
   }
 
@@ -125,7 +126,7 @@ function buildInterpretation(rows: CompareRow[], activeFocusGroup: FocusGroup): 
     }
     if (synergyLeader && hasMetricData(rows, ['synergyIndex'])) {
       lines.push(
-        `${synergyLeader.label} has the best chemistry signal. If you are building lineups instead of just ranking individuals, this is the player or group to watch most closely.`
+        `${synergyLeader.label} has the best Synergy Index signal. If you are building lineups instead of just ranking individuals, this is the player or group to watch most closely.`
       );
     }
   }
@@ -159,12 +160,12 @@ function buildInterpretation(rows: CompareRow[], activeFocusGroup: FocusGroup): 
   if (activeFocusGroup === 'outcomes') {
     if (winLeader) {
       lines.push(
-        `${winLeader.label} is the current results leader, but the best pick depends on whether you care more about pure wins, prestige generation, or lineup synergy.`
+        `${winLeader.label} is the current results leader, but the best pick depends on whether you care more about pure Wins, Prestige / Game, or Synergy Index.`
       );
     }
     if (prestigeLeader && synergyLeader && prestigeLeader.id !== synergyLeader.id) {
       lines.push(
-        `${prestigeLeader.label} leads individual pace, while ${synergyLeader.label} leads synergy. That split suggests the strongest solo performer is not necessarily the best table-fit option.`
+        `${prestigeLeader.label} leads individual pace, while ${synergyLeader.label} leads Synergy Index. That split suggests the strongest solo performer is not necessarily the best table-fit option.`
       );
     }
   }
@@ -190,13 +191,13 @@ export default function CompareInsightBar({
 
       return [
         bestPrestige && hasMetricData(rows, prestigeKeys)
-          ? `${bestPrestige.label} leads prestige pace at ${formatFixed(getMetric(bestPrestige, prestigeKeys), 1)} per game.`
+          ? `${bestPrestige.label} leads Prestige / Game at ${formatFixed(getMetric(bestPrestige, prestigeKeys), 1)}.`
           : null,
         mostPrestige && hasMetricData(rows, totalPrestigeKeys)
-          ? `${mostPrestige.label} has the highest Prestige at ${formatFixed(getMetric(mostPrestige, totalPrestigeKeys), 0)}.`
+          ? `${mostPrestige.label} has the highest Total Prestige at ${formatFixed(getMetric(mostPrestige, totalPrestigeKeys), 0)}.`
           : null,
         strongestConversion
-          ? `${strongestConversion.label} converts prestige pressure into the best win rate at ${formatPercent(toNumber(strongestConversion.winRate))}.`
+          ? `${strongestConversion.label} converts prestige pressure into the best Win Rate at ${formatPercent(toNumber(strongestConversion.winRate))}.`
           : null,
       ].filter(Boolean) as string[];
     }
@@ -213,10 +214,10 @@ export default function CompareInsightBar({
           ? `${bestAssist.label} creates the most assist value at ${formatFixed(getMetric(bestAssist, assistKeys), 1)}.`
           : null,
         bestSynergy && hasMetricData(rows, synergyKeys)
-          ? `${bestSynergy.label} has the strongest team-play profile with synergy ${formatFixed(getMetric(bestSynergy, synergyKeys), 2)}.`
+          ? `${bestSynergy.label} has the strongest team-play profile with Synergy Index ${formatFixed(getMetric(bestSynergy, synergyKeys), 2)}.`
           : null,
         bestWinRate
-          ? `${bestWinRate.label} still converts shared table value into the best win rate at ${formatPercent(toNumber(bestWinRate.winRate))}.`
+          ? `${bestWinRate.label} still converts shared table value into the best Win Rate at ${formatPercent(toNumber(bestWinRate.winRate))}.`
           : null,
       ].filter(Boolean) as string[];
     }
@@ -231,13 +232,13 @@ export default function CompareInsightBar({
 
       return [
         bestRate && hasMetricData(rows, objectiveRateKeys)
-          ? `${bestRate.label} has the best tracked objective win rate at ${formatPercent(getMetric(bestRate, objectiveRateKeys))}.`
+          ? `${bestRate.label} has the best tracked Win Rate at ${formatPercent(getMetric(bestRate, objectiveRateKeys))}.`
           : null,
         bestShare && hasMetricData(rows, objectiveShareKeys)
-          ? `${bestShare.label} gets the largest share of prestige from objectives at ${formatPercent(getMetric(bestShare, objectiveShareKeys))}.`
+          ? `${bestShare.label} gets the largest Objective Share at ${formatPercent(getMetric(bestShare, objectiveShareKeys))}.`
           : null,
         bestVolume && hasMetricData(rows, objectiveVolumeKeys)
-          ? `${bestVolume.label} averages ${formatFixed(getMetric(bestVolume, objectiveVolumeKeys), 1)} objectives in tracked games.`
+          ? `${bestVolume.label} leads Objectives / Game at ${formatFixed(getMetric(bestVolume, objectiveVolumeKeys), 1)}.`
           : null,
       ].filter(Boolean) as string[];
     }
@@ -252,13 +253,13 @@ export default function CompareInsightBar({
 
       return [
         bestEfficiency && hasMetricData(rows, efficiencyKeys)
-          ? `${bestEfficiency.label} leads raw efficiency at ${formatFixed(getMetric(bestEfficiency, efficiencyKeys), 2)}.`
+          ? `${bestEfficiency.label} leads raw Efficiency at ${formatFixed(getMetric(bestEfficiency, efficiencyKeys), 2)}.`
           : null,
         bestAssisted && hasMetricData(rows, assistedEfficiencyKeys)
-          ? `${bestAssisted.label} leads assisted efficiency at ${formatFixed(getMetric(bestAssisted, assistedEfficiencyKeys), 2)}.`
+          ? `${bestAssisted.label} leads Assisted Efficiency at ${formatFixed(getMetric(bestAssisted, assistedEfficiencyKeys), 2)}.`
           : null,
         cleanest && hasMetricData(rows, cleanestKeys)
-          ? `${cleanest.label} is the cleanest closer with failure ratio ${formatFixed(getMetric(cleanest, cleanestKeys), 2)}.`
+          ? `${cleanest.label} is the cleanest closer with Contracts / Failures Ratio ${formatFixed(getMetric(cleanest, cleanestKeys), 2)}.`
           : null,
       ].filter(Boolean) as string[];
     }
@@ -278,7 +279,7 @@ export default function CompareInsightBar({
           ? `${bestSeat.label} tends to start earliest at seat ${formatFixed(getMetric(bestSeat, seatKeys), 1)}.`
           : null,
         bestCorrelation && hasMetricData(rows, correlationKeys)
-          ? `${bestCorrelation.label} gets the strongest seat-order win signal at ${formatFixed(getMetric(bestCorrelation, correlationKeys), 2)}.`
+          ? `${bestCorrelation.label} gets the strongest Seat to Win Correlation at ${formatFixed(getMetric(bestCorrelation, correlationKeys), 2)}.`
           : null,
         mostNeutral && hasMetricData(rows, correlationKeys)
           ? `${mostNeutral.label} is least sensitive to seat position at ${formatFixed(Math.abs(getMetric(mostNeutral, correlationKeys)), 2)}.`
@@ -291,12 +292,12 @@ export default function CompareInsightBar({
     const synergyLeader = pickHighest(rows, ['synergyIndex']);
 
     return [
-      winLeader ? `${winLeader.label} leads wins at ${formatPercent(toNumber(winLeader.winRate))}.` : null,
+      winLeader ? `${winLeader.label} leads Wins at ${formatPercent(toNumber(winLeader.winRate))}.` : null,
       prestigeLeader && hasMetricData(rows, ['avgPrestigePerGame', 'avgPrestige'])
-        ? `${prestigeLeader.label} leads prestige pace at ${formatFixed(getMetric(prestigeLeader, ['avgPrestigePerGame', 'avgPrestige']), 1)} per game.`
+        ? `${prestigeLeader.label} leads Prestige / Game at ${formatFixed(getMetric(prestigeLeader, ['avgPrestigePerGame', 'avgPrestige']), 1)}.`
         : null,
       synergyLeader && hasMetricData(rows, ['synergyIndex'])
-        ? `${synergyLeader.label} leads overall synergy at ${formatFixed(getMetric(synergyLeader, ['synergyIndex']), 2)}.`
+        ? `${synergyLeader.label} leads overall Synergy Index at ${formatFixed(getMetric(synergyLeader, ['synergyIndex']), 2)}.`
         : null,
     ].filter(Boolean) as string[];
   }, [rows, activeFocusGroup]);
@@ -330,7 +331,10 @@ export default function CompareInsightBar({
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <Text style={styles.cardEyebrow}>Insights</Text>
-        <Text style={styles.cardMeta}>{focusLabel(activeFocusGroup)} view</Text>
+        <DefinitionRichText
+          text={`${focusLabel(activeFocusGroup)} view`}
+          style={styles.cardMeta}
+        />
       </View>
 
       <Text style={styles.cardTitle}>Current read</Text>
@@ -343,15 +347,19 @@ export default function CompareInsightBar({
           <Text style={styles.insightBadgeText}>Compared: {comparedLabel}</Text>
         </View>
         <View style={styles.insightBadge}>
-          <Text style={styles.insightBadgeText}>Focus: {focusLabel(activeFocusGroup)}</Text>
+          <DefinitionRichText
+            text={`Focus: ${focusLabel(activeFocusGroup)}`}
+            style={styles.insightBadgeText}
+          />
         </View>
       </View>
 
       <View style={{ gap: 8 }}>
         {readLines.map((line) => (
-          <Text key={line} style={styles.matrixWhyText} numberOfLines={3}>
-            {`\u2022 ${line}`}
-          </Text>
+          <View key={line} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+            <Text style={[styles.matrixWhyText, { marginTop: 0 }]}>{'\u2022'}</Text>
+            <DefinitionRichText text={line} style={[styles.matrixWhyText, { marginTop: 0, flex: 1 }]} numberOfLines={3} />
+          </View>
         ))}
       </View>
     </View>

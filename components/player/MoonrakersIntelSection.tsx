@@ -18,8 +18,8 @@ const COLORS = {
   blueSoft: "rgba(96,165,250,0.14)",
   green: "#22C55E",
   greenSoft: "rgba(34,197,94,0.14)",
-  gold: "#FBBF24",
-  goldSoft: "rgba(251,191,36,0.14)",
+  gold: "#2DD4BF",
+  goldSoft: "rgba(45,212,191,0.14)",
   red: "#F87171",
   redSoft: "rgba(248,113,113,0.14)",
 };

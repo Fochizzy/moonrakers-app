@@ -55,7 +55,7 @@ const FALLBACK_COLORS = [
   "#3B82F6",
   "#22C55E",
   "#F97316",
-  "#EAB308",
+  "#14B8A6",
   "#EF4444",
 ];
 const DEFAULT_ELO = 1000;

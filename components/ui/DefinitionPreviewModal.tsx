@@ -76,7 +76,7 @@ export default function DefinitionPreviewModal({
 
           {relatedTermKeys.length > 0 ? (
             <View style={styles.relatedSection}>
-              <Text style={styles.relatedLabel}>Related Terms</Text>
+              <Text style={styles.relatedLabel}>Related</Text>
               <View style={styles.relatedRail}>
                 {relatedTermKeys.map((relatedKey) => {
                   const relatedItem = getDefinitionItem(relatedKey);
@@ -84,21 +84,40 @@ export default function DefinitionPreviewModal({
                     return null;
                   }
 
+                  const isCurrentTerm = relatedItem.key === metric;
+
                   return (
                     <Pressable
                       key={relatedItem.key}
+                      disabled={isCurrentTerm}
+                      accessibilityState={{
+                        disabled: isCurrentTerm,
+                        selected: isCurrentTerm,
+                      }}
                       style={({ pressed }) => [
                         styles.relatedChip,
+                        isCurrentTerm && styles.relatedChipCurrent,
                         pressed && styles.relatedChipPressed,
                       ]}
-                      onPress={() =>
+                      onPress={() => {
+                        if (isCurrentTerm) {
+                          return;
+                        }
+
                         openDefinitionRoute(
                           relatedItem.key,
                           getDefinitionGroupKeyForItem(relatedItem.key),
-                        )
-                      }
+                        );
+                      }}
                     >
-                      <Text style={styles.relatedChipText}>{relatedItem.title}</Text>
+                      <Text
+                        style={[
+                          styles.relatedChipText,
+                          isCurrentTerm && styles.relatedChipTextCurrent,
+                        ]}
+                      >
+                        {relatedItem.title}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -167,7 +186,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   relatedSection: {
-    gap: 8,
+    gap: 6,
+    marginTop: -2,
   },
   relatedLabel: {
     color: "#9FB6D8",
@@ -180,15 +200,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.18)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 8,
   },
   relatedChip: {
     ...buttonSystem.rectBase,
     minHeight: 38,
+    flexBasis: "48%",
+    flexGrow: 1,
+    minWidth: 118,
     borderRadius: 10,
     borderColor: "rgba(96,165,250,0.32)",
     backgroundColor: "rgba(37,99,235,0.14)",
     paddingHorizontal: 12,
     paddingVertical: 7,
+  },
+  relatedChipCurrent: {
+    borderColor: "rgba(147,197,253,0.48)",
+    backgroundColor: "rgba(37,99,235,0.24)",
   },
   relatedChipPressed: {
     opacity: 0.78,
@@ -197,6 +229,10 @@ const styles = StyleSheet.create({
     color: "#E8F1FF",
     fontSize: 11,
     fontWeight: "800",
+    textAlign: "center",
+  },
+  relatedChipTextCurrent: {
+    color: "#F8FBFF",
   },
   actions: {
     flexDirection: "row",

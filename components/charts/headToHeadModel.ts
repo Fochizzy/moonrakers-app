@@ -59,7 +59,7 @@ type BuildHeadToHeadVisualModelArgs = {
   compareId?: string | null;
 };
 
-const FALLBACK_COLORS = ["#A855F7", "#3B82F6", "#22C55E", "#F59E0B"];
+const FALLBACK_COLORS = ["#A855F7", "#3B82F6", "#22C55E", "#14B8A6"];
 
 function n(value: unknown): number {
   const parsed = Number(value);

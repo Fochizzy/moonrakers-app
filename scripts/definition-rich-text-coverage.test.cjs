@@ -63,8 +63,8 @@ assert.match(
 
 assert.match(
   analyticsSource,
-  /DefinitionTermText|DefinitionRichText/,
-  "expected the analytics destination hub to expose glossary-aware term links on its cards",
+  /DefinitionTermText|DefinitionRichText|DefinitionsJumpLink/,
+  "expected the analytics destination hub to expose glossary-aware access on its cards",
 );
 
 assert.match(

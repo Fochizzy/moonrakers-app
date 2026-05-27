@@ -39,7 +39,7 @@ export const chartColors = {
   cyan: '#06b6d4',
   green: '#22c55e',
   red: '#ef4444',
-  yellow: '#f59e0b',
+  yellow: '#14b8a6',
   blue: '#3b82f6',
   orange: '#f97316',
   pink: '#ec4899',

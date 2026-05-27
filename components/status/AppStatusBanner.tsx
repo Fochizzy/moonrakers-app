@@ -25,9 +25,9 @@ const TONE_STYLES = {
     eyebrowColor: "#86efac",
   },
   warning: {
-    borderColor: "rgba(251,191,36,0.35)",
-    backgroundColor: "rgba(42,29,7,0.92)",
-    eyebrowColor: "#fde68a",
+    borderColor: "rgba(45,212,191,0.35)",
+    backgroundColor: "rgba(8,56,52,0.92)",
+    eyebrowColor: "#99f6e4",
   },
   danger: {
     borderColor: "rgba(248,113,113,0.35)",

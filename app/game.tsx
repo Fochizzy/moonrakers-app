@@ -108,7 +108,7 @@ const UI = {
   textFaint: 'rgba(255,255,255,0.44)',
   success: COLORS.success,
   failure: COLORS.danger,
-  gold: '#facc15',
+  gold: '#2dd4bf',
   silver: '#c0c0c0',
   pressedScale: 0.97,
 } as const;

@@ -24,7 +24,7 @@ export type BumpChartModel = {
   biggestClimber: BumpSeriesRow | null;
 };
 
-const FALLBACK_COLORS = ["#A855F7", "#3B82F6", "#22C55E", "#F59E0B", "#EF4444"];
+const FALLBACK_COLORS = ["#A855F7", "#3B82F6", "#22C55E", "#14B8A6", "#EF4444"];
 
 function playerName(player?: SimplePlayer | null) {
   return String(player?.name || "Unknown").trim() || "Unknown";

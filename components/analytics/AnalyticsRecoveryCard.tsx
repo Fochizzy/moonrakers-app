@@ -20,9 +20,9 @@ function resolveTone(tone: AnalyticsRecoveryTone) {
   switch (tone) {
     case "warning":
       return {
-        borderColor: "rgba(251, 191, 36, 0.30)",
-        backgroundColor: "rgba(40, 24, 10, 0.92)",
-        eyebrowColor: "#FCD34D",
+        borderColor: "rgba(45, 212, 191, 0.30)",
+        backgroundColor: "rgba(4, 47, 46, 0.92)",
+        eyebrowColor: "#99F6E4",
       };
     case "danger":
       return {

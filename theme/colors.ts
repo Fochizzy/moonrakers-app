@@ -16,7 +16,7 @@ const palette = {
   },
 
   yellow: {
-    400: '#FACC15',
+    400: '#2DD4BF',
   },
 
   red: {
@@ -24,9 +24,9 @@ const palette = {
   },
 
   rank: {
-    bronze: '#A16207',
+    bronze: '#0F766E',
     silver: '#C0C0C0',
-    gold: '#FFD700',
+    gold: '#5EEAD4',
     platinum: '#E5E4E2',
     diamond: '#0DCAF0',
   },

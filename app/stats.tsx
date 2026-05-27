@@ -726,6 +726,7 @@ export default function StatsScreen() {
         )}
       </AnalyticsStateSection>
       <PlaystyleSection
+        authProfileId={profileId || null}
         players={players}
         games={games as any}
         leaderboard={players}

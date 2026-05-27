@@ -102,7 +102,7 @@ const PRESET_CONFIGS: Record<ScreenBackgroundPreset, BackgroundPresetConfig> = {
   archive: {
     base: "#09111D",
     overlay: "rgba(9,17,29,0.8)",
-    glowA: "rgba(245,158,11,0.08)",
+    glowA: "rgba(45,212,191,0.08)",
     glowB: "rgba(96,165,250,0.08)",
     artSource: MOONRISE,
     artVariant: "fill",
@@ -139,7 +139,7 @@ const PRESET_CONFIGS: Record<ScreenBackgroundPreset, BackgroundPresetConfig> = {
     base: "#0A1422",
     overlay: "rgba(10,20,34,0.82)",
     glowA: "rgba(239,68,68,0.12)",
-    glowB: "rgba(245,158,11,0.1)",
+    glowB: "rgba(20,184,166,0.1)",
     artSource: BACKGROUND_ALT,
     artVariant: "fill",
     artOpacity: 0.2,

@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { useTheme } from "@/theme";
 import DefinitionRichText from "@/components/ui/DefinitionRichText";
-import Text from "@/components/ui/Text";
 
 type HeroCardProps = {
   actions?: React.ReactNode;
@@ -58,14 +57,16 @@ export default function HeroCard({
       {headerAction ? (
         <View style={styles.headerRow}>
           <View style={styles.headerCopy}>
-            {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
+            {eyebrow ? (
+              <DefinitionRichText text={eyebrow} variant="eyebrow" />
+            ) : null}
             <DefinitionRichText text={title} variant="pageTitle" />
           </View>
           <View style={styles.headerAction}>{headerAction}</View>
         </View>
       ) : (
         <>
-          {eyebrow ? <Text variant="eyebrow">{eyebrow}</Text> : null}
+          {eyebrow ? <DefinitionRichText text={eyebrow} variant="eyebrow" /> : null}
           <DefinitionRichText text={title} variant="pageTitle" />
         </>
       )}

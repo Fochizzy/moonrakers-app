@@ -21,10 +21,10 @@ function getTier(rating: number): Tier {
 
 const TIERS: Record<Tier, { bg: string; border: string; text: string; glow: string }> = {
   bronze: {
-    bg: 'rgba(211,154,100,0.14)',
-    border: 'rgba(211,154,100,0.5)',
-    text: '#F2C39C',
-    glow: 'rgba(211,154,100,0.25)',
+    bg: 'rgba(15,118,110,0.16)',
+    border: 'rgba(20,184,166,0.5)',
+    text: '#99F6E4',
+    glow: 'rgba(45,212,191,0.24)',
   },
   silver: {
     bg: 'rgba(201,212,232,0.15)',
@@ -33,10 +33,10 @@ const TIERS: Record<Tier, { bg: string; border: string; text: string; glow: stri
     glow: 'rgba(201,212,232,0.2)',
   },
   gold: {
-    bg: 'rgba(255,215,106,0.16)',
-    border: 'rgba(255,215,106,0.6)',
-    text: '#FFE8A3',
-    glow: 'rgba(255,215,106,0.25)',
+    bg: 'rgba(45,212,191,0.16)',
+    border: 'rgba(94,234,212,0.6)',
+    text: '#CCFBF1',
+    glow: 'rgba(94,234,212,0.25)',
   },
   platinum: {
     bg: 'rgba(125,196,255,0.14)',
@@ -131,5 +131,4 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
 });
-
 

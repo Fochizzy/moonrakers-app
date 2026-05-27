@@ -12,6 +12,7 @@ const suites = {
   ui: [
     "scripts/action-button-hierarchy.test.cjs",
     "scripts/analytics-control-rail.test.cjs",
+    "scripts/conditional-quick-select-underline.test.cjs",
     "scripts/game-trends-visual-system.test.cjs",
     "scripts/player-directory-visual-system.test.cjs",
     "scripts/game-flow-shell-upgrades.test.cjs",

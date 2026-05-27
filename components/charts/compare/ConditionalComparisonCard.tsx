@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import DefinitionRichText from '@/components/ui/DefinitionRichText';
+import DefinitionTermText from '@/components/ui/DefinitionTermText';
 import Text from '@/components/ui/Text';
 import {
   ConditionalAnalysis,
@@ -36,6 +38,33 @@ type Props = {
   onSort: (key: 'winRateDelta' | 'prestigeDelta' | 'scoreDelta' | 'synergyDelta') => void;
 };
 
+type QuickSelectTabProps = {
+  label: string;
+  color?: string;
+  active: boolean;
+  onPress: () => void;
+};
+
+function QuickSelectTab({ label, color, active, onPress }: QuickSelectTabProps) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.quickSelectTab, pressed && { opacity: 0.9 }]}>
+      <View style={styles.quickSelectTabBody}>
+        <View
+          style={[
+            styles.selectorDot,
+            color ? { backgroundColor: color } : null,
+            active && styles.selectorDotActive,
+          ]}
+        />
+        <Text style={[styles.quickSelectText, active && styles.quickSelectTextActive]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+      <View style={[styles.quickSelectTabLine, active && styles.quickSelectTabLineActive]} />
+    </Pressable>
+  );
+}
+
 function toNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -53,6 +82,23 @@ function formatSigned(value: unknown, digits = 1): string {
   const num = toNumber(value);
   const sign = num > 0 ? '+' : '';
   return `${sign}${formatMetric(num, digits)}`;
+}
+
+function DefinitionMetricCell({
+  label,
+  metric,
+  value,
+}: {
+  label: string;
+  metric: string;
+  value: string | number;
+}) {
+  return (
+    <View style={styles.metricCell}>
+      <DefinitionTermText label={label} metric={metric} style={styles.metricLabel} numberOfLines={1} />
+      <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
 }
 
 function activeEntities(subjectMode: ConditionalSubjectMode, players: Player[], groups: Group[]): Entity[] {
@@ -118,9 +164,9 @@ function buildSummaryLines(rows: ConditionalEntityDelta[], subjectMode: Conditio
   const synergyLeader = [...rows].sort((a, b) => toNumber(b.synergyDelta) - toNumber(a.synergyDelta))[0];
 
   return [
-    `${winLeader.name} has the biggest ${noun} win-rate swing at ${formatSigned(winLeader.winRateDelta, 1)}.`,
-    `${prestigeLeader.name} has the biggest prestige swing at ${formatSigned(prestigeLeader.prestigeDelta, 1)} per game.`,
-    `${synergyLeader.name} has the biggest synergy shift at ${formatSigned(synergyLeader.synergyDelta, 2)}.`,
+    `${winLeader.name} has the biggest ${noun} Win Rate swing at ${formatSigned(winLeader.winRateDelta, 1)}.`,
+    `${prestigeLeader.name} has the biggest Prestige / Game swing at ${formatSigned(prestigeLeader.prestigeDelta, 1)}.`,
+    `${synergyLeader.name} has the biggest Synergy Index shift at ${formatSigned(synergyLeader.synergyDelta, 2)}.`,
   ];
 }
 
@@ -162,6 +208,12 @@ export default function ConditionalComparisonCard({
   onToggleCollapsed,
   onSort,
 }: Props) {
+  const sortMetricTargets = {
+    winRateDelta: 'winRate',
+    prestigeDelta: 'avgPrestigePerGame',
+    scoreDelta: 'avgScorePerGame',
+    synergyDelta: 'synergyIndex',
+  } as const;
   const [showBaseline, setShowBaseline] = useState(false);
   const [anchorSearchQuery, setAnchorSearchQuery] = useState('');
   const [partnerSearchQuery, setPartnerSearchQuery] = useState('');
@@ -276,22 +328,13 @@ export default function ConditionalComparisonCard({
                   {quickSelectEntities.map((entity) => {
                     const active = conditionalState.anchorId === entity.id;
                     return (
-                      <Pressable
+                      <QuickSelectTab
                         key={`anchor-quick-${entity.id}`}
+                        label={entity.name}
+                        color={entity.color}
+                        active={active}
                         onPress={() => onSetAnchor(entity.id)}
-                        style={[styles.quickSelectCard, active && styles.quickSelectCardActive]}
-                      >
-                        <View
-                          style={[
-                            styles.selectorDot,
-                            entity.color ? { backgroundColor: entity.color } : null,
-                            active && styles.selectorDotActive,
-                          ]}
-                        />
-                        <Text style={[styles.quickSelectText, active && styles.quickSelectTextActive]} numberOfLines={1}>
-                          {entity.name}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </ScrollView>
@@ -405,22 +448,13 @@ export default function ConditionalComparisonCard({
                   {partnerQuickSelectEntities.map((entity) => {
                     const active = selectedIds.includes(entity.id);
                     return (
-                      <Pressable
+                      <QuickSelectTab
                         key={`partner-quick-${entity.id}`}
+                        label={entity.name}
+                        color={entity.color}
+                        active={active}
                         onPress={() => onToggleEntity(entity.id)}
-                        style={[styles.quickSelectCard, active && styles.quickSelectCardActive]}
-                      >
-                        <View
-                          style={[
-                            styles.selectorDot,
-                            entity.color ? { backgroundColor: entity.color } : null,
-                            active && styles.selectorDotActive,
-                          ]}
-                        />
-                        <Text style={[styles.quickSelectText, active && styles.quickSelectTextActive]} numberOfLines={1}>
-                          {entity.name}
-                        </Text>
-                      </Pressable>
+                      />
                     );
                   })}
                 </ScrollView>
@@ -487,15 +521,15 @@ export default function ConditionalComparisonCard({
               <Text style={styles.summaryValue}>{sampleSize}</Text>
             </View>
             <View style={styles.summaryTile}>
-              <Text style={styles.summaryLabel}>Anchor Win Rate</Text>
+              <DefinitionTermText label="Anchor Win Rate" metric="winRate" style={styles.summaryLabel} />
               <Text style={styles.summaryValue}>{formatPercent(conditionalAnalysis?.winRate)}</Text>
             </View>
             <View style={styles.summaryTile}>
-              <Text style={styles.summaryLabel}>Anchor Prestige</Text>
+              <DefinitionTermText label="Anchor Prestige" metric="avgPrestigePerGame" style={styles.summaryLabel} />
               <Text style={styles.summaryValue}>{formatMetric(conditionalAnalysis?.avgPrestige)}</Text>
             </View>
             <View style={styles.summaryTile}>
-              <Text style={styles.summaryLabel}>Anchor Score</Text>
+              <DefinitionTermText label="Anchor Score" metric="avgScorePerGame" style={styles.summaryLabel} />
               <Text style={styles.summaryValue}>{formatMetric(conditionalAnalysis?.avgScore)}</Text>
             </View>
           </View>
@@ -505,7 +539,11 @@ export default function ConditionalComparisonCard({
             <View style={styles.sortGrid}>
               {SORT_ITEMS.map((item) => (
                 <Pressable key={item.key} onPress={() => onSort(item.key)} style={styles.sortCard}>
-                  <Text style={styles.sortTitle}>{item.label}</Text>
+                  <DefinitionTermText
+                    label={item.label}
+                    metric={sortMetricTargets[item.key]}
+                    style={styles.sortTitle}
+                  />
                   <Text style={styles.sortSub}>{item.sub}</Text>
                 </Pressable>
               ))}
@@ -536,30 +574,12 @@ export default function ConditionalComparisonCard({
                     </View>
 
                     <View style={styles.metricGrid}>
-                      <View style={styles.metricCell}>
-                        <Text style={styles.metricLabel} numberOfLines={1}>Win %</Text>
-                        <Text style={styles.metricValue}>{formatPercent(row.sampleWinRate)}</Text>
-                      </View>
-                      <View style={styles.metricCell}>
-                        <Text style={styles.metricLabel} numberOfLines={1}>Prestige</Text>
-                        <Text style={styles.metricValue}>{formatMetric(row.samplePrestigePerGame)}</Text>
-                      </View>
-                      <View style={styles.metricCell}>
-                        <Text style={styles.metricLabel} numberOfLines={1}>Score</Text>
-                        <Text style={styles.metricValue}>{formatMetric(row.sampleScorePerGame)}</Text>
-                      </View>
-                      <View style={styles.metricCell}>
-                        <Text style={styles.metricLabel} numberOfLines={1}>Win Δ</Text>
-                        <Text style={styles.metricValue}>{formatSigned(row.winRateDelta, 1)}</Text>
-                      </View>
-                      <View style={styles.metricCell}>
-                        <Text style={styles.metricLabel} numberOfLines={1}>Prestige Δ</Text>
-                        <Text style={styles.metricValue}>{formatSigned(row.prestigeDelta, 1)}</Text>
-                      </View>
-                      <View style={styles.metricCell}>
-                        <Text style={styles.metricLabel} numberOfLines={1}>Synergy Δ</Text>
-                        <Text style={styles.metricValue}>{formatSigned(row.synergyDelta, 2)}</Text>
-                      </View>
+                      <DefinitionMetricCell label="Win %" metric="winRate" value={formatPercent(row.sampleWinRate)} />
+                      <DefinitionMetricCell label="Prestige" metric="avgPrestigePerGame" value={formatMetric(row.samplePrestigePerGame)} />
+                      <DefinitionMetricCell label="Score" metric="avgScorePerGame" value={formatMetric(row.sampleScorePerGame)} />
+                      <DefinitionMetricCell label="Win Δ" metric="winRate" value={formatSigned(row.winRateDelta, 1)} />
+                      <DefinitionMetricCell label="Prestige Δ" metric="avgPrestigePerGame" value={formatSigned(row.prestigeDelta, 1)} />
+                      <DefinitionMetricCell label="Synergy Δ" metric="synergyIndex" value={formatSigned(row.synergyDelta, 2)} />
                     </View>
                   </View>
                 ))}
@@ -571,11 +591,17 @@ export default function ConditionalComparisonCard({
             <View style={styles.sectionBlock}>
               <Text style={styles.sectionTitle}>Summary</Text>
               {summaryLines.map((line) => (
-                <Text key={line} style={styles.helpText}>
-                  • {line}
-                </Text>
+                <View key={line} style={styles.helpLine}>
+                  <Text style={styles.helpBullet}>{'\u2022'}</Text>
+                  <DefinitionRichText text={line} style={styles.helpText} />
+                </View>
               ))}
-              {!!conditionalAnalysis?.summary ? <Text style={styles.helpText}>• {conditionalAnalysis.summary}</Text> : null}
+              {conditionalAnalysis?.summary ? (
+                <View style={styles.helpLine}>
+                  <Text style={styles.helpBullet}>{'\u2022'}</Text>
+                  <DefinitionRichText text={conditionalAnalysis.summary} style={styles.helpText} />
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -596,26 +622,11 @@ export default function ConditionalComparisonCard({
                     <View key={`${row.id}-baseline`} style={styles.basisRow}>
                       <Text style={styles.resultName}>{row.name}</Text>
                       <View style={styles.metricGrid}>
-                        <View style={styles.metricCell}>
-                          <Text style={styles.metricLabel} numberOfLines={1}>Base Win %</Text>
-                          <Text style={styles.metricValue}>{formatPercent(row.overallWinRate)}</Text>
-                        </View>
-                        <View style={styles.metricCell}>
-                          <Text style={styles.metricLabel} numberOfLines={1}>Base Prestige</Text>
-                          <Text style={styles.metricValue}>{formatMetric(row.overallPrestigePerGame)}</Text>
-                        </View>
-                        <View style={styles.metricCell}>
-                          <Text style={styles.metricLabel} numberOfLines={1}>Base Score</Text>
-                          <Text style={styles.metricValue}>{formatMetric(row.overallScorePerGame)}</Text>
-                        </View>
-                        <View style={styles.metricCell}>
-                          <Text style={styles.metricLabel} numberOfLines={1}>Base Synergy</Text>
-                          <Text style={styles.metricValue}>{formatMetric(row.overallSynergy, 2)}</Text>
-                        </View>
-                        <View style={styles.metricCell}>
-                          <Text style={styles.metricLabel} numberOfLines={1}>Sample Games</Text>
-                          <Text style={styles.metricValue}>{row.sampleGames}</Text>
-                        </View>
+                        <DefinitionMetricCell label="Base Win %" metric="winRate" value={formatPercent(row.overallWinRate)} />
+                        <DefinitionMetricCell label="Base Prestige" metric="avgPrestigePerGame" value={formatMetric(row.overallPrestigePerGame)} />
+                        <DefinitionMetricCell label="Base Score" metric="avgScorePerGame" value={formatMetric(row.overallScorePerGame)} />
+                        <DefinitionMetricCell label="Base Synergy" metric="synergyIndex" value={formatMetric(row.overallSynergy, 2)} />
+                        <DefinitionMetricCell label="Sample Games" metric="games" value={row.sampleGames} />
                       </View>
                     </View>
                   ))}
@@ -762,34 +773,37 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
   },
   quickSelectCards: {
-    gap: 6,
-    paddingRight: 6,
+    gap: 14,
+    paddingRight: 10,
   },
-  quickSelectCard: {
+  quickSelectTab: {
     minWidth: 112,
-    minHeight: 40,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(15, 23, 42, 0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.16)',
+    paddingBottom: 2,
+  },
+  quickSelectTabBody: {
+    minHeight: 30,
+    paddingHorizontal: 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  quickSelectCardActive: {
-    backgroundColor: 'rgba(86, 120, 255, 0.22)',
-    borderColor: 'rgba(125, 235, 255, 0.52)',
-  },
   quickSelectText: {
-    color: '#E5EEF9',
+    color: '#8FA6C4',
     fontSize: 11,
     fontWeight: '800',
     flexShrink: 1,
   },
   quickSelectTextActive: {
     color: '#FFFFFF',
+  },
+  quickSelectTabLine: {
+    marginTop: 4,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: 'transparent',
+  },
+  quickSelectTabLineActive: {
+    backgroundColor: '#7DEBFF',
   },
   horizontalCards: {
     gap: 6,
@@ -1117,6 +1131,17 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   helpText: {
+    color: '#C9D8EC',
+    fontSize: 13,
+    lineHeight: 20,
+    flex: 1,
+  },
+  helpLine: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'flex-start',
+  },
+  helpBullet: {
     color: '#C9D8EC',
     fontSize: 13,
     lineHeight: 20,

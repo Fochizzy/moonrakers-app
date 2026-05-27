@@ -18,17 +18,17 @@ export function describeAnalyticsSource(
       return {
         label: label?.trim() || "Stale server data",
         body: "The last successful Supabase payload is still showing because the latest refresh failed.",
-        borderColor: "rgba(251, 191, 36, 0.34)",
-        backgroundColor: "rgba(69, 26, 3, 0.24)",
-        textColor: "#FBBF24",
+        borderColor: "rgba(45, 212, 191, 0.34)",
+        backgroundColor: "rgba(4, 47, 46, 0.24)",
+        textColor: "#5EEAD4",
       };
     case "supabase-fallback":
       return {
         label: label?.trim() || "Supabase fallback",
         body: "Direct Supabase history is filling in while the published analytics payload is unavailable or empty.",
-        borderColor: "rgba(251, 191, 36, 0.34)",
-        backgroundColor: "rgba(120, 53, 15, 0.26)",
-        textColor: "#FCD34D",
+        borderColor: "rgba(94, 234, 212, 0.30)",
+        backgroundColor: "rgba(17, 94, 89, 0.26)",
+        textColor: "#99F6E4",
       };
     case "device-fallback":
       return {

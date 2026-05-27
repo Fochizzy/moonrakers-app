@@ -28,9 +28,9 @@ const sciFi = {
   dim: '#6C7896',
   cyan: '#63E6FF',
   violet: '#B57CFF',
-  gold: '#FFD76A',
+  gold: '#5EEAD4',
   silver: '#C9D4E8',
-  bronze: '#D39A64',
+  bronze: '#14B8A6',
 };
 
 function getRankAccent(rank: number) {
@@ -182,5 +182,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
 

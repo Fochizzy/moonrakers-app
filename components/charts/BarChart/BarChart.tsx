@@ -74,7 +74,7 @@ const COLORS = {
   redSoft: "rgba(239,68,68,0.16)",
   border: "rgba(255,255,255,0.08)",
   whiteSoft: "rgba(255,255,255,0.06)",
-  gold: "#FBBF24",
+  gold: "#2DD4BF",
 };
 
 function sanitizeArray<T>(value: T[] | undefined): T[] {

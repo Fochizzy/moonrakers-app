@@ -202,7 +202,7 @@ const STACKED_COLORS: Record<string, string> = {
   directPrestige: "#3B82F6",
   assistPrestigeReceived: "#A855F7",
   objectivePrestige: "#22C55E",
-  score: "#F59E0B",
+  score: "#14B8A6",
   contracts: "#22C55E",
   failures: "#EF4444",
   assists: "#A855F7",

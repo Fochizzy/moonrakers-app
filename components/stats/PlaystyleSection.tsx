@@ -4,6 +4,10 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import PlaystyleScatterCard, {
   type PlaystyleScatterPoint,
 } from "@/components/stats/PlaystyleScatterCard";
+import {
+  rankPlaystyleLeaderboard,
+  type LeaderboardPlayer,
+} from "@/components/stats/playstyleLeaderboard";
 import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import Text from "@/components/ui/Text";
 import {
@@ -18,13 +22,8 @@ import { COLORS } from "@/utils/colors";
 import type { Game, Player } from "@/utils/statsEngine";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 
-type LeaderboardPlayer = {
-  id: string;
-  name: string;
-  color?: string | null;
-};
-
 type Props = {
+  authProfileId?: string | null;
   players: Player[];
   games: Game[];
   leaderboard: LeaderboardPlayer[];
@@ -282,6 +281,7 @@ function ScopePanel({
 }
 
 export default function PlaystyleSection({
+  authProfileId = null,
   players,
   games,
   leaderboard,
@@ -307,9 +307,20 @@ export default function PlaystyleSection({
   }, [leaderboard, players]);
 
   const samples = useMemo(() => buildPlaystyleSamples(players, games), [games, players]);
+  const orderedLeaderboard = useMemo(
+    () =>
+      rankPlaystyleLeaderboard({
+        leaderboard,
+        authProfileId,
+        samples,
+      }),
+    [authProfileId, leaderboard, samples]
+  );
 
   const resolvedPlayer =
-    leaderboard.find((player) => player.id === selectedPlayerId) ?? leaderboard[0] ?? null;
+    orderedLeaderboard.find((player) => player.id === selectedPlayerId) ??
+    orderedLeaderboard[0] ??
+    null;
 
   const personalSamples = useMemo(
     () =>
@@ -392,7 +403,7 @@ export default function PlaystyleSection({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.selectorWrap}
       >
-        {leaderboard.map((player) => {
+        {orderedLeaderboard.map((player) => {
           const active = player.id === resolvedPlayer.id;
           const playerAccent = getPlayerAccentColor(player.color);
 
