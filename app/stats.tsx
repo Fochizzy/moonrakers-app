@@ -16,6 +16,12 @@ import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import ActionButton from "@/components/ui/ActionButton";
 import { getStatsScreen } from "@/lib/cloud/analytics/getStatsScreen";
+import {
+  normalizeStatsCorrelationRows,
+  normalizeStatsGameRows,
+  normalizeStatsPlayerCountOverviewRows,
+  normalizeStatsPlayerCountSummaryRows,
+} from "@/lib/cloud/analytics/statsScreenDisplay";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
@@ -253,18 +259,21 @@ export default function StatsScreen() {
   }, [playerOptions, playersSection.detail, selectedPlayerId]);
 
   const playstyleHighlights = toArray(playstyleSection.highlights);
-  const correlationItems = [
+  const correlationItems = normalizeStatsCorrelationRows([
     ...toArray(correlationsSection.items),
     ...toArray(correlationsSection.pairing),
     ...toArray(correlationsSection.macro),
-  ];
-  const gamesItems = toArray(gamesSection.items);
+  ]);
+  const gamesItems = normalizeStatsGameRows(gamesSection.items);
+  const playerCountMetaItems = normalizeStatsPlayerCountOverviewRows(groupMeta.playerCountSplit);
+  const playerCountSummaryItems = normalizeStatsPlayerCountSummaryRows(groupMeta.playerCountSplit);
   const detailStats = normalizeStatsList(selectedPlayerDetail.stats);
   const hasLeagueData =
     overviewCards.length > 0 ||
     topSignals.length > 0 ||
     playstyleHighlights.length > 0 ||
     correlationItems.length > 0 ||
+    playerCountSummaryItems.length > 0 ||
     gamesItems.length > 0 ||
     toNumberValue(hero.games) > 0;
   const {
@@ -473,7 +482,9 @@ export default function StatsScreen() {
           </View>
         ) : null}
 
-        {(toNumberValue(groupMeta.avgSpread) > 0 || groupMeta.optimalPlayerCount != null) ? (
+        {(toNumberValue(groupMeta.avgSpread) > 0 ||
+        toNumberValue(groupMeta.chaosIndex) > 0 ||
+        playerCountMetaItems.length > 0) ? (
           <View style={styles.metricSubsection}>
             <Text style={styles.metricSubsectionTitle}>Group Meta</Text>
             <View style={styles.compactGrid}>
@@ -487,14 +498,26 @@ export default function StatsScreen() {
                 value={toDisplayValue(groupMeta.chaosIndex)}
                 accent={COLORS.blueGlow}
               />
-              {groupMeta.optimalPlayerCount != null ? (
-                <StatPill
-                  label="Best table size"
-                  value={`${toDisplayValue(groupMeta.optimalPlayerCount)}p`}
-                  accent={COLORS.green}
-                />
-              ) : null}
             </View>
+            {playerCountMetaItems.length > 0 ? (
+              <View style={styles.signalSection}>
+                <Text style={styles.compactSectionTitle}>By Table Size</Text>
+                {playerCountMetaItems.map((entry, index) => (
+                  <View key={toStringValue(entry.key, `group-meta-${index}`)} style={styles.signalCard}>
+                    <View style={styles.signalBody}>
+                      <DefinitionTermText
+                        label={toStringValue(entry.label, `Bucket ${index + 1}`)}
+                        style={styles.signalLabel}
+                      />
+                      <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
+                      {toStringValue(entry.detail, "").trim() ? (
+                        <Text style={styles.signalDetail}>{toStringValue(entry.detail, "")}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -797,6 +820,9 @@ export default function StatsScreen() {
                     style={styles.signalLabel}
                   />
                   <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
+                  {toStringValue(entry.detail, "").trim() ? (
+                    <Text style={styles.signalDetail}>{toStringValue(entry.detail, "")}</Text>
+                  ) : null}
                 </View>
               </View>
             ))}
@@ -854,17 +880,41 @@ export default function StatsScreen() {
         secondaryAction={recoveryProps?.secondaryAction}
         tone={error ? "danger" : recoveryProps?.tone ?? "info"}
       >
-        {gamesItems.length > 0 ? (
+        {playerCountSummaryItems.length > 0 ? (
           <View style={styles.signalSection}>
-            {gamesItems.map((entry, index) => (
-              <View key={toStringValue(entry.id ?? entry.key, `game-${index}`)} style={styles.signalCard}>
-                <Text style={styles.signalRank}>#{index + 1}</Text>
+            <Text style={styles.compactSectionTitle}>By Table Size</Text>
+            {playerCountSummaryItems.map((entry, index) => (
+              <View key={toStringValue(entry.key, `player-count-${index}`)} style={styles.signalCard}>
                 <View style={styles.signalBody}>
                   <DefinitionTermText
-                    label={toStringValue(entry.label ?? entry.title, `Game ${index + 1}`)}
+                    label={toStringValue(entry.label, `Bucket ${index + 1}`)}
                     style={styles.signalLabel}
                   />
                   <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
+                  {toStringValue(entry.detail, "").trim() ? (
+                    <Text style={styles.signalDetail}>{toStringValue(entry.detail, "")}</Text>
+                  ) : null}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {gamesItems.length > 0 ? (
+          <View style={styles.signalSection}>
+            <Text style={styles.compactSectionTitle}>Recent Games</Text>
+            {gamesItems.map((entry, index) => (
+              <View key={toStringValue(entry.key, `game-${index}`)} style={styles.signalCard}>
+                <Text style={styles.signalRank}>#{index + 1}</Text>
+                <View style={styles.signalBody}>
+                  <DefinitionTermText
+                    label={toStringValue(entry.label, `Game ${index + 1}`)}
+                    style={styles.signalLabel}
+                  />
+                  <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
+                  {toStringValue(entry.detail, "").trim() ? (
+                    <Text style={styles.signalDetail}>{toStringValue(entry.detail, "")}</Text>
+                  ) : null}
                 </View>
               </View>
             ))}
@@ -1024,6 +1074,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: COLORS.gold,
     letterSpacing: 0.25,
+  },
+  signalDetail: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    lineHeight: 14,
   },
   playersList: {
     gap: 8,
