@@ -64,6 +64,22 @@ function normalizeStatsList(value: unknown) {
   }));
 }
 
+function hasMetricValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  return true;
+}
+
 function normalizePlayerOption(entry: PayloadRecord, index: number) {
   const id = toStringValue(entry.id, `player-${index}`);
   const displayName = toStringValue(entry.displayName, "");
@@ -268,6 +284,22 @@ export default function StatsScreen() {
   const playerCountMetaItems = normalizeStatsPlayerCountOverviewRows(groupMeta.playerCountSplit);
   const playerCountSummaryItems = normalizeStatsPlayerCountSummaryRows(groupMeta.playerCountSplit);
   const detailStats = normalizeStatsList(selectedPlayerDetail.stats);
+  const hasAvgSpreadValue = hasMetricValue(groupMeta.avgSpread);
+  const hasChaosIndexValue = hasMetricValue(groupMeta.chaosIndex);
+  const hasOverviewServerData =
+    overviewCards.length > 0 ||
+    topSignals.length > 0 ||
+    toNumberValue(halftimeProfile.totalGames) > 0 ||
+    hasMetricValue(contractEfficiency.avgContractsPerGame) ||
+    hasMetricValue(contractEfficiency.contractConversion) ||
+    hasMetricValue(contractEfficiency.abandonmentRate) ||
+    hasAvgSpreadValue ||
+    hasChaosIndexValue ||
+    playerCountMetaItems.length > 0 ||
+    headToHead.length > 0;
+  const hasGamesServerData =
+    playerCountSummaryItems.length > 0 ||
+    gamesItems.length > 0;
   const hasLeagueData =
     overviewCards.length > 0 ||
     topSignals.length > 0 ||
@@ -350,7 +382,8 @@ export default function StatsScreen() {
 
   function renderOverviewTab() {
     const recoveryProps =
-      overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games"
+      overviewRecoveryState.kind === "no-players" ||
+      (overviewRecoveryState.kind === "no-games" && !hasOverviewServerData)
         ? renderSharedRecoveryCard(overviewRecoveryState.kind)
         : null;
 
@@ -482,23 +515,29 @@ export default function StatsScreen() {
           </View>
         ) : null}
 
-        {(toNumberValue(groupMeta.avgSpread) > 0 ||
-        toNumberValue(groupMeta.chaosIndex) > 0 ||
+        {(hasAvgSpreadValue ||
+        hasChaosIndexValue ||
         playerCountMetaItems.length > 0) ? (
           <View style={styles.metricSubsection}>
             <Text style={styles.metricSubsectionTitle}>Group Meta</Text>
-            <View style={styles.compactGrid}>
-              <StatPill
-                label="Avg prestige spread"
-                value={toDisplayValue(groupMeta.avgSpread)}
-                accent={COLORS.cyan}
-              />
-              <StatPill
-                label="Chaos index"
-                value={toDisplayValue(groupMeta.chaosIndex)}
-                accent={COLORS.blueGlow}
-              />
-            </View>
+            {hasAvgSpreadValue || hasChaosIndexValue ? (
+              <View style={styles.compactGrid}>
+                {hasAvgSpreadValue ? (
+                  <StatPill
+                    label="Avg prestige spread"
+                    value={toDisplayValue(groupMeta.avgSpread)}
+                    accent={COLORS.cyan}
+                  />
+                ) : null}
+                {hasChaosIndexValue ? (
+                  <StatPill
+                    label="Chaos index"
+                    value={toDisplayValue(groupMeta.chaosIndex)}
+                    accent={COLORS.blueGlow}
+                  />
+                ) : null}
+              </View>
+            ) : null}
             {playerCountMetaItems.length > 0 ? (
               <View style={styles.signalSection}>
                 <Text style={styles.compactSectionTitle}>By Table Size</Text>
@@ -838,7 +877,8 @@ export default function StatsScreen() {
 
   function renderGamesTab() {
     const recoveryProps =
-      overviewRecoveryState.kind === "no-players" || overviewRecoveryState.kind === "no-games"
+      overviewRecoveryState.kind === "no-players" ||
+      (overviewRecoveryState.kind === "no-games" && !hasGamesServerData)
         ? renderSharedRecoveryCard(overviewRecoveryState.kind)
         : null;
 
@@ -919,11 +959,11 @@ export default function StatsScreen() {
               </View>
             ))}
           </View>
-        ) : (
+        ) : playerCountSummaryItems.length === 0 ? (
           <Text style={styles.emptyInlineText}>
             No game-specific analytics items were returned in the current payload.
           </Text>
-        )}
+        ) : null}
       </AnalyticsStateSection>
     );
   }

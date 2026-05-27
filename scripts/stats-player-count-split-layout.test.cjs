@@ -37,14 +37,44 @@ assert.match(
 
 assert.match(
   statsSource,
-  /<Text style=\{styles\.compactSectionTitle\}>By Table Size<\/Text>/,
-  "expected app/stats.tsx to render a By Table Size summary section",
+  /const hasLeagueData =[\s\S]*playerCountSummaryItems\.length > 0/,
+  "expected hasLeagueData to treat table-size summary cards as usable server-authored league data",
 );
 
 assert.match(
   statsSource,
-  /playerCountMetaItems\.map[\s\S]*playerCountSummaryItems\.map/,
-  "expected app/stats.tsx to render both overview and games-tab table-size split cards",
+  /const hasOverviewServerData =[\s\S]*playerCountMetaItems\.length > 0/,
+  "expected app/stats.tsx to derive overview readiness from server-authored overview data including table-size rows",
+);
+
+assert.match(
+  statsSource,
+  /const hasGamesServerData =[\s\S]*playerCountSummaryItems\.length > 0/,
+  "expected app/stats.tsx to derive games-tab readiness from server-authored game data including table-size rows",
+);
+
+assert.match(
+  statsSource,
+  /renderOverviewTab[\s\S]*overviewRecoveryState\.kind === "no-games"[\s\S]*!hasOverviewServerData/,
+  "expected Overview to stop blindly blocking on no-games when server-authored overview data exists",
+);
+
+assert.match(
+  statsSource,
+  /renderGamesTab[\s\S]*overviewRecoveryState\.kind === "no-games"[\s\S]*!hasGamesServerData/,
+  "expected Games to stop blindly blocking on no-games when server-authored game data exists",
+);
+
+assert.match(
+  statsSource,
+  /<Text style=\{styles\.compactSectionTitle\}>By Table Size<\/Text>[\s\S]*playerCountMetaItems\.map/,
+  "expected app/stats.tsx to keep rendering the overview By Table Size section",
+);
+
+assert.match(
+  statsSource,
+  /<Text style=\{styles\.compactSectionTitle\}>By Table Size<\/Text>[\s\S]*playerCountSummaryItems\.map/,
+  "expected app/stats.tsx to keep rendering the games By Table Size section",
 );
 
 console.log("stats-player-count-split-layout.test.cjs passed");
