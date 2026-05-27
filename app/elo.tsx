@@ -38,10 +38,7 @@ import {
 import { toNumber } from "@/utils/numbers";
 import { normalizeId } from "@/utils/strings";
 import { resolvePreferredChartPlayerId } from "@/utils/charts";
-import { buildGameRowsByPlayer } from "@/utils/gameRowsByPlayer";
 import {
-  resolveEloInsightPayload,
-  resolveEloSectionPayload,
   type EloMetricTabName,
 } from "@/utils/ratingTabFallbacks";
 
@@ -145,25 +142,7 @@ export default function EloScreen() {
       .filter((row) => Boolean(row.playerId));
   }, [payload?.leaderboardRows]);
 
-  const gameDrivenPlayerIds = useMemo(() => {
-    return new Set(
-      (games as any[]).flatMap((game) =>
-        Array.isArray(game?.players)
-          ? game.players
-              .map((p: any) => normalizeId(p?.id ?? p?.playerId))
-              .filter(Boolean)
-          : []
-      )
-    );
-  }, [games]);
-
-  const analyticsPlayers = useMemo<StorePlayer[]>(() => {
-    const playersWithSavedGames = sortedPlayers.filter((player) =>
-      gameDrivenPlayerIds.has(normalizeId(player.id)),
-    );
-
-    return playersWithSavedGames.length ? playersWithSavedGames : sortedPlayers;
-  }, [sortedPlayers, gameDrivenPlayerIds]);
+  const analyticsPlayers = useMemo<StorePlayer[]>(() => sortedPlayers, [sortedPlayers]);
 
   const preferredPlayerId = useMemo(
     () =>
@@ -288,59 +267,79 @@ export default function EloScreen() {
     }));
   }, [payload?.topCards]);
 
-  const activeSection = useMemo(
-    () =>
-      resolveEloSectionPayload({
-        tab: activeTab,
-        summary: selectedSummary,
-        opponentName: selectedOpponent?.name ?? null,
-        sections:
-          payload?.sections && typeof payload.sections === "object"
-            ? (payload.sections as Record<string, unknown>)
-            : null,
-      }),
-    [activeTab, payload?.sections, selectedOpponent?.name, selectedSummary],
-  );
+  const activeSection = useMemo(() => {
+    if (!payload?.sections || typeof payload.sections !== "object") {
+      return {
+        title: `${activeTab} Metrics`,
+        cards: [] as EloMetricCard[],
+      };
+    }
 
-  const activeInsight = useMemo(
-    () =>
-      resolveEloInsightPayload({
-        tab: activeTab,
-        summary: selectedSummary,
-        opponentName: selectedOpponent?.name ?? null,
-        insights:
-          payload?.insights && typeof payload.insights === "object"
-            ? (payload.insights as Record<string, unknown>)
-            : null,
-      }),
-    [activeTab, payload?.insights, selectedOpponent?.name, selectedSummary],
-  );
+    const section = (payload.sections as Record<string, any>)[activeTab];
+    const cards = Array.isArray(section?.cards)
+      ? section.cards
+          .map((card: any) => ({
+            key: String(card?.key ?? ""),
+            label: String(card?.label ?? ""),
+            value: String(card?.value ?? "0"),
+            sub:
+              typeof card?.sub === "string" && card.sub.trim()
+                ? card.sub.trim()
+                : undefined,
+            tone:
+              card?.tone === "accent" ||
+              card?.tone === "blue" ||
+              card?.tone === "green" ||
+              card?.tone === "amber" ||
+              card?.tone === "danger"
+                ? card.tone
+                : "default",
+          }))
+          .filter((card: EloMetricCard) => Boolean(card.key && card.label))
+      : [];
+
+    return {
+      title:
+        typeof section?.title === "string" && section.title.trim()
+          ? section.title.trim()
+          : `${activeTab} Metrics`,
+      cards,
+    };
+  }, [activeTab, payload?.sections]);
+
+  const activeInsight = useMemo(() => {
+    if (!payload?.insights || typeof payload.insights !== "object") {
+      return {
+        title: `${activeTab} Insight`,
+        body: "No server-authored insight is available yet.",
+      };
+    }
+
+    const insight = (payload.insights as Record<string, any>)[activeTab];
+
+    return {
+      title:
+        typeof insight?.title === "string" && insight.title.trim()
+          ? insight.title.trim()
+          : `${activeTab} Insight`,
+      body:
+        typeof insight?.body === "string" && insight.body.trim()
+          ? insight.body.trim()
+          : "No server-authored insight is available yet.",
+    };
+  }, [activeTab, payload?.insights]);
 
   const hasData = selectedSummary.gamesPlayed > 0;
 
   const leaderboardRows = useMemo(() => {
-    const gameRows = buildGameRowsByPlayer(games, analyticsPlayers);
-    return analyticsPlayers
-      .map((player, index) => {
-        const playerId = normalizeId(player.id);
-        const cloudRow = rawLeaderboardRows.find(
-          (r) => normalizeId(r.playerId) === playerId
-        );
-        return {
-          rank: toNumber(cloudRow?.rank) || index + 1,
-          playerId,
-          name: player.name ?? "Unknown",
-          currentElo: toNumber(cloudRow?.currentElo) || DEFAULT_ELO,
-          peakElo: toNumber(cloudRow?.peakElo) || toNumber(cloudRow?.currentElo) || DEFAULT_ELO,
-          confidence: toNumber(cloudRow?.confidence),
-          gamesPlayed: toNumber(cloudRow?.gamesPlayed) || (gameRows[playerId]?.length ?? 0),
-          wins: toNumber(cloudRow?.wins),
-          losses: toNumber(cloudRow?.losses),
-          isSelected: playerId === normalizeId(selectedPlayerId),
-        };
-      })
+    return rawLeaderboardRows
+      .map((row, index) => ({
+        ...row,
+        rank: toNumber(row.rank) || index + 1,
+        isSelected: normalizeId(row.playerId) === normalizeId(selectedPlayerId),
+      }))
       .filter((row) => Boolean(row.playerId));
-  }, [analyticsPlayers, games, rawLeaderboardRows, selectedPlayerId]);
+  }, [rawLeaderboardRows, selectedPlayerId]);
 
   const featuredCard = topCards[0];
   const secondaryCards = topCards.slice(1, 3);

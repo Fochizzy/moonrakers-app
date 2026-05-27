@@ -26,7 +26,6 @@ import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
-import { buildLocalPlayerProfileFallback } from "@/lib/cloud/analytics/buildLocalPlayerProfileFallback";
 import { getPlayerProfileScreen } from "@/lib/cloud/analytics/getPlayerProfileScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useAuthProfile, useAuthSession, useGames, usePlayers } from "@/store/useStore";
@@ -37,19 +36,11 @@ import {
   buildPlayerProfileRoute,
 } from "@/utils/appRoutes";
 import {
-  buildCommonOpponentOptions,
   buildRecentGameOpponentOptions,
   prioritizeSignedInPlayerOptions,
   resolveSignedInPlayerOptionId,
 } from "@/utils/charts";
 import { COLORS } from "@/utils/colors";
-import {
-  buildContextRows,
-  buildGameRowsByPlayer,
-  buildInsight as buildFallbackInsight,
-  buildSectionCards,
-  buildSummary as buildFallbackSummary,
-} from "@/utils/eloScreenAnalytics";
 import { getPlayerCardSourceByArtIndex } from "@/utils/playerCardAssets";
 import { resolveAssignedCardArtIndexForProfile } from "@/utils/profileAppearance";
 import { isValidPlayerCardArtIndex } from "@/utils/playerCards";
@@ -658,26 +649,17 @@ export default function PlayerProfileDetailScreen() {
   const topOpponentOptions = useMemo(
     () => {
       const payloadOptions = toArray(payload?.topOpponentOptions);
-      if (payloadOptions.length > 0) {
-        return payloadOptions.map((option) => ({
-          id: String(option.id ?? option.playerId ?? ""),
-          name:
-            toStringValue(option.name, "") ||
-            toStringValue(option.label, "") ||
-            toStringValue(option.displayName, "") ||
-            toStringValue(option.playerName, "") ||
-            "Player",
-        }));
-      }
-
-      return buildCommonOpponentOptions({
-        playerId: resolvedPlayerId,
-        players: sortedPlayers as any,
-        games: games as any,
-        limit: 4,
-      });
+      return payloadOptions.map((option) => ({
+        id: String(option.id ?? option.playerId ?? ""),
+        name:
+          toStringValue(option.name, "") ||
+          toStringValue(option.label, "") ||
+          toStringValue(option.displayName, "") ||
+          toStringValue(option.playerName, "") ||
+          "Player",
+      }));
     },
-    [games, payload?.topOpponentOptions, resolvedPlayerId, sortedPlayers]
+    [payload?.topOpponentOptions]
   );
 
   const filteredOpponentOptions = useMemo(() => {
@@ -710,52 +692,7 @@ export default function PlayerProfileDetailScreen() {
       : totalGames > 0
         ? totalWins / totalGames
         : 0;
-  const localProfilePlayers = useMemo(
-    () =>
-      sortedPlayers.map((player) => ({
-        id: String(player.id),
-        name: player.name || "Player",
-        color: player.color,
-        assignedCardArtIndex: player.assignedCardArtIndex ?? null,
-      })),
-    [sortedPlayers],
-  );
-
-  const localProfileFallback = useMemo(() => {
-    const fallbackMoonrakersIntel =
-      payload?.moonrakersIntel && typeof payload.moonrakersIntel === "object"
-        ? (payload.moonrakersIntel as any)
-        : {
-            hasData: false as const,
-            emptyTitle: "Not enough Moonrakers data yet",
-            emptyBody:
-              "Finish or import a few more games to unlock player-specific playstyle reads.",
-          };
-
-    if (!resolvedPlayerId) {
-      return {
-        recentGames: toArray(payload?.recentGames),
-        moonrakersIntel: fallbackMoonrakersIntel,
-      };
-    }
-
-    return buildLocalPlayerProfileFallback({
-      playerId: String(resolvedPlayerId),
-      opponentId: selectedOpponentId,
-      players: localProfilePlayers,
-      games,
-      recentGamesPayload: toArray(payload?.recentGames),
-      moonrakersIntelPayload: fallbackMoonrakersIntel,
-    });
-  }, [
-    games,
-    localProfilePlayers,
-    payload?.moonrakersIntel,
-    payload?.recentGames,
-    resolvedPlayerId,
-    selectedOpponentId,
-  ]);
-  const recentGames = localProfileFallback.recentGames;
+  const recentGames = toArray(payload?.recentGames);
 
   const topCards = useMemo(
     () =>
@@ -772,39 +709,6 @@ export default function PlayerProfileDetailScreen() {
   const secondaryCards = topCards.slice(1, 3);
   const stickySignalsLabel = featuredCard ? "Ready" : "Pending";
 
-  const rowsByPlayer = useMemo(
-    () => buildGameRowsByPlayer(games as any, sortedPlayers as any),
-    [games, sortedPlayers],
-  );
-  const fallbackRows = useMemo(
-    () => rowsByPlayer[String(resolvedPlayerId ?? "")] ?? [],
-    [resolvedPlayerId, rowsByPlayer],
-  );
-  const fallbackContextRows = useMemo(
-    () => buildContextRows(fallbackRows, selectedOpponentId),
-    [fallbackRows, selectedOpponentId],
-  );
-  const fallbackSummary = useMemo(() => {
-    const activePlayerId = String(resolvedPlayerId ?? "");
-    const baseSummary = buildFallbackSummary(
-      activePlayerId,
-      sortedPlayers as any,
-      rowsByPlayer,
-      { [activePlayerId]: currentElo },
-    );
-    const resolvedGames = totalGames > 0 ? totalGames : baseSummary.gamesPlayed;
-    const resolvedWins = totalGames > 0 ? totalWins : baseSummary.wins;
-
-    return {
-      ...baseSummary,
-      currentElo,
-      peakElo,
-      gamesPlayed: resolvedGames,
-      wins: resolvedWins,
-      losses: Math.max(resolvedGames - resolvedWins, 0),
-    };
-  }, [currentElo, peakElo, resolvedPlayerId, rowsByPlayer, sortedPlayers, totalGames, totalWins]);
-
   const tabs = toRecord(payload?.tabs);
   const activeSection = toRecord(tabs[activeTab]);
   const sectionCards = useMemo(
@@ -818,38 +722,16 @@ export default function PlayerProfileDetailScreen() {
       })),
     [activeSection.cards],
   );
-  const fallbackSection = useMemo(
-    () =>
-      buildSectionCards(
-        activeTab,
-        fallbackSummary,
-        fallbackRows,
-        fallbackContextRows,
-        selectedOpponentName,
-      ),
-    [activeTab, fallbackContextRows, fallbackRows, fallbackSummary, selectedOpponentName],
-  );
-  const resolvedSectionCards = sectionCards.length > 0 ? sectionCards : fallbackSection.cards;
-  const sectionTitle = toStringValue(activeSection.title, fallbackSection.title);
+  const sectionTitle = toStringValue(activeSection.title, `${activeTab} Metrics`);
   const sectionSubtitle =
     selectedOpponentName && activeTab === "Context"
       ? `Filtered to ${selectedOpponentName}`
       : selectedPlayerName;
   const tabInsights = toRecord(payload?.tabInsights);
   const activeInsight = toRecord(tabInsights[activeTab] ?? payload?.activeInsight);
-  const fallbackInsight = useMemo(
-    () =>
-      buildFallbackInsight(
-        activeTab,
-        fallbackSummary,
-        fallbackContextRows,
-        selectedOpponentName,
-      ),
-    [activeTab, fallbackContextRows, fallbackSummary, selectedOpponentName],
-  );
   const profileInsight = toRecord(payload?.profileInsight);
-  const hasData = totalGames > 0 || topCards.length > 0 || resolvedSectionCards.length > 0;
-  const moonrakersIntel = localProfileFallback.moonrakersIntel;
+  const hasData = totalGames > 0 || topCards.length > 0 || sectionCards.length > 0;
+  const moonrakersIntel = payload?.moonrakersIntel;
 
   if (!selectedPlayer) {
     return (
@@ -1135,12 +1017,10 @@ export default function PlayerProfileDetailScreen() {
               profileInsight.body,
               "No server-authored profile insight is available yet.",
             )}
-            activeInsightBody={
-              toStringValue(activeInsight.body, fallbackInsight.body) || null
-            }
+            activeInsightBody={toStringValue(activeInsight.body, "") || null}
             sectionTitle={sectionTitle}
             sectionSubtitle={sectionSubtitle}
-            sectionCards={resolvedSectionCards}
+            sectionCards={sectionCards}
           />
         ) : (
           <EmptyStateCard
@@ -1149,7 +1029,14 @@ export default function PlayerProfileDetailScreen() {
           />
         )}
 
-        <MoonrakersIntelSection profile={moonrakersIntel} />
+        {moonrakersIntel && typeof moonrakersIntel === "object" ? (
+          <MoonrakersIntelSection profile={moonrakersIntel as any} />
+        ) : (
+          <EmptyStateCard
+            message="No Moonrakers Intel available yet."
+            hint="This profile does not currently expose a published Moonrakers Intel payload."
+          />
+        )}
 
         <View
           style={styles.sectionCompact}
