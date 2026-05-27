@@ -10,8 +10,8 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /case "primary"[\s\S]*shadowColor:/,
-  "expected the primary ActionButton variant to define a dedicated shadow color hierarchy marker",
+  /case "primary"[\s\S]*borderColor:/,
+  "expected the primary ActionButton variant to define a dedicated border hierarchy marker",
 );
 
 assert.match(
@@ -34,8 +34,14 @@ assert.match(
 
 assert.match(
   source,
-  /shadowColor: tone\.shadowColor/,
-  "expected ActionButton to apply variant-driven shadow styling",
+  /backgroundColor: pressed && !disabled[\s\S]*tone\.pressedBackgroundColor[\s\S]*tone\.backgroundColor/,
+  "expected ActionButton to apply variant-driven fill styling without a separate overlay layer",
+);
+
+assert.match(
+  source,
+  /borderColor: tone\.borderColor/,
+  "expected ActionButton to apply variant-driven border styling",
 );
 
 assert.match(

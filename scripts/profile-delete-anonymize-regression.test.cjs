@@ -16,7 +16,9 @@ const migrationSource = read(
   ),
 );
 const registerSource = read(path.join("app", "register.tsx"));
-const layoutSource = read(path.join("app", "_layout.tsx"));
+const authBootstrapSource = read(
+  path.join("lib", "auth", "bootstrapSharedCloudState.ts"),
+);
 const registeredProfilesSource = read(
   path.join("lib", "cloud", "loadRegisteredProfiles.ts"),
 );
@@ -79,9 +81,9 @@ assert.match(
 );
 
 assert.match(
-  layoutSource,
+  authBootstrapSource,
   /\.is\("deleted_at", null\)/,
-  "expected app/_layout.tsx to ignore soft-deleted auth profiles during bootstrap"
+  "expected the shared auth bootstrap loader to ignore soft-deleted auth profiles"
 );
 
 assert.match(

@@ -9,7 +9,6 @@ import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { getAnalyticsHome } from "@/lib/cloud/analytics/getAnalyticsHome";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
@@ -143,7 +142,6 @@ export default function AnalyticsScreen() {
   const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
   const cards = useMemo(() => getAnalyticsHubCards(), []);
   const profileId = String(authSession?.user?.id ?? "").trim();
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const [error, setError] = useState<string | null>(null);
   const analyticsQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),

@@ -1,7 +1,5 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
-  Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -19,7 +17,6 @@ import Text from "@/components/ui/Text";
 import ActionButton from "@/components/ui/ActionButton";
 import { getStatsScreen } from "@/lib/cloud/analytics/getStatsScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { buildChartsRoute, buildHomeRoute, APP_ROUTES } from "@/utils/appRoutes";
@@ -166,7 +163,6 @@ export default function StatsScreen() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const [error, setError] = useState<string | null>(null);
   const analyticsQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),

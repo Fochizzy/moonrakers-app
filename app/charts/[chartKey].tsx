@@ -42,7 +42,6 @@ import StackedBarChart from "@/components/charts/StackedBarChart";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { getChartDataset } from "@/lib/cloud/analytics/getChartDataset";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { APP_ROUTES } from "@/utils/appRoutes";
@@ -281,7 +280,6 @@ export default function ChartKeyScreen() {
         opponentId: routeOpponentId ?? null,
       }),
   });
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const nextError = datasetQuery.error;

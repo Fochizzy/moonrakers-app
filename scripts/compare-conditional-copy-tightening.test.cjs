@@ -73,7 +73,7 @@ assert.match(
 
 assert.match(
   heroCardSource,
-  /<Text[\s\S]*variant="heroSubtitle"[\s\S]*numberOfLines=\{subtitleNumberOfLines\}[\s\S]*style=\{subtitleStyle\}[\s\S]*>\s*\{subtitle\}\s*<\/Text>/,
+  /<DefinitionRichText[\s\S]*text=\{subtitle\}[\s\S]*variant="heroSubtitle"[\s\S]*numberOfLines=\{subtitleNumberOfLines\}[\s\S]*style=\{subtitleStyle\}[\s\S]*\/>/,
   "expected HeroCard to forward subtitle line-clamp and style overrides to the subtitle text"
 );
 

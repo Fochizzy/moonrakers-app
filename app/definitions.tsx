@@ -12,6 +12,7 @@ import PageShell from "@/components/ui/PageShell";
 import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
+import { buttonSystem } from "@/utils/buttonSystem";
 import { APP_ROUTES, buildDefinitionsRoute } from "@/utils/appRoutes";
 import {
   DEFINITION_GROUPS,
@@ -506,12 +507,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   relatedTermChip: {
-    borderRadius: 999,
-    borderWidth: 1,
+    ...buttonSystem.rectBase,
+    minHeight: 38,
+    borderRadius: 10,
     borderColor: "rgba(103,232,249,0.22)",
     backgroundColor: "rgba(12, 30, 44, 0.9)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   relatedTermChipPressed: {
     opacity: 0.78,

@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 
 import Text from "@/components/ui/Text";
 import { buildDefinitionsRoute } from "@/utils/appRoutes";
+import { buttonSystem } from "@/utils/buttonSystem";
 import {
   getDefinitionGroup,
   getDefinitionGroupKeyForItem,
@@ -181,11 +182,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   relatedChip: {
-    borderRadius: 999,
-    borderWidth: 1,
+    ...buttonSystem.rectBase,
+    minHeight: 38,
+    borderRadius: 10,
     borderColor: "rgba(96,165,250,0.32)",
     backgroundColor: "rgba(37,99,235,0.14)",
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 7,
   },
   relatedChipPressed: {

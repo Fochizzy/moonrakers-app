@@ -652,16 +652,17 @@ security invoker
 set search_path = public
 as $$
 declare
+  target_profile_id uuid := profile_id;
   rollup_payload jsonb;
 begin
-  if profile_id is null or profile_id <> (select auth.uid()) then
+  if target_profile_id is null or target_profile_id <> (select auth.uid()) then
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select public.personal_stats_rollups.payload
+  select rollup.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = profile_id;
+  where rollup.profile_id = target_profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'analyticsHome' then
     return rollup_payload->'analyticsHome';
@@ -686,16 +687,17 @@ security invoker
 set search_path = public
 as $$
 declare
+  target_profile_id uuid := profile_id;
   rollup_payload jsonb;
 begin
-  if profile_id is null or profile_id <> (select auth.uid()) then
+  if target_profile_id is null or target_profile_id <> (select auth.uid()) then
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select public.personal_stats_rollups.payload
+  select rollup.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = profile_id;
+  where rollup.profile_id = target_profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'statsScreen' then
     return rollup_payload->'statsScreen';
@@ -758,16 +760,17 @@ security invoker
 set search_path = public
 as $$
 declare
+  target_profile_id uuid := profile_id;
   rollup_payload jsonb;
 begin
-  if profile_id is null or profile_id <> (select auth.uid()) then
+  if target_profile_id is null or target_profile_id <> (select auth.uid()) then
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select public.personal_stats_rollups.payload
+  select rollup.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = profile_id;
+  where rollup.profile_id = target_profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'insightsScreen' then
     return rollup_payload->'insightsScreen';
@@ -1090,18 +1093,19 @@ declare
     when coalesce(array_length(scoped_player_ids, 1), 0) >= 2 then coalesce(to_jsonb(scoped_player_ids), '[]'::jsonb)
     else '[]'::jsonb
   end;
+  target_profile_id uuid := profile_id;
   default_metric_key text := coalesce(metric_key, 'totalPrestige');
   default_line_mode text := coalesce(line_mode, 'raw');
   default_graph_mode text := coalesce(graph_mode, 'network');
 begin
-  if profile_id is null or profile_id <> (select auth.uid()) then
+  if target_profile_id is null or target_profile_id <> (select auth.uid()) then
     raise exception 'profile_id must match the authenticated profile';
   end if;
 
-  select public.personal_stats_rollups.payload
+  select rollup.payload
   into rollup_payload
   from public.personal_stats_rollups as rollup
-  where rollup.profile_id = profile_id;
+  where rollup.profile_id = target_profile_id;
 
   if rollup_payload is not null and rollup_payload ? 'charts' then
     stored_chart := rollup_payload->'charts'->normalized_chart_key;

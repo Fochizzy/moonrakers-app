@@ -18,7 +18,6 @@ import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { getInsightsScreen } from "@/lib/cloud/analytics/getInsightsScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { useAnalyticsRefreshTick } from "@/lib/cloud/analytics/useAnalyticsRefreshTick";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { buildInsightSummaryStatements } from "@/utils/insightSummaries";
@@ -31,7 +30,7 @@ import {
 import {
   prioritizeSignedInPlayerOptions,
   resolveSignedInPlayerOptionId,
-} from "@/utils/charts";
+} from "@/lib/cloud/analytics/signedInPlayerOptions";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 
 type PayloadRecord = Record<string, unknown>;
@@ -151,7 +150,6 @@ export default function InsightsScreen() {
   }, [authProfileId]);
 
   const activeProfileId = String(selectedProfileId ?? authProfileId ?? "").trim();
-  const analyticsRefreshTick = useAnalyticsRefreshTick();
   const [error, setError] = useState<string | null>(null);
   const insightsQuery = useLiveAnalyticsQuery({
     enabled: Boolean(activeProfileId),

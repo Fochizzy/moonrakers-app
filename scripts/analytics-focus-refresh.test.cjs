@@ -17,6 +17,8 @@ assert.ok(
 );
 
 const helperSource = read(helperPath);
+const liveQueryPath = path.join("lib", "cloud", "analytics", "useLiveAnalyticsQuery.ts");
+const liveQuerySource = read(liveQueryPath);
 
 assert.match(
   helperSource,
@@ -30,6 +32,24 @@ assert.match(
   "expected the analytics refresh hook to refetch when the app becomes active again",
 );
 
+assert.match(
+  liveQuerySource,
+  /useAnalyticsRefreshTick/,
+  "expected the shared live analytics query helper to subscribe to the analytics refresh hook",
+);
+
+assert.match(
+  liveQuerySource,
+  /const\s+analyticsRefreshTick\s*=\s*useAnalyticsRefreshTick\(\);/,
+  "expected the shared live analytics query helper to create a refresh tick",
+);
+
+assert.match(
+  liveQuerySource,
+  /analyticsRefreshTick/,
+  "expected the shared live analytics query helper to use the refresh tick in its loading flow",
+);
+
 for (const relPath of [
   path.join("app", "analytics.tsx"),
   path.join("app", "stats.tsx"),
@@ -41,20 +61,20 @@ for (const relPath of [
 
   assert.match(
     source,
-    /useAnalyticsRefreshTick/,
-    `expected ${relPath} to import the shared analytics refresh hook`,
+    /useLiveAnalyticsQuery/,
+    `expected ${relPath} to load analytics through the shared live analytics query helper`,
   );
 
   assert.match(
     source,
-    /const\s+analyticsRefreshTick\s*=\s*useAnalyticsRefreshTick\(\);/,
-    `expected ${relPath} to create a refresh tick from the shared analytics refresh hook`,
+    /useLiveAnalyticsQuery\s*\(/,
+    `expected ${relPath} to create analytics state through the shared live analytics query helper`,
   );
 
   assert.match(
     source,
-    /analyticsRefreshTick/,
-    `expected ${relPath} to use the refresh tick in its analytics loading flow`,
+    /queryKey:/,
+    `expected ${relPath} to provide a stable analytics query key to the shared live analytics query helper`,
   );
 }
 
