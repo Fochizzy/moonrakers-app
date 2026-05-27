@@ -18,7 +18,7 @@ assert.doesNotMatch(
 
 assert.match(
   gameSource,
-  /hydrateCloudSnapshot/,
+  /hydrateCloudSnapshot\(\s*hydratedSnapshot\s*\)/,
   "expected app/game.tsx to refresh the hydrated cloud snapshot after finishing a game",
 );
 

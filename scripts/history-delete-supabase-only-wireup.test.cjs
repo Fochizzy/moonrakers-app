@@ -28,6 +28,12 @@ assert.match(
   "expected app/history.tsx to rehydrate through the shared helper after deleting or importing history",
 );
 
+assert.match(
+  historySource,
+  /hydrateCloudSnapshot\(\s*hydratedSnapshot\s*\)/,
+  "expected app/history.tsx to hydrate from the shared helper payload after deleting or importing history",
+);
+
 assert.doesNotMatch(
   historySource,
   /loadCloudSnapshot\(/,
@@ -45,5 +51,4 @@ assert.doesNotMatch(
   /loadStatsSnapshot\(/,
   "expected app/history.tsx to stop rebuilding stats inline after deleting or importing history",
 );
-
 console.log("history-delete-supabase-only-wireup.test.cjs passed");

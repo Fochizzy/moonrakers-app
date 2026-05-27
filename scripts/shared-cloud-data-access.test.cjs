@@ -49,6 +49,18 @@ assert.doesNotMatch(
   "expected finish-profile registration to stop reloading the cloud snapshot inline",
 );
 
+assert.doesNotMatch(
+  registerSource,
+  /loadRegisteredProfiles\(\)\.catch\(\(\) => \[\]\)/,
+  "expected finish-profile registration to stop rebuilding the fallback registered-profile merge inline",
+);
+
+assert.doesNotMatch(
+  registerSource,
+  /loadStatsSnapshot\(/,
+  "expected finish-profile registration to stop rebuilding the stats snapshot inline",
+);
+
 assert.match(
   addPlayersSource,
   /loadHydratedCloudState|loadHydratedSharedSnapshot/,
@@ -65,6 +77,18 @@ assert.doesNotMatch(
   addPlayersSource,
   /loadCloudSnapshot\(signedInUserId\)/,
   "expected add-players shared-group refreshes to stop reloading the cloud snapshot inline",
+);
+
+assert.doesNotMatch(
+  addPlayersSource,
+  /loadRegisteredProfiles\(\)\.catch\(\(\) => \[\]\)/,
+  "expected add-players shared-group refreshes to stop rebuilding the fallback registered-profile merge inline",
+);
+
+assert.doesNotMatch(
+  addPlayersSource,
+  /loadStatsSnapshot\(/,
+  "expected add-players shared-group refreshes to stop rebuilding the stats snapshot inline",
 );
 
 for (const policyName of [
