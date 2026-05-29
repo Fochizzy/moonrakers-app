@@ -25,4 +25,10 @@ assert.match(
   "expected the radar chart to keep inset paragraph panels inside the deep comparison report before the glossary"
 );
 
+assert.match(
+  radarSource,
+  /Comparison Summary[\s\S]*<SummaryBulletRows[\s\S]*Deep Comparison Report/s,
+  "expected the radar chart to render bullet-row summaries between the chart stage and the deep report"
+);
+
 console.log("radar-chart-style.test.cjs passed");

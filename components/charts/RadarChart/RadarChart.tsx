@@ -452,6 +452,25 @@ function ReportParagraphPanels({
   );
 }
 
+function SummaryBulletRows({
+  keyPrefix,
+  lines,
+}: {
+  keyPrefix: string;
+  lines: string[];
+}) {
+  return (
+    <View style={styles.summaryBulletStack}>
+      {lines.map((line, index) => (
+        <View key={`${keyPrefix}-${index}`} style={styles.summaryBulletRow}>
+          <View style={styles.summaryBulletDot} />
+          <Text style={styles.summaryLine}>{line}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function SectionHeader({
   title,
   sub,
@@ -784,11 +803,7 @@ export default function RadarChart({
         <Text style={styles.summaryTitle}>
           {comparisonCount > 0 ? "Comparison Summary" : "Profile Summary"}
         </Text>
-        {summaryLines.map((line) => (
-          <Text key={line} style={styles.summaryLine}>
-            {line}
-          </Text>
-        ))}
+        <SummaryBulletRows keyPrefix="summary" lines={summaryLines} />
       </View>
 
       {comparisonSeriesModels.length > 0 ? (
@@ -824,11 +839,7 @@ export default function RadarChart({
                   </View>
                 </View>
 
-                {summaryForSeries.map((line) => (
-                  <Text key={`${series.key}-${line}`} style={styles.summaryLine}>
-                    {line}
-                  </Text>
-                ))}
+                <SummaryBulletRows keyPrefix={series.key} lines={summaryForSeries} />
 
                 <View style={styles.traitGrid}>
                   {series.model.entries.map((entry) => {
@@ -1100,7 +1111,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
+  summaryBulletStack: {
+    gap: 8,
+  },
+  summaryBulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  summaryBulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: CHART_COLORS.accent,
+    marginTop: 6,
+    flexShrink: 0,
+  },
   summaryLine: {
+    flex: 1,
     color: CHART_COLORS.text,
     fontSize: 12,
     lineHeight: 18,

@@ -33,6 +33,18 @@ assert.match(
 
 assert.match(
   radarSource,
+  /SummaryBulletRows/,
+  "expected the radar chart to render summary lines through a shared bullet-row helper"
+);
+
+assert.match(
+  radarSource,
+  /summaryBulletRow/,
+  "expected the radar chart to define bullet-row styling for summary lines"
+);
+
+assert.match(
+  radarSource,
   /reportParagraphPanel/,
   "expected the radar chart to render inset paragraph panels inside deep report cards"
 );
