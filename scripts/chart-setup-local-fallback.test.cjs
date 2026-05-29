@@ -62,8 +62,8 @@ assert.match(
 
 assert.match(
   chartHubSource,
-  /players:\s*supabaseSetupFallbackPlayers/,
-  "expected the local chart-setup fallback builder to use Supabase-sourced player options",
+  /analyticsDirectory\.players\.length\s*\?\s*analyticsDirectory\.players\s*:\s*supabaseSetupFallbackPlayers/,
+  "expected the local chart-setup fallback builder to prefer the synced analytics roster and fall back to the Supabase registry only when needed",
 );
 
 const {

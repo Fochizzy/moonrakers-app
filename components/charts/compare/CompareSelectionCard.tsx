@@ -19,6 +19,12 @@ type Props = {
   onSetDensity: (mode: DensityMode) => void;
   onClear: () => void;
   onAnalyze: () => void;
+  specialSelection?: {
+    title: string;
+    subtitle: string;
+    active: boolean;
+    onPress: () => void;
+  } | null;
 };
 
 const MAX_COMPARE_PLAYERS = 5;
@@ -51,13 +57,20 @@ export default function CompareSelectionCard({
   onToggleGroup,
   onClear,
   onAnalyze,
+  specialSelection = null,
 }: Props) {
   const isPlayers = mode === 'players';
   const items = useMemo(() => getEntities(mode, players, groups), [mode, players, groups]);
   const selectedIds = getSelectionIds(mode, selectedPlayerIds, selectedGroupIds);
   const selectedLookup = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedCount = selectedIds.length;
-  const analyzeDisabled = selectedCount === 0;
+  const analyzeDisabled = selectedCount === 0 && !specialSelection?.active;
+  const countValue = specialSelection?.active ? 'Field' : `${selectedCount}`;
+  const countLabel = specialSelection?.active
+    ? 'aggregate'
+    : isPlayers
+      ? `of ${MAX_COMPARE_PLAYERS}`
+      : 'selected';
 
   return (
     <View style={styles.shell}>
@@ -68,10 +81,43 @@ export default function CompareSelectionCard({
         </View>
 
         <View style={styles.countCard}>
-          <Text style={styles.countValue}>{selectedCount}</Text>
-          <Text style={styles.countLabel}>{isPlayers ? `of ${MAX_COMPARE_PLAYERS}` : 'selected'}</Text>
+          <Text style={styles.countValue}>{countValue}</Text>
+          <Text style={styles.countLabel}>{countLabel}</Text>
         </View>
       </View>
+
+      {isPlayers && specialSelection ? (
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>Quick read</Text>
+            <Text style={styles.panelMeta}>Played field aggregate</Text>
+          </View>
+
+          <Pressable
+            onPress={specialSelection.onPress}
+            style={[
+              styles.specialSelectionCard,
+              specialSelection.active && styles.specialSelectionCardActive,
+            ]}
+          >
+            <View style={styles.copyWrap}>
+              <Text style={styles.rowTitle}>{specialSelection.title}</Text>
+              <Text style={styles.rowSub}>{specialSelection.subtitle}</Text>
+            </View>
+
+            <View style={[styles.rowAction, specialSelection.active && styles.rowActionSelected]}>
+              <Text
+                style={[
+                  styles.rowActionText,
+                  specialSelection.active && styles.rowActionTextSelected,
+                ]}
+              >
+                {specialSelection.active ? 'Selected' : 'Use read'}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.panel}>
         <View style={styles.panelHeader}>
@@ -125,7 +171,22 @@ export default function CompareSelectionCard({
         </ScrollView>
       </View>
 
-      {selectedCount > 0 ? (
+      {specialSelection?.active ? (
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>Active read</Text>
+            <Text style={styles.panelMeta}>Self vs field</Text>
+          </View>
+
+          <View style={[styles.slotCard, styles.specialSelectionSlot]}>
+            <Text style={styles.slotIndex}>Aggregate</Text>
+            <Text style={styles.slotName} numberOfLines={1}>
+              {specialSelection.title}
+            </Text>
+            <Text style={styles.slotHint}>{specialSelection.subtitle}</Text>
+          </View>
+        </View>
+      ) : selectedCount > 0 ? (
         <View style={styles.panel}>
           <View style={styles.panelHeader}>
             <Text style={styles.panelTitle}>Lineup</Text>
@@ -242,6 +303,23 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
     padding: 10,
     gap: 6,
+  },
+  specialSelectionCard: {
+    minHeight: 54,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: PANEL_ALT,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  specialSelectionCardActive: {
+    borderColor: BORDER_STRONG,
+    backgroundColor: 'rgba(86, 120, 255, 0.20)',
   },
   panelHeader: {
     flexDirection: 'row',
@@ -361,6 +439,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.58)',
     borderColor: BORDER,
   },
+  specialSelectionSlot: {
+    width: '100%',
+    minHeight: 66,
+    backgroundColor: 'rgba(86, 120, 255, 0.20)',
+    borderColor: BORDER_STRONG,
+  },
   slotIndex: {
     color: SUBTEXT,
     fontSize: 9,
@@ -416,5 +500,3 @@ const styles = StyleSheet.create({
     color: 'rgba(226, 232, 240, 0.56)',
   },
 });
-
-

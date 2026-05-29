@@ -21,8 +21,11 @@ import Svg, {
 import Text from "@/components/ui/Text";
 import { createSmoothPath } from "@/components/charts/ELO/eloChartUtils";
 import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import SeriesIdentityBadge from "@/components/charts/SeriesIdentityBadge";
+import SeriesIdentitySvgBadge from "@/components/charts/SeriesIdentitySvgBadge";
 import ChartStage from "@/components/charts/ChartStage";
 import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
+import { buildLineSeriesIdentities } from "@/components/charts/lineSeriesIdentity";
 import {
   CHART_COLORS,
   getChartStagePreset,
@@ -78,6 +81,10 @@ type Series = {
   values: number[];
   points: PlotPoint[];
   path: string;
+  strokeDasharray?: string | null;
+  hasColorCollision?: boolean;
+  collisionIndex?: number;
+  collisionBadgeText?: string | null;
 };
 
 const MODE_OPTIONS: readonly LineMode[] = ["raw", "cumulative", "average"];
@@ -333,9 +340,13 @@ function LineChart({
   const minValue = numericValues.length ? Math.min(...numericValues, 0) : 0;
   const maxValue = numericValues.length ? Math.max(...numericValues, 1) : 1;
 
-  const renderedSeries = useMemo(
+  const renderedSeriesBase = useMemo(
     () => buildSeries(data, visiblePlayers, statKey, resolvedMode, chartWidth, minValue, maxValue),
     [chartWidth, data, maxValue, minValue, resolvedMode, statKey, visiblePlayers]
+  );
+  const renderedSeries = useMemo(
+    () => buildLineSeriesIdentities(renderedSeriesBase),
+    [renderedSeriesBase]
   );
 
   const hasRenderableData =
@@ -547,6 +558,7 @@ function LineChart({
                         ? 1
                         : 0.7;
                     const strokeWidth = isFocused ? 3.8 : 2.5;
+                    const latestPoint = row.points[row.points.length - 1] ?? null;
 
                     return (
                       <G key={row.id}>
@@ -561,6 +573,7 @@ function LineChart({
                             strokeWidth={strokeWidth + 5}
                             strokeLinecap="round"
                             strokeLinejoin="round"
+                            strokeDasharray={row.strokeDasharray ?? undefined}
                           />
                         ) : null}
 
@@ -572,6 +585,7 @@ function LineChart({
                             strokeWidth={strokeWidth}
                             strokeLinecap="round"
                             strokeLinejoin="round"
+                            strokeDasharray={row.strokeDasharray ?? undefined}
                           />
                         ) : null}
 
@@ -599,6 +613,19 @@ function LineChart({
                             </G>
                           );
                         })}
+
+                        {latestPoint && row.collisionBadgeText ? (
+                          <SeriesIdentitySvgBadge
+                            x={latestPoint.x}
+                            y={latestPoint.y}
+                            color={row.color}
+                            label={row.collisionBadgeText}
+                            minX={PAD_L + 4}
+                            maxX={chartWidth - PAD_R - 4}
+                            minY={PAD_T + 4}
+                            maxY={CHART_HEIGHT - PAD_B - 4}
+                          />
+                        ) : null}
                       </G>
                     );
                   })}
@@ -636,12 +663,24 @@ function LineChart({
               })}`}
               accentColor={focusedSeries.color}
               leading={
-                <View
-                  style={[
-                    styles.inspectorDot,
-                    { backgroundColor: focusedSeries.color },
-                  ]}
-                />
+                <View style={styles.identityLead}>
+                  <Svg style={styles.identitySwatch} width={22} height={10}>
+                    <Line
+                      x1={2}
+                      y1={5}
+                      x2={20}
+                      y2={5}
+                      stroke={focusedSeries.color}
+                      strokeWidth={3}
+                      strokeLinecap="round"
+                      strokeDasharray={focusedSeries.strokeDasharray ?? undefined}
+                    />
+                  </Svg>
+                  <SeriesIdentityBadge
+                    label={focusedSeries.collisionBadgeText}
+                    color={focusedSeries.color}
+                  />
+                </View>
               }
               compact
             >
@@ -671,10 +710,27 @@ function LineChart({
                       },
                     ]}
                   >
-                    <View style={[styles.legendDot, { backgroundColor: row.color }]} />
-                    <Text style={styles.legendName} numberOfLines={1}>
-                      {row.name}
-                    </Text>
+                    <Svg style={styles.legendSwatch} width={22} height={10}>
+                      <Line
+                        x1={2}
+                        y1={5}
+                        x2={20}
+                        y2={5}
+                        stroke={row.color}
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                        strokeDasharray={row.strokeDasharray ?? undefined}
+                      />
+                    </Svg>
+                    <View style={styles.legendLabelGroup}>
+                      <Text style={styles.legendName} numberOfLines={1}>
+                        {row.name}
+                      </Text>
+                      <SeriesIdentityBadge
+                        label={row.collisionBadgeText}
+                        color={row.color}
+                      />
+                    </View>
                     <Text style={[styles.legendValue, { color: row.color }]}>
                       {formatMetricValue(entry?.value ?? 0, metric)}
                     </Text>
@@ -752,10 +808,10 @@ const styles = StyleSheet.create({
     height: INNER_H,
   },
 
-  inspectorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
+  identityLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 
   legendGrid: {
@@ -776,17 +832,28 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
 
-  legendDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 999,
+  legendSwatch: {
+    width: 22,
+    height: 10,
+  },
+
+  identitySwatch: {
+    width: 22,
+    height: 10,
+  },
+
+  legendLabelGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 
   legendName: {
-    flex: 1,
     color: "#E5E7EB",
     fontSize: 11,
     fontWeight: "800",
+    flexShrink: 1,
   },
 
   legendValue: {

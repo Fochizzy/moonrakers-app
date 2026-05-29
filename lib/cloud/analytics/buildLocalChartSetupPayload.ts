@@ -1,5 +1,9 @@
 import { resolveChartCatalogEntry } from "@/components/charts/chartCatalog";
 import type { ChartSetupPayload } from "@/lib/cloud/analytics/types";
+import {
+  getVisibleEloMetricTabs,
+  normalizeVisibleEloMetricTab,
+} from "@/utils/elo/visibleMetricTabs";
 import { getMetricOrFallback } from "@/utils/metricMap";
 import {
   getSupportedMetricKeysForChart,
@@ -47,13 +51,12 @@ const LOCAL_LINE_MODE_OPTIONS: SetupOption[] = [
   { key: "average", label: "Average" },
 ];
 
-const LOCAL_ELO_VIEW_OPTIONS: SetupOption[] = [
-  { key: "Leaderboard", label: "Leaderboard" },
-  { key: "Momentum", label: "Momentum" },
-  { key: "Skills", label: "Skills" },
-  { key: "Context", label: "Context" },
-  { key: "Projection", label: "Projection" },
-];
+const LOCAL_ELO_VIEW_OPTIONS: SetupOption[] = getVisibleEloMetricTabs().map(
+  (tab) => ({
+    key: tab,
+    label: tab,
+  }),
+);
 
 function normalizeId(value: unknown) {
   return String(value ?? "").trim();
@@ -160,8 +163,9 @@ function resolveEloTabDefault(
 ) {
   if (!options.length) return null;
 
-  const normalized = normalizeId(routeEloTab).toLowerCase();
-  const matched = options.find((option) => option.key.toLowerCase() === normalized);
+  const matched = options.find(
+    (option) => option.key === normalizeVisibleEloMetricTab(routeEloTab),
+  );
   return matched ? matched.key : options[0]?.key ?? null;
 }
 

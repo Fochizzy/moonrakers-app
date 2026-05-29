@@ -13,8 +13,11 @@ import Svg, {
 } from "react-native-svg";
 
 import ChartFocusCard from "./ChartFocusCard";
+import SeriesIdentityBadge from "./SeriesIdentityBadge";
+import SeriesIdentitySvgBadge from "./SeriesIdentitySvgBadge";
 import ChartStage from "./ChartStage";
 import Text from "@/components/ui/Text";
+import { buildLineSeriesIdentities } from "./lineSeriesIdentity";
 import {
   CHART_COLORS,
   getChartStagePreset,
@@ -94,24 +97,40 @@ export default function BumpChart({
       }),
     [data, statKey, visiblePlayers]
   );
+  const series = useMemo(
+    () =>
+      buildLineSeriesIdentities(
+        model.series.map((row) => ({
+          ...row,
+          id: row.playerId,
+          name: row.name,
+        }))
+      ),
+    [model.series]
+  );
 
-  const hasData = model.series.length >= 2 && model.labels.length > 0;
+  const hasData = series.length >= 2 && model.labels.length > 0;
   const chartWidth = Math.max(520, Math.max(1, model.labels.length - 1) * 92 + 120);
   const innerWidth = chartWidth - 88;
   const innerHeight = Math.max(160, model.maxRank * 32);
   const rankRange = Math.max(1, model.maxRank - 1);
-  const leader = model.leader;
-  const biggestClimber = model.biggestClimber;
+  const leader =
+    series.find((entry) => entry.playerId === model.leader?.playerId) ??
+    series[0] ??
+    null;
+  const biggestClimber =
+    series.find((entry) => entry.playerId === model.biggestClimber?.playerId) ??
+    null;
   const [focusedPlayerIdState, setFocusedPlayerIdState] = useState<string | null>(null);
   const focusedSeries =
-    model.series.find((series) => series.playerId === focusedPlayerIdState) ??
+    series.find((entry) => entry.playerId === focusedPlayerIdState) ??
     leader ??
-    model.series[0] ??
+    series[0] ??
     null;
   const stagePreset = getChartStagePreset("comparison");
   const beamColor = focusedSeries?.color ?? CHART_COLORS.blue;
   const latestLabel = model.labels[model.labels.length - 1] ?? "Latest";
-  const defsKey = sanitizeId(`${metric.key}-${model.labels.length}-${model.series.length}`);
+  const defsKey = sanitizeId(`${metric.key}-${model.labels.length}-${series.length}`);
   const backgroundId = `bump-bg-${defsKey}`;
   const beamId = `bump-beam-${defsKey}`;
   const latestX =
@@ -244,7 +263,7 @@ export default function BumpChart({
               );
             })}
 
-            {model.series.map((series, seriesIndex) => {
+            {series.map((series, seriesIndex) => {
               const points = series.ranks.map((rank, index) => ({
                 x:
                   56 +
@@ -255,7 +274,7 @@ export default function BumpChart({
               }));
               const path = buildPath(points);
               const isFocused = series.playerId === focusedSeries?.playerId;
-              const isLeader = series.playerId === leader?.playerId;
+              const latestPoint = points[points.length - 1] ?? null;
 
               return (
                 <G key={series.playerId}>
@@ -267,6 +286,7 @@ export default function BumpChart({
                     fill="none"
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    strokeDasharray={series.strokeDasharray ?? undefined}
                   />
                   <Path
                     d={path}
@@ -282,6 +302,7 @@ export default function BumpChart({
                     fill="none"
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    strokeDasharray={series.strokeDasharray ?? undefined}
                   />
                   {points.map((point, index) => {
                     const isLatest = index === points.length - 1;
@@ -307,6 +328,18 @@ export default function BumpChart({
                       </G>
                     );
                   })}
+                  {latestPoint && series.collisionBadgeText ? (
+                    <SeriesIdentitySvgBadge
+                      x={latestPoint.x}
+                      y={latestPoint.y}
+                      color={series.color}
+                      label={series.collisionBadgeText}
+                      minX={22}
+                      maxX={chartWidth - 22}
+                      minY={24}
+                      maxY={24 + innerHeight}
+                    />
+                  ) : null}
                 </G>
               );
             })}
@@ -331,14 +364,31 @@ export default function BumpChart({
           tone="comparison"
           accentColor={focusedSeries.color}
           leading={
-            <View style={[styles.focusDot, { backgroundColor: focusedSeries.color }]} />
+            <View style={styles.identityLead}>
+              <Svg style={styles.identitySwatch} width={22} height={10}>
+                <Line
+                  x1={2}
+                  y1={5}
+                  x2={20}
+                  y2={5}
+                  stroke={focusedSeries.color}
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeDasharray={focusedSeries.strokeDasharray ?? undefined}
+                />
+              </Svg>
+              <SeriesIdentityBadge
+                label={focusedSeries.collisionBadgeText}
+                color={focusedSeries.color}
+              />
+            </View>
           }
           compact
         />
       ) : null}
 
       <View style={styles.legendGrid}>
-        {model.series
+        {series
           .slice()
           .sort((left, right) => left.latestRank - right.latestRank)
           .map((series) => (
@@ -365,8 +415,25 @@ export default function BumpChart({
               ]}
             >
               <View style={styles.legendHeader}>
-                <View style={[styles.legendDot, { backgroundColor: series.color }]} />
-                <Text style={styles.legendName}>{series.name}</Text>
+                <Svg style={styles.legendSwatch} width={22} height={10}>
+                  <Line
+                    x1={2}
+                    y1={5}
+                    x2={20}
+                    y2={5}
+                    stroke={series.color}
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                    strokeDasharray={series.strokeDasharray ?? undefined}
+                  />
+                </Svg>
+                <View style={styles.legendLabelGroup}>
+                  <Text style={styles.legendName}>{series.name}</Text>
+                  <SeriesIdentityBadge
+                    label={series.collisionBadgeText}
+                    color={series.color}
+                  />
+                </View>
               </View>
               <Text style={[styles.legendMetric, { color: series.color }]}>
                 #{series.latestRank}
@@ -429,21 +496,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
+  identityLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  focusDot: {
-    width: 10,
+  identitySwatch: {
+    width: 22,
     height: 10,
-    borderRadius: 999,
+  },
+  legendSwatch: {
+    width: 22,
+    height: 10,
+  },
+  legendLabelGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   legendName: {
     color: CHART_COLORS.textStrong,
     fontSize: 12,
     fontWeight: "800",
-    flex: 1,
+    flexShrink: 1,
   },
   legendMetric: {
     color: CHART_COLORS.textStrong,

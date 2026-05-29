@@ -236,6 +236,171 @@ function normalizePlayerRow(row: any, player: any, playerId: string) {
   };
 }
 
+export const PLAYER_FIELD_SELF_ROW_ID = "__player_field_self__";
+export const PLAYER_FIELD_OPPONENTS_ROW_ID = "__player_field_opponents__";
+
+export function buildPlayerVsOpponentAggregateRows({
+  playerId,
+  playerMap,
+  games,
+}: {
+  playerId: string;
+  playerMap: Map<string, any>;
+  games: any[];
+}) {
+  const normalizedPlayerId = String(playerId ?? "").trim();
+  if (!normalizedPlayerId) return null;
+
+  const player = playerMap.get(normalizedPlayerId);
+  if (!player) return null;
+
+  const sharedGames = (Array.isArray(games) ? games : []).filter((game) =>
+    Boolean(buildOverallPlayerRow(normalizedPlayerId, playerMap, [game]))
+  );
+  if (!sharedGames.length) return null;
+
+  const selfOverall = buildOverallPlayerRow(normalizedPlayerId, playerMap, sharedGames);
+  if (!selfOverall) return null;
+
+  const selfRowBase = normalizePlayerRow(selfOverall, player, normalizedPlayerId);
+  const opponentIds = new Set<string>();
+
+  for (const game of sharedGames) {
+    for (const entry of getGamePlayerEntries(game)) {
+      const entryId = String(entry?.playerId ?? entry?.id ?? "").trim();
+      if (!entryId || entryId === normalizedPlayerId || !playerMap.has(entryId)) continue;
+      opponentIds.add(entryId);
+    }
+  }
+
+  const opponentRows = [...opponentIds]
+    .map((opponentId) => {
+      const overall = buildOverallPlayerRow(opponentId, playerMap, sharedGames);
+      if (!overall || n(overall.gamesPlayed) <= 0) return null;
+      return normalizePlayerRow(overall, playerMap.get(opponentId), opponentId);
+    })
+    .filter(Boolean);
+
+  if (!opponentRows.length) return null;
+
+  const aggregateGames = opponentRows.reduce((sum, row: any) => sum + n(row.games), 0);
+  const aggregateObjectiveGames = opponentRows.reduce(
+    (sum, row: any) => sum + n(row.objectiveTrackedGames),
+    0
+  );
+  const wins = opponentRows.reduce((sum, row: any) => sum + n(row.wins), 0);
+  const prestige = opponentRows.reduce((sum, row: any) => sum + n(row.prestige), 0);
+  const directPrestige = opponentRows.reduce((sum, row: any) => sum + n(row.directPrestige), 0);
+  const assistIn = opponentRows.reduce(
+    (sum, row: any) => sum + n(row.assistPrestigeReceived),
+    0
+  );
+  const assistOut = opponentRows.reduce(
+    (sum, row: any) => sum + n(row.assistPrestigeSent),
+    0
+  );
+  const objectivePrestige = opponentRows.reduce(
+    (sum, row: any) => sum + n(row.objectivePrestige),
+    0
+  );
+  const score = opponentRows.reduce((sum, row: any) => sum + n(row.score), 0);
+  const assists = opponentRows.reduce((sum, row: any) => sum + n(row.assists), 0);
+  const failures = opponentRows.reduce((sum, row: any) => sum + n(row.failures), 0);
+  const contracts = opponentRows.reduce((sum, row: any) => sum + n(row.contracts), 0);
+  const closeGames = opponentRows.reduce((sum, row: any) => sum + n(row.closeGames), 0);
+
+  const weightedByGames = (key: string) => {
+    if (aggregateGames <= 0) return 0;
+    const total = opponentRows.reduce(
+      (sum, row: any) => sum + n(row[key]) * Math.max(1, n(row.games)),
+      0
+    );
+    return total / aggregateGames;
+  };
+
+  const weightedByObjectiveGames = (key: string) => {
+    if (aggregateObjectiveGames <= 0) return 0;
+    const total = opponentRows.reduce(
+      (sum, row: any) => sum + n(row[key]) * Math.max(1, n(row.objectiveTrackedGames)),
+      0
+    );
+    return total / aggregateObjectiveGames;
+  };
+
+  const avgPrestigePerGame = aggregateGames > 0 ? prestige / aggregateGames : 0;
+  const avgScorePerGame = aggregateGames > 0 ? score / aggregateGames : 0;
+  const efficiency = contracts + assists > 0 ? (directPrestige + assistIn) / (contracts + assists) : 0;
+  const assistEfficiency = assists > 0 ? assistIn / assists : 0;
+  const directEfficiency = contracts > 0 ? directPrestige / contracts : 0;
+  const winRate = aggregateGames > 0 ? (wins / aggregateGames) * 100 : 0;
+  const objectiveShareOfPrestige = prestige > 0 ? objectivePrestige / prestige : 0;
+  const avgObjectivesPerTrackedGame =
+    aggregateObjectiveGames > 0 ? objectivePrestige / aggregateObjectiveGames : 0;
+
+  const opponentRow = {
+    id: PLAYER_FIELD_OPPONENTS_ROW_ID,
+    label: "Opponents (aggregate)",
+    subtitle: `${sharedGames.length} shared games • ${opponentRows.length} opponents`,
+    members: opponentRows.length,
+    color: "#F59E0B",
+    palette: buildPalette("#F59E0B"),
+    games: aggregateGames,
+    wins,
+    winRate,
+    prestige,
+    totalPrestige: prestige,
+    directPrestige,
+    assistPrestigeReceived: assistIn,
+    assistPrestigeSent: assistOut,
+    assists,
+    objectivePrestige,
+    objectiveTrackedGames: aggregateObjectiveGames,
+    score,
+    failures,
+    contracts,
+    objectiveWins: 0,
+    closeGames,
+    closeGameRate: weightedByGames("closeGameRate"),
+    avgPrestigePerGame,
+    avgScorePerGame,
+    allContractsEfficiency: efficiency,
+    assistEfficiency,
+    directEfficiency,
+    efficiency,
+    assistedEfficiency: assistEfficiency,
+    efficiencyTier: getEfficiencyTier(efficiency),
+    assistEfficiencyTier: getEfficiencyTier(assistEfficiency),
+    directEfficiencyTier: getEfficiencyTier(directEfficiency),
+    contractFailureRatio: contracts > 0 ? contracts / Math.max(1, failures) : 0,
+    avgPrestigeMargin: weightedByGames("avgPrestigeMargin"),
+    avgScoreMargin: weightedByGames("avgScoreMargin"),
+    netAssistBenefit: assistIn - assistOut,
+    synergyIndex: weightedByGames("synergyIndex"),
+    avgStartOrder: weightedByGames("avgStartOrder"),
+    turnOrderWinCorrelation: weightedByGames("turnOrderWinCorrelation"),
+    assistWinCorrelation: weightedByGames("assistWinCorrelation"),
+    dataConfidenceScore: Math.min(1, aggregateGames / 10),
+    dataConfidenceLabel:
+      aggregateGames >= 8 ? "strong" : aggregateGames >= 4 ? "medium" : "low",
+    avgObjectivesPerTrackedGame,
+    objectiveWinRateTracked: weightedByObjectiveGames("objectiveWinRateTracked"),
+    objectiveShareOfPrestige,
+  };
+
+  const selfRow = {
+    ...selfRowBase,
+    id: PLAYER_FIELD_SELF_ROW_ID,
+    subtitle: `${sharedGames.length} shared games`,
+  };
+
+  return {
+    rows: [selfRow, opponentRow],
+    sharedGames: sharedGames.length,
+    opponentCount: opponentRows.length,
+    playerLabel: selfRowBase.label,
+  };
+}
+
 export function buildPlayerRows(
   selectedPlayerIds: string[],
   playerMap: Map<string, any>,

@@ -28,20 +28,14 @@ assert.match(
 
 assert.match(
   chartRouteSource,
-  /players:\s*rpcFallbackPlayers\.length\s*\?\s*rpcFallbackPlayers\s*:\s*cloudFallbackPlayers[\s\S]*games:\s*rpcFallbackGames\.length\s*\?\s*rpcFallbackGames\s*:\s*cloudFallbackGames/,
-  "expected the chart detail route to prefer Supabase source history from the chart RPC before falling back to the shared cloud snapshot",
+  /const hasUsableRpcFallbackHistory =\s*rpcFallbackGames\.length > 0 && rpcFallbackPlayers\.length > 0;[\s\S]*const fallbackPlayers =\s*hasUsableRpcFallbackHistory\s*\?\s*rpcFallbackPlayers\s*:\s*cloudFallbackPlayers\.length\s*\?\s*cloudFallbackPlayers\s*:\s*storePlayers;[\s\S]*const fallbackGames =\s*hasUsableRpcFallbackHistory\s*\?\s*rpcFallbackGames\s*:\s*cloudFallbackGames\.length\s*\?\s*cloudFallbackGames\s*:\s*storeGames;/,
+  "expected the chart detail route to require complete RPC history before preferring it ahead of the shared cloud snapshot and hydrated device store",
 );
 
 assert.match(
   chartRouteSource,
-  /Supabase game history/i,
-  "expected the chart detail route to explain when it is rendering cloud-backed fallback history",
-);
-
-assert.doesNotMatch(
-  chartRouteSource,
-  /saved history data|games saved on this device|Device fallback/i,
-  "expected the chart detail route to stop advertising device-local analytics fallback copy",
+  /if \(shouldUseLocalChartFallback\) \{[\s\S]*const localChart = renderLocalChartFallback\(\);[\s\S]*<ChartSurface>[\s\S]*\{localChart\}/,
+  "expected the chart detail route to keep a dedicated local fallback rendering branch even after the extra recovery chrome is removed",
 );
 
 console.log("chart-cloud-fallback.test.cjs passed");

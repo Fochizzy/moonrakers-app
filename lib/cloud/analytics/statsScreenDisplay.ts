@@ -75,6 +75,56 @@ function joinParts(parts: Array<string | null | undefined>): string | undefined 
   return compact.length > 0 ? compact.join(" | ") : undefined;
 }
 
+function joinLines(parts: Array<string | null | undefined>): string | undefined {
+  const compact = parts.filter((part): part is string => Boolean(part && part.trim()));
+  return compact.length > 0 ? compact.join("\n") : undefined;
+}
+
+function normalizeCorrelationLine(value: string, punctuate = false): string {
+  const cleaned = value
+    .replace(/\s+/g, " ")
+    .replace(/\s*(?:--|—)\s*/g, " — ")
+    .trim();
+
+  if (!cleaned) {
+    return "";
+  }
+
+  const withoutTrailingPunctuation = cleaned.replace(/[.!?]+$/u, "");
+  if (!punctuate) {
+    return withoutTrailingPunctuation;
+  }
+
+  return `${withoutTrailingPunctuation.charAt(0).toUpperCase()}${withoutTrailingPunctuation.slice(1)}.`;
+}
+
+function formatCorrelationDetail({
+  delta,
+  description,
+  strength,
+}: {
+  delta: number | null;
+  description: string;
+  strength: string;
+}): string | undefined {
+  const normalizedDescription = description.trim();
+  const descriptionLines =
+    normalizedDescription.length > 0
+      ? normalizedDescription
+          .split(/\s*(?:--|—)\s*/u)
+          .map((part, index, parts) =>
+            normalizeCorrelationLine(part, index === parts.length - 1),
+          )
+          .filter(Boolean)
+      : [];
+
+  return joinLines([
+    delta !== null ? `Swing ${formatSignedNumber(delta)}` : null,
+    ...descriptionLines,
+    descriptionLines.length === 0 && strength ? `${strength} correlation` : null,
+  ]);
+}
+
 function buildPlayerCountBuckets(value: unknown): PlayerCountBucket[] {
   const buckets = new Map<
     PlayerCountBucket["key"],
@@ -189,16 +239,19 @@ export function normalizeStatsCorrelationRows(value: unknown): StatsDisplayRow[]
       toStringValue(entry.label) ||
       toStringValue(entry.title) ||
       `Correlation ${index + 1}`;
+    const explicitTextValue = toStringValue(entry.value);
     const explicitValue = toNumberValue(entry.value);
-    const whenWin = toNumberValue(entry.whenWin);
-    const whenLose = toNumberValue(entry.whenLose);
-    const delta = toNumberValue(entry.delta);
+    const whenWin = toNumberValue(entry.whenWin ?? entry.when_win);
+    const whenLose = toNumberValue(entry.whenLose ?? entry.when_lose);
+    const delta = toNumberValue(entry.delta ?? entry.delta_value);
     const description = toStringValue(entry.description);
     const strength = toStringValue(entry.strength);
 
     let displayValue = "-";
     if (explicitValue !== null) {
       displayValue = formatNumber(explicitValue);
+    } else if (explicitTextValue) {
+      displayValue = explicitTextValue;
     } else if (whenWin !== null || whenLose !== null) {
       const winLabel = whenWin !== null ? formatNumber(whenWin) : "-";
       const loseLabel = whenLose !== null ? formatNumber(whenLose) : "-";
@@ -207,13 +260,11 @@ export function normalizeStatsCorrelationRows(value: unknown): StatsDisplayRow[]
       displayValue = `Delta ${formatSignedNumber(delta)}`;
     }
 
-    const detail = joinParts([
-      delta !== null && (whenWin !== null || whenLose !== null)
-        ? `Delta ${formatSignedNumber(delta)}`
-        : null,
-      description || null,
-      !description && strength ? `${strength} correlation` : null,
-    ]);
+    const detail = formatCorrelationDetail({
+      delta: delta !== null && (whenWin !== null || whenLose !== null) ? delta : null,
+      description,
+      strength,
+    });
 
     return {
       key,
@@ -228,6 +279,7 @@ export function normalizeStatsGameRows(value: unknown): StatsDisplayRow[] {
   return toArray(value).map((entry, index) => {
     const key =
       toStringValue(entry.gameId) ||
+      toStringValue(entry.game_id) ||
       toStringValue(entry.id) ||
       toStringValue(entry.key) ||
       `game-${index + 1}`;
@@ -235,23 +287,40 @@ export function normalizeStatsGameRows(value: unknown): StatsDisplayRow[] {
       toStringValue(entry.label) ||
       toStringValue(entry.title) ||
       toStringValue(entry.groupName) ||
+      toStringValue(entry.group_name) ||
       `Game ${index + 1}`;
-    const isWinner = entry.isWinner === true;
-    const prestige = toNumberValue(entry.prestige);
-    const playerCount = toNumberValue(entry.playerCount);
-    const winnerName = toStringValue(entry.winnerName);
-    const prestigeSpread = toNumberValue(entry.prestigeSpread);
+    const explicitValue =
+      toStringValue(entry.value) ||
+      toStringValue(entry.summary);
+    const explicitDetail =
+      toStringValue(entry.detail) ||
+      toStringValue(entry.description);
+    const isWinner = entry.isWinner === true || entry.is_winner === true;
+    const prestige = toNumberValue(
+      entry.prestige ??
+        entry.totalPrestige ??
+        entry.total_prestige,
+    );
+    const playerCount = toNumberValue(entry.playerCount ?? entry.player_count);
+    const winnerName =
+      toStringValue(entry.winnerName) ||
+      toStringValue(entry.winner_name);
+    const prestigeSpread = toNumberValue(
+      entry.prestigeSpread ?? entry.prestige_spread,
+    );
     const contracts = toNumberValue(entry.contracts);
     const assists = toNumberValue(entry.assists);
     const failures = toNumberValue(entry.failures);
 
-    const value = joinParts([
-      isWinner ? "Win" : "Loss",
-      prestige !== null ? `${formatNumber(prestige)} prestige` : null,
-      playerCount !== null ? `${formatNumber(playerCount)}p` : null,
-    ]) ?? "Tracked game";
+    const displayValue =
+      explicitValue ||
+      (joinParts([
+        isWinner ? "Win" : "Loss",
+        prestige !== null ? `${formatNumber(prestige)} prestige` : null,
+        playerCount !== null ? `${formatNumber(playerCount)}p` : null,
+      ]) ?? "Tracked game");
 
-    const detail = joinParts([
+    const detail = explicitDetail || joinParts([
       !isWinner && winnerName ? `Winner ${winnerName}` : null,
       prestigeSpread !== null ? `Spread ${formatNumber(prestigeSpread)}` : null,
       contracts !== null
@@ -268,7 +337,7 @@ export function normalizeStatsGameRows(value: unknown): StatsDisplayRow[] {
     return {
       key,
       label,
-      value,
+      value: displayValue,
       ...(detail ? { detail } : {}),
     };
   });

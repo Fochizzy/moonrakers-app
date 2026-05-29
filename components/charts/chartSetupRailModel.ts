@@ -14,7 +14,7 @@ export function buildScopeStageSummary(input: {
   const compare = input.comparePlayerLabel?.trim() ?? "";
   const scopedCount = Math.max(0, input.scopedCount);
 
-  if (!focus) return null;
+  if (!focus) return scopedCount > 0 ? `${scopedCount} players` : null;
   if (compare) {
     return scopedCount > 0
       ? `${focus} vs ${compare} - ${scopedCount} players`

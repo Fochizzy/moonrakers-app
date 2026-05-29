@@ -3,8 +3,10 @@ import { StyleSheet, View } from "react-native";
 
 import ChartFocusCard from "./ChartFocusCard";
 import ChartStage from "./ChartStage";
+import SeriesIdentityBadge from "./SeriesIdentityBadge";
 import Text from "@/components/ui/Text";
 import { CHART_COLORS } from "./chartVisualSystem";
+import { buildLineSeriesIdentities } from "./lineSeriesIdentity";
 import { getMetricOrFallback } from "@/utils/metricMap";
 import { buildConsistencyBandModel } from "./consistencyBandModel";
 
@@ -71,9 +73,21 @@ export default function ConsistencyBandChart({
     [data, statKey, visiblePlayers]
   );
 
-  const orderedSeries = useMemo(
-    () => [...model.series].sort((left, right) => right.median - left.median),
+  const identifiedSeries = useMemo(
+    () =>
+      buildLineSeriesIdentities(
+        model.series.map((row) => ({
+          ...row,
+          id: row.playerId,
+          name: row.name,
+        }))
+      ),
     [model.series]
+  );
+
+  const orderedSeries = useMemo(
+    () => [...identifiedSeries].sort((left, right) => right.median - left.median),
+    [identifiedSeries]
   );
 
   const scaleRange = Math.max(1, model.maxValue - model.minValue);
@@ -156,6 +170,10 @@ export default function ConsistencyBandChart({
                   <View style={styles.nameRow}>
                     <View style={[styles.dot, { backgroundColor: series.color }]} />
                     <Text style={styles.playerName}>{series.name}</Text>
+                    <SeriesIdentityBadge
+                      label={series.collisionBadgeText}
+                      color={series.color}
+                    />
                   </View>
                   <Text style={styles.playerMeta}>
                     Median {round(series.median, 1)} | sigma {round(series.deviation, 2)}

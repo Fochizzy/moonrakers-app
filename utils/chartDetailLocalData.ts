@@ -28,12 +28,18 @@ export type LocalChartDetailState = {
   chartPlayers: StorePlayer[];
   selectedPlayer: StorePlayer | null;
   comparePlayer: StorePlayer | null;
+  comparePlayers: StorePlayer[];
   scopedPlayerIds: string[];
   metricKey: SimpleMetricKey;
   snapshots: SnapshotPoint[];
   stackedRows: StackedRow[];
   relationships: Relationships;
   radarPrimary: RadarStats | null;
+  radarComparisons: Array<{
+    player: StorePlayer;
+    stats: RadarStats;
+  }>;
+  radarComparison: RadarStats | null;
   sparklineValues: number[];
 };
 
@@ -43,9 +49,12 @@ type BuildLocalChartDetailStateArgs = {
   players?: StorePlayer[];
   routePlayerId?: string | null;
   routeCompareId?: string | null;
+  routeCompareIds?: string[] | null;
   routeSelectedGameId?: string | null;
   routeIds?: string[] | null;
   routeMetric?: string | null;
+  authProfileId?: string | null;
+  authSessionUserId?: string | null;
 };
 
 function normalizeId(value: unknown) {
@@ -428,26 +437,41 @@ function filterRelationshipsToScope(
   return filtered;
 }
 
-function pickComparePlayer(
+function pickComparePlayers(
   players: readonly StorePlayer[],
   selectedPlayerId: string | null,
-  routeCompareId?: string | null,
-): StorePlayer | null {
-  const explicitCompareId = normalizeId(routeCompareId);
-  if (explicitCompareId) {
-    const explicit = players.find(
-      (player) => normalizeId(player?.id) === explicitCompareId,
-    );
-    if (explicit) {
-      return explicit;
+  routeCompareIds?: readonly string[] | null,
+  limit = 1,
+  allowImplicitFallback = true,
+): StorePlayer[] {
+  const explicitCompareIds = (routeCompareIds ?? [])
+    .map((playerId) => normalizeId(playerId))
+    .filter(Boolean)
+    .filter((playerId, index, values) => values.indexOf(playerId) === index)
+    .filter((playerId) => playerId !== normalizeId(selectedPlayerId));
+
+  if (explicitCompareIds.length > 0) {
+    const explicitPlayers = explicitCompareIds
+      .map((compareId) =>
+        players.find((player) => normalizeId(player?.id) === compareId) ?? null,
+      )
+      .filter((player): player is StorePlayer => player !== null);
+
+    if (explicitPlayers.length > 0) {
+      return explicitPlayers.slice(0, Math.max(1, limit));
     }
   }
 
+  if (!allowImplicitFallback) {
+    return [];
+  }
+
   const preferredSelectedId = normalizeId(selectedPlayerId);
-  return (
+  const fallback =
     players.find((player) => normalizeId(player?.id) !== preferredSelectedId) ??
-    null
-  );
+    null;
+
+  return fallback ? [fallback] : [];
 }
 
 function buildSelectedGameSnapshots(
@@ -494,28 +518,64 @@ export function buildLocalChartDetailState(
         : selectedGame?.players?.length
           ? selectedGame.players
           : availablePlayers;
+  const scopedGames = selectedGame ? [selectedGame] : unifiedGames;
+  const explicitRoutePlayerId = canonicalizeChartPlayerId(
+    args.routePlayerId ?? null,
+    playerIdAliases,
+  );
   const resolvedSelectedPlayerId = resolvePreferredChartPlayerId({
     availablePlayers: chartPlayers,
-    routePlayerId: canonicalizeChartPlayerId(args.routePlayerId ?? null, playerIdAliases),
-    authProfileId: null,
-    authSessionUserId: null,
+    routePlayerId: explicitRoutePlayerId,
+    authProfileId: canonicalizeChartPlayerId(args.authProfileId ?? null, playerIdAliases),
+    authSessionUserId: canonicalizeChartPlayerId(
+      args.authSessionUserId ?? null,
+      playerIdAliases,
+    ),
   });
+  const playersWithTrackedGames = new Set(
+    scopedGames.flatMap((game) => Object.keys(game?.totals ?? {}).map(normalizeId)),
+  );
+  const fallbackRadarPlayerId =
+    chartKey === "radar" && !explicitRoutePlayerId
+      ? normalizeId(
+          chartPlayers.find((player) =>
+            playersWithTrackedGames.has(normalizeId(player?.id)),
+          )?.id,
+        ) || null
+      : null;
+  const resolvedPlayerIdHasTrackedGames =
+    resolvedSelectedPlayerId != null &&
+    playersWithTrackedGames.has(normalizeId(resolvedSelectedPlayerId));
   const selectedPlayerId =
-    resolvedSelectedPlayerId ||
+    (chartKey === "radar" &&
+    fallbackRadarPlayerId &&
+    !resolvedPlayerIdHasTrackedGames
+      ? fallbackRadarPlayerId
+      : resolvedSelectedPlayerId) ||
     normalizeId(chartPlayers[0]?.id) ||
     null;
   const selectedPlayer =
     chartPlayers.find((player) => normalizeId(player?.id) === normalizeId(selectedPlayerId)) ??
     null;
-  const comparePlayer = pickComparePlayer(
+  const routeCompareIds = canonicalizeChartPlayerIds(
+    args.routeCompareIds?.length
+      ? args.routeCompareIds
+      : args.routeCompareId
+        ? [args.routeCompareId]
+        : [],
+    playerIdAliases,
+  );
+  const comparePlayers = pickComparePlayers(
     chartPlayers,
     selectedPlayerId,
-    canonicalizeChartPlayerId(args.routeCompareId ?? null, playerIdAliases),
+    routeCompareIds,
+    chartKey === "radar" ? 4 : 1,
+    chartKey !== "radar",
   );
+  const comparePlayer = comparePlayers[0] ?? null;
   const metricKey =
     normalizeMetricForChart(chartKey, args.routeMetric ?? null) ??
     defaultMetricForChart(chartKey);
-  const scopedGames = selectedGame ? [selectedGame] : unifiedGames;
   const snapshots = selectedGame
     ? buildSelectedGameSnapshots(selectedGame, chartPlayers)
     : buildUnifiedSnapshots(scopedGames, chartPlayers as StorePlayer[]);
@@ -548,6 +608,15 @@ export function buildLocalChartDetailState(
   const radarPrimary = selectedPlayer
     ? buildRadarStatsForPlayer(selectedPlayer.id, scopedGames)
     : null;
+  const radarComparisons = comparePlayers.map((player) => ({
+    player,
+    stats: buildRadarStatsForPlayer(player.id, scopedGames),
+  }));
+  const radarComparison = radarComparisons[0]?.stats ?? null;
+  const hasRadarData =
+    chartKey === "radar" &&
+    Boolean(selectedPlayer) &&
+    scopedGames.some((game) => Boolean(game?.totals?.[selectedPlayer.id]));
   const sparklineValues = selectedPlayer
     ? buildSparkSeries(
         snapshots,
@@ -559,7 +628,8 @@ export function buildLocalChartDetailState(
   const hasData =
     scopedGames.length > 0 &&
     filteredChartPlayers.length > 0 &&
-    (snapshots.length > 0 ||
+    (hasRadarData ||
+      snapshots.length > 0 ||
       stackedRows.length > 0 ||
       sparklineValues.length > 0 ||
       Object.keys(filteredRelationships).length > 0);
@@ -573,6 +643,7 @@ export function buildLocalChartDetailState(
     chartPlayers: filteredChartPlayers,
     selectedPlayer,
     comparePlayer,
+    comparePlayers,
     scopedPlayerIds:
       relationshipScopeIds.length > 0
         ? relationshipScopeIds
@@ -582,6 +653,8 @@ export function buildLocalChartDetailState(
     stackedRows,
     relationships: filteredRelationships,
     radarPrimary,
+    radarComparisons,
+    radarComparison,
     sparklineValues,
   };
 }

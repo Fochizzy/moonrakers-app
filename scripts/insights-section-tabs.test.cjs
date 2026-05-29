@@ -26,8 +26,20 @@ assert.match(
 
 assert.match(
   screenSource,
-  /<AnalyticsControlRail[\s\S]*title="Insight Lenses"[\s\S]*tabVariant="stacked"/,
-  "expected the insights screen to render the insight lens controls as a stacked vertical button list"
+  /shortLabel: ["']Personal["'][\s\S]*shortLabel: ["']Macro["'][\s\S]*shortLabel: ["']Synergy["']/,
+  "expected the insights focus rail to use one-line short labels for Personal, Macro, and Synergy"
+);
+
+assert.match(
+  screenSource,
+  /<AnalyticsControlRail[\s\S]*title="Focus"[\s\S]*tabVariant="underline"/,
+  "expected the insights screen to render the insight controls as a lighter focus rail"
+);
+
+assert.match(
+  screenSource,
+  /search=\{[\s\S]*variant:\s*"rail"/,
+  "expected the insights focus rail to use the compact player search rail variant"
 );
 
 assert.doesNotMatch(

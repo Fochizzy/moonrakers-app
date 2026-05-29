@@ -1,8 +1,12 @@
-import React, { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import Svg, { Circle, Line, Rect, Text as SvgText } from "react-native-svg";
 
 import Text from "@/components/ui/Text";
+import {
+  buildEfficiencyFailureScatterLayout,
+  resolveEfficiencyFailureScatterLabelPlacement,
+} from "@/components/charts/efficiencyFailureScatterLayout";
 import { getChartMetricValue } from "@/utils/chartMetricValue";
 import { resolveStoredPlayerColor } from "@/utils/playerColor";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
@@ -23,10 +27,6 @@ type Props = {
   title?: string;
   subtitle?: string;
 };
-
-const W = 340;
-const H = 260;
-const PAD = 30;
 
 const COLORS = {
   card: "rgba(12,18,38,0.92)",
@@ -101,6 +101,10 @@ export default function EfficiencyFailureScatter({
   title = "Efficiency vs Failure",
   subtitle = "Average per-player positioning across unified snapshots.",
 }: Props) {
+  const { width: deviceWidth } = useWindowDimensions();
+  const [containerWidth, setContainerWidth] = useState(() =>
+    Math.max(240, Math.round(deviceWidth - 132))
+  );
   const visiblePlayers = useMemo(
     () => buildVisiblePlayers(data, players, scopedPlayerIds),
     [data, players, scopedPlayerIds]
@@ -131,6 +135,10 @@ export default function EfficiencyFailureScatter({
       }),
     [data, visiblePlayers, xMetric, yMetric]
   );
+  const chartMetrics = useMemo(
+    () => buildEfficiencyFailureScatterLayout(containerWidth),
+    [containerWidth]
+  );
 
   const maxX = Math.max(1, ...points.map((point) => point.x));
   const maxY = Math.max(1, ...points.map((point) => point.y));
@@ -142,11 +150,11 @@ export default function EfficiencyFailureScatter({
       right.x / Math.max(1, maxX) -
       (left.y / Math.max(1, maxY) - left.x / Math.max(1, maxX))
   )[0];
-  const chartW = W - PAD * 2;
-  const chartH = H - PAD * 2;
+  const chartW = chartMetrics.innerWidth;
+  const chartH = chartMetrics.innerHeight;
 
-  const xPos = (value: number) => PAD + (value / maxX) * chartW;
-  const yPos = (value: number) => PAD + chartH - (value / maxY) * chartH;
+  const xPos = (value: number) => chartMetrics.padLeft + (value / maxX) * chartW;
+  const yPos = (value: number) => chartMetrics.padTop + chartH - (value / maxY) * chartH;
 
   if (!points.length) {
     return (
@@ -166,74 +174,108 @@ export default function EfficiencyFailureScatter({
           <Text style={styles.chartTitle}>{title}</Text>
           <Text style={styles.chartSub}>{`${xMetric} vs ${yMetric}`}</Text>
         </View>
-        <Svg width={W} height={H}>
-          <Rect
-            x={0}
-            y={0}
-            width={W}
-            height={H}
-            rx={16}
-            fill={COLORS.cardAlt}
-            stroke={COLORS.border}
-          />
+        <View
+          style={styles.chartShell}
+          onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
+        >
+          <Svg width={chartMetrics.width} height={chartMetrics.height}>
+            <Rect
+              x={0}
+              y={0}
+              width={chartMetrics.width}
+              height={chartMetrics.height}
+              rx={16}
+              fill={COLORS.cardAlt}
+              stroke={COLORS.border}
+            />
 
-          <Line
-            x1={PAD}
-            y1={H - PAD}
-            x2={W - PAD}
-            y2={H - PAD}
-            stroke="rgba(255,255,255,0.18)"
-          />
-          <Line
-            x1={PAD}
-            y1={PAD}
-            x2={PAD}
-            y2={H - PAD}
-            stroke="rgba(255,255,255,0.18)"
-          />
+            <Line
+              x1={chartMetrics.padLeft}
+              y1={chartMetrics.height - chartMetrics.padBottom}
+              x2={chartMetrics.width - chartMetrics.padRight}
+              y2={chartMetrics.height - chartMetrics.padBottom}
+              stroke="rgba(255,255,255,0.18)"
+            />
+            <Line
+              x1={chartMetrics.padLeft}
+              y1={chartMetrics.padTop}
+              x2={chartMetrics.padLeft}
+              y2={chartMetrics.height - chartMetrics.padBottom}
+              stroke="rgba(255,255,255,0.18)"
+            />
 
-          <Line
-            x1={xPos(meanX)}
-            y1={PAD}
-            x2={xPos(meanX)}
-            y2={H - PAD}
-            stroke="rgba(255,255,255,0.10)"
-            strokeDasharray="4 4"
-          />
-          <Line
-            x1={PAD}
-            y1={yPos(meanY)}
-            x2={W - PAD}
-            y2={yPos(meanY)}
-            stroke="rgba(255,255,255,0.10)"
-            strokeDasharray="4 4"
-          />
+            <Line
+              x1={xPos(meanX)}
+              y1={chartMetrics.padTop}
+              x2={xPos(meanX)}
+              y2={chartMetrics.height - chartMetrics.padBottom}
+              stroke="rgba(255,255,255,0.10)"
+              strokeDasharray="4 4"
+            />
+            <Line
+              x1={chartMetrics.padLeft}
+              y1={yPos(meanY)}
+              x2={chartMetrics.width - chartMetrics.padRight}
+              y2={yPos(meanY)}
+              stroke="rgba(255,255,255,0.10)"
+              strokeDasharray="4 4"
+            />
 
-          <SvgText x={PAD} y={H - 8} fill={COLORS.sub} fontSize="10">
-            0
-          </SvgText>
-          <SvgText x={W - PAD} y={H - 8} fill={COLORS.sub} fontSize="10" textAnchor="end">
-            {compact(maxX)}
-          </SvgText>
-          <SvgText x={12} y={PAD + 4} fill={COLORS.sub} fontSize="10">
-            {compact(maxY)}
-          </SvgText>
+            <SvgText
+              x={chartMetrics.padLeft}
+              y={chartMetrics.height - 8}
+              fill={COLORS.sub}
+              fontSize="10"
+            >
+              0
+            </SvgText>
+            <SvgText
+              x={chartMetrics.width - chartMetrics.padRight}
+              y={chartMetrics.height - 8}
+              fill={COLORS.sub}
+              fontSize="10"
+              textAnchor="end"
+            >
+              {compact(maxX)}
+            </SvgText>
+            <SvgText
+              x={Math.max(10, chartMetrics.padLeft - 8)}
+              y={chartMetrics.padTop + 4}
+              fill={COLORS.sub}
+              fontSize="10"
+              textAnchor="end"
+            >
+              {compact(maxY)}
+            </SvgText>
 
-          {points.map((point) => (
-            <React.Fragment key={point.id}>
-              <Circle cx={xPos(point.x)} cy={yPos(point.y)} r={5} fill={point.color} />
-              <SvgText
-                x={xPos(point.x)}
-                y={yPos(point.y) - 10}
-                fill={COLORS.text}
-                fontSize="10"
-                textAnchor="middle"
-              >
-                {point.name}
-              </SvgText>
-            </React.Fragment>
-          ))}
-        </Svg>
+            {points.map((point) => {
+              const pointX = xPos(point.x);
+              const pointY = yPos(point.y);
+              const labelPlacement = resolveEfficiencyFailureScatterLabelPlacement({
+                pointX,
+                pointY,
+                chartWidth: chartMetrics.width,
+                padLeft: chartMetrics.padLeft,
+                padRight: chartMetrics.padRight,
+              });
+
+              return (
+                <React.Fragment key={point.id}>
+                  <Circle cx={pointX} cy={pointY} r={5} fill={point.color} />
+                  <SvgText
+                    x={labelPlacement.x}
+                    y={labelPlacement.y}
+                    fill={COLORS.text}
+                    fontSize="10"
+                    textAnchor={labelPlacement.textAnchor}
+                  >
+                    {point.name}
+                  </SvgText>
+                </React.Fragment>
+              );
+            })}
+          </Svg>
+        </View>
       </View>
 
       <View style={styles.proofRow}>
@@ -268,6 +310,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  chartShell: {
+    width: "100%",
   },
   chartHeader: {
     flexDirection: "row",

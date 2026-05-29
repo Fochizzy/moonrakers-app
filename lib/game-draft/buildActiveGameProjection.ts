@@ -11,6 +11,8 @@ function createEmptyCurrent(): ActiveGame["current"] {
     assistRecipients: {},
     assistPrestigeRecipients: {},
     objectiveCount: 0,
+    headToHeadFirstPlaceId: null,
+    headToHeadSecondPlaceId: null,
   };
 }
 

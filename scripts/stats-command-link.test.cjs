@@ -28,6 +28,12 @@ assert.match(
 
 assert.match(
   source,
+  /style=\{styles\.headerCard\}/,
+  "expected the stats hero card to use the tighter compact spacing treatment"
+);
+
+assert.match(
+  source,
   /router\.push\(APP_ROUTES\.home\)/,
   "expected the stats screen to keep the shared Command navigation path"
 );
@@ -36,6 +42,18 @@ assert.match(
   source,
   /title="Command"/,
   "expected the stats screen to keep the Command control visible"
+);
+
+assert.match(
+  source,
+  /style=\{styles\.commandActionButton\}/,
+  "expected the stats screen to keep the smaller Command return button styling"
+);
+
+assert.doesNotMatch(
+  source,
+  /sourceKind=\{freshness\.sourceKind\}|sourceLabel=\{freshness\.sourceLabel\}/,
+  "expected the stats screen to remove the source badge pill chrome from its section headers"
 );
 
 assert.ok(

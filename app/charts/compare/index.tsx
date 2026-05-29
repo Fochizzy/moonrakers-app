@@ -40,6 +40,7 @@ import {
   buildGlobalTurnOrderInsight,
   buildGroupRows,
   buildPlayerRows,
+  buildPlayerVsOpponentAggregateRows,
   createMatrixLayout,
   getVisibleMetricEntries,
   sortRowsByMetric,
@@ -331,6 +332,7 @@ export default function IndexScreen() {
 
   const [activeTab, setActiveTab] = useState<AffectTab>("conditional");
   const [mode, setMode] = useState<CompareMode>(initialMode);
+  const [cohesionSelectionMode, setCohesionSelectionMode] = useState<"manual" | "player_field_aggregate">("manual");
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>(
     initialMode === "players" ? initialIds : []
   );
@@ -386,15 +388,78 @@ export default function IndexScreen() {
       authSession?.user?.id,
     ]
   );
+  const compareAuthPlayerId = useMemo(
+    () =>
+      resolveConditionalQuickSelectAuthPlayerId({
+        players,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+        authPlayerName: authProfile?.player_name,
+        authDisplayName: authProfile?.display_name,
+      }),
+    [
+      players,
+      authProfile?.display_name,
+      authProfile?.id,
+      authProfile?.player_name,
+      authSession?.user?.id,
+    ]
+  );
 
   const playerMap = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
+  const playerFieldAggregateSelection = useMemo(() => {
+    if (mode !== "players" || cohesionSelectionMode !== "player_field_aggregate" || !compareAuthPlayerId) {
+      return null;
+    }
+
+    return buildPlayerVsOpponentAggregateRows({
+      playerId: compareAuthPlayerId,
+      playerMap,
+      games,
+    });
+  }, [cohesionSelectionMode, compareAuthPlayerId, games, mode, playerMap]);
+  const playerFieldAggregateOption = useMemo(() => {
+    if (mode !== "players" || !compareAuthPlayerId) return null;
+
+    const aggregate = buildPlayerVsOpponentAggregateRows({
+      playerId: compareAuthPlayerId,
+      playerMap,
+      games,
+    });
+    if (!aggregate) return null;
+
+    return {
+      title: "You vs played field",
+      subtitle: `${aggregate.playerLabel} against ${aggregate.opponentCount} opponents across ${aggregate.sharedGames} shared games`,
+      active: cohesionSelectionMode === "player_field_aggregate",
+      onPress: () => {
+        setCompareSetupCollapsed(false);
+        setHasRunCohesionAnalyze(false);
+        setCohesionSelectionMode("player_field_aggregate");
+        setSelectedPlayerIds([]);
+      },
+    };
+  }, [cohesionSelectionMode, compareAuthPlayerId, games, mode, playerMap]);
 
   const baseRows = useMemo(() => {
+    if (mode === "players" && cohesionSelectionMode === "player_field_aggregate") {
+      return playerFieldAggregateSelection?.rows ?? [];
+    }
+
     return mode === "players"
       ? buildPlayerRows(selectedPlayerIds, playerMap, games)
       : buildGroupRows(selectedGroupIds, groupMap, playerMap, games);
-  }, [games, mode, playerMap, groupMap, selectedGroupIds, selectedPlayerIds]);
+  }, [
+    cohesionSelectionMode,
+    games,
+    mode,
+    playerFieldAggregateSelection?.rows,
+    playerMap,
+    groupMap,
+    selectedGroupIds,
+    selectedPlayerIds,
+  ]);
 
   const sortMetric = useMemo(
     () => METRICS.find((metric) => String(metric.key) === sortMetricKey) ?? METRICS[0],
@@ -514,7 +579,11 @@ export default function IndexScreen() {
       )
       .filter((value): value is string => Boolean(value));
   }, [currentSelectionIds, groupMap, mode, playerMap]);
-  const hasSelection = currentSelectionIds.length > 0;
+  const hasSelection =
+    currentSelectionIds.length > 0 ||
+    (mode === "players" &&
+      cohesionSelectionMode === "player_field_aggregate" &&
+      Boolean(playerFieldAggregateSelection));
   const hasAnalyzed = hasRunCohesionAnalyze && hasSelection && rows.length > 0;
   const showCompareSetupSummary = compareSetupCollapsed && hasAnalyzed;
 
@@ -541,6 +610,7 @@ export default function IndexScreen() {
   function setModeAndSync(nextMode: CompareMode) {
     setCompareSetupCollapsed(false);
     setHasRunCohesionAnalyze(false);
+    setCohesionSelectionMode("manual");
     setMode(nextMode);
     dispatchConditional({ type: "set-subject-mode", mode: nextMode === "groups" ? "groups" : "players" });
 
@@ -554,6 +624,7 @@ export default function IndexScreen() {
   function togglePlayer(id: string): void {
     setCompareSetupCollapsed(false);
     setHasRunCohesionAnalyze(false);
+    setCohesionSelectionMode("manual");
     setSelectedPlayerIds((prev) => {
       if (prev.includes(id)) return prev.filter((value) => value !== id);
       if (prev.length >= MAX_COMPARE_PLAYERS) return prev;
@@ -564,6 +635,7 @@ export default function IndexScreen() {
   function toggleGroup(id: string): void {
     setCompareSetupCollapsed(false);
     setHasRunCohesionAnalyze(false);
+    setCohesionSelectionMode("manual");
     setSelectedGroupIds((prev) => {
       if (prev.includes(id)) return prev.filter((value) => value !== id);
       if (prev.length >= MAX_COMPARE_PLAYERS) return prev;
@@ -574,6 +646,7 @@ export default function IndexScreen() {
   function clearSelection(): void {
     setCompareSetupCollapsed(false);
     setHasRunCohesionAnalyze(false);
+    setCohesionSelectionMode("manual");
     if (mode === "players") {
       setSelectedPlayerIds([]);
       return;
@@ -620,9 +693,24 @@ export default function IndexScreen() {
   }
 
   const selectionLabel =
-    rows.length === 1 ? rows[0]?.label ?? "Selection" : `${rows.length} ${mode}`;
+    mode === "players" &&
+    cohesionSelectionMode === "player_field_aggregate" &&
+    playerFieldAggregateSelection
+      ? `${playerFieldAggregateSelection.playerLabel} vs played field`
+      : rows.length === 1
+        ? rows[0]?.label ?? "Selection"
+        : `${rows.length} ${mode}`;
   const selectionSummaryLabel =
     currentSelectionNames.length > 0 ? currentSelectionNames.join(" • ") : selectionLabel;
+
+  const resolvedSelectionSummaryLabel =
+    mode === "players" &&
+    cohesionSelectionMode === "player_field_aggregate" &&
+    playerFieldAggregateSelection
+      ? `${playerFieldAggregateSelection.playerLabel} against ${playerFieldAggregateSelection.opponentCount} opponents across ${playerFieldAggregateSelection.sharedGames} shared games`
+      : currentSelectionNames.length > 0
+        ? currentSelectionNames.join(" • ")
+        : selectionLabel;
 
   const liveSentenceSubtitle =
     mode === "players"
@@ -737,7 +825,7 @@ export default function IndexScreen() {
                 <View style={styles.sectionHeaderRow}>
                   <View style={styles.summaryHeaderCopy}>
                     <Text style={styles.sectionTitle}>Analyzed lineup</Text>
-                    <Text style={styles.summarySubtext}>{selectionSummaryLabel}</Text>
+                    <Text style={styles.summarySubtext}>{resolvedSelectionSummaryLabel}</Text>
                   </View>
 
                   <Pressable
@@ -773,6 +861,7 @@ export default function IndexScreen() {
                   onSetDensity={setDensity}
                   onClear={clearSelection}
                   onAnalyze={handleAnalyzeSelection}
+                  specialSelection={mode === "players" ? playerFieldAggregateOption : null}
                 />
               </View>
             )}

@@ -16,6 +16,7 @@ import ChartStage from "@/components/charts/ChartStage";
 import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
 import Text from "@/components/ui/Text";
 import buildAssistNetworkLayout from "@/components/charts/AssistNetworkOverview/buildAssistNetworkLayout";
+import { normalizeColor as normalizeChartColor } from "@/utils/chartTheme";
 import { CHART_COLORS, withChartAlpha } from "./chartVisualSystem";
 import {
   DEFAULT_MAX_ITEMS,
@@ -117,6 +118,17 @@ const NODE_PLATE_FILL = withChartAlpha(COLORS.bg, 0.82);
 const NODE_PLATE_STROKE = withChartAlpha("#F8FAFC", 0.14);
 const NODE_FILL_STROKE = withChartAlpha("#F8FAFC", 0.28);
 const NODE_LABEL_OUTLINE = withChartAlpha(COLORS.bg, 0.96);
+const FALLBACK_PLAYER_COLORS = [
+  "#A855F7",
+  "#3B82F6",
+  "#22C55E",
+  "#EF4444",
+  "#14B8A6",
+  "#F97316",
+];
+const DUPLICATE_HUE_OFFSETS = [0, 28, -24, 54, -46, 76];
+const DUPLICATE_SATURATION_OFFSETS = [0, 0.06, 0.03, 0.08, 0.05, 0.1];
+const DUPLICATE_LIGHTNESS_OFFSETS = [0, 0.05, -0.04, 0.08, -0.06, 0.1];
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -129,16 +141,173 @@ function toNumber(value: unknown): number {
 }
 
 function normalizeColor(color?: string, index = 0): string {
-  if (typeof color === "string" && color.trim()) return color.trim();
-  const fallback = [
-    "#A855F7",
-    "#3B82F6",
-    "#22C55E",
-    "#3B82F6",
-    "#EF4444",
-    "#14B8A6",
-  ];
-  return fallback[index % fallback.length];
+  if (typeof color === "string" && color.trim()) {
+    return normalizeChartColor(color);
+  }
+  return FALLBACK_PLAYER_COLORS[index % FALLBACK_PLAYER_COLORS.length];
+}
+
+function clampChannel(value: number) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  return `#${[r, g, b]
+    .map((value) => clampChannel(value).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function parseGraphColorToRgb(color: string) {
+  const normalized = normalizeChartColor(color);
+
+  if (/^#([0-9a-f]{6})$/i.test(normalized)) {
+    return {
+      r: parseInt(normalized.slice(1, 3), 16),
+      g: parseInt(normalized.slice(3, 5), 16),
+      b: parseInt(normalized.slice(5, 7), 16),
+    };
+  }
+
+  const rgbMatch = normalized.match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i,
+  );
+
+  if (!rgbMatch) {
+    return null;
+  }
+
+  return {
+    r: Number(rgbMatch[1]),
+    g: Number(rgbMatch[2]),
+    b: Number(rgbMatch[3]),
+  };
+}
+
+function rgbToHsl(r: number, g: number, b: number) {
+  const red = r / 255;
+  const green = g / 255;
+  const blue = b / 255;
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const lightness = (max + min) / 2;
+
+  if (max === min) {
+    return { h: 0, s: 0, l: lightness };
+  }
+
+  const delta = max - min;
+  const saturation =
+    lightness > 0.5
+      ? delta / (2 - max - min)
+      : delta / (max + min);
+
+  let hue = 0;
+  switch (max) {
+    case red:
+      hue = (green - blue) / delta + (green < blue ? 6 : 0);
+      break;
+    case green:
+      hue = (blue - red) / delta + 2;
+      break;
+    default:
+      hue = (red - green) / delta + 4;
+      break;
+  }
+
+  return { h: hue * 60, s: saturation, l: lightness };
+}
+
+function hslToRgb(h: number, s: number, l: number) {
+  if (s === 0) {
+    const channel = clampChannel(l * 255);
+    return { r: channel, g: channel, b: channel };
+  }
+
+  const hue = ((h % 360) + 360) % 360;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const segment = hue / 60;
+  const x = chroma * (1 - Math.abs((segment % 2) - 1));
+  const match = l - chroma / 2;
+
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (segment >= 0 && segment < 1) {
+    red = chroma;
+    green = x;
+  } else if (segment < 2) {
+    red = x;
+    green = chroma;
+  } else if (segment < 3) {
+    green = chroma;
+    blue = x;
+  } else if (segment < 4) {
+    green = x;
+    blue = chroma;
+  } else if (segment < 5) {
+    red = x;
+    blue = chroma;
+  } else {
+    red = chroma;
+    blue = x;
+  }
+
+  return {
+    r: (red + match) * 255,
+    g: (green + match) * 255,
+    b: (blue + match) * 255,
+  };
+}
+
+function shiftDuplicateGraphColor(color: string, duplicateIndex: number) {
+  if (duplicateIndex <= 0) {
+    return normalizeChartColor(color);
+  }
+
+  const rgb = parseGraphColorToRgb(color);
+  if (!rgb) {
+    return normalizeChartColor(color);
+  }
+
+  const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+  const hueOffset =
+    DUPLICATE_HUE_OFFSETS[duplicateIndex] ??
+    duplicateIndex * 22;
+  const saturationOffset =
+    DUPLICATE_SATURATION_OFFSETS[duplicateIndex] ??
+    0.04;
+  const lightnessOffset =
+    DUPLICATE_LIGHTNESS_OFFSETS[duplicateIndex] ??
+    0.06;
+  const shifted = hslToRgb(
+    hsl.h + hueOffset,
+    clamp(hsl.s + saturationOffset, 0.18, 0.95),
+    clamp(hsl.l + lightnessOffset, 0.24, 0.76),
+  );
+
+  return rgbToHex(shifted.r, shifted.g, shifted.b);
+}
+
+export function resolveDistinctGraphPlayers(players: Player[] = []) {
+  const baseColors = players.map((player, index) =>
+    normalizeColor(player.color, index),
+  );
+  const counts = new Map<string, number>();
+
+  return players.map((player, index) => {
+    const baseColor = baseColors[index];
+    const duplicateIndex = counts.get(baseColor) ?? 0;
+    counts.set(baseColor, duplicateIndex + 1);
+
+    return {
+      ...player,
+      color:
+        duplicateIndex === 0
+          ? baseColor
+          : shiftDuplicateGraphColor(baseColor, duplicateIndex),
+    };
+  });
 }
 
 function formatSigned(value: number) {
@@ -539,6 +708,10 @@ export default function RelationshipGraph({
     const allowed = new Set(scopedPlayerIds.map(String));
     return players.filter((player) => allowed.has(String(player.id)));
   }, [players, scopedPlayerIds]);
+  const resolvedPlayers = useMemo(
+    () => resolveDistinctGraphPlayers(visiblePlayers),
+    [visiblePlayers],
+  );
 
   const scopedRelationships = useMemo(
     () => buildScopedRelationships(relationships ?? {}, scopedPlayerIds),
@@ -552,7 +725,7 @@ export default function RelationshipGraph({
   const layout = useMemo(() => {
     if (variant === "assist_network") {
       return buildDeterministicAssistLayout(
-        visiblePlayers,
+        resolvedPlayers,
         scopedAssistRelationships,
         internalTopEdgesPerNode,
         internalMode
@@ -560,7 +733,7 @@ export default function RelationshipGraph({
     }
 
     return buildRelationshipGraphLayout(
-      visiblePlayers as any,
+      resolvedPlayers as any,
       scopedRelationships ?? {},
       maxItems,
       internalTopEdgesPerNode,
@@ -572,13 +745,13 @@ export default function RelationshipGraph({
     maxItems,
     scopedAssistRelationships,
     scopedRelationships,
+    resolvedPlayers,
     variant,
-    visiblePlayers,
   ]);
 
   const insight = useMemo(
-    () => buildRelationshipInsightModel(visiblePlayers, scopedRelationships),
-    [visiblePlayers, scopedRelationships]
+    () => buildRelationshipInsightModel(resolvedPlayers, scopedRelationships),
+    [resolvedPlayers, scopedRelationships]
   );
 
   const selectedNode = layout.nodes.find((node) => node.id === selectedNodeId) ?? null;

@@ -30,7 +30,7 @@ run("Home route uses the restored cinematic shell", () => {
   expectIncludes(indexSource, 'from "@/components/ui/SegmentedControl"', "home SegmentedControl import");
   expectIncludes(indexSource, 'from "@/components/ui/HubTileCard"', "home HubTileCard import");
   expectIncludes(indexSource, "Tap to select. Hold to open a profile.", "command player hint");
-  expectIncludes(indexSource, "Selected Crew", "selected crew section");
+  expectIncludes(indexSource, 'eyebrow="Mission Prep"', "mission prep section");
   expectIncludes(indexSource, "commandPlayerViewport", "fixed player viewport");
   expectIncludes(indexSource, "showInitial={false}", "command player cards hide initials");
 });

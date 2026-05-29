@@ -1,4 +1,11 @@
-import { formatPercentFromDecimal } from "@/utils/formatters";
+import {
+  formatPercentFromDecimal,
+  formatSigned,
+} from "@/utils/formatters";
+import {
+  describeRecentForm,
+  replaceRecentFormSummaryInText,
+} from "@/utils/eloRecentForm";
 import { type EloMetricTab } from "@/utils/elo/metricRegistry";
 import { toNumber } from "@/utils/numbers";
 import { normalizeId } from "@/utils/strings";
@@ -240,7 +247,7 @@ export function buildSectionCards(
           {
             key: "recent-form",
             label: "Recent Form",
-            value: summary.recentForm || "—",
+            value: describeRecentForm(summary.recentForm),
             tone: "accent",
           },
           {
@@ -291,6 +298,12 @@ export function buildSectionCards(
             label: "Peak ELO",
             value: `${Math.round(summary.peakElo)}`,
             tone: "blue",
+          },
+          {
+            key: "avg-delta",
+            label: "Avg ELO Change",
+            value: formatSigned(summary.avgDelta, 1),
+            tone: summary.avgDelta >= 0 ? "green" : "danger",
           },
           {
             key: "games",
@@ -459,15 +472,16 @@ export function buildInsight(
 ): { title: string; body: string } {
   switch (activeTab) {
     case "Momentum":
-      return {
-        title: "Momentum Insight",
-        body:
+      {
+        const body =
           summary.gamesPlayed === 0
             ? "No rated games yet. Finish a saved game to start real leaderboard-backed ELO tracking."
-            : `${summary.name} has played ${summary.gamesPlayed} rated game${
-                summary.gamesPlayed === 1 ? "" : "s"
-              } with recent form ${summary.recentForm || "—"}.`,
+            : `${summary.name} recent form: ${describeRecentForm(summary.recentForm)}.`;
+      return {
+        title: "Momentum Insight",
+        body: replaceRecentFormSummaryInText(body, summary.recentForm),
       };
+      }
 
     case "Skills":
       return {
@@ -477,7 +491,7 @@ export function buildInsight(
             ? "This screen now uses the same ELO source as the leaderboard."
             : `${summary.name} currently sits at ${Math.round(
                 summary.currentElo
-              )}. The headline ELO now matches leaderboard ordering exactly.`,
+              )}. The headline ELO now matches leaderboard ordering exactly, and average change is ${formatSigned(summary.avgDelta, 1)} per rated game.`,
       };
 
     case "Context":

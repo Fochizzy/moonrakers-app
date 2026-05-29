@@ -7,6 +7,7 @@ import Text from "@/components/ui/Text";
 import type { NormalizedGame } from "@/utils/charts";
 import AssistNetworkDetailsCard from "./AssistNetworkDetailsCard";
 import AssistNetworkImpactSection from "./AssistNetworkImpactSection";
+import { buildAssistNetworkInterpretation } from "./buildAssistNetworkInterpretation";
 import buildAssistNetworkDataset from "./buildAssistNetworkDataset";
 import buildAssistNetworkImpact from "./buildAssistNetworkImpact";
 import buildAssistNetworkLayout from "./buildAssistNetworkLayout";
@@ -139,6 +140,37 @@ export default function AssistNetworkOverview({
   const story = topLink
     ? `${hubName} is the current hub, and ${topLinkLabel} leads at ${topLinkValue}.`
     : `${hubName} is the current hub in the exact filtered table.`;
+  const interpretationLines = useMemo(
+    () =>
+      buildAssistNetworkInterpretation({
+        playerCount: visiblePlayers.length,
+        linkCount: dataset.edges.length,
+        sampleGameCount: dataset.gameCount,
+        exactScopeApplied: dataset.exactScopeApplied,
+        hubName,
+        hubValue: insight.hub?.value ?? null,
+        netGiverName,
+        netGiverValue: insight.netGiver?.value ?? null,
+        netReceiverName,
+        netReceiverValue: insight.netReceiver?.value ?? null,
+        topLinkLabel,
+        topLinkValue,
+      }),
+    [
+      dataset.edges.length,
+      dataset.exactScopeApplied,
+      dataset.gameCount,
+      hubName,
+      insight.hub?.value,
+      insight.netGiver?.value,
+      insight.netReceiver?.value,
+      netGiverName,
+      netReceiverName,
+      topLinkLabel,
+      topLinkValue,
+      visiblePlayers.length,
+    ]
+  );
 
   if (dataset.exactScopeApplied && dataset.gameCount === 0) {
     return (
@@ -194,6 +226,19 @@ export default function AssistNetworkOverview({
         cards={impact.cards}
         sampleGameCount={impact.sampleGameCount}
       />
+
+      {!showZeroLinkState ? (
+        <View style={styles.interpretationCard}>
+          <Text style={styles.interpretationTitle}>Interpretation</Text>
+          <View style={styles.interpretationStack}>
+            {interpretationLines.map((line) => (
+              <Text key={line} style={styles.interpretationLine}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -241,6 +286,27 @@ const styles = StyleSheet.create({
   },
   warningBody: {
     color: "#E2E8F0",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  interpretationCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.24)",
+    backgroundColor: "rgba(15,23,42,0.4)",
+    padding: 12,
+    gap: 8,
+  },
+  interpretationTitle: {
+    color: "#E2E8F0",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  interpretationStack: {
+    gap: 6,
+  },
+  interpretationLine: {
+    color: "#CBD5E1",
     fontSize: 12,
     lineHeight: 18,
   },

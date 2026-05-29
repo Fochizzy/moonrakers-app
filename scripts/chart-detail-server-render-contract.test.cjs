@@ -28,8 +28,20 @@ assert.match(
 
 assert.match(
   chartRouteSource,
-  /const hasServerPayload = hasData \|\| hasRenderableServerChart;/,
-  "expected the route to treat direct chart-family payloads as first-class server data even when generic points and series are empty",
+  /const shouldUseLocalChartFallback =[\s\S]*localChartData\.hasData[\s\S]*!loading[\s\S]*!hasRenderableServerChart;/,
+  "expected the chart detail route to prefer the synced-history fallback whenever the server only returns a non-renderable placeholder dataset",
+);
+
+assert.match(
+  chartRouteSource,
+  /const shouldLoadCloudFallback =[\s\S]*!loading[\s\S]*!hasRenderableServerChart[\s\S]*!shouldSkipCloudFallbackBecauseRpcSource;/,
+  "expected the chart detail route to keep loading the shared Supabase snapshot when the server payload has summary metadata but no renderable chart data",
+);
+
+assert.match(
+  chartRouteSource,
+  /const shouldSkipCloudFallbackBecauseRpcSource =[\s\S]*hasRenderableServerChart\s*\|\|\s*\(hasUsableRpcFallbackHistory && localChartData\.hasData\);/,
+  "expected chart detail cloud fallback loading to skip only when a real server chart or complete RPC-provided history is already enough to build the local fallback chart",
 );
 
 assert.match(

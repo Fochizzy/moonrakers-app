@@ -23,6 +23,7 @@ export const APP_ROUTES = {
   playerProfileDetail: "/player-profile/[playerId]",
   playerCards: "/player-cards",
   game: "/game",
+  headToHeadMission: "/head-to-head-mission",
   gameSetup: "/game-setup",
   summary: "/summary",
   gameTrends: "/game-trends",
@@ -72,18 +73,23 @@ export function buildCompareRoute(input?: {
 export function buildChartsRoute(input?: {
   playerId?: string | null;
   compareId?: string | null;
+  compareIds?: string[];
   ids?: string[];
   setup?: boolean;
 }) {
   const ids = (input?.ids ?? []).map((id) => String(id).trim()).filter(Boolean);
   const playerId = String(input?.playerId ?? "").trim();
   const compareId = String(input?.compareId ?? "").trim();
+  const compareIds = (input?.compareIds ?? [])
+    .map((id) => String(id).trim())
+    .filter(Boolean);
 
   return {
     pathname: APP_ROUTES.charts,
     params: {
       ...(playerId ? { playerId } : {}),
       ...(compareId ? { compareId } : {}),
+      ...(compareIds.length ? { compareIds: compareIds.join(",") } : {}),
       ...(ids.length ? { ids: ids.join(",") } : {}),
       ...(input?.setup ? { setup: "1" } : {}),
     },

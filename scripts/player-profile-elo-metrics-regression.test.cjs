@@ -25,22 +25,34 @@ assert.doesNotMatch(
   "expected the player profile screen to stop pinning the metric card stack as the sticky header",
 );
 
-assert.doesNotMatch(
+assert.match(
   source,
-  /buildSummary as buildFallbackSummary|buildSectionCards|buildInsight as buildFallbackInsight/,
-  "expected the player profile route to stop importing the local ELO fallback builders once the server tab payload is authoritative",
-);
-
-assert.doesNotMatch(
-  source,
-  /const fallbackSection = useMemo\(/,
-  "expected the player profile route to stop computing a local fallback metrics section",
+  /buildSummary as buildFallbackSummary|buildSectionCards as buildFallbackSectionCards|buildInsight as buildFallbackInsight/,
+  "expected the player profile route to keep the shared local ELO fallback builders available for empty published profiles",
 );
 
 assert.match(
   source,
-  /sectionCards=\{sectionCards\}/,
-  "expected the player profile route to render the published server section cards directly",
+  /const fallbackSection = useMemo\(/,
+  "expected the player profile route to compute a local fallback metrics section for empty published profiles",
+);
+
+assert.match(
+  source,
+  /buildPlayerProfileMetricPresentation\(/,
+  "expected the player profile route to build a tab-aware metric presentation instead of reusing one static profile view across every tab",
+);
+
+assert.match(
+  source,
+  /sectionCards=\{metricPresentation\.sectionCards\}/,
+  "expected the player profile route to render the tab-aware metric grid produced by the presentation helper",
+);
+
+assert.match(
+  source,
+  /signalsTitle=\{metricPresentation\.signalsTitle\}/,
+  "expected the player profile route to feed a tab-aware signals heading into the shared metric tabs component",
 );
 
 console.log("player-profile-elo-metrics-regression.test.cjs passed");

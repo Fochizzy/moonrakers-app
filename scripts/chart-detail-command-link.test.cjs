@@ -16,8 +16,20 @@ assert.match(
 
 assert.match(
   source,
-  /<View style=\{styles\.heroActionRow\}>[\s\S]*Back to Adjust[\s\S]*Command[\s\S]*<\/View>/,
-  "expected the chart detail hero actions to show Command beside Back to Adjust"
+  /function openChartsPage\(\)\s*\{[\s\S]*buildChartsRoute\(\{[\s\S]*playerId:\s*routePlayerId\s*\?\?\s*null[\s\S]*compareId:\s*routeCompareId\s*\?\?\s*null[\s\S]*ids:\s*routeIds[\s\S]*\}\)[\s\S]*\}/,
+  "expected the chart detail screen to define a Charts-page navigation helper"
+);
+
+assert.match(
+  source,
+  /<View style=\{styles\.heroActionRow\}>[\s\S]*Back to Adjust[\s\S]*Back to Charts[\s\S]*Command[\s\S]*<\/View>/,
+  "expected the chart detail hero actions to place Back to Charts between Back to Adjust and Command"
+);
+
+assert.match(
+  source,
+  /<TouchableOpacity[\s\S]*style=\{styles\.secondaryButton\}[\s\S]*onPress=\{openChartsPage\}[\s\S]*Back to Charts/,
+  "expected the Back to Charts button to use the Charts-page navigation helper"
 );
 
 assert.match(

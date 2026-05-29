@@ -36,7 +36,8 @@ type Props = {
 
 const COLORS = CHART_COLORS;
 const MIN_MOMENTUM_HEIGHT_PCT = 22;
-const MOMENTUM_BAR_WIDTH = 18;
+const MOMENTUM_CAPSULE_WIDTH = 18;
+const MOMENTUM_TRACK_HEIGHT = 96;
 
 function n(value: unknown): number {
   const parsed = Number(value);
@@ -63,6 +64,14 @@ function signed(value: number) {
 
 function pct(value: number) {
   return `${(value * 100).toFixed(0)}%`;
+}
+
+function runLabel(name: string | null, length: number) {
+  if (!name || length <= 0) {
+    return "No active streak";
+  }
+
+  return `${name} \u00b7 ${length}-game run`;
 }
 
 function gamesToSnapshots(games: GameLike[] = []): SnapshotPoint[] {
@@ -154,15 +163,21 @@ export default function HeadToHeadChart({
       />
 
       <View style={styles.heroCard}>
-        <View style={styles.headerRow}>
-          {showHeader ? (
-            <View style={styles.headerText}>
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.subtitle}>{subtitle}</Text>
-            </View>
-          ) : (
-            <View />
-          )}
+        <View style={[styles.headerRow, !showHeader && styles.headerRowCompact]}>
+          <View style={styles.headerText}>
+            <Text style={styles.matchupEyebrow}>{showHeader ? title : "Matchup"}</Text>
+            <Text style={styles.matchupTitle}>
+              {summary.playerAName} vs {summary.playerBName}
+            </Text>
+            <Text style={styles.matchupSummary}>
+              {showHeader
+                ? subtitle
+                : `${summary.games} shared games | ${runLabel(
+                    summary.currentRunWinnerName,
+                    summary.currentRunLength
+                  )}`}
+            </Text>
+          </View>
           <View
             style={[
               styles.leaderBadge,
@@ -185,7 +200,9 @@ export default function HeadToHeadChart({
             <Text style={styles.leaderBadgeLabel}>
               {summary.leaderTone === "tie" ? "Even" : "Leader"}
             </Text>
-            <Text style={styles.leaderBadgeValue}>{summary.leaderName}</Text>
+            <Text numberOfLines={2} style={styles.leaderBadgeValue}>
+              {summary.leaderName}
+            </Text>
           </View>
         </View>
 
@@ -198,21 +215,42 @@ export default function HeadToHeadChart({
               },
             ]}
           >
-            <View style={[styles.playerDot, { backgroundColor: summary.playerAColor }]} />
-            <Text style={styles.scoreLabel}>{summary.playerAName}</Text>
-            <Text style={[styles.scoreValue, { color: summary.playerAColor }]}>
-              {summary.aWins}
-            </Text>
-            <Text style={styles.scoreHelper}>{pct(summary.aWins / summary.games)} wins</Text>
+            <View style={styles.scoreLabelRow}>
+              <View style={[styles.playerDot, { backgroundColor: summary.playerAColor }]} />
+              <Text numberOfLines={2} style={styles.scoreLabel}>
+                {summary.playerAName}
+              </Text>
+            </View>
+            <View style={styles.scoreMetaRow}>
+              <View style={styles.scoreValueBlock}>
+                <Text style={[styles.scoreValue, { color: summary.playerAColor }]}>
+                  {summary.aWins}
+                </Text>
+                <Text style={styles.scoreValueLabel}>wins</Text>
+              </View>
+              <View
+                style={[
+                  styles.scorePercentChip,
+                  {
+                    backgroundColor: withChartAlpha(summary.playerAColor, 0.14),
+                    borderColor: withChartAlpha(summary.playerAColor, 0.3),
+                  },
+                ]}
+              >
+                <Text style={[styles.scorePercentText, { color: summary.playerAColor }]}>
+                  {pct(summary.aWins / summary.games)}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <View style={styles.centerCard}>
+            <Text style={styles.centerLabel}>Shared sample</Text>
             <Text style={styles.centerValue}>{summary.games}</Text>
-            <Text style={styles.centerLabel}>Games</Text>
-            <Text style={styles.centerHelper}>
-              {summary.currentRunWinnerName
-                ? `${summary.currentRunWinnerName} on a ${summary.currentRunLength}-game run`
-                : "No active streak"}
+            <Text style={styles.centerHelper}>games</Text>
+            <View style={styles.centerDivider} />
+            <Text numberOfLines={2} style={styles.centerRunLabel}>
+              {runLabel(summary.currentRunWinnerName, summary.currentRunLength)}
             </Text>
           </View>
 
@@ -224,34 +262,78 @@ export default function HeadToHeadChart({
               },
             ]}
           >
-            <View style={[styles.playerDot, { backgroundColor: summary.playerBColor }]} />
-            <Text style={styles.scoreLabel}>{summary.playerBName}</Text>
-            <Text style={[styles.scoreValue, { color: summary.playerBColor }]}>
-              {summary.bWins}
-            </Text>
-            <Text style={styles.scoreHelper}>{pct(summary.bWins / summary.games)} wins</Text>
+            <View style={styles.scoreLabelRow}>
+              <View style={[styles.playerDot, { backgroundColor: summary.playerBColor }]} />
+              <Text numberOfLines={2} style={styles.scoreLabel}>
+                {summary.playerBName}
+              </Text>
+            </View>
+            <View style={styles.scoreMetaRow}>
+              <View style={styles.scoreValueBlock}>
+                <Text style={[styles.scoreValue, { color: summary.playerBColor }]}>
+                  {summary.bWins}
+                </Text>
+                <Text style={styles.scoreValueLabel}>wins</Text>
+              </View>
+              <View
+                style={[
+                  styles.scorePercentChip,
+                  {
+                    backgroundColor: withChartAlpha(summary.playerBColor, 0.14),
+                    borderColor: withChartAlpha(summary.playerBColor, 0.3),
+                  },
+                ]}
+              >
+                <Text style={[styles.scorePercentText, { color: summary.playerBColor }]}>
+                  {pct(summary.bWins / summary.games)}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
 
-        <View style={styles.proofRow}>
-          <View style={styles.proofCard}>
-            <Text style={styles.proofLabel}>Prestige Gap</Text>
-            <Text style={styles.proofValue}>{signed(summary.avgPrestigeMargin)}</Text>
-            <Text style={styles.proofHelper}>
+        <View style={styles.summaryChipGrid}>
+          <View style={[styles.summaryChip, styles.summaryChipHalf]}>
+            <Text style={styles.summaryChipLabel}>Prestige Gap</Text>
+            <Text style={styles.summaryChipValue}>{signed(summary.avgPrestigeMargin)}</Text>
+            <Text style={styles.summaryChipHelper}>
               {summary.playerAName} minus {summary.playerBName}
             </Text>
           </View>
 
-          <View style={styles.proofCard}>
-            <Text style={styles.proofLabel}>Score Gap</Text>
-            <Text style={styles.proofValue}>{signed(summary.avgScoreMargin)}</Text>
-            <Text style={styles.proofHelper}>Full score comparison</Text>
+          <View style={[styles.summaryChip, styles.summaryChipHalf]}>
+            <Text style={styles.summaryChipLabel}>Score Gap</Text>
+            <Text style={styles.summaryChipValue}>{signed(summary.avgScoreMargin)}</Text>
+            <Text style={styles.summaryChipHelper}>Full score comparison</Text>
           </View>
 
-          <View style={styles.proofCard}>
-            <Text style={styles.proofLabel}>Recent Swing</Text>
-            <Text style={styles.proofValue}>{summary.swingLeaderName ?? "Even"}</Text>
-            <Text style={styles.proofHelper}>
+          <View
+            style={[
+              styles.summaryChip,
+              styles.summaryChipFull,
+              {
+                backgroundColor: withChartAlpha(
+                  summary.swingLeaderName === summary.playerAName
+                    ? summary.playerAColor
+                    : summary.swingLeaderName === summary.playerBName
+                      ? summary.playerBColor
+                      : COLORS.textStrong,
+                  0.12
+                ),
+                borderColor: withChartAlpha(
+                  summary.swingLeaderName === summary.playerAName
+                    ? summary.playerAColor
+                    : summary.swingLeaderName === summary.playerBName
+                      ? summary.playerBColor
+                      : COLORS.textStrong,
+                  0.26
+                ),
+              },
+            ]}
+          >
+            <Text style={styles.summaryChipLabel}>Recent Swing</Text>
+            <Text style={styles.summaryChipValue}>{summary.swingLeaderName ?? "Even"}</Text>
+            <Text style={styles.summaryChipHelper}>
               Latest {Math.min(3, summary.games)}-game window
             </Text>
           </View>
@@ -295,13 +377,13 @@ export default function HeadToHeadChart({
         }
       >
         <View style={styles.timelineShell}>
-          <View style={styles.baseline} />
           <View style={styles.timelineRow}>
             {summary.timeline.map((point) => {
               const heightPct = Math.max(
                 MIN_MOMENTUM_HEIGHT_PCT,
                 (Math.abs(point.prestigeMargin) / summary.maxAbsPrestigeMargin) * 100
               );
+              const isLatest = point.key === summary.latestResult?.key;
               const winnerColor =
                 point.winner === "a"
                   ? summary.playerAColor
@@ -312,65 +394,49 @@ export default function HeadToHeadChart({
               return (
                 <View key={point.key} style={styles.timelineColumn}>
                   <Text style={styles.timelineGameLabel}>{point.label.replace("Game ", "G")}</Text>
-                  <View style={styles.barFrame}>
-                    {point === summary.latestResult ? (
-                      <View
-                        style={[
-                          styles.latestBeam,
-                          {
-                            backgroundColor: withChartAlpha(winnerColor, 0.2),
-                            borderColor: withChartAlpha(winnerColor, 0.38),
-                          },
-                        ]}
-                      />
-                    ) : null}
-                    <View
-                      style={[
-                        styles.upperLane,
-                        {
-                          backgroundColor: withChartAlpha(summary.playerAColor, 0.16),
-                          borderColor: withChartAlpha(summary.playerAColor, 0.32),
-                        },
-                      ]}
-                    >
-                      {point.winner === "a" ? (
-                        <View
-                          style={[
-                            styles.momentumBar,
-                            {
-                              height: `${heightPct}%`,
-                              backgroundColor: winnerColor,
-                            },
-                          ]}
-                        />
-                      ) : null}
-                    </View>
-                    <View style={styles.tieLane}>
+                  <View
+                    style={[
+                      styles.latestResultFrame,
+                      isLatest
+                        ? {
+                            backgroundColor: withChartAlpha(winnerColor, 0.12),
+                            borderColor: withChartAlpha(winnerColor, 0.3),
+                          }
+                        : styles.latestResultFrameIdle,
+                    ]}
+                  >
+                    <View style={styles.momentumTrack}>
+                      <View style={styles.trackHalfTop}>
+                        {point.winner === "a" ? (
+                          <View
+                            style={[
+                              styles.momentumCapsule,
+                              {
+                                height: `${heightPct}%`,
+                                backgroundColor: withChartAlpha(winnerColor, 0.82),
+                                borderColor: withChartAlpha(winnerColor, 0.92),
+                              },
+                            ]}
+                          />
+                        ) : null}
+                      </View>
+                      <View style={styles.trackDivider} />
+                      <View style={styles.trackHalfBottom}>
+                        {point.winner === "b" ? (
+                          <View
+                            style={[
+                              styles.momentumCapsule,
+                              {
+                                height: `${heightPct}%`,
+                                backgroundColor: withChartAlpha(winnerColor, 0.82),
+                                borderColor: withChartAlpha(winnerColor, 0.92),
+                              },
+                            ]}
+                          />
+                        ) : null}
+                      </View>
                       {point.winner === "tie" ? (
-                        <View
-                          style={[styles.tieDot, { backgroundColor: winnerColor }]}
-                        />
-                      ) : null}
-                    </View>
-                    <View
-                      style={[
-                        styles.lowerLane,
-                        {
-                          backgroundColor: withChartAlpha(summary.playerBColor, 0.16),
-                          borderColor: withChartAlpha(summary.playerBColor, 0.32),
-                        },
-                      ]}
-                    >
-                      {point.winner === "b" ? (
-                        <View
-                          style={[
-                            styles.momentumBar,
-                            {
-                              height: `${heightPct}%`,
-                              backgroundColor: winnerColor,
-                            },
-                          ]}
-                        />
+                        <View style={[styles.tieDot, { backgroundColor: winnerColor }]} />
                       ) : null}
                     </View>
                   </View>
@@ -409,42 +475,54 @@ export default function HeadToHeadChart({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 12,
+    gap: 14,
   },
   heroCard: {
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 20,
+    padding: 16,
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 14,
+    gap: 16,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     gap: 12,
+  },
+  headerRowCompact: {
+    alignItems: "flex-start",
   },
   headerText: {
     flex: 1,
-    gap: 4,
+    gap: 6,
   },
-  title: {
-    color: COLORS.text,
-    fontSize: 16,
+  matchupEyebrow: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  matchupTitle: {
+    color: COLORS.textStrong,
+    fontSize: 18,
     fontWeight: "900",
+    lineHeight: 22,
   },
-  subtitle: {
+  matchupSummary: {
     color: COLORS.sub,
     fontSize: 11,
     lineHeight: 16,
   },
   leaderBadge: {
-    minWidth: 112,
-    borderRadius: 14,
+    minWidth: 116,
+    maxWidth: "42%",
+    borderRadius: 16,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 2,
+    gap: 4,
     justifyContent: "center",
   },
   leaderBadgeLabel: {
@@ -455,24 +533,42 @@ const styles = StyleSheet.create({
   },
   leaderBadgeValue: {
     color: COLORS.textStrong,
-    fontSize: 13,
+    fontSize: 17,
     fontWeight: "900",
+    lineHeight: 20,
   },
   scoreboardRow: {
     flexDirection: "row",
     gap: 10,
+    alignItems: "stretch",
   },
   scoreCard: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     backgroundColor: COLORS.cardAlt,
     padding: 12,
-    gap: 4,
+    gap: 10,
+    justifyContent: "space-between",
+    minHeight: 108,
+  },
+  scoreLabelRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  scoreMetaRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  scoreValueBlock: {
+    gap: 2,
   },
   centerCard: {
     width: 96,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.whiteSoft,
@@ -480,29 +576,46 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
+    gap: 4,
   },
   playerDot: {
-    width: 12,
-    height: 12,
+    width: 10,
+    height: 10,
     borderRadius: 999,
+    marginTop: 3,
   },
   scoreLabel: {
-    color: COLORS.sub,
-    fontSize: 10,
+    color: COLORS.textStrong,
+    fontSize: 13,
     fontWeight: "800",
+    flexShrink: 1,
+    lineHeight: 16,
   },
   scoreValue: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: "900",
   },
-  scoreHelper: {
+  scoreValueLabel: {
     color: COLORS.sub,
     fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  scorePercentChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scorePercentText: {
+    fontSize: 11,
+    fontWeight: "800",
   },
   centerValue: {
     color: COLORS.textStrong,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "900",
   },
   centerLabel: {
@@ -513,38 +626,56 @@ const styles = StyleSheet.create({
   },
   centerHelper: {
     color: COLORS.sub,
-    fontSize: 10,
+    fontSize: 11,
     textAlign: "center",
     lineHeight: 14,
   },
-  proofRow: {
+  centerDivider: {
+    width: "100%",
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 2,
+  },
+  centerRunLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 14,
+    textAlign: "center",
+  },
+  summaryChipGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
-  proofCard: {
-    minWidth: "30%",
-    flexGrow: 1,
+  summaryChip: {
     borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.whiteSoft,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 3,
+    gap: 4,
   },
-  proofLabel: {
+  summaryChipHalf: {
+    flexGrow: 1,
+    flexBasis: "47%",
+  },
+  summaryChipFull: {
+    width: "100%",
+  },
+  summaryChipLabel: {
     color: COLORS.sub,
     fontSize: 10,
     fontWeight: "800",
     textTransform: "uppercase",
   },
-  proofValue: {
+  summaryChipValue: {
     color: COLORS.textStrong,
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "900",
   },
-  proofHelper: {
+  summaryChipHelper: {
     color: COLORS.sub,
     fontSize: 10,
     lineHeight: 14,
@@ -553,8 +684,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   timelineStagePlot: {
-    paddingVertical: 12,
-    backgroundColor: "rgba(17, 29, 62, 0.98)",
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(15, 27, 54, 0.98)",
     borderColor: withChartAlpha(COLORS.blue, 0.22),
   },
   timelineHeader: {
@@ -565,89 +697,83 @@ const styles = StyleSheet.create({
   },
   timelineTitle: {
     color: COLORS.textStrong,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "900",
   },
   timelineSub: {
     color: withChartAlpha(COLORS.textStrong, 0.72),
-    fontSize: 10,
+    fontSize: 11,
     textAlign: "right",
     flexShrink: 1,
   },
   timelineShell: {
-    position: "relative",
-    paddingTop: 8,
-  },
-  baseline: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 74,
-    height: 1,
-    backgroundColor: withChartAlpha(COLORS.textStrong, 0.18),
+    paddingTop: 4,
   },
   timelineRow: {
     flexDirection: "row",
     alignItems: "flex-start",
+    justifyContent: "space-between",
     gap: 8,
   },
   timelineColumn: {
     flex: 1,
-    minWidth: 36,
+    minWidth: 40,
     alignItems: "center",
-    gap: 6,
+    gap: 8,
   },
   timelineGameLabel: {
     color: withChartAlpha(COLORS.textStrong, 0.74),
     fontSize: 10,
     fontWeight: "800",
   },
-  barFrame: {
+  latestResultFrame: {
     width: "100%",
-    height: 108,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  latestBeam: {
-    position: "absolute",
-    top: 0,
-    width: "100%",
-    height: 108,
-    borderRadius: 16,
-    borderWidth: 1,
+  latestResultFrameIdle: {
+    backgroundColor: withChartAlpha(COLORS.textStrong, 0.02),
+    borderColor: COLORS.border,
   },
-  upperLane: {
-    width: "100%",
-    height: 44,
+  momentumTrack: {
+    position: "relative",
+    width: 34,
+    height: MOMENTUM_TRACK_HEIGHT,
+    borderRadius: 18,
+    backgroundColor: withChartAlpha(COLORS.textStrong, 0.04),
+    overflow: "hidden",
+  },
+  trackHalfTop: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "flex-end",
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingBottom: 4,
+    paddingBottom: 6,
   },
-  tieLane: {
-    width: "100%",
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
+  trackDivider: {
+    height: 1,
+    marginHorizontal: 5,
+    backgroundColor: withChartAlpha(COLORS.textStrong, 0.22),
   },
-  lowerLane: {
-    width: "100%",
-    height: 44,
+  trackHalfBottom: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingTop: 4,
+    paddingTop: 6,
   },
-  momentumBar: {
-    width: MOMENTUM_BAR_WIDTH,
+  momentumCapsule: {
+    width: MOMENTUM_CAPSULE_WIDTH,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: withChartAlpha(COLORS.textStrong, 0.44),
     minHeight: 10,
   },
   tieDot: {
+    position: "absolute",
+    top: MOMENTUM_TRACK_HEIGHT / 2 - 6,
+    left: 11,
     width: 12,
     height: 12,
     borderRadius: 999,
@@ -655,22 +781,23 @@ const styles = StyleSheet.create({
     borderColor: withChartAlpha(COLORS.textStrong, 0.38),
   },
   timelineMarginChip: {
-    minWidth: 40,
+    minWidth: 50,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     alignItems: "center",
     justifyContent: "center",
   },
   timelineMargin: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
   },
   legendRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
+    justifyContent: "center",
   },
   legendItem: {
     flexDirection: "row",
@@ -693,9 +820,9 @@ const styles = StyleSheet.create({
   },
   verdict: {
     color: withChartAlpha(COLORS.textStrong, 0.9),
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
-    lineHeight: 17,
+    lineHeight: 18,
   },
   emptyCard: {
     borderRadius: 16,

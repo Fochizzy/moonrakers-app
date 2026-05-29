@@ -30,6 +30,8 @@ import {
   getChartsForSection,
   normalizeChartHubSelection,
   resolveChartCatalogEntry,
+  supportsChartFocusPlayerToggle,
+  supportsChartScopePlayerToggle,
   type ChartCatalogEntry,
   type ChartCatalogKey,
 } from "@/components/charts/chartCatalog";
@@ -37,7 +39,6 @@ import {
   CHART_COLORS,
   CHART_LAYOUT,
   getChartToneStyles,
-  getQuietChipStyle,
   withChartAlpha,
 } from "@/components/charts/chartVisualSystem";
 import {
@@ -50,9 +51,13 @@ import {
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
 import { buildLocalChartSetupPayload } from "@/lib/cloud/analytics/buildLocalChartSetupPayload";
 import { getChartSetup } from "@/lib/cloud/analytics/getChartSetup";
+import {
+  needsChartSetupSupplement,
+  resolveEffectiveChartSetupPayload,
+} from "@/lib/cloud/analytics/resolveChartSetupPayload";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useStore } from "@/store/useStore";
-import { APP_ROUTES, buildDefinitionsRoute } from "@/utils/appRoutes";
+import { APP_ROUTES } from "@/utils/appRoutes";
 import {
   buildRouteScopeSeedKey,
   getPreferredScopeIdsForChart,
@@ -65,7 +70,11 @@ import {
   resolveSignedInPlayerOptionId,
   resolvePreferredChartPlayerId,
 } from "@/utils/charts";
-import { resolveDefinitionTarget } from "@/utils/definitionTargets";
+import {
+  getVisibleEloMetricTabs,
+  normalizeVisibleEloMetricTab,
+  type VisibleEloMetricTab,
+} from "@/utils/elo/visibleMetricTabs";
 
 function getParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -87,21 +96,13 @@ function isTruthyParam(value?: string | string[]) {
   return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
-type EloSetupTab =
-  | "Leaderboard"
-  | "Momentum"
-  | "Skills"
-  | "Context"
-  | "Projection";
+type EloSetupTab = VisibleEloMetricTab;
 type SetupOption = {
   key: string;
   label: string;
   badge?: string | null;
   kind?: "default" | "action";
 };
-
-const ALL_FOCUS_PLAYERS_CHIP_ID = "__all_focus_players__";
-const ALL_SCOPE_PLAYERS_CHIP_ID = "__all_scope_players__";
 
 type SetupDefaults = {
   focusPlayerId: string | null;
@@ -114,13 +115,8 @@ type SetupDefaults = {
 };
 
 const LINE_MODE_OPTIONS: readonly LineMode[] = ["raw", "cumulative", "average"];
-const ELO_VIEW_OPTIONS: readonly EloSetupTab[] = [
-  "Leaderboard",
-  "Momentum",
-  "Skills",
-  "Context",
-  "Projection",
-];
+const ELO_VIEW_OPTIONS: readonly EloSetupTab[] = getVisibleEloMetricTabs();
+const TOGGLE_SCOPE_PLAYER_LIST_KEY = "__toggle_scope_player_list__";
 
 function titleCase(value: string) {
   return value
@@ -139,13 +135,8 @@ function normalizeLineMode(value?: string | string[]) {
 }
 
 function normalizeEloTab(value?: string | string[]) {
-  const normalized = String(getParam(value) ?? "Leaderboard")
-    .trim()
-    .toLowerCase();
-
-  return (
-    ELO_VIEW_OPTIONS.find((tab) => tab.toLowerCase() === normalized) ??
-    "Leaderboard"
+  return normalizeVisibleEloMetricTab(
+    String(getParam(value) ?? "Leaderboard"),
   );
 }
 
@@ -216,6 +207,27 @@ function haveSameIds(left: readonly string[], right: readonly string[]) {
   return left.every((id, index) => String(id) === String(right[index]));
 }
 
+function dedupeIds(ids: readonly string[]) {
+  return ids.filter((id, index) => ids.indexOf(id) === index);
+}
+
+function sanitizeRadarCompareIds(
+  options: readonly SetupOption[],
+  ids: readonly string[],
+  selectedPlayerId: string | null,
+  limit = 4,
+) {
+  const validIds = new Set(options.map((option) => String(option.key)));
+  const focusId = String(selectedPlayerId ?? "").trim();
+
+  return dedupeIds(
+    ids
+      .map((id) => String(id).trim())
+      .filter(Boolean)
+      .filter((id) => validIds.has(id) && id !== focusId),
+  ).slice(0, Math.max(0, limit));
+}
+
 function sanitizeSelectedIds(
   options: readonly SetupOption[],
   ids: readonly string[],
@@ -229,15 +241,51 @@ function sanitizeSelectedIds(
 
 function canUseSegmentedControl(items: readonly SetupOption[]) {
   return (
-    items.length >= 2 &&
+    items.length >= 1 &&
     items.length <= 4 &&
     items.every(
       (item) =>
-        item.label.length <= 14 &&
         !item.badge &&
         item.kind !== "action"
     )
   );
+}
+
+function chunkSetupOptions(
+  items: readonly SetupOption[],
+  chunkSize = 4,
+) {
+  const chunks: SetupOption[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push([...items.slice(index, index + chunkSize)]);
+  }
+
+  return chunks;
+}
+
+function buildPrimarySetupOptions(
+  options: readonly SetupOption[],
+  priorityKeys: readonly (string | null | undefined)[],
+  limit = 4,
+) {
+  const next: SetupOption[] = [];
+  const seen = new Set<string>();
+
+  const push = (option?: SetupOption | null) => {
+    const optionKey = String(option?.key ?? "").trim();
+    if (!optionKey || seen.has(optionKey)) return;
+    seen.add(optionKey);
+    next.push({
+      key: optionKey,
+      label: String(option?.label ?? optionKey),
+    });
+  };
+
+  priorityKeys.forEach((key) => push(findOption(options, key)));
+  options.forEach((option) => push(option));
+
+  return next.slice(0, limit);
 }
 
 function SetupTabs({
@@ -272,139 +320,62 @@ function SetupTabs({
   );
 }
 
-function ScopeTab({
-  label,
-  badge = null,
-  kind = "default",
-  active,
-  onPress,
+function SetupSegmentedTabs({
+  items,
+  selectedKeys,
+  onChange,
+  selectionMode = "single",
+  columns = 4,
 }: {
-  label: string;
-  badge?: string | null;
-  kind?: "default" | "action";
-  active: boolean;
-  onPress: () => void;
+  items: readonly SetupOption[];
+  selectedKeys: readonly string[];
+  onChange: (next: string) => void;
+  selectionMode?: "single" | "multiple";
+  columns?: number;
 }) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.scopeTab,
-        kind === "action" && styles.scopeTabAction,
-        pressed && { opacity: 0.9 },
-      ]}
-      onPress={onPress}
-    >
-      <View style={styles.scopeTabLabelRow}>
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.scopeTabText,
-            kind === "action" && styles.scopeTabTextAction,
-            active && styles.scopeTabTextActive,
-          ]}
-        >
-          {label}
-        </Text>
-        {badge ? (
-          <View style={[styles.scopeTabBadge, active && styles.scopeTabBadgeActive]}>
-            <Text
-              style={[
-                styles.scopeTabBadgeText,
-                active && styles.scopeTabBadgeTextActive,
-              ]}
-            >
-              {badge}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      <View
-        style={[
-          styles.scopeTabUnderline,
-          kind === "action" && styles.scopeTabUnderlineAction,
-          active && styles.scopeTabUnderlineActive,
-        ]}
-      />
-    </Pressable>
-  );
-}
+  if (!items.length) return null;
 
-function MetricButton({
-  label,
-  active,
-  definitionMetricKey = null,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  definitionMetricKey?: string | null;
-  onPress: () => void;
-}) {
-  const router = useRouter();
-  const quiet = getQuietChipStyle(active ? "green" : "neutral");
-  const definitionTarget = resolveDefinitionTarget({ metric: definitionMetricKey, label });
+  const selectedKeySet = new Set(selectedKeys.map((key) => String(key)));
+  const rows = chunkSetupOptions(items, columns);
 
   return (
-    <View
-      style={[
-        styles.metricButton,
-        {
-          backgroundColor: quiet.backgroundColor,
-          borderColor: quiet.borderColor,
-        },
-      ]}
-    >
-      <View style={styles.metricButtonMain}>
-        <View
-          style={[
-            styles.metricButtonMarker,
-            {
-              backgroundColor: active
-                ? quiet.textColor
-                : withChartAlpha(CHART_COLORS.sub, 0.32),
-            },
-          ]}
-        />
+    <View style={styles.setupSegmentedTabStack}>
+      {rows.map((row, rowIndex) => (
+        <View key={`setup-row-${rowIndex}`} style={styles.setupSegmentedTabShell}>
+          {row.map((item) => {
+            const itemKey = String(item.key);
+            const active =
+              selectionMode === "multiple"
+                ? selectedKeySet.has(itemKey)
+                : itemKey === String(selectedKeys[0] ?? "");
 
-        <View style={styles.metricButtonCopy}>
-          {definitionTarget ? (
-            <Pressable
-              onPress={() => router.push(buildDefinitionsRoute(definitionTarget))}
-              style={styles.metricButtonLabelLink}
-            >
-              <Text style={[styles.metricButtonText, { color: quiet.textColor }]}>
-                {label}
-              </Text>
-            </Pressable>
-          ) : (
-            <Text style={[styles.metricButtonText, { color: quiet.textColor }]}>
-              {label}
-            </Text>
-          )}
-
-          {definitionTarget ? (
-            <Text style={styles.metricButtonHint}>Definition</Text>
-          ) : null}
+            return (
+              <Pressable
+                key={itemKey}
+                onPress={() => onChange(itemKey)}
+                style={({ pressed }) => [
+                  styles.setupSegmentedTab,
+                  active && styles.setupSegmentedTabActive,
+                  pressed && styles.setupSegmentedTabPressed,
+                ]}
+              >
+                <Text
+                  variant="utilityLabel"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                  style={[
+                    styles.setupSegmentedTabText,
+                    active && styles.setupSegmentedTabTextActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      </View>
-
-      <Pressable
-        style={({ pressed }) => [
-          styles.metricButtonAction,
-          active && styles.metricButtonActionActive,
-          pressed && { opacity: 0.9 },
-        ]}
-        onPress={onPress}
-      >
-        <Text
-          style={[
-            styles.metricButtonActionText,
-            active && styles.metricButtonActionTextActive,
-          ]}
-        >
-          {active ? "Selected" : "Use metric"}
-        </Text>
-      </Pressable>
+      ))}
     </View>
   );
 }
@@ -520,6 +491,7 @@ export default function ChartsIndexScreen() {
     chartKey?: string | string[];
     playerId?: string | string[];
     compareId?: string | string[];
+    compareIds?: string | string[];
     ids?: string | string[];
     metric?: string | string[];
     lineMode?: string | string[];
@@ -539,6 +511,12 @@ export default function ChartsIndexScreen() {
   ).key;
   const routePlayerId = getParam(params.playerId);
   const routeCompareId = getParam(params.compareId);
+  const routeCompareIdsParam = getParam(params.compareIds);
+  const routeCompareIds = useMemo(
+    () => getParamList(routeCompareIdsParam),
+    [routeCompareIdsParam],
+  );
+  const routeCompareIdsKey = routeCompareIds.join(",");
   const routeIdsParam = getParam(params.ids);
   const routeIds = useMemo(() => getParamList(routeIdsParam), [routeIdsParam]);
   const routeMetric = getParam(params.metric);
@@ -552,6 +530,13 @@ export default function ChartsIndexScreen() {
   );
   const [comparePlayerId, setComparePlayerId] = useState<string | null>(
     routeCompareId ?? null
+  );
+  const [selectedRadarCompareIds, setSelectedRadarCompareIds] = useState<string[]>(
+    routeCompareIds.length
+      ? routeCompareIds
+      : routeCompareId
+        ? [routeCompareId]
+        : [],
   );
   const [selectedMetric, setSelectedMetric] = useState<string | null>(
     routeMetric ? String(routeMetric).trim() : null
@@ -571,12 +556,14 @@ export default function ChartsIndexScreen() {
     routeOpponentId ?? null
   );
   const [focusPlayerSearch, setFocusPlayerSearch] = useState("");
+  const [comparePlayerSearch, setComparePlayerSearch] = useState("");
   const [scopePlayerSearch, setScopePlayerSearch] = useState("");
-  const [showAllFocusPlayerOptions, setShowAllFocusPlayerOptions] = useState(false);
   const [showAllScopePlayerOptions, setShowAllScopePlayerOptions] = useState(false);
   const [setupOpen, setSetupOpen] = useState(routeSetupOpen);
+  const shouldHonorRouteSetupParams = !setupOpen;
   const [activeStageKey, setActiveStageKey] = useState<ChartSetupStageKey>("scope");
   const deferredFocusPlayerSearch = useDeferredValue(focusPlayerSearch);
+  const deferredComparePlayerSearch = useDeferredValue(comparePlayerSearch);
   const deferredScopePlayerSearch = useDeferredValue(scopePlayerSearch);
   const previousScopeStageSignatureRef = useRef<string | null>(null);
   const previousMetricStageSignatureRef = useRef<string | null>(null);
@@ -584,6 +571,7 @@ export default function ChartsIndexScreen() {
     () => resolveChartCatalogEntry(selectedChartKey),
     [selectedChartKey]
   );
+  const isRadarChart = selectedChart.key === "radar";
   const chartSetupQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),
     queryKey: `chart-setup:${profileId || "anon"}:${selectedChart.key}`,
@@ -611,12 +599,62 @@ export default function ChartsIndexScreen() {
     () => buildAnalyticsPlayerDirectory({ players, games, groups }),
     [players, games, groups]
   );
+  const localSetupPlayers = useMemo(
+    () =>
+      analyticsDirectory.players.length
+        ? analyticsDirectory.players
+        : supabaseSetupFallbackPlayers,
+    [analyticsDirectory.players, supabaseSetupFallbackPlayers]
+  );
+  const localSetupFallbackPayload = useMemo(
+    () =>
+      buildLocalChartSetupPayload({
+        chartKey: selectedChart.key,
+        players: localSetupPlayers as any,
+        authProfileId: authProfile?.id,
+        authSessionUserId: authSession?.user?.id,
+        routePlayerId: routePlayerId ?? null,
+        routeCompareId: routeCompareId ?? null,
+        routeIds,
+        routeMetric: routeMetric ?? null,
+        routeLineMode,
+        routeEloTab,
+        routeOpponentId: routeOpponentId ?? null,
+      }),
+    [
+      authProfile?.id,
+      authSession?.user?.id,
+      localSetupPlayers,
+      routeCompareId,
+      routeEloTab,
+      routeIds,
+      routeLineMode,
+      routeMetric,
+      routeOpponentId,
+      routePlayerId,
+      selectedChart.key,
+    ]
+  );
+  const setupNeedsSupplement = useMemo(
+    () =>
+      needsChartSetupSupplement({
+        chartKey: selectedChart.key,
+        publishedPayload: setupPayload as any,
+        fallbackPayload: localSetupFallbackPayload,
+      }),
+    [localSetupFallbackPayload, selectedChart.key, setupPayload]
+  );
   useEffect(() => {
-    if (!profileId || setupPayload || !setupError || supabaseSetupFallbackLoading) {
+    if (
+      !profileId ||
+      analyticsDirectory.players.length > 0 ||
+      supabaseSetupFallbackLoading ||
+      supabaseSetupFallbackPlayers.length > 0
+    ) {
       return;
     }
 
-    if (supabaseSetupFallbackPlayers.length > 0) {
+    if (setupPayload && !setupError && !setupNeedsSupplement) {
       return;
     }
 
@@ -644,43 +682,23 @@ export default function ChartsIndexScreen() {
       cancelled = true;
     };
   }, [
+    analyticsDirectory.players.length,
     profileId,
     setupError,
     setupPayload,
     supabaseSetupFallbackLoading,
     supabaseSetupFallbackPlayers.length,
+    setupNeedsSupplement,
   ]);
-  const localSetupFallbackPayload = useMemo(
+  const effectiveSetupPayload = useMemo(
     () =>
-      buildLocalChartSetupPayload({
+      resolveEffectiveChartSetupPayload({
         chartKey: selectedChart.key,
-        players: supabaseSetupFallbackPlayers as any,
-        authProfileId: authProfile?.id,
-        authSessionUserId: authSession?.user?.id,
-        routePlayerId: routePlayerId ?? null,
-        routeCompareId: routeCompareId ?? null,
-        routeIds,
-        routeMetric: routeMetric ?? null,
-        routeLineMode,
-        routeEloTab,
-        routeOpponentId: routeOpponentId ?? null,
+        publishedPayload: setupPayload as any,
+        fallbackPayload: localSetupFallbackPayload,
       }),
-    [
-      authProfile?.id,
-      authSession?.user?.id,
-      routeCompareId,
-      routeEloTab,
-      routeIds,
-      routeLineMode,
-      routeMetric,
-      routeOpponentId,
-      routePlayerId,
-      selectedChart.key,
-      supabaseSetupFallbackPlayers,
-    ]
+    [localSetupFallbackPayload, selectedChart.key, setupPayload]
   );
-  const effectiveSetupPayload =
-    setupPayload ?? (setupError ? localSetupFallbackPayload : null);
   const usingLocalSetupFallback = Boolean(
     !setupPayload && setupError && effectiveSetupPayload
   );
@@ -690,17 +708,32 @@ export default function ChartsIndexScreen() {
   const setupRecoveryMessage = usingLocalSetupFallback
     ? "The published chart setup is unavailable right now, so these options are using Supabase roster data instead."
     : null;
+  const hasFocusPlayerToggle = supportsChartFocusPlayerToggle(selectedChart.key);
+  const hasScopePlayerToggle = supportsChartScopePlayerToggle(selectedChart.key);
   const focusPlayerOptions = useMemo(
-    () => toSetupOptions(effectiveSetupPayload?.focusPlayerOptions),
-    [effectiveSetupPayload?.focusPlayerOptions]
+    () =>
+      hasFocusPlayerToggle
+        ? toSetupOptions(effectiveSetupPayload?.focusPlayerOptions)
+        : [],
+    [effectiveSetupPayload?.focusPlayerOptions, hasFocusPlayerToggle]
   );
   const comparePlayerOptions = useMemo(
     () => toSetupOptions(effectiveSetupPayload?.comparePlayerOptions),
     [effectiveSetupPayload?.comparePlayerOptions]
   );
-  const scopePlayerOptions = useMemo(
-    () => toSetupOptions(effectiveSetupPayload?.scopePlayerOptions),
-    [effectiveSetupPayload?.scopePlayerOptions]
+  const radarCompareOptions = useMemo(
+    () =>
+      comparePlayerOptions.filter(
+        (option) => String(option.key) !== String(selectedPlayerId ?? ""),
+      ),
+    [comparePlayerOptions, selectedPlayerId],
+  );
+  const setupScopePlayerOptions = useMemo(
+    () =>
+      hasScopePlayerToggle
+        ? toSetupOptions(effectiveSetupPayload?.scopePlayerOptions)
+        : [],
+    [effectiveSetupPayload?.scopePlayerOptions, hasScopePlayerToggle]
   );
   const metricOptions = useMemo(
     () => toSetupOptions(effectiveSetupPayload?.metricOptions),
@@ -721,14 +754,6 @@ export default function ChartsIndexScreen() {
   const setupDefaults = useMemo(
     () => toSetupDefaults(effectiveSetupPayload?.defaults),
     [effectiveSetupPayload?.defaults]
-  );
-  const scopePlayerIds = useMemo(
-    () => scopePlayerOptions.map((option) => String(option.key)),
-    [scopePlayerOptions]
-  );
-  const scopePlayerIdentities = useMemo(
-    () => scopePlayerOptions.map((option) => ({ id: String(option.key) })),
-    [scopePlayerOptions]
   );
   const focusPlayerDirectoryPlayers = useMemo(() => {
     const playerById = new Map(
@@ -758,7 +783,7 @@ export default function ChartsIndexScreen() {
       analyticsDirectory.players.map((player) => [String(player.id), player])
     );
 
-    return scopePlayerOptions.map((option) => {
+    return setupScopePlayerOptions.map((option) => {
       const matched = playerById.get(String(option.key));
       return {
         id: String(option.key),
@@ -773,9 +798,9 @@ export default function ChartsIndexScreen() {
           typeof matched?.artIndex === "number"
             ? matched.artIndex
             : null,
-      };
+        };
     });
-  }, [analyticsDirectory.players, scopePlayerOptions]);
+  }, [analyticsDirectory.players, setupScopePlayerOptions]);
   const authProfilePlayer = useMemo(() => {
     const authProfilePlayerId = String(
       authProfile?.id ?? authSession?.user?.id ?? ""
@@ -885,7 +910,7 @@ export default function ChartsIndexScreen() {
         playerId: preferredScopePlayerId,
         players: scopePlayerDirectoryPlayers,
         games: analyticsDirectory.games,
-        limit: 4,
+        limit: 3,
       }),
     [preferredScopePlayerId, scopePlayerDirectoryPlayers, analyticsDirectory.games]
   );
@@ -897,7 +922,7 @@ export default function ChartsIndexScreen() {
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
         authProfilePlayer: authProfilePlayer as any,
-        commonPlayerLimit: 4,
+        commonPlayerLimit: 3,
         explicitPriorityPlayerIds: topCommonScopePlayers.map((player) =>
           String(player.id)
         ),
@@ -926,6 +951,45 @@ export default function ChartsIndexScreen() {
       scopePlayerDirectoryPlayers,
     ]
   );
+  const allPlayedScopePlayers = useMemo(
+    () =>
+      buildCommonOpponentOptions({
+        playerId: preferredScopePlayerId,
+        players: scopePlayerDirectoryPlayers,
+        games: analyticsDirectory.games,
+        limit: scopePlayerDirectoryPlayers.length,
+      }),
+    [preferredScopePlayerId, scopePlayerDirectoryPlayers, analyticsDirectory.games]
+  );
+  const scopeAllowedPlayerIds = useMemo(() => {
+    const next = new Set<string>(
+      allPlayedScopePlayers.map((player) => String(player.id))
+    );
+
+    const signedInId = String(
+      signedInScopePlayerOptionId ?? preferredScopePlayerId ?? ""
+    ).trim();
+    if (signedInId) {
+      next.add(signedInId);
+    }
+
+    return next;
+  }, [allPlayedScopePlayers, preferredScopePlayerId, signedInScopePlayerOptionId]);
+  const scopePlayerOptions = useMemo(() => {
+    if (!scopeAllowedPlayerIds.size) {
+      return setupScopePlayerOptions;
+    }
+
+    const filtered = setupScopePlayerOptions.filter((option) =>
+      scopeAllowedPlayerIds.has(String(option.key))
+    );
+
+    return filtered.length ? filtered : setupScopePlayerOptions;
+  }, [scopeAllowedPlayerIds, setupScopePlayerOptions]);
+  const scopePlayerIdentities = useMemo(
+    () => scopePlayerOptions.map((option) => ({ id: String(option.key) })),
+    [scopePlayerOptions]
+  );
   const orderedFocusPlayerOptions = useMemo(() => {
     const optionByKey = new Map(
       focusPlayerOptions.map((option) => {
@@ -934,7 +998,7 @@ export default function ChartsIndexScreen() {
           optionKey,
           optionKey === String(signedInFocusPlayerOptionId ?? "").trim() &&
           authProfilePlayer?.name
-            ? { ...option, label: authProfilePlayer.name }
+            ? { ...option, label: "You" }
             : option,
         ];
       })
@@ -965,24 +1029,15 @@ export default function ChartsIndexScreen() {
     prioritizedFocusPlayerDirectoryPlayers,
     signedInFocusPlayerOptionId,
   ]);
-  const quickFocusPlayerOptions = useMemo(() => {
-    const signedInId = String(signedInFocusPlayerOptionId ?? "").trim();
-    const quickOptions = orderedFocusPlayerOptions.slice(0, 5).map((option) => ({
-      ...option,
-      badge: String(option.key) === signedInId ? "You" : null,
-    }));
-
-    if (orderedFocusPlayerOptions.length > 0) {
-      quickOptions.push({
-        key: ALL_FOCUS_PLAYERS_CHIP_ID,
-        label: "All players",
-        badge: null,
-        kind: "action",
-      });
-    }
-
-    return quickOptions;
-  }, [orderedFocusPlayerOptions, signedInFocusPlayerOptionId]);
+  const primaryFocusPlayerOptions = useMemo(
+    () =>
+      buildPrimarySetupOptions(
+        orderedFocusPlayerOptions,
+        [selectedPlayerId, signedInFocusPlayerOptionId],
+        4,
+      ),
+    [orderedFocusPlayerOptions, selectedPlayerId, signedInFocusPlayerOptionId]
+  );
   const orderedScopePlayerOptions = useMemo(() => {
     const optionByKey = new Map(
       scopePlayerOptions.map((option) => {
@@ -991,7 +1046,7 @@ export default function ChartsIndexScreen() {
           optionKey,
           optionKey === String(signedInScopePlayerOptionId ?? "").trim() &&
           authProfilePlayer?.name
-            ? { ...option, label: authProfilePlayer.name }
+            ? { ...option, label: "You" }
             : option,
         ];
       })
@@ -1022,88 +1077,145 @@ export default function ChartsIndexScreen() {
     scopePlayerOptions,
     signedInScopePlayerOptionId,
   ]);
-  const quickScopePlayerOptions = useMemo(() => {
-    const signedInId = String(signedInScopePlayerOptionId ?? "").trim();
-    const quickOptions = orderedScopePlayerOptions.slice(0, 5).map((option) => ({
-      ...option,
-      badge: String(option.key) === signedInId ? "You" : null,
-    }));
-
-    if (orderedScopePlayerOptions.length > 0) {
-      quickOptions.push({
-        key: ALL_SCOPE_PLAYERS_CHIP_ID,
-        label: "All players",
-        badge: null,
-        kind: "action",
-      });
-    }
-
-    return quickOptions;
-  }, [orderedScopePlayerOptions, signedInScopePlayerOptionId]);
   const filteredFocusPlayerOptions = useMemo(() => {
     const normalizedQuery = deferredFocusPlayerSearch.trim().toLowerCase();
     if (!normalizedQuery) return [];
 
-    return orderedFocusPlayerOptions.filter((option) =>
+    return orderedFocusPlayerOptions.filter((option) => {
+      const isSignedInOption =
+        String(option.key) === String(signedInFocusPlayerOptionId ?? "").trim();
+      const searchTargets = [
+        String(option.label ?? "").toLowerCase(),
+        isSignedInOption ? String(authProfilePlayer?.name ?? "").toLowerCase() : "",
+      ].filter(Boolean);
+
+      return searchTargets.some((target) => target.includes(normalizedQuery));
+    });
+  }, [
+    authProfilePlayer?.name,
+    deferredFocusPlayerSearch,
+    orderedFocusPlayerOptions,
+    signedInFocusPlayerOptionId,
+  ]);
+  const filteredComparePlayerOptions = useMemo(() => {
+    const normalizedQuery = deferredComparePlayerSearch.trim().toLowerCase();
+    if (!normalizedQuery) return [];
+
+    return radarCompareOptions.filter((option) =>
       String(option.label ?? "").toLowerCase().includes(normalizedQuery)
     );
-  }, [deferredFocusPlayerSearch, orderedFocusPlayerOptions]);
+  }, [deferredComparePlayerSearch, radarCompareOptions]);
+  const comparePlayerSearchItems = useMemo(
+    () =>
+      filteredComparePlayerOptions.map((option) => ({
+        id: String(option.key),
+        label: option.label,
+      })),
+    [filteredComparePlayerOptions]
+  );
+  const selectedRadarComparePlayers = useMemo(
+    () =>
+      selectedRadarCompareIds
+        .map((playerId) => findOption(radarCompareOptions, playerId))
+        .filter((option): option is SetupOption => option !== null),
+    [radarCompareOptions, selectedRadarCompareIds],
+  );
+  const radarPinnedCompareOptions = useMemo(() => {
+    const selectedIds = new Set(selectedRadarCompareIds.map((id) => String(id)));
+    const selectedOptions = selectedRadarComparePlayers.map((option, index) => ({
+      ...option,
+      badge: `P${index + 1}`,
+    }));
+    const remainingOptions = radarCompareOptions
+      .filter((option) => !selectedIds.has(String(option.key)))
+      .slice(0, Math.max(0, 8 - selectedOptions.length));
+
+    return [...selectedOptions, ...remainingOptions];
+  }, [radarCompareOptions, selectedRadarCompareIds, selectedRadarComparePlayers]);
   const filteredScopePlayerOptions = useMemo(() => {
     const normalizedQuery = deferredScopePlayerSearch.trim().toLowerCase();
     if (!normalizedQuery) return [];
 
-    return orderedScopePlayerOptions.filter((option) =>
-      String(option.label ?? "").toLowerCase().includes(normalizedQuery)
-    );
-  }, [deferredScopePlayerSearch, orderedScopePlayerOptions]);
-  const visibleFocusPlayerOptions = useMemo(() => {
-    const signedInId = String(signedInFocusPlayerOptionId ?? "").trim();
-    if (focusPlayerSearch.trim()) {
-      return filteredFocusPlayerOptions.map((option) => ({
-        ...option,
-        badge: String(option.key) === signedInId ? "You" : null,
-      }));
-    }
+    return orderedScopePlayerOptions.filter((option) => {
+      const isSignedInOption =
+        String(option.key) === String(signedInScopePlayerOptionId ?? "").trim();
+      const searchTargets = [
+        String(option.label ?? "").toLowerCase(),
+        isSignedInOption ? String(authProfilePlayer?.name ?? "").toLowerCase() : "",
+      ].filter(Boolean);
 
-    return showAllFocusPlayerOptions
-      ? orderedFocusPlayerOptions.map((option) => ({
-          ...option,
-          badge: String(option.key) === signedInId ? "You" : null,
-        }))
-      : [];
+      return searchTargets.some((target) => target.includes(normalizedQuery));
+    });
   }, [
-    filteredFocusPlayerOptions,
-    focusPlayerSearch,
-    orderedFocusPlayerOptions,
-    showAllFocusPlayerOptions,
-    signedInFocusPlayerOptionId,
+    authProfilePlayer?.name,
+    deferredScopePlayerSearch,
+    orderedScopePlayerOptions,
+    signedInScopePlayerOptionId,
   ]);
-  const visibleScopePlayerOptions = useMemo(() => {
-    const signedInId = String(signedInScopePlayerOptionId ?? "").trim();
-    if (scopePlayerSearch.trim()) {
-      return filteredScopePlayerOptions.map((option) => ({
-        ...option,
-        badge: String(option.key) === signedInId ? "You" : null,
-      }));
+  const collapsedScopePlayerOptions = useMemo(
+    () =>
+      buildPrimarySetupOptions(
+        orderedScopePlayerOptions,
+        [
+          signedInScopePlayerOptionId,
+          ...topCommonScopePlayers.map((player) => String(player.id)),
+        ],
+        4,
+      ),
+    [
+      orderedScopePlayerOptions,
+      signedInScopePlayerOptionId,
+      topCommonScopePlayers,
+    ]
+  );
+  const canExpandScopePlayerOptions =
+    orderedScopePlayerOptions.length > collapsedScopePlayerOptions.length;
+  const visibleScopePlayerTabOptions = useMemo(() => {
+    const normalizedQuery = scopePlayerSearch.trim();
+    const matchingOptions = normalizedQuery
+      ? filteredScopePlayerOptions
+      : showAllScopePlayerOptions
+        ? orderedScopePlayerOptions
+        : collapsedScopePlayerOptions;
+
+    if (normalizedQuery || !canExpandScopePlayerOptions) {
+      return matchingOptions;
     }
 
-    return showAllScopePlayerOptions
-      ? orderedScopePlayerOptions.map((option) => ({
-          ...option,
-          badge: String(option.key) === signedInId ? "You" : null,
-        }))
-      : [];
+    return [
+      ...matchingOptions,
+      {
+        key: TOGGLE_SCOPE_PLAYER_LIST_KEY,
+        label: showAllScopePlayerOptions ? "Show less" : "Show all",
+        kind: "action" as const,
+      },
+    ];
   }, [
+    canExpandScopePlayerOptions,
+    collapsedScopePlayerOptions,
     filteredScopePlayerOptions,
     orderedScopePlayerOptions,
     scopePlayerSearch,
     showAllScopePlayerOptions,
-    signedInScopePlayerOptionId,
   ]);
+  const scopeSegmentedSelectedKeys = useMemo(
+    () => selectedGroupIds,
+    [selectedGroupIds]
+  );
 
   useEffect(() => {
     setSelectedChartKey(routeChartKey);
   }, [routeChartKey]);
+
+  useEffect(() => {
+    setShowAllScopePlayerOptions(false);
+  }, [selectedChartKey]);
+
+  useEffect(() => {
+    if (!canExpandScopePlayerOptions && showAllScopePlayerOptions) {
+      setShowAllScopePlayerOptions(false);
+    }
+  }, [canExpandScopePlayerOptions, showAllScopePlayerOptions]);
 
   useEffect(() => {
     if (getParam(params.setup) != null) {
@@ -1114,26 +1226,44 @@ export default function ChartsIndexScreen() {
   useEffect(() => {
     const nextLineMode = resolveOptionKey(
       lineModeOptions,
-      getParam(params.lineMode) != null ? routeLineMode : null,
+      shouldHonorRouteSetupParams && getParam(params.lineMode) != null
+        ? routeLineMode
+        : null,
       selectedLineMode,
       setupDefaults.lineMode,
     );
     if (nextLineMode && nextLineMode !== selectedLineMode) {
       setSelectedLineMode(nextLineMode);
     }
-  }, [lineModeOptions, params.lineMode, routeLineMode, selectedLineMode, setupDefaults.lineMode]);
+  }, [
+    lineModeOptions,
+    params.lineMode,
+    routeLineMode,
+    selectedLineMode,
+    setupDefaults.lineMode,
+    shouldHonorRouteSetupParams,
+  ]);
 
   useEffect(() => {
     const nextEloTab = resolveOptionKey(
       eloViewOptions,
-      getParam(params.eloTab) != null ? routeEloTab : null,
+      shouldHonorRouteSetupParams && getParam(params.eloTab) != null
+        ? routeEloTab
+        : null,
       selectedEloTab,
       setupDefaults.eloTab,
     );
     if (nextEloTab && nextEloTab !== selectedEloTab) {
       setSelectedEloTab(nextEloTab);
     }
-  }, [eloViewOptions, params.eloTab, routeEloTab, selectedEloTab, setupDefaults.eloTab]);
+  }, [
+    eloViewOptions,
+    params.eloTab,
+    routeEloTab,
+    selectedEloTab,
+    setupDefaults.eloTab,
+    shouldHonorRouteSetupParams,
+  ]);
 
   useEffect(() => {
     const activeId = String(selectedPlayerId ?? "").trim();
@@ -1150,7 +1280,7 @@ export default function ChartsIndexScreen() {
 
     const nextSelectedPlayerId = resolveOptionKey(
       focusPlayerOptions,
-      routePlayerId,
+      shouldHonorRouteSetupParams ? routePlayerId : null,
       activeId,
       preferredFocusPlayerId,
       setupDefaults.focusPlayerId,
@@ -1164,24 +1294,67 @@ export default function ChartsIndexScreen() {
     routePlayerId,
     selectedPlayerId,
     setupDefaults.focusPlayerId,
+    shouldHonorRouteSetupParams,
   ]);
 
   useEffect(() => {
+    if (isRadarChart) {
+      return;
+    }
+
     const nextComparePlayerId = resolveOptionKey(
       comparePlayerOptions,
-      routeCompareId,
+      shouldHonorRouteSetupParams ? routeCompareId : null,
       comparePlayerId,
       setupDefaults.comparePlayerId,
     );
     if (nextComparePlayerId !== comparePlayerId) {
       setComparePlayerId(nextComparePlayerId);
     }
-  }, [comparePlayerId, comparePlayerOptions, routeCompareId, setupDefaults.comparePlayerId]);
+  }, [
+    comparePlayerId,
+    comparePlayerOptions,
+    isRadarChart,
+    routeCompareId,
+    setupDefaults.comparePlayerId,
+    shouldHonorRouteSetupParams,
+  ]);
+
+  useEffect(() => {
+    if (!isRadarChart) {
+      return;
+    }
+
+    const nextRadarCompareIds = sanitizeRadarCompareIds(
+      radarCompareOptions,
+      shouldHonorRouteSetupParams
+        ? routeCompareIds.length
+          ? routeCompareIds
+          : routeCompareId
+            ? [routeCompareId]
+            : []
+        : selectedRadarCompareIds,
+      selectedPlayerId,
+      4,
+    );
+
+    if (!haveSameIds(nextRadarCompareIds, selectedRadarCompareIds)) {
+      setSelectedRadarCompareIds(nextRadarCompareIds);
+    }
+  }, [
+    isRadarChart,
+    radarCompareOptions,
+    routeCompareId,
+    routeCompareIdsKey,
+    selectedPlayerId,
+    selectedRadarCompareIds,
+    shouldHonorRouteSetupParams,
+  ]);
 
   useEffect(() => {
     const nextSelectedOpponentId = resolveOptionKey(
       opponentOptions,
-      routeOpponentId,
+      shouldHonorRouteSetupParams ? routeOpponentId : null,
       selectedOpponentId,
       setupDefaults.opponentId,
       "none",
@@ -1189,19 +1362,34 @@ export default function ChartsIndexScreen() {
     if (nextSelectedOpponentId !== selectedOpponentId) {
       setSelectedOpponentId(nextSelectedOpponentId);
     }
-  }, [opponentOptions, routeOpponentId, selectedOpponentId, setupDefaults.opponentId]);
+  }, [
+    opponentOptions,
+    routeOpponentId,
+    selectedOpponentId,
+    setupDefaults.opponentId,
+    shouldHonorRouteSetupParams,
+  ]);
 
   useEffect(() => {
     const nextMetric = resolveOptionKey(
       metricOptions,
-      routeMetric,
+      shouldHonorRouteSetupParams && getParam(params.metric) != null
+        ? routeMetric
+        : null,
       selectedMetric,
       setupDefaults.metricKey,
     );
     if (nextMetric !== selectedMetric) {
       setSelectedMetric(nextMetric);
     }
-  }, [metricOptions, routeMetric, selectedMetric, setupDefaults.metricKey]);
+  }, [
+    metricOptions,
+    params.metric,
+    routeMetric,
+    selectedMetric,
+    setupDefaults.metricKey,
+    shouldHonorRouteSetupParams,
+  ]);
 
   useEffect(() => {
     if (!routeScopeSeedKey) {
@@ -1235,20 +1423,24 @@ export default function ChartsIndexScreen() {
     setSelectedGroupIds((current) => {
       const fallbackIds = setupDefaults.scopedPlayerIds.length
         ? sanitizeSelectedIds(scopePlayerOptions, setupDefaults.scopedPlayerIds, [])
-        : scopePlayerIds.slice(0, Math.min(4, scopePlayerIds.length));
+        : collapsedScopePlayerOptions.map((option) => String(option.key));
       const nextIds = sanitizeSelectedIds(scopePlayerOptions, current, fallbackIds);
       return haveSameIds(nextIds, current) ? current : nextIds;
     });
-  }, [scopePlayerIds, scopePlayerOptions, setupDefaults.scopedPlayerIds]);
+  }, [collapsedScopePlayerOptions, scopePlayerOptions, setupDefaults.scopedPlayerIds]);
 
   useEffect(() => {
+    if (isRadarChart) {
+      return;
+    }
+
     if (comparePlayerId && String(comparePlayerId) === String(selectedPlayerId)) {
       const fallback = comparePlayerOptions.find(
         (option) => String(option.key) !== String(selectedPlayerId)
       );
       setComparePlayerId(fallback ? String(fallback.key) : null);
     }
-  }, [comparePlayerId, comparePlayerOptions, selectedPlayerId]);
+  }, [comparePlayerId, comparePlayerOptions, isRadarChart, selectedPlayerId]);
 
   useEffect(() => {
     if (selectedOpponentId && String(selectedOpponentId) === String(selectedPlayerId)) {
@@ -1287,10 +1479,30 @@ export default function ChartsIndexScreen() {
   );
 
   const comparePlayer = useMemo(() => {
+    if (isRadarChart) {
+      return selectedRadarComparePlayers[0] ?? null;
+    }
+
     const explicit = findOption(comparePlayerOptions, comparePlayerId);
     if (explicit) return explicit;
     return comparePlayerOptions[0] ?? null;
-  }, [comparePlayerId, comparePlayerOptions]);
+  }, [
+    comparePlayerId,
+    comparePlayerOptions,
+    isRadarChart,
+    selectedRadarComparePlayers,
+  ]);
+  const radarCompareSummaryLabel = useMemo(() => {
+    if (!selectedRadarComparePlayers.length) {
+      return null;
+    }
+
+    if (selectedRadarComparePlayers.length === 1) {
+      return selectedRadarComparePlayers[0]?.label ?? null;
+    }
+
+    return `${selectedRadarComparePlayers.length} compares`;
+  }, [selectedRadarComparePlayers]);
 
   const selectedOpponent = useMemo(() => {
     if (!selectedOpponentId || selectedOpponentId === "none") return null;
@@ -1321,13 +1533,22 @@ export default function ChartsIndexScreen() {
   const scopeSummary = useMemo(
     () =>
       buildScopeStageSummary({
-        focusPlayerLabel: selectedPlayer?.label ?? null,
-        comparePlayerLabel: comparePlayerOptions.length > 0 ? comparePlayer?.label ?? null : null,
-        scopedCount: selectedGroupIds.length,
+        focusPlayerLabel: hasFocusPlayerToggle ? selectedPlayer?.label ?? null : null,
+        comparePlayerLabel:
+          comparePlayerOptions.length > 0
+            ? isRadarChart
+              ? radarCompareSummaryLabel
+              : comparePlayer?.label ?? null
+            : null,
+        scopedCount: hasScopePlayerToggle ? selectedGroupIds.length : 0,
       }),
     [
       comparePlayer?.label,
       comparePlayerOptions.length,
+      hasFocusPlayerToggle,
+      hasScopePlayerToggle,
+      isRadarChart,
+      radarCompareSummaryLabel,
       selectedGroupIds.length,
       selectedPlayer?.label,
     ]
@@ -1336,6 +1557,15 @@ export default function ChartsIndexScreen() {
     () => buildMetricStageSummary(activeMetricLabel),
     [activeMetricLabel]
   );
+  const hasMetricStageChoices = metricOptions.length > 0;
+  const showStyleOpponentOptions =
+    selectedChart.key === "elo" &&
+    selectedEloTab === "Context" &&
+    opponentOptions.length > 0;
+  const hasStyleStageChoices =
+    lineModeOptions.length > 0 ||
+    eloViewOptions.length > 0 ||
+    showStyleOpponentOptions;
   const styleSummary = useMemo(
     () =>
       buildStyleStageSummary({
@@ -1352,9 +1582,9 @@ export default function ChartsIndexScreen() {
     ]
   );
   const scopeReady =
-    Boolean(selectedPlayer?.key) &&
-    selectedGroupIds.length >= minimumScopeCount &&
-    (comparePlayerOptions.length === 0 || Boolean(comparePlayer?.key));
+    (!hasFocusPlayerToggle || Boolean(selectedPlayer?.key)) &&
+    (!hasScopePlayerToggle || selectedGroupIds.length >= minimumScopeCount) &&
+    (comparePlayerOptions.length === 0 || isRadarChart || Boolean(comparePlayer?.key));
   const metricReady = metricOptions.length === 0 || Boolean(activeMetric);
   const styleReady =
     (lineModeOptions.length === 0 || Boolean(selectedLineMode)) &&
@@ -1381,6 +1611,41 @@ export default function ChartsIndexScreen() {
       }),
     [activeStageKey, completedStages]
   );
+  const visibleStageKeys = useMemo<ChartSetupStageKey[]>(() => {
+    const nextStages: ChartSetupStageKey[] = ["scope"];
+
+    if (hasMetricStageChoices) {
+      nextStages.push("metric");
+    }
+
+    if (hasStyleStageChoices) {
+      nextStages.push("style");
+    }
+
+    return nextStages;
+  }, [hasMetricStageChoices, hasStyleStageChoices]);
+  const normalizedActiveStageKey = useMemo<ChartSetupStageKey>(() => {
+    if (visibleStageKeys.includes(activeStageKey)) {
+      return activeStageKey;
+    }
+
+    if (activeStageKey === "metric" && visibleStageKeys.includes("style")) {
+      return "style";
+    }
+
+    if (visibleStageKeys.includes("metric")) {
+      return "metric";
+    }
+
+    return "scope";
+  }, [activeStageKey, visibleStageKeys]);
+  const visibleRailStages = useMemo(
+    () => railStages.filter((stage) => visibleStageKeys.includes(stage.key)),
+    [railStages, visibleStageKeys]
+  );
+  const lastVisibleStageKey =
+    visibleStageKeys[visibleStageKeys.length - 1] ?? "scope";
+  const canOpenChart = scopeReady && metricReady && styleReady;
   const heroTakeaway = buildFeaturedChartTakeaway({
     chartKey: selectedChart.key,
     selectedPlayerName: selectedPlayer?.label,
@@ -1403,6 +1668,12 @@ export default function ChartsIndexScreen() {
   ]);
 
   useEffect(() => {
+    if (activeStageKey !== normalizedActiveStageKey) {
+      setActiveStageKey(normalizedActiveStageKey);
+    }
+  }, [activeStageKey, normalizedActiveStageKey]);
+
+  useEffect(() => {
     if (!setupOpen) {
       previousScopeStageSignatureRef.current = null;
       return;
@@ -1410,7 +1681,11 @@ export default function ChartsIndexScreen() {
 
     const signature = [
       selectedPlayer?.key ?? "",
-      comparePlayerOptions.length > 0 ? comparePlayer?.key ?? "" : "",
+      comparePlayerOptions.length > 0
+        ? isRadarChart
+          ? selectedRadarCompareIds.join(",")
+          : comparePlayer?.key ?? ""
+        : "",
       selectedGroupIds.join(","),
     ].join("|");
     const previous = previousScopeStageSignatureRef.current;
@@ -1422,14 +1697,23 @@ export default function ChartsIndexScreen() {
       previous !== signature &&
       scopeReady
     ) {
-      setActiveStageKey(metricOptions.length > 0 ? "metric" : "style");
+      setActiveStageKey(
+        hasMetricStageChoices
+          ? "metric"
+          : hasStyleStageChoices
+            ? "style"
+            : "scope",
+      );
     }
   }, [
     activeStageKey,
     comparePlayer?.key,
     comparePlayerOptions.length,
-    metricOptions.length,
+    isRadarChart,
+    hasMetricStageChoices,
+    hasStyleStageChoices,
     scopeReady,
+    selectedRadarCompareIds,
     selectedGroupIds,
     selectedPlayer?.key,
     setupOpen,
@@ -1454,18 +1738,37 @@ export default function ChartsIndexScreen() {
       previous !== signature &&
       metricReady
     ) {
-      setActiveStageKey("style");
+      setActiveStageKey(hasStyleStageChoices ? "style" : "metric");
     }
-  }, [activeMetric, activeStageKey, metricOptions, metricReady, setupOpen]);
+  }, [activeMetric, activeStageKey, hasStyleStageChoices, metricOptions, metricReady, setupOpen]);
 
-  function handleQuickFocusPlayerSelect(nextPlayerId: string) {
-    if (nextPlayerId === ALL_FOCUS_PLAYERS_CHIP_ID) {
-      setShowAllFocusPlayerOptions((current) => !current);
-      return;
-    }
-
-    setShowAllFocusPlayerOptions(false);
+  function handleFocusPlayerSelect(nextPlayerId: string) {
     setSelectedPlayerId(nextPlayerId);
+  }
+
+  function handleComparePlayerSelect(nextComparePlayerId: string) {
+    setComparePlayerId(nextComparePlayerId);
+    setComparePlayerSearch("");
+  }
+
+  function handleRadarComparePlayerToggle(nextComparePlayerId: string) {
+    setSelectedRadarCompareIds((current) => {
+      const normalizedId = String(nextComparePlayerId ?? "").trim();
+      if (!normalizedId) {
+        return current;
+      }
+
+      if (current.includes(normalizedId)) {
+        return current.filter((playerId) => playerId !== normalizedId);
+      }
+
+      if (current.length >= 4) {
+        return current;
+      }
+
+      return [...current, normalizedId];
+    });
+    setComparePlayerSearch("");
   }
 
   function toggleGroupPlayer(playerId: string) {
@@ -1478,13 +1781,12 @@ export default function ChartsIndexScreen() {
     });
   }
 
-  function handleQuickScopePlayerSelect(nextPlayerId: string) {
-    if (nextPlayerId === ALL_SCOPE_PLAYERS_CHIP_ID) {
+  function handleScopePlayerToggle(nextPlayerId: string) {
+    if (nextPlayerId === TOGGLE_SCOPE_PLAYER_LIST_KEY) {
       setShowAllScopePlayerOptions((current) => !current);
       return;
     }
 
-    setShowAllScopePlayerOptions(false);
     toggleGroupPlayer(nextPlayerId);
   }
 
@@ -1492,14 +1794,24 @@ export default function ChartsIndexScreen() {
     chart: ChartCatalogEntry,
     setupOpen: boolean
   ) {
+    const supportsFocusPlayerToggle = supportsChartFocusPlayerToggle(chart.key);
+    const supportsScopePlayerToggle = supportsChartScopePlayerToggle(chart.key);
     const params: Record<string, string | undefined> = {
       chartKey: chart.key,
       setup: setupOpen ? "true" : undefined,
-      playerId: selectedPlayer?.key ? String(selectedPlayer.key) : undefined,
+      playerId:
+        supportsFocusPlayerToggle && selectedPlayer?.key
+          ? String(selectedPlayer.key)
+          : undefined,
+      compareId: undefined,
+      compareIds: undefined,
     };
 
     if (chart.key === "elo") {
-      params.ids = selectedGroupIds.length ? selectedGroupIds.join(",") : undefined;
+      params.ids =
+        supportsScopePlayerToggle && selectedGroupIds.length
+          ? selectedGroupIds.join(",")
+          : undefined;
       params.eloTab = selectedEloTab || undefined;
       params.opponentId =
         selectedEloTab === "Context" && selectedOpponent?.key
@@ -1508,11 +1820,15 @@ export default function ChartsIndexScreen() {
       return params;
     }
 
-    if (comparePlayerOptions.length > 0 && comparePlayer?.key) {
+    if (chart.key === "radar") {
+      if (selectedRadarCompareIds.length) {
+        params.compareIds = selectedRadarCompareIds.join(",");
+      }
+    } else if (comparePlayerOptions.length > 0 && comparePlayer?.key) {
       params.compareId = String(comparePlayer.key);
     }
 
-    if (scopePlayerOptions.length > 0 && selectedGroupIds.length) {
+    if (supportsScopePlayerToggle && selectedGroupIds.length) {
       params.ids = selectedGroupIds.join(",");
     }
 
@@ -1536,6 +1852,26 @@ export default function ChartsIndexScreen() {
     replaceChartHubRoute(chart, nextSetupOpen);
   }
 
+  useEffect(() => {
+    if (!setupOpen) return;
+
+    replaceChartHubRoute(selectedChart, true);
+  }, [
+    activeMetric,
+    comparePlayer?.key,
+    comparePlayerOptions.length,
+    selectedRadarCompareIds,
+    lineModeOptions.length,
+    metricOptions.length,
+    selectedChart,
+    selectedEloTab,
+    selectedGroupIds,
+    selectedLineMode,
+    selectedOpponent?.key,
+    selectedPlayer?.key,
+    setupOpen,
+  ]);
+
   function previewChart(chartKey: ChartCatalogKey) {
     const nextChart = resolveChartCatalogEntry(chartKey);
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
@@ -1546,8 +1882,9 @@ export default function ChartsIndexScreen() {
 
   function resolveSetupEntryStage() {
     if (!scopeReady) return "scope";
-    if (!metricReady) return "metric";
-    return "style";
+    if (hasMetricStageChoices && !metricReady) return "metric";
+    if (hasStyleStageChoices && !styleReady) return "style";
+    return lastVisibleStageKey;
   }
 
   function openSetup() {
@@ -1628,128 +1965,172 @@ export default function ChartsIndexScreen() {
                     </Text>
                   ) : null}
                   <View style={styles.guidedRailStack}>
-                    {railStages.map((stage, index) => {
+                    {visibleRailStages.map((stage, index) => {
                       if (stage.key === "scope") {
                         return (
                           <ChartSetupStageShell
                             key={stage.key}
                             index={index + 1}
                             title="Scope"
+                            hideStepLabel
+                            hideTitle
                             helper="Choose whose story this chart should tell."
                             summary={scopeSummary}
                             status={stage.status}
                             onEdit={() => reopenStage("scope")}
+                            footer={
+                              lastVisibleStageKey === "scope" ? (
+                                <ChartSetupStageAction
+                                  title="Open Chart"
+                                  subtitle="Launch this chart with the current setup"
+                                  onPress={() => openChart(selectedChart)}
+                                  disabled={!canOpenChart}
+                                />
+                              ) : null
+                            }
                           >
                             <View style={styles.stageSectionStack}>
-                              <SetupSection
-                                title="Focus player"
-                                subtitle="You first, then your most-played tablemates."
-                                contentStyle={styles.focusPlayerSectionContent}
-                              >
-                                {quickFocusPlayerOptions.length ? (
-                                  <SetupTabs
-                                    items={quickFocusPlayerOptions}
-                                    value={selectedPlayer ? String(selectedPlayer.key) : ""}
-                                    onChange={handleQuickFocusPlayerSelect}
+                              {hasFocusPlayerToggle && focusPlayerOptions.length > 0 ? (
+                                <SetupSection
+                                  title="Focus player"
+                                  contentStyle={styles.setupFullWidthSectionContent}
+                                >
+                                  <SetupSegmentedTabs
+                                    items={primaryFocusPlayerOptions}
+                                    selectedKeys={selectedPlayer ? [String(selectedPlayer.key)] : []}
+                                    onChange={handleFocusPlayerSelect}
                                   />
-                                ) : null}
 
-                                <PlayerSearchPicker
-                                  query={focusPlayerSearch}
-                                  onQueryChange={setFocusPlayerSearch}
-                                  placeholder="Search for Player"
-                                  items={[]}
-                                  selectedIds={selectedPlayer ? [String(selectedPlayer.key)] : []}
-                                  onSelect={handleQuickFocusPlayerSelect}
-                                  variant="rail"
-                                  hideResults
-                                />
-
-                                {focusPlayerSearch.trim() || showAllFocusPlayerOptions ? (
-                                  visibleFocusPlayerOptions.length ? (
-                                    <SetupTabs
-                                      items={visibleFocusPlayerOptions}
-                                      value={selectedPlayer ? String(selectedPlayer.key) : ""}
-                                      onChange={handleQuickFocusPlayerSelect}
-                                    />
-                                  ) : (
-                                    <Text style={styles.emptyText}>No players match that search yet.</Text>
-                                  )
-                                ) : null}
-                              </SetupSection>
-
-                              {comparePlayerOptions.length > 0 ? (
-                                <SetupSection title="Compare player">
-                                  <SetupTabs
-                                    items={comparePlayerOptions}
-                                    value={comparePlayer ? String(comparePlayer.key) : ""}
-                                    onChange={setComparePlayerId}
+                                  <PlayerSearchPicker
+                                    query={focusPlayerSearch}
+                                    onQueryChange={setFocusPlayerSearch}
+                                    placeholder="Search player"
+                                    items={[]}
+                                    selectedIds={selectedPlayer ? [String(selectedPlayer.key)] : []}
+                                    onSelect={handleFocusPlayerSelect}
+                                    inputProps={{
+                                      placeholderTextColor: CHART_COLORS.sub,
+                                      returnKeyType: "search",
+                                      style: styles.setupSearchInput,
+                                    }}
+                                    variant="rail"
+                                    hideResults
                                   />
+
+                                  {focusPlayerSearch.trim() ? (
+                                    filteredFocusPlayerOptions.length ? (
+                                      <SetupSegmentedTabs
+                                        items={filteredFocusPlayerOptions}
+                                        selectedKeys={selectedPlayer ? [String(selectedPlayer.key)] : []}
+                                        onChange={handleFocusPlayerSelect}
+                                      />
+                                    ) : (
+                                      <Text style={styles.emptyText}>No players match that search yet.</Text>
+                                    )
+                                  ) : null}
                                 </SetupSection>
                               ) : null}
 
-                              {scopePlayerOptions.length > 0 ? (
+                              {comparePlayerOptions.length > 0 ? (
+                                <SetupSection
+                                  title={isRadarChart ? "Compare players" : "Compare player"}
+                                  subtitle={
+                                    isRadarChart
+                                      ? `Select up to 4 compare players. Selected players stay pinned at the top.`
+                                      : undefined
+                                  }
+                                  contentStyle={styles.setupFullWidthSectionContent}
+                                >
+                                  {isRadarChart ? (
+                                    <>
+                                      <SetupSegmentedTabs
+                                        items={radarPinnedCompareOptions}
+                                        selectedKeys={selectedRadarCompareIds}
+                                        onChange={handleRadarComparePlayerToggle}
+                                        selectionMode="multiple"
+                                        columns={2}
+                                      />
+
+                                      <PlayerSearchPicker
+                                        query={comparePlayerSearch}
+                                        onQueryChange={setComparePlayerSearch}
+                                        onClearQuery={() => setComparePlayerSearch("")}
+                                        placeholder="Search compare players"
+                                        items={comparePlayerSearchItems}
+                                        selectedIds={selectedRadarCompareIds}
+                                        onSelect={handleRadarComparePlayerToggle}
+                                        inputProps={{
+                                          placeholderTextColor: CHART_COLORS.sub,
+                                          returnKeyType: "search",
+                                          style: styles.setupSearchInput,
+                                        }}
+                                        variant="rail"
+                                        selectionMode="multiple"
+                                        showResultsOnlyWhenQuery
+                                      />
+                                    </>
+                                  ) : (
+                                    <>
+                                      <SetupTabs
+                                        items={comparePlayerOptions}
+                                        value={comparePlayer ? String(comparePlayer.key) : ""}
+                                        onChange={handleComparePlayerSelect}
+                                      />
+
+                                      <PlayerSearchPicker
+                                        query={comparePlayerSearch}
+                                        onQueryChange={setComparePlayerSearch}
+                                        onClearQuery={() => setComparePlayerSearch("")}
+                                        placeholder="Search player here"
+                                        items={comparePlayerSearchItems}
+                                        selectedIds={comparePlayer ? [String(comparePlayer.key)] : []}
+                                        onSelect={handleComparePlayerSelect}
+                                        inputProps={{
+                                          placeholderTextColor: CHART_COLORS.sub,
+                                          returnKeyType: "search",
+                                          style: styles.setupSearchInput,
+                                        }}
+                                        variant="rail"
+                                        showResultsOnlyWhenQuery
+                                      />
+                                    </>
+                                  )}
+                                </SetupSection>
+                              ) : null}
+
+                              {hasScopePlayerToggle && scopePlayerOptions.length > 0 ? (
                                 <SetupSection
                                   title="Players in scope"
-                                  subtitle="Logged-in player first, then your most-played tablemates."
-                                  contentStyle={styles.scopeTabSectionContent}
+                                  contentStyle={styles.setupFullWidthSectionContent}
                                 >
-                                  {quickScopePlayerOptions.length ? (
-                                    <ScrollView
-                                      horizontal
-                                      nestedScrollEnabled
-                                      showsHorizontalScrollIndicator={false}
-                                      contentContainerStyle={styles.scopeTabRail}
-                                    >
-                                      {quickScopePlayerOptions.map((player) => (
-                                        <ScopeTab
-                                          key={`scope-quick-${player.key}`}
-                                          label={player.label || "Unknown"}
-                                          badge={player.badge}
-                                          kind={player.kind}
-                                          active={selectedGroupIds.includes(String(player.key))}
-                                          onPress={() => handleQuickScopePlayerSelect(String(player.key))}
-                                        />
-                                      ))}
-                                    </ScrollView>
-                                  ) : null}
+                                  <SetupSegmentedTabs
+                                    items={visibleScopePlayerTabOptions}
+                                    selectedKeys={scopeSegmentedSelectedKeys}
+                                    onChange={handleScopePlayerToggle}
+                                    selectionMode="multiple"
+                                    columns={2}
+                                  />
 
                                   <PlayerSearchPicker
                                     query={scopePlayerSearch}
                                     onQueryChange={setScopePlayerSearch}
-                                    placeholder="Player Search"
+                                    onClearQuery={() => setScopePlayerSearch("")}
+                                    placeholder="Search player"
                                     items={[]}
                                     selectedIds={selectedGroupIds}
-                                    onSelect={(playerId) => handleQuickScopePlayerSelect(String(playerId))}
+                                    onSelect={(playerId) => handleScopePlayerToggle(String(playerId))}
+                                    inputProps={{
+                                      placeholderTextColor: CHART_COLORS.sub,
+                                      returnKeyType: "search",
+                                      style: styles.setupSearchInput,
+                                    }}
                                     variant="rail"
                                     selectionMode="multiple"
                                     hideResults
                                   />
 
-                                  {scopePlayerSearch.trim() || showAllScopePlayerOptions ? (
-                                    visibleScopePlayerOptions.length ? (
-                                      <ScrollView
-                                        horizontal
-                                        nestedScrollEnabled
-                                        showsHorizontalScrollIndicator={false}
-                                        contentContainerStyle={styles.scopeTabRail}
-                                      >
-                                        {visibleScopePlayerOptions.map((player) => (
-                                          <ScopeTab
-                                            key={`scope-browse-${player.key}`}
-                                            label={player.label || "Unknown"}
-                                            badge={player.badge}
-                                            kind={player.kind}
-                                            active={selectedGroupIds.includes(String(player.key))}
-                                            onPress={() =>
-                                              handleQuickScopePlayerSelect(String(player.key))
-                                            }
-                                          />
-                                        ))}
-                                      </ScrollView>
-                                    ) : (
-                                      <Text style={styles.emptyText}>No players match that search yet.</Text>
-                                    )
+                                  {scopePlayerSearch.trim() && !filteredScopePlayerOptions.length ? (
+                                    <Text style={styles.emptyText}>No players match that search yet.</Text>
                                   ) : null}
                                 </SetupSection>
                               ) : null}
@@ -1766,29 +2147,30 @@ export default function ChartsIndexScreen() {
                             title="Metric"
                             helper="Choose what this chart should measure."
                             lockedHelper="Unlocks after Scope"
-                            summary={metricSummary ?? "Fixed metric"}
+                            summary={metricSummary}
                             status={stage.status}
                             onEdit={() => reopenStage("metric")}
+                            footer={
+                              lastVisibleStageKey === "metric" ? (
+                                <ChartSetupStageAction
+                                  title="Open Chart"
+                                  subtitle="Launch this chart with the current setup"
+                                  onPress={() => openChart(selectedChart)}
+                                  disabled={!canOpenChart}
+                                />
+                              ) : null
+                            }
                           >
-                            {metricOptions.length > 0 ? (
+                            {hasMetricStageChoices ? (
                               <SetupSection title="Metric" contentStyle={styles.metricGrid}>
-                                {metricOptions.map((metric) => (
-                                  <MetricButton
-                                    key={`metric-${metric.key}`}
-                                    label={metric.label}
-                                    active={metric.key === activeMetric}
-                                    definitionMetricKey={metric.key}
-                                    onPress={() => setSelectedMetric(metric.key)}
-                                  />
-                                ))}
+                                <SetupSegmentedTabs
+                                  items={metricOptions}
+                                  selectedKeys={activeMetric ? [activeMetric] : []}
+                                  onChange={(nextMetric) => setSelectedMetric(nextMetric)}
+                                  columns={2}
+                                />
                               </SetupSection>
-                            ) : (
-                              <View style={styles.stageNoteCard}>
-                                <Text style={styles.emptyText}>
-                                  This chart uses a fixed metric, so there is nothing to choose here.
-                                </Text>
-                              </View>
-                            )}
+                            ) : null}
                           </ChartSetupStageShell>
                         );
                       }
@@ -1798,9 +2180,11 @@ export default function ChartsIndexScreen() {
                           key={stage.key}
                           index={index + 1}
                           title="Style"
-                          helper="Choose how this chart should render."
+                          hideStepLabel
+                          hideTitle
+                          hideHelperText
                           lockedHelper="Unlocks after Metric"
-                          summary={styleSummary ?? "Default style"}
+                          summary={null}
                           status={stage.status}
                           onEdit={() => reopenStage("style")}
                           footer={
@@ -1808,7 +2192,7 @@ export default function ChartsIndexScreen() {
                               title="Open Chart"
                               subtitle="Launch this chart with the current setup"
                               onPress={() => openChart(selectedChart)}
-                              disabled={!styleReady}
+                              disabled={!canOpenChart}
                             />
                           }
                         >
@@ -1833,9 +2217,7 @@ export default function ChartsIndexScreen() {
                               </SetupSection>
                             ) : null}
 
-                            {selectedChart.key === "elo" &&
-                            selectedEloTab === "Context" &&
-                            opponentOptions.length > 0 ? (
+                            {showStyleOpponentOptions ? (
                               <SetupSection title="Opponent">
                                 <SetupTabs
                                   items={opponentOptions}
@@ -1843,18 +2225,6 @@ export default function ChartsIndexScreen() {
                                   onChange={setSelectedOpponentId}
                                 />
                               </SetupSection>
-                            ) : null}
-
-                            {lineModeOptions.length === 0 &&
-                            eloViewOptions.length === 0 &&
-                            !(selectedChart.key === "elo" &&
-                              selectedEloTab === "Context" &&
-                              opponentOptions.length > 0) ? (
-                              <View style={styles.stageNoteCard}>
-                                <Text style={styles.emptyText}>
-                                  This chart is ready to launch with the current default style.
-                                </Text>
-                              </View>
                             ) : null}
                           </View>
                         </ChartSetupStageShell>
@@ -2035,13 +2405,11 @@ const styles = StyleSheet.create({
   setupChipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
+    alignItems: "flex-start",
+    alignContent: "flex-start",
     gap: 6,
   },
-  focusPlayerSectionContent: {
-    width: "100%",
-    gap: 8,
-  },
-  scopeTabSectionContent: {
+  setupFullWidthSectionContent: {
     width: "100%",
     gap: 8,
   },
@@ -2051,154 +2419,47 @@ const styles = StyleSheet.create({
   setupUnderlineTabs: {
     gap: 6,
   },
-  scopeTabRail: {
-    gap: 12,
-    paddingRight: 12,
-    alignItems: "flex-end",
-  },
-  scopeTab: {
-    minWidth: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 2,
-    gap: 4,
-  },
-  scopeTabAction: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: CHART_COLORS.accent,
-    backgroundColor: withChartAlpha(CHART_COLORS.panel, 0.72),
-  },
-  scopeTabLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  scopeTabText: {
-    color: CHART_COLORS.sub,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.12,
-  },
-  scopeTabTextAction: {
-    color: CHART_COLORS.textStrong,
-  },
-  scopeTabTextActive: {
-    color: CHART_COLORS.textStrong,
-  },
-  scopeTabBadge: {
-    minHeight: 18,
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: withChartAlpha(CHART_COLORS.accent, 0.14),
-    borderWidth: 1,
-    borderColor: CHART_COLORS.accent,
-  },
-  scopeTabBadgeActive: {
-    backgroundColor: CHART_COLORS.accent,
-  },
-  scopeTabBadgeText: {
-    color: CHART_COLORS.accent,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.2,
-    textTransform: "uppercase",
-  },
-  scopeTabBadgeTextActive: {
-    color: CHART_COLORS.panel,
-  },
-  scopeTabUnderline: {
+  setupSegmentedTabStack: {
     width: "100%",
-    minWidth: 24,
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: withChartAlpha(CHART_COLORS.accent, 0),
-  },
-  scopeTabUnderlineAction: {
-    backgroundColor: withChartAlpha(CHART_COLORS.accent, 0.22),
-  },
-  scopeTabUnderlineActive: {
-    backgroundColor: CHART_COLORS.accent,
-  },
-  metricGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 5,
-  },
-  metricButton: {
-    flexBasis: "48%",
-    flexGrow: 1,
-    minHeight: 54,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: 8,
   },
-  metricButtonMain: {
-    flex: 1,
+  setupSegmentedTabShell: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 5,
+    borderWidth: 1,
+    backgroundColor: withChartAlpha(CHART_COLORS.panel, 0.72),
+    borderColor: withChartAlpha(CHART_COLORS.textStrong, 0.16),
+    borderRadius: 16,
+    padding: 4,
+    gap: 4,
   },
-  metricButtonMarker: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    marginTop: 5,
-  },
-  metricButtonCopy: {
+  setupSegmentedTab: {
     flex: 1,
     minWidth: 0,
-  },
-  metricButtonLabelLink: {
-    alignSelf: "flex-start",
-  },
-  metricButtonText: {
-    flex: 1,
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "800",
-    letterSpacing: 0.12,
-  },
-  metricButtonHint: {
-    marginTop: 2,
-    color: CHART_COLORS.accent,
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.24,
-    textTransform: "uppercase",
-  },
-  metricButtonAction: {
-    minWidth: 72,
-    borderRadius: 11,
+    minHeight: 38,
     borderWidth: 1,
-    borderColor: withChartAlpha(CHART_COLORS.textStrong, 0.14),
-    backgroundColor: withChartAlpha(CHART_COLORS.bg, 0.58),
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    borderRadius: 12,
+    borderColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 8,
   },
-  metricButtonActionActive: {
-    borderColor: withChartAlpha(CHART_COLORS.accent, 0.38),
+  setupSegmentedTabActive: {
     backgroundColor: withChartAlpha(CHART_COLORS.accent, 0.18),
+    borderColor: withChartAlpha(CHART_COLORS.accent, 0.72),
   },
-  metricButtonActionText: {
+  setupSegmentedTabPressed: {
+    opacity: 0.92,
+  },
+  setupSegmentedTabText: {
+    color: CHART_COLORS.sub,
+    textAlign: "center",
+  },
+  setupSegmentedTabTextActive: {
     color: CHART_COLORS.textStrong,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.18,
-    textTransform: "uppercase",
   },
-  metricButtonActionTextActive: {
-    color: CHART_COLORS.accent,
+  metricGrid: {
+    width: "100%",
+    gap: 8,
   },
 });

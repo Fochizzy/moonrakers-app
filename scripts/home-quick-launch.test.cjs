@@ -118,10 +118,10 @@ assert.deepEqual(
   "expected the history route builder to return the base History route for Task 1 shortcuts",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /<SectionCard[\s\S]*title="Quick Launch"/,
-  "expected the Home game tab to render a Quick Launch section",
+  "expected the Home game tab to stop rendering the Quick Launch section",
 );
 
 assert.doesNotMatch(
@@ -130,52 +130,52 @@ assert.doesNotMatch(
   "expected the Home game tab to stop rendering the Live Ranking ELO leaders block",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /title="Compare"[\s\S]*title="Charts"[\s\S]*title="Profiles"[\s\S]*title="History"/s,
-  "expected the Quick Launch block to render Compare, Charts, Profiles, and History buttons",
+  "expected the Home game tab to stop rendering the Quick Launch shortcut buttons",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
-  /<SectionCard[\s\S]*eyebrow="Selected Crew"[\s\S]*title="Quick Launch">/s,
-  "expected the Quick Launch section to appear after the Selected Crew block at the bottom of the Command page flow",
+  /<SectionCard[\s\S]*title="Players"[\s\S]*title="Quick Launch">/s,
+  "expected the Home game tab to stop placing a Quick Launch section after the Players block",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /quickLaunchGrid:\s*\{[\s\S]*flexDirection:\s*"row"[\s\S]*flexWrap:\s*"wrap"[\s\S]*\}/s,
-  "expected the Home styles to define quickLaunchGrid",
+  "expected the Home styles to remove the quickLaunchGrid helper",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /quickLaunchButton:\s*\{[\s\S]*flexBasis:\s*"48%"[\s\S]*flexGrow:\s*1[\s\S]*\}/s,
-  "expected the Home styles to define quickLaunchButton",
+  "expected the Home styles to remove the quickLaunchButton helper",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /router\.push\(buildCompareRoute\(\)\)/,
-  "expected the Compare shortcut to use the shared compare route builder",
+  "expected the Home game tab to stop wiring the Compare quick-launch shortcut",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /router\.push\(buildChartsRoute\(\)\)/,
-  "expected the Charts shortcut to use the shared charts route builder",
+  "expected the Home game tab to stop wiring the Charts quick-launch shortcut",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /router\.push\(APP_ROUTES\.playerDirectory\)/,
-  "expected the Profiles shortcut to open the player directory directly",
+  "expected the Home game tab to stop wiring the Profiles quick-launch shortcut",
 );
 
-assert.match(
+assert.doesNotMatch(
   homeSource,
   /router\.push\(buildHistoryRoute\(\)\)/,
-  "expected the History shortcut to use the shared History route builder",
+  "expected the Home game tab to stop wiring the History quick-launch shortcut",
 );
 
 assert.match(

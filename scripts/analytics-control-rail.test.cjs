@@ -28,6 +28,12 @@ assert.match(
 
 assert.match(
   railSource,
+  /\{tab\.shortLabel \?\? tab\.label\}/,
+  "expected AnalyticsControlRail to prefer short tab labels when a route provides them",
+);
+
+assert.match(
+  railSource,
   /numberOfLines=\{tabVariant === "stacked" \? 3 : 1\}/,
   "expected stacked analytics rails to allow up to three lines for narrow labels"
 );

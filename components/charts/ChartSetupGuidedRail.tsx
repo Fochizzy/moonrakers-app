@@ -11,6 +11,9 @@ import { CHART_COLORS, withChartAlpha } from "./chartVisualSystem";
 type ChartSetupStageShellProps = {
   index: number;
   title: string;
+  hideStepLabel?: boolean;
+  hideTitle?: boolean;
+  hideHelperText?: boolean;
   helper?: string | null;
   lockedHelper?: string | null;
   summary?: string | null;
@@ -23,6 +26,9 @@ type ChartSetupStageShellProps = {
 export function ChartSetupStageShell({
   index,
   title,
+  hideStepLabel = false,
+  hideTitle = false,
+  hideHelperText = false,
   helper,
   lockedHelper,
   summary,
@@ -34,21 +40,31 @@ export function ChartSetupStageShell({
   const locked = status === "locked";
   const completed = status === "completed";
   const active = status === "active";
-  const helperText = locked
-    ? lockedHelper || `Unlocks after ${title}`
-    : completed
-      ? summary
-      : helper;
+  const displayTitle = title.trim();
+  const helperText = hideHelperText
+    ? null
+    : locked
+      ? lockedHelper ||
+        (displayTitle ? `Unlocks after ${displayTitle}` : "Unlocks after the previous stage")
+      : completed
+        ? summary
+        : helper;
+  const shouldRenderHeader = Boolean(
+    (!hideStepLabel && index >= 1) ||
+      (!hideTitle && displayTitle) ||
+      helperText ||
+      (completed && onEdit)
+  );
 
   return (
     <ChartStage
       tone={active ? "standard" : "compact"}
       style={[styles.stage, locked && styles.stageLocked]}
-      header={
+      header={shouldRenderHeader ? (
         <View style={styles.header}>
           <View style={styles.headerCopy}>
-            <Text style={styles.stepEyebrow}>{`Step ${index}`}</Text>
-            <Text style={styles.title}>{title}</Text>
+            {!hideStepLabel ? <Text style={styles.stepEyebrow}>{`Step ${index}`}</Text> : null}
+            {!hideTitle && displayTitle ? <Text style={styles.title}>{displayTitle}</Text> : null}
             {helperText ? (
               <Text style={completed ? styles.summary : styles.helper}>
                 {helperText}
@@ -61,7 +77,7 @@ export function ChartSetupStageShell({
             </Pressable>
           ) : null}
         </View>
-      }
+      ) : null}
       footer={footer ? <View style={styles.footer}>{footer}</View> : null}
     >
       {locked ? <View style={styles.lockedBody} /> : children}

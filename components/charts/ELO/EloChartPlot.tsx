@@ -13,6 +13,9 @@ import Svg, {
 } from "react-native-svg";
 
 import Text from "@/components/ui/Text";
+import SeriesIdentityBadge from "@/components/charts/SeriesIdentityBadge";
+import SeriesIdentitySvgBadge from "@/components/charts/SeriesIdentitySvgBadge";
+import { buildLineSeriesIdentities } from "@/components/charts/lineSeriesIdentity";
 import { chartColors, withAlpha } from "@/utils/chartTheme";
 import {
   createSmoothPath,
@@ -129,10 +132,11 @@ export default function EloChartPlot({
 
   const safeSelectedIndex = clamp(selectedIndex, 0, Math.max(0, totalGames - 1));
 
-  const rows = useMemo(
+  const rowsBase = useMemo(
     () => buildSeriesGeometry(safeSeriesPaths, minValue, maxValue, totalGames),
     [safeSeriesPaths, minValue, maxValue, totalGames]
   );
+  const rows = useMemo(() => buildLineSeriesIdentities(rowsBase), [rowsBase]);
 
   const yTicks = useMemo(() => buildYTicks(minValue, maxValue), [minValue, maxValue]);
 
@@ -146,6 +150,8 @@ export default function EloChartPlot({
       id: row.id,
       name: row.name ?? "Unknown",
       color: row.colorValue,
+      strokeDasharray: row.strokeDasharray ?? null,
+      collisionBadgeText: row.collisionBadgeText ?? null,
       point: asArray(row.points)[safeSelectedIndex],
     }))
     .filter((entry) => entry.point);
@@ -272,10 +278,10 @@ export default function EloChartPlot({
 
           {rows.map((row) => {
             const isFocused = focusedPlayerId ? row.id === focusedPlayerId : row.isFocused;
-
             const strokeWidth = row.strokeWidth ?? (isFocused ? 4 : 2.5);
             const strokeOpacity = row.strokeOpacity ?? (isFocused ? 1 : 0.55);
             const rowPoints = asArray(row.points);
+            const latestPoint = rowPoints[rowPoints.length - 1] ?? null;
 
             return (
               <G key={row.id}>
@@ -287,6 +293,7 @@ export default function EloChartPlot({
                     strokeWidth={strokeWidth + 5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    strokeDasharray={row.strokeDasharray ?? undefined}
                   />
                 ) : null}
 
@@ -298,6 +305,7 @@ export default function EloChartPlot({
                     strokeWidth={strokeWidth}
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    strokeDasharray={row.strokeDasharray ?? undefined}
                   />
                 ) : null}
 
@@ -324,6 +332,19 @@ export default function EloChartPlot({
                     </G>
                   );
                 })}
+
+                {latestPoint && row.collisionBadgeText ? (
+                  <SeriesIdentitySvgBadge
+                    x={latestPoint.x}
+                    y={latestPoint.y}
+                    color={row.colorValue}
+                    label={row.collisionBadgeText}
+                    minX={PAD_L + 4}
+                    maxX={WIDTH - PAD_R - 4}
+                    minY={PAD_T + 4}
+                    maxY={HEIGHT - PAD_B - 4}
+                  />
+                ) : null}
               </G>
             );
           })}
@@ -361,12 +382,24 @@ export default function EloChartPlot({
           ]}
         >
           <View style={styles.inspectorHeader}>
-            <View
-              style={[
-                styles.inspectorDot,
-                { backgroundColor: focusedRow.colorValue },
-              ]}
-            />
+            <View style={styles.identityLead}>
+              <Svg style={styles.identitySwatch} width={22} height={10}>
+                <Line
+                  x1={2}
+                  y1={5}
+                  x2={20}
+                  y2={5}
+                  stroke={focusedRow.colorValue}
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeDasharray={focusedRow.strokeDasharray ?? undefined}
+                />
+              </Svg>
+              <SeriesIdentityBadge
+                label={focusedRow.collisionBadgeText}
+                color={focusedRow.colorValue}
+              />
+            </View>
             <Text style={styles.inspectorTitle}>
               {focusedRow.name ?? "Unknown"}
             </Text>
@@ -406,13 +439,30 @@ export default function EloChartPlot({
                 },
               ]}
             >
-              <View style={[styles.legendDot, { backgroundColor: entry.color }]} />
-              <Text style={styles.legendName} numberOfLines={1}>
-                {entry.name}
-              </Text>
-              <Text style={[styles.legendValue, { color: entry.color }]}>
-                {formatValue(entry.point?.value ?? 0, selectedMode)}
-              </Text>
+                <Svg style={styles.legendSwatch} width={22} height={10}>
+                  <Line
+                    x1={2}
+                    y1={5}
+                    x2={20}
+                    y2={5}
+                    stroke={entry.color}
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                    strokeDasharray={entry.strokeDasharray ?? undefined}
+                  />
+                </Svg>
+                <View style={styles.legendLabelGroup}>
+                  <Text style={styles.legendName} numberOfLines={1}>
+                    {entry.name}
+                  </Text>
+                  <SeriesIdentityBadge
+                    label={entry.collisionBadgeText}
+                    color={entry.color}
+                  />
+                </View>
+                <Text style={[styles.legendValue, { color: entry.color }]}>
+                  {formatValue(entry.point?.value ?? 0, selectedMode)}
+                </Text>
             </View>
           ))}
         </View>
@@ -460,10 +510,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  inspectorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
+  identityLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 
   inspectorTitle: {
@@ -509,17 +559,28 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  legendDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 999,
+  legendSwatch: {
+    width: 22,
+    height: 10,
+  },
+
+  identitySwatch: {
+    width: 22,
+    height: 10,
+  },
+
+  legendLabelGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 
   legendName: {
-    flex: 1,
     color: "#E5E7EB",
     fontSize: 11,
     fontWeight: "800",
+    flexShrink: 1,
   },
 
   legendValue: {

@@ -376,6 +376,47 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  selectionContextCard: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(12, 26, 46, 0.86)',
+    borderWidth: 1,
+    borderColor: 'rgba(125, 235, 255, 0.18)',
+    gap: 4,
+  },
+  selectionContextLabel: {
+    color: '#8EA3C6',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  selectionContextValue: {
+    color: '#F4FBFF',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+
+  insightLineList: {
+    gap: 10,
+  },
+  insightLineCard: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  insightLineText: {
+    marginTop: 0,
+    color: 'rgba(226, 236, 255, 0.84)',
+    fontSize: 12,
+    lineHeight: 20,
+  },
+
   matrixWhyText: {
     marginTop: 8,
     color: 'rgba(210, 223, 255, 0.74)',
@@ -522,6 +563,26 @@ export const styles = StyleSheet.create({
 
   telemetryRow: {
     gap: 12,
+  },
+  telemetryCardWide: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    gap: 6,
+  },
+  telemetryHeadline: {
+    color: '#f8fafc',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  telemetryMeta: {
+    color: '#8ea3c6',
+    fontSize: 12,
+    lineHeight: 18,
   },
   insightCard: {
     padding: 16,

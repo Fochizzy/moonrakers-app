@@ -366,7 +366,7 @@ function read(relPath) {
     statsSource,
     /type StatsTab = "overview" \| "players" \| "playstyle" \| "correlations" \| "games";/
   );
-  assert.match(statsSource, /label="Playstyle"/);
+  assert.match(statsSource, /key:\s*"playstyle",\s*label:\s*"Playstyle"/);
   assert.match(statsSource, /<PlaystyleSection/);
   assert.match(statsSource, /authProfileId=\{profileId \|\| null\}/);
 

@@ -292,11 +292,13 @@ function CorrelationCard({
   value,
   strength,
   compact = false,
+  stackedHeader = false,
 }: {
   label: string;
   value: number;
   strength?: string;
   compact?: boolean;
+  stackedHeader?: boolean;
 }) {
   const strengthMeta = getStrengthMeta(value);
   const directionMeta = getDirectionMeta(value);
@@ -316,19 +318,29 @@ function CorrelationCard({
         style={[styles.metricGlow, { backgroundColor: strengthMeta.glow }]}
       />
 
-      <View style={[styles.metricHeader, compact && styles.metricHeaderCompact]}>
+      <View
+        style={[
+          styles.metricHeader,
+          (compact || stackedHeader) && styles.metricHeaderCompact,
+        ]}
+      >
         <DefinitionTermText
+          containerStyle={
+            (compact || stackedHeader) && styles.metricLabelContainerCompact
+          }
           label={label}
-          style={[styles.metricLabel, compact && styles.metricLabelCompact]}
-          numberOfLines={1}
-          adjustsFontSizeToFit={compact}
-          minimumFontScale={0.7}
+          style={[
+            styles.metricLabel,
+            compact && styles.metricLabelCompact,
+            stackedHeader && styles.metricLabelStacked,
+          ]}
+          numberOfLines={compact || stackedHeader ? 2 : 1}
         />
 
         <View
           style={[
             styles.metricBadge,
-            compact && styles.metricBadgeCompact,
+            (compact || stackedHeader) && styles.metricBadgeCompact,
             {
               backgroundColor: withAlpha(strengthMeta.color, 0.14),
               borderColor: withAlpha(strengthMeta.color, 0.38),
@@ -449,7 +461,14 @@ export default function CorrelationStats({
 }: CorrelationStatsProps) {
   const { width } = useWindowDimensions();
   const showOverviewChrome = view === 'all';
-  const isTwoColumn = width >= 360 && (view === 'pairing' || view === 'macro');
+  const pairingTwoColumnMinWidth = 420;
+  const macroTwoColumnMinWidth = 420;
+  const isTwoColumn =
+    (view === 'pairing' && width >= pairingTwoColumnMinWidth) ||
+    (view === 'macro' && width >= macroTwoColumnMinWidth);
+  const shouldStackCompactHeader =
+    (view === 'pairing' && width < pairingTwoColumnMinWidth) ||
+    (view === 'macro' && width < macroTwoColumnMinWidth);
   const serverPersonalCorrelations = useMemo(() => {
     return normalizeServerCorrelationRows(serverData?.personal).map((item) => ({
       ...item,
@@ -614,6 +633,7 @@ export default function CorrelationStats({
                     value={item.value}
                     strength={item.strength}
                     compact={isTwoColumn}
+                    stackedHeader={shouldStackCompactHeader}
                   />
                 </View>
               ))}
@@ -649,6 +669,7 @@ export default function CorrelationStats({
                     label={item.label}
                     value={item.value}
                     compact={isTwoColumn}
+                    stackedHeader={shouldStackCompactHeader}
                   />
                 </View>
               ))}
@@ -888,8 +909,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   metricCardCompact: {
-    minHeight: 214,
+    minHeight: 206,
     padding: 12,
+    gap: 10,
   },
   metricGlow: {
     position: 'absolute',
@@ -918,11 +940,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#f8fafc',
   },
+  metricLabelContainerCompact: {
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
+  },
   metricLabelCompact: {
     flex: 0,
     width: '100%',
-    fontSize: 13,
-    lineHeight: 16,
+    minHeight: 36,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  metricLabelStacked: {
+    flex: 0,
+    width: '100%',
+    minHeight: 40,
   },
   metricBadge: {
     paddingHorizontal: 10,
@@ -947,7 +981,7 @@ const styles = StyleSheet.create({
   metricNumbersCompact: {
     flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 6,
   },
   metricPrimaryBlock: {
     flex: 1,

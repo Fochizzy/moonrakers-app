@@ -6,6 +6,7 @@ export type ChartPreviewKind =
   | "trend"
   | "scatter"
   | "matchup"
+  | "elo"
   | "ranking"
   | "bar"
   | "heatmap"
@@ -104,7 +105,7 @@ export const CHART_CATALOG: ChartCatalogEntry[] = [
     section: "profile",
     tone: "blue",
     bestFor: ["ranking", "trend"],
-    preview: "ranking",
+    preview: "elo",
     supportsIds: true,
   },
   {
@@ -266,6 +267,14 @@ export const CHART_CATALOG: ChartCatalogEntry[] = [
   },
 ];
 
+const FOCUS_PLAYER_TOGGLE_KEYS = new Set<ChartCatalogKey>([
+  "radar",
+  "elo",
+  "sparkline",
+  "head_to_head",
+  "rivalry_graph",
+]);
+
 export function resolveChartCatalogEntry(chartKey?: string | null) {
   const normalized = String(chartKey ?? "")
     .trim()
@@ -278,6 +287,14 @@ export function resolveChartCatalogEntry(chartKey?: string | null) {
         (entry.aliases ?? []).some((alias) => alias === normalized)
     ) ?? CHART_CATALOG[0]
   );
+}
+
+export function supportsChartFocusPlayerToggle(chartKey?: string | null) {
+  return FOCUS_PLAYER_TOGGLE_KEYS.has(resolveChartCatalogEntry(chartKey).key);
+}
+
+export function supportsChartScopePlayerToggle(chartKey?: string | null) {
+  return resolveChartCatalogEntry(chartKey).supportsIds === true;
 }
 
 export function canAdjustChartFromHub(chartKey?: string | null) {

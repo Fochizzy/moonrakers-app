@@ -9,8 +9,14 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /buildCommonOpponentOptions\(\{[\s\S]*playerId:\s*resolvedPlayerId,\s*players:\s*sortedPlayers as any,\s*games:\s*games as any,\s*limit:\s*4[\s\S]*\}\)/,
-  "expected Context Matchup to derive a top-four shared-opponent strip for the selected player",
+  /const topOpponentOptions = useMemo\(/,
+  "expected Context Matchup to keep a memoized quick opponent strip for the selected profile",
+);
+
+assert.match(
+  source,
+  /const payloadOptions = toArray\(payload\?\.topOpponentOptions\);/,
+  "expected Context Matchup to derive its quick opponent strip from the published top-opponent payload",
 );
 
 assert.match(

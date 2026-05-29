@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { getVisibleEloMetricTabs } from "./visibleMetricTabs";
 import type { EloGameRecord } from "./eloTransforms";
 import {
   computeMetric,
@@ -121,8 +122,8 @@ function getTabInsight(
       return {
         title: "Skill Signal",
         body: lead
-          ? `${playerName}'s strongest skill signal is ${lead.label.toLowerCase()}, which is currently one of the biggest drivers of winning outcomes.`
-          : `${playerName}'s skill profile will populate once enough game history is available.`,
+          ? `${playerName}'s strongest skill signal is ${lead.label.toLowerCase()}, and this merged view now carries the forward-looking projection outlook as well.`
+          : `${playerName}'s skill profile and projection outlook will populate once enough game history is available.`,
       };
     case "Context":
       return {
@@ -263,7 +264,7 @@ function buildAllEloRows(games: any[]): EloGameRecord[] {
 }
 
 export function getAvailableMetricTabs(): EloMetricTab[] {
-  return ["Leaderboard", "Momentum", "Skills", "Context", "Projection"];
+  return getVisibleEloMetricTabs();
 }
 
 export function getDefaultMetricTab(): EloMetricTab {

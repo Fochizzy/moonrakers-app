@@ -103,7 +103,11 @@ function buildPath(points: Array<{ x: number; y: number }>) {
   return /NaN|Infinity|undefined|null/.test(d) ? "" : d;
 }
 
-function buildModel(primary: RadarStats, comparison?: RadarStats, size = 280): RadarModel {
+export function buildRadarChartModel(
+  primary: RadarStats,
+  comparison?: RadarStats,
+  size = 280,
+): RadarModel {
   const safeSize = Math.max(160, safeNum(size, 280));
   const center = safeSize / 2;
   const radius = safeSize * 0.32;
@@ -184,5 +188,8 @@ export function useRadarChartModel(
   comparison?: RadarStats,
   size = 280
 ): RadarModel {
-  return useMemo(() => buildModel(primary, comparison, size), [primary, comparison, size]);
+  return useMemo(
+    () => buildRadarChartModel(primary, comparison, size),
+    [primary, comparison, size],
+  );
 }

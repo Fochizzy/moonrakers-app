@@ -503,8 +503,9 @@ export default function HistoryScreen() {
         onDismiss={historyStatus ? clearHistoryStatus : null}
       />
 
-      <SectionCard title="Filter" subtitle={`${displayedGames.length} visible`}>
-        <View style={styles.searchWrap}>
+      <SectionCard title="Archive Controls" subtitle={`${displayedGames.length} visible`}>
+        <View style={styles.archiveControlGroup}>
+          <View style={styles.searchWrap}>
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -522,9 +523,10 @@ export default function HistoryScreen() {
               <Text style={styles.searchClearText}>✕</Text>
             </Pressable>
           ) : null}
-        </View>
+          </View>
 
-        <View style={styles.historyTabRail}>
+          <Text style={styles.archiveControlLabel}>Filter</Text>
+          <View style={styles.historyTabRail}>
           <HistoryTab
             label="All"
             active={historyFilter === 'all'}
@@ -540,7 +542,7 @@ export default function HistoryScreen() {
             active={historyFilter === 'mine'}
             onPress={() => setHistoryFilter('mine')}
           />
-        </View>
+          </View>
 
         {historyFilter === 'group' ? (
           <View style={styles.groupFilterSection}>
@@ -588,10 +590,11 @@ export default function HistoryScreen() {
             </ScrollView>
           </View>
         ) : null}
-      </SectionCard>
+        </View>
 
-      <SectionCard title="Sort By" subtitle="Reorder the archive without leaving the main lane">
-        <View style={styles.historyTabRail}>
+        <View style={styles.archiveControlGroup}>
+          <Text style={styles.archiveControlLabel}>Sort By</Text>
+          <View style={styles.historyTabRail}>
           <HistoryTab
             label="Newest"
             active={historySort === 'newest'}
@@ -612,6 +615,7 @@ export default function HistoryScreen() {
             active={historySort === 'rounds'}
             onPress={() => setHistorySort('rounds')}
           />
+          </View>
         </View>
       </SectionCard>
 
@@ -760,9 +764,16 @@ const styles = StyleSheet.create({
   backButton: {
     alignSelf: 'flex-start',
   },
+  archiveControlGroup: {
+    gap: 8,
+  },
+  archiveControlLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+    fontWeight: '700',
+  },
   searchWrap: {
     position: 'relative',
-    marginBottom: 8,
   },
   input: {
     borderWidth: 1,
@@ -858,7 +869,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
   },
   groupFilterSection: {
-    marginTop: 8,
+    marginTop: 2,
   },
   groupFilterLabel: {
     color: COLORS.sub,

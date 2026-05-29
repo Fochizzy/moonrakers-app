@@ -3,6 +3,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -38,9 +39,6 @@ import {
 import { getBridgeDestinations, type HubCard } from "@/utils/appHubs";
 import {
   APP_ROUTES,
-  buildChartsRoute,
-  buildCompareRoute,
-  buildHistoryRoute,
   buildPlayerProfileRoute,
   normalizeHomeTab,
 } from "@/utils/appRoutes";
@@ -49,12 +47,12 @@ import {
   ensureRequiredPlayerSelection,
   filterGroupsForSignedInPlayer,
 } from "@/utils/homeCommandSelection";
+import { buildPlayerSelectionPreview } from "@/utils/playerSelectionPreview";
 import { buildCloudPlayableCommandDirectory } from "@/utils/registeredProfilePlayer";
 
 import { GroupSelectionCard } from "@/components/home/GroupSelectionCard";
 import { HomeLeaderboardTab } from "@/components/home/HomeLeaderboardTab";
 import { PlayerSelectionCard } from "@/components/home/PlayerSelectionCard";
-import { AnimatedSelectedNamePill } from "@/components/home/SelectedNamePill";
 import type { PlayerLike, GroupLike, GameLike } from "@/components/home/homeTypes";
 import { canResumeDraft } from "@/lib/game-draft/phase";
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
@@ -109,6 +107,7 @@ export default function HomeScreen() {
   const [playerSearch, setPlayerSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<GroupLike | null>(null);
+  const [showAllPlayers, setShowAllPlayers] = useState(false);
 
   const startPulse = useRef(new Animated.Value(1)).current;
   const startGlowOpacity = useRef(new Animated.Value(0)).current;
@@ -264,8 +263,62 @@ export default function HomeScreen() {
       )
     );
   }, [playerSearch, rankedPlayers]);
+  const collapsedPlayerPreview = useMemo(
+    () =>
+      buildPlayerSelectionPreview(filteredPlayers, {
+        priorityPlayerIds: [signedInPlayerId, ...selectedIds],
+        maxVisible: 6,
+      }),
+    [filteredPlayers, selectedIds, signedInPlayerId]
+  );
+  const hasPlayerSearch = playerSearch.trim().length > 0;
+  const visiblePlayerOptions = useMemo(
+    () =>
+      hasPlayerSearch || showAllPlayers
+        ? filteredPlayers
+        : collapsedPlayerPreview,
+    [collapsedPlayerPreview, filteredPlayers, hasPlayerSearch, showAllPlayers]
+  );
+  const canTogglePlayerPreview = !hasPlayerSearch && filteredPlayers.length > collapsedPlayerPreview.length;
 
   const canStart = selectedPlayers.length >= 2 && selectedPlayers.length <= 5;
+  const commandPrepTitle = canStart ? "Start with this crew" : "Choose your crew";
+  const selectedCrewKey = Array.from(
+    new Set(
+      selectedIds
+        .map((playerId) => normalizeId(playerIdAliases[playerId] ?? playerId))
+        .filter(Boolean)
+    )
+  )
+    .sort()
+    .join("|");
+  const activeSelectedGroup = useMemo(() => {
+    if (!selectedCrewKey) return null;
+
+    const candidateGroups = selectedGroup
+      ? [selectedGroup, ...visibleGroups.filter((group) => group.id !== selectedGroup.id)]
+      : visibleGroups;
+
+    return candidateGroups.find((group) => {
+      const groupKey = Array.from(
+        new Set(
+          group.playerIds
+            .map((playerId) => normalizeId(playerIdAliases[playerId] ?? playerId))
+            .filter(Boolean)
+        )
+      )
+        .sort()
+        .join("|");
+
+      return groupKey === selectedCrewKey;
+    }) ?? null;
+  }, [playerIdAliases, selectedCrewKey, selectedGroup, visibleGroups]);
+  const selectedCrewLabel = selectedPlayers
+    .map((player) => player.name?.trim())
+    .filter((name): name is string => Boolean(name))
+    .join(" • ");
+  const startGameSubtitle =
+    activeSelectedGroup?.name?.trim() || selectedCrewLabel || "Select 2 to 5 captains";
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -503,9 +556,9 @@ export default function HomeScreen() {
       return;
     }
 
-    const effectiveGroup = selectedGroup
+    const effectiveGroup = activeSelectedGroup
       ? {
-          ...selectedGroup,
+          ...activeSelectedGroup,
           playerIds: ensureRequiredPlayerSelection(selectedIds, signedInPlayerId),
         }
       : null;
@@ -567,7 +620,7 @@ export default function HomeScreen() {
         size="compact"
         actions={
           <ActionButton
-            title="Sign Out"
+            title="Sign out"
             variant="ghost"
             onPress={handleSignOut}
             style={styles.headerAction}
@@ -611,16 +664,33 @@ export default function HomeScreen() {
                   </View>
                 </SectionCard>
               ) : null}
-              <Animated.View
-                style={[styles.primaryActions, { transform: [{ scale: startPulse }] }]}
-              >
-                <ActionButton
-                  title="Start Game"
-                  onPress={startGame}
-                  disabled={!canStart}
-                  style={styles.startGameButton}
-                />
-              </Animated.View>
+                <SectionCard
+                  eyebrow="Mission Prep"
+                  title={commandPrepTitle}
+                  actions={
+                    <ActionButton
+                      title="Clear"
+                    variant="ghost"
+                    onPress={clearSelection}
+                    disabled={selectedPlayers.length === 0}
+                    style={styles.clearSelectionButton}
+                  />
+                }
+                >
+                  <View style={styles.commandPrepStack}>
+                    <Animated.View
+                      style={[styles.primaryActions, { transform: [{ scale: startPulse }] }]}
+                    >
+                    <ActionButton
+                      title="Start Game"
+                      subtitle={startGameSubtitle}
+                      onPress={startGame}
+                      disabled={!canStart}
+                      style={styles.startGameButton}
+                    />
+                  </Animated.View>
+                </View>
+              </SectionCard>
 
               <SectionCard title="Players">
                 {rankedPlayers.length === 0 ? (
@@ -646,6 +716,25 @@ export default function HomeScreen() {
                     <Text style={styles.commandPlayerHint}>
                       Tap to select. Hold to open a profile.
                     </Text>
+                    <View style={styles.commandPlayerMetaRow}>
+                      <Text style={styles.commandPlayerMetaText}>
+                        {hasPlayerSearch
+                          ? `${visiblePlayerOptions.length} match${visiblePlayerOptions.length === 1 ? "" : "es"}`
+                          : canTogglePlayerPreview
+                            ? `Showing ${visiblePlayerOptions.length} of ${filteredPlayers.length}`
+                            : `${visiblePlayerOptions.length} available`}
+                      </Text>
+                      {canTogglePlayerPreview ? (
+                        <Pressable
+                          onPress={() => setShowAllPlayers((current) => !current)}
+                          style={styles.commandPlayerToggleButton}
+                        >
+                          <Text style={styles.commandPlayerToggleText}>
+                            {showAllPlayers ? "Show Less" : "Show All"}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
 
                     <View style={styles.commandPlayerViewport}>
                       <ScrollView
@@ -653,7 +742,7 @@ export default function HomeScreen() {
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={styles.commandPlayerViewportContent}
                       >
-                        {filteredPlayers.length === 0 ? (
+                        {visiblePlayerOptions.length === 0 ? (
                           <EmptyStateCard message="No players match that search." />
                         ) : (
                           <Animated.View
@@ -662,14 +751,14 @@ export default function HomeScreen() {
                               { transform: [{ scale: removePulse }] },
                             ]}
                           >
-                            {filteredPlayers.map((player) => {
-                              const selected = selectedIds.includes(player.id);
-                              const locked =
-                                !selected && !selectedGroup && selectedIds.length >= 5;
-                              const dimmed = Boolean(selectedGroup) && !selected;
+                              {visiblePlayerOptions.map((player) => {
+                                const selected = selectedIds.includes(player.id);
+                                const locked =
+                                  !selected && !activeSelectedGroup && selectedIds.length >= 5;
+                                const dimmed = Boolean(activeSelectedGroup) && !selected;
 
-                              return (
-                                <PlayerSelectionCard
+                                return (
+                                  <PlayerSelectionCard
                                   key={player.id}
                                   player={player}
                                   selected={selected}
@@ -698,76 +787,20 @@ export default function HomeScreen() {
                     onAction={() => router.push(APP_ROUTES.roster)}
                   />
                 ) : (
-                  <View style={styles.groupListCompact}>
-                    {visibleGroups.map((group) => (
-                      <GroupSelectionCard
-                        key={group.id}
-                        group={group}
-                        selected={selectedGroup?.id === group.id}
-                        onPress={() => loadGroup(group)}
-                        playersById={playersById}
-                      />
+                    <View style={styles.groupListCompact}>
+                      {visibleGroups.map((group) => (
+                        <GroupSelectionCard
+                          key={group.id}
+                          group={group}
+                          selected={activeSelectedGroup?.id === group.id}
+                          onPress={() => loadGroup(group)}
+                          playersById={playersById}
+                        />
                     ))}
                   </View>
                 )}
               </SectionCard>
 
-              <SectionCard
-                eyebrow="Selected Crew"
-                title={`${selectedPlayers.length}/5 Selected`}
-                actions={
-                  <ActionButton
-                    title="Clear Selection"
-                    variant="ghost"
-                    onPress={clearSelection}
-                    disabled={selectedPlayers.length === 0}
-                    style={styles.clearSelectionButton}
-                  />
-                }
-              >
-                {selectedPlayers.length === 0 ? (
-                  <Text style={styles.selectedCrewEmpty}>No players selected.</Text>
-                ) : (
-                  <View style={styles.selectedCrewWrap}>
-                    {selectedPlayers.map((player) => (
-                      <AnimatedSelectedNamePill
-                        key={player.id}
-                        name={player.name ?? "Unknown"}
-                        color={player.color}
-                      />
-                    ))}
-                  </View>
-                )}
-              </SectionCard>
-
-              <SectionCard title="Quick Launch">
-                <View style={styles.quickLaunchGrid}>
-                  <ActionButton
-                    title="Compare"
-                    variant="secondary"
-                    style={styles.quickLaunchButton}
-                    onPress={() => router.push(buildCompareRoute())}
-                  />
-                  <ActionButton
-                    title="Charts"
-                    variant="secondary"
-                    style={styles.quickLaunchButton}
-                    onPress={() => router.push(buildChartsRoute())}
-                  />
-                  <ActionButton
-                    title="Profiles"
-                    variant="secondary"
-                    style={styles.quickLaunchButton}
-                    onPress={() => router.push(APP_ROUTES.playerDirectory)}
-                  />
-                  <ActionButton
-                    title="History"
-                    variant="secondary"
-                    style={styles.quickLaunchButton}
-                    onPress={() => router.push(buildHistoryRoute())}
-                  />
-                </View>
-              </SectionCard>
             </ScrollView>
           </View>
         )}
@@ -836,7 +869,11 @@ const styles = StyleSheet.create({
   },
   headerAction: {
     alignSelf: "center",
-    minWidth: 108,
+    minWidth: 0,
+    minHeight: 38,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    opacity: 0.8,
   },
   homeTabControl: {
     marginTop: 2,
@@ -845,15 +882,6 @@ const styles = StyleSheet.create({
   homeTabContent: {
     flex: 1,
   },
-  homePrimaryPill: {
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    backgroundColor: "rgba(168,85,247,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(168,85,247,0.32)",
-  },
-
   gameTabWrap: {
     flex: 1,
   },
@@ -897,10 +925,40 @@ const styles = StyleSheet.create({
   commandPlayerPicker: {
     gap: 10,
   },
+  commandPrepStack: {
+    gap: 12,
+  },
   commandPlayerHint: {
     color: "#7D9BC4",
     fontSize: 11,
     fontWeight: "600",
+  },
+  commandPlayerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  commandPlayerMetaText: {
+    flex: 1,
+    color: "#A9C1E7",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  commandPlayerToggleButton: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "rgba(96,165,250,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.24)",
+  },
+  commandPlayerToggleText: {
+    color: "#BFE4FF",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
   commandPlayerViewport: {
     height: 198,
@@ -910,19 +968,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   primaryActions: {
-    marginBottom: 2,
-  },
-  quickLaunchGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  quickLaunchButton: {
-    flexBasis: "48%",
-    flexGrow: 1,
+    marginBottom: 0,
   },
   startGameButton: {
     width: "100%",
+    minHeight: 56,
   },
   commandPlayerViewportContent: {
     paddingBottom: 4,
@@ -940,17 +990,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   clearSelectionButton: {
-    minWidth: 120,
-  },
-  selectedCrewWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  selectedCrewEmpty: {
-    color: "#C9D8F4",
-    fontSize: 13,
-    fontWeight: "700",
+    minWidth: 82,
+    minHeight: 38,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   leaderboardPanel: {
     flex: 1,
@@ -966,7 +1009,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   hubGrid: {
-    flex: 1,
+    width: "100%",
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
@@ -975,6 +1018,7 @@ const styles = StyleSheet.create({
   },
   hubWideStack: {
     width: "100%",
+    flexShrink: 0,
   },
   hubTileBase: {
     minHeight: 0,
@@ -988,6 +1032,7 @@ const styles = StyleSheet.create({
   },
   hubTileFullWidth: {
     width: "100%",
+    flexBasis: "auto",
     minHeight: 112,
     paddingHorizontal: 18,
   },

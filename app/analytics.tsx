@@ -64,6 +64,14 @@ const ANALYTICS_CARD_TONES: Record<
   },
 };
 
+const ANALYTICS_GLOSSARY_TARGETS = {
+  compare: { category: "correlations" as const, label: "What is Compare?" },
+  charts: { category: "scoring" as const, label: "What are Charts?" },
+  stats: { category: "scoring" as const, label: "What are Stats?" },
+  elo: { category: "elo" as const, label: "What is ELO?" },
+  insights: { category: "correlations" as const, label: "What are Insights?" },
+} as const;
+
 function CroppedHubIcon({
   iconKey,
   accent,
@@ -94,11 +102,9 @@ function AnalyticsCard({
   tone: (typeof ANALYTICS_CARD_TONES)[string];
 }) {
   const glossaryTarget =
-    card.key === "stats"
-      ? { category: "scoring" as const, label: "Glossary" }
-      : card.key === "elo"
-        ? { category: "elo" as const, label: "What is ELO?" }
-        : null;
+    ANALYTICS_GLOSSARY_TARGETS[
+      card.key as keyof typeof ANALYTICS_GLOSSARY_TARGETS
+    ] ?? null;
 
   return (
     <Pressable
@@ -121,6 +127,14 @@ function AnalyticsCard({
           <View style={styles.cardWideContent}>
             <View style={styles.cardWideTitleWrap}>
               <Text style={[styles.cardTitle, styles.cardTitleWide]}>{card.title}</Text>
+              {glossaryTarget ? (
+                <DefinitionsJumpLink
+                  category={glossaryTarget.category}
+                  label={glossaryTarget.label}
+                  style={styles.cardWideGlossaryLink}
+                  textStyle={[styles.cardGlossaryText, styles.cardGlossaryTextCentered]}
+                />
+              ) : null}
             </View>
           </View>
         </View>
@@ -252,9 +266,6 @@ export default function AnalyticsScreen() {
         title="Analytics Destinations"
         state={analyticsSectionState}
         style={styles.directorySection}
-        sourceCaption={freshness.sourceCaption(
-          "This directory stays aligned with the published Supabase analytics hub payload.",
-        )}
         messageTitle={analyticsSectionTitle}
         messageBody={error ? freshness.sourceCaption(analyticsSectionBody) : analyticsSectionBody}
         primaryAction={freshness.retryAction ?? analyticsPrimaryAction}
@@ -398,11 +409,18 @@ const styles = StyleSheet.create({
   cardGlossaryText: {
     color: "#DFF6FF",
   },
+  cardGlossaryTextCentered: {
+    textAlign: "center",
+  },
   cardWideTitleWrap: {
     flex: 1,
     minHeight: 52,
     justifyContent: "flex-end",
     alignItems: "center",
+    gap: 4,
+  },
+  cardWideGlossaryLink: {
+    alignSelf: "center",
   },
   cardTitle: {
     color: "#FFFFFF",

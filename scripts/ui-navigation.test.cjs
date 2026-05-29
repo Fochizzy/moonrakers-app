@@ -113,7 +113,7 @@ run("Analytics and players hubs expose the consolidated navigation model", () =>
   );
   assert.deepEqual(
     analyticsCards.map((card) => card.iconKey),
-    ["damage", "reactor", "thruster", "billBendo", "ships"]
+    ["compare", "charts", "statistics", "elo", "ships"]
   );
 
   const playersHubCards = getPlayersHubCards();
@@ -129,15 +129,31 @@ run("Analytics and players hubs expose the consolidated navigation model", () =>
   const bridgeCards = getBridgeDestinations();
   assert.deepEqual(
     bridgeCards.map((card) => card.key),
-    ["history", "analytics", "players", "definitions"]
+    ["history", "analytics", "players", "definitions", "manage-user-groups"]
   );
   assert.deepEqual(
     bridgeCards.map((card) => card.iconKey),
-    ["miss", "shield", "orangePerson", "thruster"]
+    ["miss", "shield", "orangePerson", "thruster", "missionHub"]
+  );
+  assert.equal(
+    bridgeCards.find((card) => card.key === "players")?.title,
+    "Profile"
   );
   assert.equal(
     bridgeCards.find((card) => card.key === "analytics")?.route,
     APP_ROUTES.analytics
+  );
+  assert.equal(
+    bridgeCards.find((card) => card.key === "manage-user-groups")?.title,
+    "Manage User/Groups"
+  );
+  assert.equal(
+    bridgeCards.find((card) => card.key === "manage-user-groups")?.route,
+    APP_ROUTES.roster
+  );
+  assert.equal(
+    bridgeCards.find((card) => card.key === "manage-user-groups")?.fullWidth,
+    true
   );
 });
 

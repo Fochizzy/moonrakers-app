@@ -27,10 +27,12 @@ import DefinitionTermText from "@/components/ui/DefinitionTermText";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
+import { buildLocalPlayerProfileFallback } from "@/lib/cloud/analytics/buildLocalPlayerProfileFallback";
 import { getPlayerProfileScreen } from "@/lib/cloud/analytics/getPlayerProfileScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useAuthProfile, useAuthSession, useGames, usePlayers } from "@/store/useStore";
 import { buildAnalyticsFreshnessPresentation } from "@/utils/analyticsFreshness";
+import { buildAnalyticsPlayerDirectory } from "@/utils/analyticsPlayers";
 import {
   APP_ROUTES,
   buildChartsRoute,
@@ -43,10 +45,24 @@ import {
   resolveSignedInPlayerOptionId,
 } from "@/utils/charts";
 import { COLORS } from "@/utils/colors";
+import {
+  getVisibleEloMetricTabs,
+  resolveVisibleEloInsight,
+  resolveVisibleEloSection,
+  type VisibleEloMetricTab,
+} from "@/utils/elo/visibleMetricTabs";
+import {
+  buildContextRows as buildFallbackContextRows,
+  buildGameRowsByPlayer,
+  buildInsight as buildFallbackInsight,
+  buildSectionCards as buildFallbackSectionCards,
+  buildSummary as buildFallbackSummary,
+  buildTopCards as buildFallbackTopCards,
+} from "@/utils/eloScreenAnalytics";
 import { getPlayerCardSourceByArtIndex } from "@/utils/playerCardAssets";
+import { buildPlayerProfileMetricPresentation } from "@/utils/playerProfileMetricPresentation";
 import { resolveAssignedCardArtIndexForProfile } from "@/utils/profileAppearance";
 import { isValidPlayerCardArtIndex } from "@/utils/playerCards";
-import { canonicalizeSelectablePlayers } from "@/utils/registeredProfilePlayer";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 import { uiPolish } from "@/utils/uiPolish";
 
@@ -57,12 +73,7 @@ type StorePlayer = {
   assignedCardArtIndex?: number | null;
 };
 
-type EloMetricTab =
-  | "Leaderboard"
-  | "Momentum"
-  | "Skills"
-  | "Context"
-  | "Projection";
+type EloMetricTab = VisibleEloMetricTab;
 
 type PayloadRecord = Record<string, unknown>;
 type ProfileMetricTone =
@@ -73,13 +84,7 @@ type ProfileMetricTone =
   | "red"
   | "danger";
 
-const PROFILE_TABS: EloMetricTab[] = [
-  "Leaderboard",
-  "Momentum",
-  "Skills",
-  "Context",
-  "Projection",
-];
+const PROFILE_TABS: EloMetricTab[] = getVisibleEloMetricTabs();
 
 function getInitials(name?: string) {
   if (!name?.trim()) return "?";
@@ -120,6 +125,15 @@ function normalizeMetricTone(value: unknown): ProfileMetricTone {
   }
 
   return "default";
+}
+
+function hasMoonrakersIntelData(value: unknown) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      (value as Record<string, unknown>).hasData === true,
+  );
 }
 
 function CropCardArt({
@@ -231,11 +245,17 @@ export default function PlayerProfileDetailScreen() {
 
   const profileId = String(authSession?.user?.id ?? "").trim();
   const playerId = Array.isArray(params.playerId) ? params.playerId[0] : params.playerId;
-  const canonicalPlayerDirectory = useMemo(
-    () => canonicalizeSelectablePlayers(players, []),
-    [players],
+  const analyticsPlayerDirectory = useMemo(
+    () =>
+      buildAnalyticsPlayerDirectory({
+        players: players as any,
+        games: games as any,
+        groups: [],
+      }),
+    [games, players],
   );
-  const canonicalStorePlayers = canonicalPlayerDirectory.players as StorePlayer[];
+  const canonicalStorePlayers = analyticsPlayerDirectory.players as StorePlayer[];
+  const canonicalStoreGames = analyticsPlayerDirectory.games;
   const resolvedPlayerId = useMemo(() => {
     const normalizedRoutePlayerId = String(playerId ?? "").trim();
     if (!normalizedRoutePlayerId) {
@@ -243,9 +263,9 @@ export default function PlayerProfileDetailScreen() {
     }
 
     return String(
-      canonicalPlayerDirectory.aliases[normalizedRoutePlayerId] ?? normalizedRoutePlayerId,
+      analyticsPlayerDirectory.aliases[normalizedRoutePlayerId] ?? normalizedRoutePlayerId,
     ).trim();
-  }, [canonicalPlayerDirectory.aliases, playerId]);
+  }, [analyticsPlayerDirectory.aliases, playerId]);
   const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<EloMetricTab>("Leaderboard");
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
@@ -624,8 +644,10 @@ export default function PlayerProfileDetailScreen() {
     () => [
       ...filteredPlayerOptions.map((player) => ({
         id: String(player.id),
-        label: player.name || "Player",
-        badge: String(player.id) === String(signedInPlayerChipId ?? "").trim() ? "You" : null,
+        label:
+          String(player.id) === String(signedInPlayerChipId ?? "").trim()
+            ? "You"
+            : player.name || "Player",
       })),
       {
         id: ALL_PLAYERS_CHIP_ID,
@@ -700,21 +722,12 @@ export default function PlayerProfileDetailScreen() {
         selectedOpponentName ??
         "Focused"
       : "All";
-  const currentElo =
-    typeof hero.currentElo === "number" ? hero.currentElo : 1000;
-  const peakElo =
-    typeof hero.peakElo === "number" ? hero.peakElo : currentElo;
-  const totalGames =
-    typeof hero.totalGames === "number" ? hero.totalGames : 0;
-  const totalWins =
-    typeof hero.totalWins === "number" ? hero.totalWins : 0;
+  const currentElo = typeof hero.currentElo === "number" ? hero.currentElo : 1000;
+  const peakElo = typeof hero.peakElo === "number" ? hero.peakElo : currentElo;
+  const totalGames = typeof hero.totalGames === "number" ? hero.totalGames : 0;
+  const totalWins = typeof hero.totalWins === "number" ? hero.totalWins : 0;
   const winRate =
-    typeof hero.winRate === "number"
-      ? hero.winRate
-      : totalGames > 0
-        ? totalWins / totalGames
-        : 0;
-  const recentGames = toArray(payload?.recentGames);
+    typeof hero.winRate === "number" ? hero.winRate : totalGames > 0 ? totalWins / totalGames : 0;
 
   const topCards = useMemo(
     () =>
@@ -727,12 +740,14 @@ export default function PlayerProfileDetailScreen() {
       })),
     [payload?.topCards],
   );
-  const featuredCard = topCards[0] ?? null;
-  const secondaryCards = topCards.slice(1, 3);
-  const stickySignalsLabel = featuredCard ? "Ready" : "Pending";
 
   const tabs = toRecord(payload?.tabs);
-  const activeSection = toRecord(tabs[activeTab]);
+  const hasTabRecords = Object.keys(tabs).length > 0;
+  const activeSection = toRecord(
+    hasTabRecords
+      ? resolveVisibleEloSection(tabs as Record<string, any>, activeTab)
+      : null,
+  );
   const sectionCards = useMemo(
     () =>
       toArray(activeSection.cards).map((card, index) => ({
@@ -750,10 +765,192 @@ export default function PlayerProfileDetailScreen() {
       ? `Filtered to ${selectedOpponentName}`
       : selectedPlayerName;
   const tabInsights = toRecord(payload?.tabInsights);
-  const activeInsight = toRecord(tabInsights[activeTab] ?? payload?.activeInsight);
+  const hasTabInsights = Object.keys(tabInsights).length > 0;
+  const activeInsight = toRecord(
+    hasTabInsights
+      ? resolveVisibleEloInsight(tabInsights as Record<string, any>, activeTab)
+      : payload?.activeInsight,
+  );
   const profileInsight = toRecord(payload?.profileInsight);
   const hasData = totalGames > 0 || topCards.length > 0 || sectionCards.length > 0;
-  const moonrakersIntel = payload?.moonrakersIntel;
+  const localProfileFallback = useMemo(
+    () =>
+      buildLocalPlayerProfileFallback({
+        playerId: resolvedPlayerId,
+        opponentId: selectedOpponentId,
+        players: canonicalStorePlayers as any,
+        games: canonicalStoreGames as any,
+        recentGamesPayload: toArray(payload?.recentGames) as any,
+        moonrakersIntelPayload:
+          payload?.moonrakersIntel && typeof payload.moonrakersIntel === "object"
+            ? (payload.moonrakersIntel as Record<string, unknown>)
+            : null,
+      }),
+    [
+      canonicalStoreGames,
+      canonicalStorePlayers,
+      payload?.moonrakersIntel,
+      payload?.recentGames,
+      resolvedPlayerId,
+      selectedOpponentId,
+    ],
+  );
+  const recentGames = localProfileFallback.recentGames;
+  const moonrakersIntel = localProfileFallback.moonrakersIntel;
+  const fallbackRowsByPlayer = useMemo(
+    () => buildGameRowsByPlayer(canonicalStoreGames as any, canonicalStorePlayers as any),
+    [canonicalStoreGames, canonicalStorePlayers],
+  );
+  const fallbackPlayerRows = fallbackRowsByPlayer[resolvedPlayerId] ?? [];
+  const fallbackContextRows = useMemo(
+    () => buildFallbackContextRows(fallbackPlayerRows, selectedOpponentId),
+    [fallbackPlayerRows, selectedOpponentId],
+  );
+  const fallbackSummary = useMemo(() => {
+    if (!resolvedPlayerId) {
+      return null;
+    }
+
+    const nextSummary = buildFallbackSummary(
+      resolvedPlayerId,
+      canonicalStorePlayers as any,
+      fallbackRowsByPlayer,
+      { [resolvedPlayerId]: currentElo },
+    );
+
+    return {
+      ...nextSummary,
+      peakElo,
+    };
+  }, [canonicalStorePlayers, currentElo, fallbackRowsByPlayer, peakElo, resolvedPlayerId]);
+  const fallbackTopCards = useMemo(
+    () =>
+      fallbackSummary
+        ? buildFallbackTopCards(fallbackSummary, fallbackPlayerRows, fallbackContextRows).map(
+            (card) => ({
+              ...card,
+              tone: normalizeMetricTone(card.tone),
+            }),
+          )
+        : [],
+    [fallbackContextRows, fallbackPlayerRows, fallbackSummary],
+  );
+  const fallbackSection = useMemo(
+    () =>
+      fallbackSummary
+        ? buildFallbackSectionCards(
+            activeTab,
+            fallbackSummary,
+            fallbackPlayerRows,
+            fallbackContextRows,
+            selectedOpponentName,
+          )
+        : { title: `${activeTab} Metrics`, cards: [] },
+    [
+      activeTab,
+      fallbackContextRows,
+      fallbackPlayerRows,
+      fallbackSummary,
+      selectedOpponentName,
+    ],
+  );
+  const fallbackActiveInsight = useMemo(
+    () =>
+      fallbackSummary
+        ? buildFallbackInsight(
+            activeTab,
+            fallbackSummary,
+            fallbackContextRows,
+            selectedOpponentName,
+          )
+        : null,
+    [activeTab, fallbackContextRows, fallbackSummary, selectedOpponentName],
+  );
+  const fallbackProfileInsight = useMemo(
+    () =>
+      fallbackSummary
+        ? buildFallbackInsight(
+            "Leaderboard",
+            fallbackSummary,
+            fallbackContextRows,
+            selectedOpponentName,
+          )
+        : null,
+    [fallbackContextRows, fallbackSummary, selectedOpponentName],
+  );
+  const usingLocalMetricFallback = !hasData && Boolean(fallbackSummary?.gamesPlayed);
+  const usingLocalRecentGamesFallback =
+    recentGames.length > toArray(payload?.recentGames).length;
+  const usingLocalMoonrakersIntelFallback =
+    hasMoonrakersIntelData(moonrakersIntel) && !hasMoonrakersIntelData(payload?.moonrakersIntel);
+  const usingLocalProfileFallback =
+    usingLocalMetricFallback || usingLocalRecentGamesFallback || usingLocalMoonrakersIntelFallback;
+  const effectiveCurrentElo = usingLocalMetricFallback ? fallbackSummary?.currentElo ?? currentElo : currentElo;
+  const effectivePeakElo = usingLocalMetricFallback ? fallbackSummary?.peakElo ?? peakElo : peakElo;
+  const effectiveTotalGames = usingLocalMetricFallback ? fallbackSummary?.gamesPlayed ?? totalGames : totalGames;
+  const effectiveTotalWins = usingLocalMetricFallback ? fallbackSummary?.wins ?? totalWins : totalWins;
+  const effectiveWinRate =
+    usingLocalMetricFallback && fallbackSummary
+      ? effectiveTotalGames > 0
+        ? effectiveTotalWins / effectiveTotalGames
+        : 0
+      : winRate;
+  const effectiveTopCards = usingLocalMetricFallback ? fallbackTopCards : topCards;
+  const effectiveSectionCards = usingLocalMetricFallback
+    ? fallbackSection.cards.map((card) => ({
+        ...card,
+        tone: normalizeMetricTone(card.tone),
+      }))
+    : sectionCards;
+  const effectiveSectionTitle = usingLocalMetricFallback ? fallbackSection.title : sectionTitle;
+  const effectiveProfileInsight = toRecord(
+    usingLocalMetricFallback ? fallbackProfileInsight : profileInsight,
+  );
+  const effectiveActiveInsight = toRecord(
+    usingLocalMetricFallback ? fallbackActiveInsight : activeInsight,
+  );
+  const metricPresentation = useMemo(
+    () =>
+      buildPlayerProfileMetricPresentation({
+        activeTab,
+        topCards: effectiveTopCards,
+        sectionCards: effectiveSectionCards,
+        profileInsight: {
+          title: toStringValue(effectiveProfileInsight.title, "Profile insight"),
+          body: toStringValue(
+            effectiveProfileInsight.body,
+            "No server-authored profile insight is available yet.",
+          ),
+        },
+        activeInsight: {
+          title: toStringValue(effectiveActiveInsight.title, `${activeTab} Insight`),
+          body: toStringValue(
+            effectiveActiveInsight.body,
+            "No server-authored insight is available yet.",
+          ),
+        },
+      }),
+    [
+      activeTab,
+      effectiveActiveInsight.body,
+      effectiveActiveInsight.title,
+      effectiveProfileInsight.body,
+      effectiveProfileInsight.title,
+      effectiveSectionCards,
+      effectiveTopCards,
+    ],
+  );
+  const stickySignalsLabel = metricPresentation.featuredCard ? "Ready" : "Pending";
+  const effectiveHasData = usingLocalMetricFallback || hasData;
+  const profileSourceKind = usingLocalProfileFallback
+    ? "device-fallback"
+    : freshness.sourceKind;
+  const profileSourceLabel = usingLocalProfileFallback
+    ? "Device fallback"
+    : freshness.sourceLabel;
+  const profileReadyCaption = usingLocalProfileFallback
+    ? "Saved history on this device is filling in while the published Supabase profile is still empty."
+    : "Full profile analytics are now coming from the published Supabase contract.";
 
   if (!selectedPlayer) {
     return (
@@ -827,16 +1024,14 @@ export default function PlayerProfileDetailScreen() {
 
             {!showProfileRecoveryCard ? (
               <View style={styles.headerMetaRow}>
-                {freshness.sourceKind ? (
+                {profileSourceKind ? (
                   <AnalyticsSourceBadge
-                    kind={freshness.sourceKind}
-                    label={freshness.sourceLabel}
+                    kind={profileSourceKind}
+                    label={profileSourceLabel}
                   />
                 ) : null}
                 <Text style={styles.headerMetaText}>
-                  {freshness.sourceCaption(
-                    "Full profile analytics are now coming from the published Supabase contract.",
-                  )}
+                  {freshness.sourceCaption(profileReadyCaption)}
                 </Text>
               </View>
             ) : null}
@@ -853,14 +1048,12 @@ export default function PlayerProfileDetailScreen() {
         {showProfileRecoveryCard ? (
           <AnalyticsRecoveryCard
             title={profileRecoveryTitle}
-            body={freshness.sourceCaption(
-              "Full profile analytics are now coming from the published Supabase contract.",
-            )}
+            body={freshness.sourceCaption(profileReadyCaption)}
             tone={
               profileQuery.error && profileQuery.lastSuccessAt === null ? "danger" : "warning"
             }
-            sourceKind={freshness.sourceKind}
-            sourceLabel={freshness.sourceLabel}
+            sourceKind={profileSourceKind}
+            sourceLabel={profileSourceLabel}
             primaryAction={freshness.retryAction}
             secondaryAction={{
               label: "Command",
@@ -873,7 +1066,6 @@ export default function PlayerProfileDetailScreen() {
 
         <AnalyticsControlRail
           title="Player Search"
-          subtitle="Swap the focus player without leaving this full profile breakdown."
           search={{
             query: playerSearchQuery,
             onQueryChange: setPlayerSearchQuery,
@@ -881,8 +1073,6 @@ export default function PlayerProfileDetailScreen() {
             items: profileSearchItems,
             selectedIds: resolvedPlayerId ? [String(resolvedPlayerId)] : [],
             onSelect: handleSelectPlayer,
-            helperText:
-              "Pick another player to reuse the same analytics layout with a different focus.",
             variant: "rail",
           }}
         />
@@ -908,7 +1098,7 @@ export default function PlayerProfileDetailScreen() {
               <DefinitionsJumpLink label="Definition" metric="elo_current" />
             </View>
             <Text style={[styles.metricValue, { color: COLORS.accent }]}>
-              {Math.round(currentElo)}
+              {Math.round(effectiveCurrentElo)}
             </Text>
             <Text style={styles.metricSub}>Live rating</Text>
           </View>
@@ -933,7 +1123,7 @@ export default function PlayerProfileDetailScreen() {
               <DefinitionsJumpLink label="Definition" metric="elo_peak" />
             </View>
             <Text style={[styles.metricValue, { color: COLORS.blue }]}>
-              {Math.round(peakElo)}
+              {Math.round(effectivePeakElo)}
             </Text>
             <Text style={styles.metricSub}>Best rating reached</Text>
           </View>
@@ -958,10 +1148,10 @@ export default function PlayerProfileDetailScreen() {
               <DefinitionsJumpLink label="Definition" category="elo" />
             </View>
             <Text style={[styles.metricValue, { color: COLORS.green }]}>
-              {`${Math.round(winRate * 100)}%`}
+              {`${Math.round(effectiveWinRate * 100)}%`}
             </Text>
             <Text style={styles.metricSub}>
-              {totalWins} wins / {totalGames} games
+              {effectiveTotalWins} wins / {effectiveTotalGames} games
             </Text>
           </View>
         </View>
@@ -1057,20 +1247,18 @@ export default function PlayerProfileDetailScreen() {
           </View>
         ) : null}
 
-        {hasData ? (
+        {effectiveHasData ? (
           <PlayerProfileMetricTabs
             activeTab={activeTab}
-            featuredCard={featuredCard}
-            secondaryCards={secondaryCards}
-            profileInsightTitle={toStringValue(profileInsight.title, "Profile insight")}
-            profileInsightBody={toStringValue(
-              profileInsight.body,
-              "No server-authored profile insight is available yet.",
-            )}
-            activeInsightBody={toStringValue(activeInsight.body, "") || null}
-            sectionTitle={sectionTitle}
+            signalsTitle={metricPresentation.signalsTitle}
+            featuredCard={metricPresentation.featuredCard}
+            secondaryCards={metricPresentation.secondaryCards}
+            insightTitle={metricPresentation.insightTitle}
+            insightBody={metricPresentation.insightBody}
+            secondaryInsightBody={metricPresentation.secondaryInsightBody}
+            sectionTitle={effectiveSectionTitle}
             sectionSubtitle={sectionSubtitle}
-            sectionCards={sectionCards}
+            sectionCards={metricPresentation.sectionCards}
           />
         ) : (
           <EmptyStateCard

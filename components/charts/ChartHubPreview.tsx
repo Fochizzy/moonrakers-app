@@ -116,6 +116,77 @@ function PreviewRanking({
   );
 }
 
+function PreviewElo({
+  stroke,
+  fill,
+  width,
+  height,
+}: {
+  stroke: string;
+  fill: string;
+  width: number;
+  height: number;
+}) {
+  const leadSeries = [
+    { x: 12, y: height - 18 },
+    { x: width * 0.28, y: height * 0.56 },
+    { x: width * 0.52, y: height * 0.48 },
+    { x: width * 0.74, y: height * 0.3 },
+    { x: width - 12, y: height * 0.2 },
+  ];
+  const chaseSeries = [
+    { x: 12, y: height * 0.34 },
+    { x: width * 0.28, y: height * 0.46 },
+    { x: width * 0.52, y: height * 0.42 },
+    { x: width * 0.74, y: height * 0.52 },
+    { x: width - 12, y: height * 0.6 },
+  ];
+
+  return (
+    <>
+      {[0.24, 0.5, 0.76].map((ratio, index) => (
+        <Line
+          key={`elo-grid-${index}`}
+          x1={10}
+          y1={10 + (height - 20) * ratio}
+          x2={width - 10}
+          y2={10 + (height - 20) * ratio}
+          stroke={CHART_COLORS.grid}
+          strokeWidth={1}
+        />
+      ))}
+      <Path
+        d={`${buildPath(leadSeries)} L ${width - 12} ${height - 10} L 12 ${height - 10} Z`}
+        fill={fill}
+      />
+      <Path d={buildPath(leadSeries)} stroke={stroke} strokeWidth={2.4} fill="none" />
+      <Path
+        d={buildPath(chaseSeries)}
+        stroke={withChartAlpha(CHART_COLORS.warning, 0.86)}
+        strokeWidth={2}
+        fill="none"
+      />
+      {leadSeries.slice(1).map((point, index) => (
+        <Circle
+          key={`elo-lead-${index}`}
+          cx={point.x}
+          cy={point.y}
+          r={2.8}
+          fill={stroke}
+        />
+      ))}
+      <Circle
+        cx={leadSeries[leadSeries.length - 1]?.x ?? width - 12}
+        cy={leadSeries[leadSeries.length - 1]?.y ?? height * 0.2}
+        r={4.2}
+        fill={CHART_COLORS.cardAlt}
+        stroke={stroke}
+        strokeWidth={2}
+      />
+    </>
+  );
+}
+
 function PreviewMatchup({
   stroke,
   width,
@@ -467,6 +538,9 @@ const CHART_PREVIEW_RENDERERS: Record<
   (props: { stroke: string; fill: string; width: number; height: number }) => React.ReactNode
 > = {
   trend: PreviewTrend,
+  elo: ({ stroke, fill, width, height }) => (
+    <PreviewElo stroke={stroke} fill={fill} width={width} height={height} />
+  ),
   scatter: ({ stroke, width, height }) => (
     <PreviewScatter stroke={stroke} width={width} height={height} />
   ),

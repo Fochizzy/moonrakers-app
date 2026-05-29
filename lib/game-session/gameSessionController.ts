@@ -1,3 +1,10 @@
+import {
+  HEAD_TO_HEAD_CURRENT_TURN_FIRST_PLACE_SCORE_BONUS,
+  HEAD_TO_HEAD_OTHER_PLAYER_FIRST_PLACE_SCORE_BONUS,
+  HEAD_TO_HEAD_SECOND_PLACE_SCORE_BONUS,
+  sanitizeHeadToHeadSelection,
+} from "@/utils/headToHeadMission";
+
 export type SessionTurnState = {
   prestige: number;
   contracts: number;
@@ -5,6 +12,8 @@ export type SessionTurnState = {
   assistRecipients: Record<string, number>;
   assistPrestigeRecipients: Record<string, number>;
   objectiveCount: number;
+  headToHeadFirstPlaceId?: string | null;
+  headToHeadSecondPlaceId?: string | null;
 };
 
 export type SessionRound = {
@@ -18,8 +27,9 @@ export type SessionRound = {
   objectiveCount: number;
   objectivePrestige: number;
   createdAt: number;
-  metaType?: "main" | "bonusObjective";
+  metaType?: "main" | "bonusObjective" | "headToHeadFirstPlace" | "headToHeadSecondPlace";
   linkedTurnId?: string;
+  headToHeadScoreBonus?: number;
 };
 
 type SubmitRoundCandidateInput = {
@@ -78,6 +88,10 @@ export function sanitizeCurrentTurnForRound(source: SessionTurnState): SessionTu
     assistRecipients,
     assistPrestigeRecipients,
     objectiveCount: clampObjectiveCount(source.objectiveCount),
+    ...sanitizeHeadToHeadSelection(
+      source.headToHeadFirstPlaceId,
+      source.headToHeadSecondPlaceId,
+    ),
   };
 }
 
@@ -101,6 +115,67 @@ function createSessionRound(args: {
     objectivePrestige: clampObjectiveCount(args.current.objectiveCount),
     createdAt: args.createdAt,
   };
+}
+
+export function createHeadToHeadPlacementRounds(args: {
+  linkedTurnId: string;
+  activeTurnPlayerId: string;
+  current: SessionTurnState;
+  now?: () => number;
+  createRoundId?: (playerId: string, createdAt: number) => string;
+}): SessionRound[] {
+  const now = args.now ?? Date.now;
+  const { firstPlaceId, secondPlaceId } = sanitizeHeadToHeadSelection(
+    args.current.headToHeadFirstPlaceId,
+    args.current.headToHeadSecondPlaceId,
+  );
+
+  if (!firstPlaceId || !secondPlaceId) {
+    return [];
+  }
+
+  const firstCreatedAt = now();
+  const secondCreatedAt = now();
+
+  return [
+    {
+      id: args.createRoundId
+        ? args.createRoundId(`${firstPlaceId}-head-to-head-first`, firstCreatedAt)
+        : `${args.linkedTurnId}-h2h-first-${firstPlaceId}`,
+      playerId: firstPlaceId,
+      prestige: 1,
+      contracts: 0,
+      failures: 0,
+      assistRecipients: {},
+      assistPrestigeRecipients: {},
+      objectiveCount: 0,
+      objectivePrestige: 0,
+      createdAt: firstCreatedAt,
+      metaType: "headToHeadFirstPlace",
+      linkedTurnId: args.linkedTurnId,
+      headToHeadScoreBonus:
+        firstPlaceId === args.activeTurnPlayerId
+          ? HEAD_TO_HEAD_CURRENT_TURN_FIRST_PLACE_SCORE_BONUS
+          : HEAD_TO_HEAD_OTHER_PLAYER_FIRST_PLACE_SCORE_BONUS,
+    },
+    {
+      id: args.createRoundId
+        ? args.createRoundId(`${secondPlaceId}-head-to-head-second`, secondCreatedAt)
+        : `${args.linkedTurnId}-h2h-second-${secondPlaceId}`,
+      playerId: secondPlaceId,
+      prestige: 0,
+      contracts: 0,
+      failures: 0,
+      assistRecipients: {},
+      assistPrestigeRecipients: {},
+      objectiveCount: 0,
+      objectivePrestige: 0,
+      createdAt: secondCreatedAt,
+      metaType: "headToHeadSecondPlace",
+      linkedTurnId: args.linkedTurnId,
+      headToHeadScoreBonus: HEAD_TO_HEAD_SECOND_PLACE_SCORE_BONUS,
+    },
+  ];
 }
 
 export function createObjectiveBonusRounds(args: {
@@ -161,10 +236,17 @@ export function buildSubmitRoundCandidate(
     now,
     createRoundId: input.createRoundId,
   });
+  const headToHeadRounds = createHeadToHeadPlacementRounds({
+    linkedTurnId: mainRound.id,
+    activeTurnPlayerId: input.activeTurnPlayerId,
+    current: input.current,
+    now,
+    createRoundId: input.createRoundId,
+  });
 
   return {
     mainRound,
-    nextRounds: [...input.existingRounds, mainRound, ...bonusRounds],
+    nextRounds: [...input.existingRounds, mainRound, ...bonusRounds, ...headToHeadRounds],
   };
 }
 
@@ -201,11 +283,21 @@ export function buildEditRoundCandidate(
     now,
     createRoundId: input.createRoundId,
   });
+  const replacementHeadToHeadRounds = createHeadToHeadPlacementRounds({
+    linkedTurnId: input.editingRoundId,
+    activeTurnPlayerId: originalMainRound.playerId,
+    current: input.current,
+    now,
+    createRoundId: input.createRoundId,
+  });
 
   return {
-    nextRounds: [...filteredRounds, replacementMainRound, ...replacementBonusRounds].sort(
-      (left, right) => toNumber(left.createdAt) - toNumber(right.createdAt),
-    ),
+    nextRounds: [
+      ...filteredRounds,
+      replacementMainRound,
+      ...replacementBonusRounds,
+      ...replacementHeadToHeadRounds,
+    ].sort((left, right) => toNumber(left.createdAt) - toNumber(right.createdAt)),
   };
 }
 

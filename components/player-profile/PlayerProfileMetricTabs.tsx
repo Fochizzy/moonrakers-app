@@ -16,15 +16,16 @@ type PlayerProfileMetricCard = {
 };
 
 type PlayerProfileMetricTabsProps = {
-  activeInsightBody?: string | null;
   activeTab: string;
   featuredCard: PlayerProfileMetricCard | null;
-  profileInsightBody: string;
-  profileInsightTitle: string;
+  insightBody: string;
+  insightTitle: string;
   secondaryCards: PlayerProfileMetricCard[];
+  secondaryInsightBody?: string | null;
   sectionCards: PlayerProfileMetricCard[];
   sectionSubtitle: string;
   sectionTitle: string;
+  signalsTitle: string;
 };
 
 function toneStyles(tone?: PlayerProfileMetricCard["tone"]) {
@@ -44,21 +45,22 @@ function toneStyles(tone?: PlayerProfileMetricCard["tone"]) {
 }
 
 export default function PlayerProfileMetricTabs({
-  activeInsightBody = null,
   activeTab,
   featuredCard,
-  profileInsightBody,
-  profileInsightTitle,
+  insightBody,
+  insightTitle,
   secondaryCards,
+  secondaryInsightBody = null,
   sectionCards,
   sectionSubtitle,
   sectionTitle,
+  signalsTitle,
 }: PlayerProfileMetricTabsProps) {
   return (
     <>
       <View style={styles.sectionCompact}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Top 3 Winning Signals</Text>
+          <Text style={styles.sectionTitle}>{signalsTitle}</Text>
           <View style={styles.sectionHeaderMeta}>
             <DefinitionsJumpLink category="elo" />
           </View>
@@ -131,12 +133,12 @@ export default function PlayerProfileMetricTabs({
 
       <View style={styles.insightCardCompact}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>{profileInsightTitle}</Text>
+          <Text style={styles.sectionTitle}>{insightTitle}</Text>
           <Text style={styles.insightChip}>{activeTab.toUpperCase()}</Text>
         </View>
-        <Text style={styles.insightText}>{profileInsightBody}</Text>
-        {activeInsightBody ? (
-          <Text style={styles.insightTextSecondary}>{activeInsightBody}</Text>
+        <Text style={styles.insightText}>{insightBody}</Text>
+        {secondaryInsightBody ? (
+          <Text style={styles.insightTextSecondary}>{secondaryInsightBody}</Text>
         ) : null}
       </View>
 

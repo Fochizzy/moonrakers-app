@@ -2,7 +2,9 @@ import React, { memo, useMemo } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import Text from "@/components/ui/Text";
 import ChartFocusCard from "@/components/charts/ChartFocusCard";
+import SeriesIdentityBadge from "@/components/charts/SeriesIdentityBadge";
 import ChartStage from "@/components/charts/ChartStage";
+import { buildLineSeriesIdentities } from "@/components/charts/lineSeriesIdentity";
 import { getMetricOrFallback } from "@/utils/metricMap";
 import { resolveStoredPlayerColor } from "@/utils/playerColor";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
@@ -495,9 +497,19 @@ function BarChart({
     () => aggregateRows(safeData, visiblePlayers, metricKeys),
     [safeData, visiblePlayers, metricKeys]
   );
+  const identifiedRows = useMemo(
+    () =>
+      buildLineSeriesIdentities(
+        allRows.map((row) => ({
+          ...row,
+          name: row.label,
+        }))
+      ),
+    [allRows]
+  );
 
   const decoratedRows = useMemo(() => {
-    const rows = allRows.map((row) => ({
+    const rows = identifiedRows.map((row) => ({
       ...row,
       value: getResolvedValue(row, statKey, mode, allRows),
     }));
@@ -509,7 +521,7 @@ function BarChart({
         return a.label.localeCompare(b.label);
       })
       .slice(0, Math.max(1, maxPlayers));
-  }, [allRows, statKey, mode, maxPlayers]);
+  }, [allRows, identifiedRows, statKey, mode, maxPlayers]);
 
   const values = decoratedRows.map((row) => row.value);
   const minValue = values.length ? Math.min(...values, 0) : 0;
@@ -616,6 +628,10 @@ function BarChart({
                     <View style={styles.nameRow}>
                       <View style={[styles.legendColor, { backgroundColor: row.color }]} />
                       <Text style={styles.leaderboardName}>{row.label}</Text>
+                      <SeriesIdentityBadge
+                        label={row.collisionBadgeText}
+                        color={row.color}
+                      />
                     </View>
 
                     <Text style={styles.leaderboardMeta}>

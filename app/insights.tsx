@@ -48,10 +48,23 @@ type PlayerOption = {
 const insightSectionTabs: Array<{
   key: InsightSectionTab;
   label: string;
+  shortLabel: string;
 }> = [
-  { key: "pairingCorrelations", label: "Personal Correlations" },
-  { key: "macroCorrelations", label: "Macro Correlations" },
-  { key: "topSynergyPairs", label: "Top Synergy Pairs" },
+  {
+    key: "pairingCorrelations",
+    label: "Personal Correlations",
+    shortLabel: "Personal",
+  },
+  {
+    key: "macroCorrelations",
+    label: "Macro Correlations",
+    shortLabel: "Macro",
+  },
+  {
+    key: "topSynergyPairs",
+    label: "Top Synergy Pairs",
+    shortLabel: "Synergy",
+  },
 ];
 
 function toRecord(value: unknown): PayloadRecord {
@@ -233,7 +246,7 @@ export default function InsightsScreen() {
       if (currentSignedInOption) {
         optionById.set(signedInPlayerOptionId, {
           ...currentSignedInOption,
-          label: authProfilePlayerOption.label || currentSignedInOption.label,
+          label: "You",
           displayName:
             authProfilePlayerOption.displayName || currentSignedInOption.displayName,
           playerName:
@@ -419,38 +432,16 @@ export default function InsightsScreen() {
         }
         title="Insights Hub"
         size="compact"
-      >
-        {!hasPlayerAwareActions ? (
-          <View style={styles.linkRow}>
-            <ActionButton
-              title="Compare"
-              variant="secondary"
-              onPress={() => router.push(APP_ROUTES.compare)}
-              style={styles.linkActionButton}
-            />
-            <ActionButton
-              title="Stats"
-              variant="ghost"
-              onPress={() => router.push(APP_ROUTES.stats)}
-              style={styles.linkActionButton}
-            />
-            <ActionButton
-              title="Elo"
-              variant="ghost"
-              onPress={() => router.push(APP_ROUTES.elo)}
-              style={styles.linkActionButton}
-            />
-          </View>
-        ) : null}
-      </HeroCard>
+      />
 
       <AnalyticsControlRail
-        title="Insight Lenses"
-        tabVariant="stacked"
+        title="Focus"
+        tabVariant="underline"
         tabs={insightSectionTabs}
         activeTabKey={activeSectionTab}
         onTabChange={(key) => setActiveSectionTab(key as InsightSectionTab)}
         actions={<DefinitionsJumpLink category="correlations" />}
+        style={styles.focusRail}
         search={
           activeSectionTab === "pairingCorrelations"
             ? {
@@ -460,10 +451,6 @@ export default function InsightsScreen() {
                 items: filteredPlayerOptions.map((player) => ({
                   id: player.id,
                   label: player.label,
-                  badge:
-                    player.id === authProfileId
-                      ? "You"
-                      : null,
                   meta:
                     buildPlayerOptionMeta(player, authProfileId) ||
                     "Shared-network player",
@@ -471,8 +458,8 @@ export default function InsightsScreen() {
                 selectedIds: selectedProfileId ? [selectedProfileId] : [],
                 onSelect: (id) => setSelectedProfileId(id),
                 emptyText: "No players match this search.",
-                helperText: "Pick a player to inspect personal correlations.",
-                variant: "list",
+                helperText: null,
+                variant: "rail",
               }
             : null
         }
@@ -483,9 +470,6 @@ export default function InsightsScreen() {
         title={activeSectionLabel}
         helpCategory="correlations"
         state={insightsState}
-        sourceCaption={freshness.sourceCaption(
-          "This hub uses the published Supabase correlations payload, so each lens stays aligned with the shared analytics view.",
-        )}
         messageTitle={insightsMessageTitle}
         messageBody={insightsMessageBody}
         primaryAction={freshness.retryAction ?? insightsPrimaryAction}
@@ -501,6 +485,29 @@ export default function InsightsScreen() {
           ))}
         </View>
       </AnalyticsStateSection>
+
+      {!hasPlayerAwareActions ? (
+        <View style={styles.linkRow}>
+          <ActionButton
+            title="Compare"
+            variant="secondary"
+            onPress={() => router.push(APP_ROUTES.compare)}
+            style={styles.linkActionButton}
+          />
+          <ActionButton
+            title="Stats"
+            variant="ghost"
+            onPress={() => router.push(APP_ROUTES.stats)}
+            style={styles.linkActionButton}
+          />
+          <ActionButton
+            title="Elo"
+            variant="ghost"
+            onPress={() => router.push(APP_ROUTES.elo)}
+            style={styles.linkActionButton}
+          />
+        </View>
+      ) : null}
 
       {insightsState === "ready" && activeSectionTab === "pairingCorrelations" ? (
         <CorrelationStats
@@ -585,6 +592,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  focusRail: {
+    marginTop: -2,
+  },
   linkActionButton: {
     flex: 1,
     minWidth: 0,
@@ -606,6 +616,7 @@ const styles = StyleSheet.create({
   linkRow: {
     flexDirection: "row",
     gap: 8,
+    marginTop: -2,
   },
   linkButton: {
     flex: 1,

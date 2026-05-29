@@ -18,6 +18,7 @@ import { COLORS } from "@/utils/colors";
 export type AnalyticsControlRailTab = {
   key: string;
   label: string;
+  shortLabel?: string;
 };
 
 type AnalyticsControlRailSearch = {
@@ -95,7 +96,7 @@ export default function AnalyticsControlRail({
                     tabVariant === "stacked" && styles.tabButtonTextStacked,
                   ]}
                 >
-                  {tab.label}
+                  {tab.shortLabel ?? tab.label}
                 </Text>
                 {tabVariant === "underline" ? (
                   <View

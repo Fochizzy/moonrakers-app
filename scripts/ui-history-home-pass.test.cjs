@@ -54,7 +54,8 @@ run("History and home surfaces expose the new control language", () => {
 
   expectIncludes(indexSource, 'type Tab = "game" | "leaderboard" | "hubs";', "home tab type rename");
   expectIncludes(indexSource, '"Hubs"', "home hubs label");
-  expectIncludes(indexSource, "homePrimaryPill", "home primary pill styles");
+  expectIncludes(indexSource, 'eyebrow="Mission Prep"', "home mission prep section");
+  expectIncludes(indexSource, "selectedCrewLabel", "home start button crew summary");
 
   expectIncludes(appRoutesSource, '["game", "leaderboard", "hubs"]', "home route helper hubs tab");
 });

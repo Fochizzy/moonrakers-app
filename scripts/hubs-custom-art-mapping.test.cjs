@@ -65,6 +65,12 @@ assert.match(
   "expected the definitions bridge tile to use thruster art"
 );
 
+assert.match(
+  appHubsSource,
+  /key:\s*"manage-user-groups"[\s\S]*?title:\s*"Manage User\/Groups"[\s\S]*?route:\s*APP_ROUTES\.roster[\s\S]*?iconKey:\s*"missionHub"[\s\S]*?layout:\s*"graphic-horizontal"[\s\S]*?fullWidth:\s*true/,
+  "expected the manage user/groups bridge tile to use Mission art and the wide horizontal hub layout"
+);
+
 const bridgeBlock = appHubsSource.match(
   /const BRIDGE_DESTINATIONS: HubCard\[] = \[([\s\S]*?)\];/
 );
@@ -77,8 +83,8 @@ const bridgeIconKeys = [...bridgeBlock[1].matchAll(/iconKey:\s*"([^"]+)"/g)].map
 
 assert.equal(
   bridgeIconKeys.length,
-  4,
-  "expected four bridge destination icon assignments"
+  5,
+  "expected five bridge destination icon assignments"
 );
 
 assert.equal(

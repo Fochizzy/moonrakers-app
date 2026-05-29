@@ -392,8 +392,6 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={freshness.sourceKind}
-        sourceLabel={freshness.sourceLabel}
         sourceCaption={freshness.sourceCaption(
           "League totals, overview cards, and top signals now come from the published Supabase stats payload.",
         )}
@@ -601,8 +599,6 @@ export default function StatsScreen() {
           actions={<DefinitionsJumpLink category="efficiency" />}
           helpCategory="efficiency"
           state={loading ? "loading" : error ? "error" : "empty"}
-          sourceKind={freshness.sourceKind}
-          sourceLabel={freshness.sourceLabel}
           sourceCaption={freshness.sourceCaption(
             "Published player analytics from the shared Supabase stats payload.",
           )}
@@ -658,8 +654,6 @@ export default function StatsScreen() {
           actions={<DefinitionsJumpLink category="efficiency" />}
           helpCategory="efficiency"
           state="ready"
-          sourceKind={freshness.sourceKind}
-          sourceLabel={freshness.sourceLabel}
           sourceCaption={freshness.sourceCaption(
             "This detail card is published from the shared stats payload, so the same player read can be reused across analytics surfaces.",
           )}
@@ -703,12 +697,6 @@ export default function StatsScreen() {
           playstyleSection.summary,
           "Stay-at-base tempo, style reads, and support fingerprints now lead the scouting pass on this screen.",
         )}
-        actions={
-          <View style={styles.sectionActions}>
-            <DefinitionsJumpLink label="Playstyle" metric="playstyle" />
-            <DefinitionsJumpLink label="Efficiency" category="efficiency" />
-          </View>
-        }
         helpMetric="playstyle"
         state={
           loading
@@ -719,8 +707,6 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={freshness.sourceKind}
-        sourceLabel={freshness.sourceLabel}
         sourceCaption={freshness.sourceCaption(
           "Playstyle spotlight is published from Supabase so stay-at-base tempo and style read stay consistent with the deeper player intel surfaces.",
         )}
@@ -799,10 +785,6 @@ export default function StatsScreen() {
       <AnalyticsStateSection
         eyebrow="Insights"
         title="Correlation feed"
-        subtitle={toStringValue(
-          correlationsSection.summary,
-          "These correlation summaries now come from Supabase instead of local derivation.",
-        )}
         actions={<DefinitionsJumpLink category="correlations" />}
         helpCategory="correlations"
         state={
@@ -814,11 +796,6 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={freshness.sourceKind}
-        sourceLabel={freshness.sourceLabel}
-        sourceCaption={freshness.sourceCaption(
-          "Correlation entries below are served from the Supabase insights payload instead of route-local math.",
-        )}
         messageTitle={
           loading
             ? "Loading correlations"
@@ -876,7 +853,6 @@ export default function StatsScreen() {
       <AnalyticsStateSection
         eyebrow="Games"
         title="Supabase summary"
-        subtitle="Any game-level summaries on this screen now come from Supabase."
         state={
           loading
             ? "loading"
@@ -886,11 +862,7 @@ export default function StatsScreen() {
                 ? "empty"
                 : "ready"
         }
-        sourceKind={freshness.sourceKind}
-        sourceLabel={freshness.sourceLabel}
-        sourceCaption={freshness.sourceCaption(
-          "This game summary is published from Supabase so it stays aligned with the other analytics hubs.",
-        )}
+        sourceCaption={freshness.sourceCaption("")}
         messageTitle={
           loading
             ? "Loading game summaries"
@@ -961,12 +933,13 @@ export default function StatsScreen() {
     <PageShell preset="analytics">
       <SectionCard
         eyebrow="Statistics"
+        style={styles.headerCard}
         actions={
           <ActionButton
             title="Command"
             variant="ghost"
             onPress={() => router.push(APP_ROUTES.home)}
-            style={styles.backActionButton}
+            style={styles.commandActionButton}
           />
         }
       />
@@ -989,8 +962,16 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  backActionButton: {
-    minWidth: 160,
+  headerCard: {
+    gap: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  commandActionButton: {
+    minWidth: 104,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   primaryTabPill: {
     borderRadius: 999,
@@ -1171,10 +1152,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 11,
     lineHeight: 17,
-  },
-  sectionActions: {
-    alignItems: "flex-end",
-    gap: 8,
   },
   playstyleLead: {
     color: COLORS.textSecondary,

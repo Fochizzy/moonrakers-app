@@ -4,6 +4,10 @@ import type {
   EloSectionPayload,
   EloSummary,
 } from "@/lib/cloud/analytics/types";
+import {
+  describeRecentForm,
+  replaceRecentFormSummaryInText,
+} from "@/utils/eloRecentForm";
 import { formatPercentFromDecimal, formatSigned } from "@/utils/formatters";
 
 export type EloMetricTabName =
@@ -48,8 +52,7 @@ function safeWinRate(summary: EloSummary) {
 }
 
 function safeRecentForm(summary: EloSummary) {
-  const recentForm = String(summary.recentForm ?? "").trim();
-  return recentForm || "-";
+  return describeRecentForm(summary.recentForm);
 }
 
 function buildCard(
@@ -138,6 +141,7 @@ export function buildFallbackEloSection(
         cards: [
           buildCard("current", "Current ELO", String(currentElo), "accent"),
           buildCard("peak", "Peak ELO", String(peakElo), "blue"),
+          buildCard("avg-delta", "Avg ELO Change", avgDelta, summary.avgDelta >= 0 ? "accent" : "danger"),
           buildCard("best-delta", "Best Single Game", bestDelta, "green"),
           buildCard("worst-delta", "Worst Single Game", worstDelta, "danger"),
           buildCard("record", "Record", `${wins}-${losses}`, wins >= losses ? "green" : "danger"),
@@ -200,13 +204,16 @@ export function buildFallbackEloInsight(
             : `${name} sits at ELO ${currentElo} (peak: ${peakElo}).`,
       };
     case "Momentum":
-      return {
-        title: fallbackInsightTitle(tab),
-        body:
+      {
+        const body =
           games === 0
             ? "No rated games yet. Finish a saved game to start real ELO tracking."
-            : `${name} recent form: ${safeRecentForm(summary)}. Avg ELO change: ${avgDelta} per game.`,
+            : `${name} recent form: ${safeRecentForm(summary)}. Avg ELO change: ${avgDelta} per game.`;
+      return {
+        title: fallbackInsightTitle(tab),
+        body: replaceRecentFormSummaryInText(body, summary.recentForm),
       };
+      }
     case "Skills":
       return {
         title: fallbackInsightTitle(tab),
@@ -214,8 +221,8 @@ export function buildFallbackEloInsight(
           games === 0
             ? "No rated games yet."
             : peakElo > currentElo
-              ? `${name} peaked at ${peakElo}. Currently ${peakElo - currentElo} below career peak.`
-              : `${name} peaked at ${peakElo}. Currently at career peak.`,
+              ? `${name} peaked at ${peakElo}. Currently ${peakElo - currentElo} below career peak. Average change is ${avgDelta} per rated game.`
+              : `${name} peaked at ${peakElo}. Currently at career peak. Average change is ${avgDelta} per rated game.`,
       };
     case "Context":
       return {
@@ -251,7 +258,10 @@ export function resolveEloSectionPayload(params: {
         .map((card: any) => ({
           key: String(card?.key ?? ""),
           label: String(card?.label ?? ""),
-          value: String(card?.value ?? "0"),
+          value:
+            String(card?.key ?? "") === "recent-form"
+              ? describeRecentForm(String(card?.value ?? ""))
+              : String(card?.value ?? "0"),
           sub:
             typeof card?.sub === "string" && card.sub.trim()
               ? card.sub.trim()
@@ -300,7 +310,13 @@ export function resolveEloInsightPayload(params: {
       : "";
 
   if (title && body) {
-    return { title, body };
+    return {
+      title,
+      body:
+        params.tab === "Momentum"
+          ? replaceRecentFormSummaryInText(body, params.summary.recentForm)
+          : body,
+    };
   }
 
   return buildFallbackEloInsight(params.tab, params.summary, params.opponentName);

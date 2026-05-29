@@ -313,6 +313,12 @@ function Sparkline({
       ? clamp(selectedIndex, 0, dataLength - 1)
       : null
     : uncontrolledSelectedIndex;
+  const [focusedSeriesKeyState, setFocusedSeriesKeyState] = useState<"primary" | "comparison" | null>(null);
+  const activeFocusedSeriesKey =
+    hasComparison &&
+    (focusedSeriesKeyState === "primary" || focusedSeriesKeyState === "comparison")
+      ? focusedSeriesKeyState
+      : null;
 
   const selectedPoint =
     activeSelectedIndex != null ? geometry.points[activeSelectedIndex] ?? null : null;
@@ -458,6 +464,20 @@ function Sparkline({
     [hasMetricMap, isMetricControlled, onChangeMetric]
   );
 
+  const toggleFocusedSeries = useCallback(
+    (nextKey: "primary" | "comparison") => {
+      if (!hasComparison) return;
+      setFocusedSeriesKeyState((current) => current === nextKey ? null : nextKey);
+    },
+    [hasComparison]
+  );
+
+  useEffect(() => {
+    if (!hasComparison) {
+      setFocusedSeriesKeyState(null);
+    }
+  }, [hasComparison]);
+
   const latestIndex = dataLength > 0 ? dataLength - 1 : null;
   const shouldShowLatestButton =
     showLatestButton &&
@@ -475,6 +495,33 @@ function Sparkline({
     selectedPoint && selectedComparisonPoint
       ? selectedPoint.value - selectedComparisonPoint.value
       : null;
+  const primaryFocused = activeFocusedSeriesKey === "primary";
+  const comparisonFocused = activeFocusedSeriesKey === "comparison";
+  const focusedSeriesColor = comparisonFocused ? comparisonColor : color;
+  const primaryStrokeOpacity = activeFocusedSeriesKey
+    ? primaryFocused
+      ? 1
+      : 0.28
+    : 1;
+  const comparisonStrokeOpacity = activeFocusedSeriesKey
+    ? comparisonFocused
+      ? 0.92
+      : 0.28
+    : 0.82;
+  const focusSelectedPoint = comparisonFocused ? selectedComparisonPoint : selectedPoint;
+  const focusMetrics = comparisonFocused ? comparisonMetrics : metrics;
+  const focusLabel = comparisonFocused ? comparisonLabel : primaryLabel;
+  const focusOpponentLabel = comparisonFocused ? primaryLabel : comparisonLabel;
+  const focusPeakValue = comparisonFocused
+    ? comparisonMetrics?.max ?? selectedComparisonPoint?.value ?? 0
+    : metrics?.max ?? selectedPoint?.value ?? 0;
+  const focusDeltaFromStart = comparisonFocused
+    ? comparisonMetrics?.changeFromStart ?? 0
+    : metrics?.changeFromStart ?? 0;
+  const focusGap =
+    comparisonFocused && selectedComparisonPoint && selectedPoint
+      ? selectedComparisonPoint.value - selectedPoint.value
+      : comparisonGap;
   const stagePreset = getChartStagePreset("compact");
   const safeMetricKey = currentMetricMeta?.key ?? currentMetricKey ?? "sparkline";
   const defsKey = sanitizeId(
@@ -583,7 +630,7 @@ function Sparkline({
             <Svg width={width} height={height}>
               <Defs>
                 <LinearGradient id={backgroundId} x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0%" stopColor={withChartAlpha(color, 0.16)} />
+                  <Stop offset="0%" stopColor={withChartAlpha(focusedSeriesColor, 0.16)} />
                   <Stop offset="62%" stopColor={withChartAlpha("#FFFFFF", 0.02)} />
                   <Stop offset="100%" stopColor={withChartAlpha("#FFFFFF", 0)} />
                 </LinearGradient>
@@ -591,9 +638,9 @@ function Sparkline({
                 <LinearGradient id={beamId} x1="0" y1="0" x2="0" y2="1">
                   <Stop
                     offset="0%"
-                    stopColor={hasComparison ? withChartAlpha(color, 0.18) : stagePreset.beamFill}
+                    stopColor={hasComparison ? withChartAlpha(focusedSeriesColor, 0.18) : stagePreset.beamFill}
                   />
-                  <Stop offset="100%" stopColor={withChartAlpha(color, 0.01)} />
+                  <Stop offset="100%" stopColor={withChartAlpha(focusedSeriesColor, 0.01)} />
                 </LinearGradient>
               </Defs>
 
@@ -638,7 +685,7 @@ function Sparkline({
                     y1={padding * 0.6}
                     x2={selectedPoint.x}
                     y2={height - padding * 0.8}
-                    stroke={withChartAlpha(color, 0.28)}
+                    stroke={withChartAlpha(focusedSeriesColor, 0.28)}
                     strokeWidth={1.5}
                   />
                 </>
@@ -659,7 +706,7 @@ function Sparkline({
                 <>
                   <Path
                     d={comparisonPath}
-                    stroke={withChartAlpha(comparisonColor, 0.22)}
+                    stroke={withChartAlpha(comparisonColor, comparisonStrokeOpacity * 0.22)}
                     strokeWidth={strokeWidth + 4}
                     fill="none"
                     strokeLinecap="round"
@@ -667,7 +714,7 @@ function Sparkline({
                   />
                   <Path
                     d={comparisonPath}
-                    stroke={withChartAlpha(comparisonColor, 0.82)}
+                    stroke={withChartAlpha(comparisonColor, comparisonStrokeOpacity)}
                     strokeWidth={strokeWidth}
                     fill="none"
                     strokeLinecap="round"
@@ -680,7 +727,7 @@ function Sparkline({
                 <>
                   <Path
                     d={primaryPath}
-                    stroke={withChartAlpha(color, 0.24)}
+                    stroke={withChartAlpha(color, primaryStrokeOpacity * 0.24)}
                     strokeWidth={strokeWidth + 4}
                     fill="none"
                     strokeLinecap="round"
@@ -688,7 +735,7 @@ function Sparkline({
                   />
                   <Path
                     d={primaryPath}
-                    stroke={color}
+                    stroke={withChartAlpha(color, primaryStrokeOpacity)}
                     strokeWidth={strokeWidth}
                     fill="none"
                     strokeLinecap="round"
@@ -703,25 +750,25 @@ function Sparkline({
                     return (
                       <G key={`comparison-${point.index}`}>
                         {isSelected ? (
-                          <Circle
-                            cx={point.x}
-                            cy={point.y}
-                            r={selectedPointRadius + 2}
-                            fill={withChartAlpha(comparisonColor, 0.14)}
-                          />
-                        ) : null}
                         <Circle
                           cx={point.x}
                           cy={point.y}
-                          r={isSelected ? selectedPointRadius - 0.4 : pointRadius - 0.3}
-                          fill={comparisonColor}
-                          stroke={withChartAlpha("#FFFFFF", isSelected ? 0.78 : 0.32)}
-                          strokeWidth={isSelected ? 1.2 : 0.7}
-                          opacity={isSelected ? 0.96 : 0.72}
+                          r={selectedPointRadius + 2}
+                          fill={withChartAlpha(comparisonColor, comparisonFocused ? 0.16 : 0.1)}
                         />
-                      </G>
-                    );
-                  })
+                      ) : null}
+                      <Circle
+                        cx={point.x}
+                        cy={point.y}
+                        r={isSelected ? selectedPointRadius - 0.4 : pointRadius - 0.3}
+                        fill={comparisonColor}
+                        stroke={withChartAlpha("#FFFFFF", isSelected ? 0.78 : 0.32)}
+                        strokeWidth={isSelected ? 1.2 : 0.7}
+                        opacity={isSelected ? (comparisonFocused ? 0.98 : 0.86) : activeFocusedSeriesKey ? (comparisonFocused ? 0.84 : 0.42) : 0.72}
+                      />
+                    </G>
+                  );
+                })
                 : null}
 
               {geometry.points.map((point) => {
@@ -729,25 +776,25 @@ function Sparkline({
                 return (
                   <G key={`primary-${point.index}`}>
                     {isSelected ? (
+                        <Circle
+                          cx={point.x}
+                          cy={point.y}
+                          r={selectedPointRadius + 3}
+                          fill={withChartAlpha(color, primaryFocused ? 0.2 : 0.12)}
+                        />
+                      ) : null}
                       <Circle
                         cx={point.x}
                         cy={point.y}
-                        r={selectedPointRadius + 3}
-                        fill={withChartAlpha(color, 0.2)}
+                        r={isSelected ? selectedPointRadius : pointRadius}
+                        fill={color}
+                        stroke={withChartAlpha("#FFFFFF", isSelected ? 0.94 : 0.42)}
+                        strokeWidth={isSelected ? 1.4 : 0.8}
+                        opacity={isSelected ? (primaryFocused ? 1 : 0.9) : activeFocusedSeriesKey ? (primaryFocused ? 0.9 : 0.48) : 0.82}
                       />
-                    ) : null}
-                    <Circle
-                      cx={point.x}
-                      cy={point.y}
-                      r={isSelected ? selectedPointRadius : pointRadius}
-                      fill={color}
-                      stroke={withChartAlpha("#FFFFFF", isSelected ? 0.94 : 0.42)}
-                      strokeWidth={isSelected ? 1.4 : 0.8}
-                      opacity={isSelected ? 1 : 0.82}
-                    />
-                  </G>
-                );
-              })}
+                    </G>
+                  );
+                })}
             </Svg>
 
             <View style={styles.touchRow} pointerEvents="box-none">
@@ -768,33 +815,34 @@ function Sparkline({
             </View>
           </View>
 
-          {selectedPoint && metrics ? (
+          {focusSelectedPoint && focusMetrics ? (
             <ChartFocusCard
-              title={primaryLabel}
-              value={compactValueFormatter(selectedPoint.value)}
+              title={focusLabel}
+              value={compactValueFormatter(focusSelectedPoint.value)}
               helper={showValueLabel ? selectedPointLabel ?? undefined : undefined}
               story={
-                comparisonGap != null
-                  ? `Peak ${compactValueFormatter(primaryPeakValue)} | Gap ${comparisonGap >= 0 ? "+" : ""}${compactValueFormatter(comparisonGap)} vs ${comparisonLabel}`
-                  : `Peak ${compactValueFormatter(primaryPeakValue)} | Delta ${deltaFromStart >= 0 ? "+" : ""}${compactValueFormatter(deltaFromStart)}`
+                hasComparison && focusGap != null
+                  ? `Peak ${compactValueFormatter(focusPeakValue)} | Gap ${focusGap >= 0 ? "+" : ""}${compactValueFormatter(focusGap)} vs ${focusOpponentLabel}`
+                  : `Peak ${compactValueFormatter(focusPeakValue)} | Delta ${focusDeltaFromStart >= 0 ? "+" : ""}${compactValueFormatter(focusDeltaFromStart)}`
               }
               tone="compact"
-              accentColor={color}
+              accentColor={focusedSeriesColor}
               style={styles.sparklineFocusCard}
-              leading={<View style={[styles.legendDot, { backgroundColor: color }]} />}
+              leading={<View style={[styles.legendDot, { backgroundColor: focusedSeriesColor }]} />}
             />
           ) : null}
 
           {(hasComparison || selectionText) && (
             <View style={styles.legendGrid}>
-              <View
+              <Pressable
                 style={[
                   styles.legendMiniCard,
                   {
-                    borderColor: withChartAlpha(color, 0.3),
-                    backgroundColor: withChartAlpha(color, 0.08),
+                    borderColor: withChartAlpha(color, primaryFocused ? 0.42 : 0.3),
+                    backgroundColor: withChartAlpha(color, primaryFocused ? 0.14 : 0.08),
                   },
                 ]}
+                onPress={() => toggleFocusedSeries("primary")}
               >
                 <View style={styles.legendMiniHeader}>
                   <View style={[styles.legendDot, { backgroundColor: color }]} />
@@ -805,17 +853,18 @@ function Sparkline({
                 <Text style={[styles.legendValue, { color }]}>
                   {compactValueFormatter(selectedPoint?.value ?? metrics?.current ?? 0)}
                 </Text>
-              </View>
+              </Pressable>
 
               {hasComparison ? (
-                <View
+                <Pressable
                   style={[
                     styles.legendMiniCard,
                     {
-                      borderColor: withChartAlpha(comparisonColor, 0.26),
-                      backgroundColor: withChartAlpha(comparisonColor, 0.08),
+                      borderColor: withChartAlpha(comparisonColor, comparisonFocused ? 0.42 : 0.26),
+                      backgroundColor: withChartAlpha(comparisonColor, comparisonFocused ? 0.14 : 0.08),
                     },
                   ]}
+                  onPress={() => toggleFocusedSeries("comparison")}
                 >
                   <View style={styles.legendMiniHeader}>
                     <View
@@ -832,7 +881,7 @@ function Sparkline({
                         0
                     )}
                   </Text>
-                </View>
+                </Pressable>
               ) : null}
             </View>
           )}

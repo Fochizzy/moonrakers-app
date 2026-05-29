@@ -55,16 +55,19 @@ run("Hubs tab keeps the four bridge cards visible in a mobile 2x2 fit-screen lay
   expectIncludes(indexSource, "style={[styles.hubTileBase, styles.hubTileFullWidth]}", "wide profile management tile style");
   expectIncludes(indexSource, 'hubGrid: {', "hubs grid style");
   expectIncludes(indexSource, 'hubWideStack: {', "bottom hub action row");
-  expectIncludes(indexSource, 'flex: 1,', "screen-filling hubs flex layout");
+  expectIncludes(indexSource, 'width: "100%"', "full-width hubs grid footprint");
   expectIncludes(indexSource, 'alignContent: "flex-start"', "top-aligned hub rows");
   expectIncludes(indexSource, "gap: 10", "tighter mobile hub tile spacing");
   expectIncludes(indexSource, 'width: "47%"', "narrower half-tile width so two cards fit per row");
   expectIncludes(indexSource, "minHeight: 184", "shorter half-tile minimum height for above-the-fold fit");
   expectIncludes(indexSource, 'width: "100%"', "full-width bottom tile width");
+  expectIncludes(indexSource, 'flexBasis: "auto"', "wide tile clears the half-card flex basis so it can sit below the grid cleanly");
+  expectIncludes(indexSource, "flexShrink: 0", "bottom hub action row stays in its own row");
   expectNotIncludes(indexSource, 'width: "48.5%"', "old overly wide half-tile width");
   expectNotIncludes(indexSource, "minHeight: 224", "old tall half-tile minimum height");
   expectNotIncludes(indexSource, 'height: "48.5%"', "old percentage-sized half-tile height");
   expectNotIncludes(indexSource, "marginBottom: 10", "old stacked hub gap");
+  expectNotIncludes(indexSource, "hubGrid: {\n    flex: 1,", "old flexible grid height that let the wide tile overlap");
 });
 
 if (process.exitCode > 0) {

@@ -51,8 +51,14 @@ assert.match(
 
 assert.match(
   source,
+  /optionById\.set\(signedInPlayerOptionId,\s*\{[\s\S]*label:\s*"You"/,
+  "expected the Personal Correlations picker to relabel the signed-in player to You before building the search items",
+);
+
+assert.doesNotMatch(
+  source,
   /badge:\s*player\.id === authProfileId\s*\?\s*"You"\s*:\s*null/,
-  "expected the Personal Correlations picker to badge the signed-in player as You",
+  "expected the Personal Correlations picker to drop the separate You badge",
 );
 
 assert.match(

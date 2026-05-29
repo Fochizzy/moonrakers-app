@@ -1,6 +1,7 @@
-import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { StyleSheet, View } from "react-native";
 
+import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import PlaystyleScatterCard, {
   type PlaystyleScatterPoint,
 } from "@/components/stats/PlaystyleScatterCard";
@@ -9,6 +10,7 @@ import {
   type LeaderboardPlayer,
 } from "@/components/stats/playstyleLeaderboard";
 import DefinitionTermText from "@/components/ui/DefinitionTermText";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
 import {
   buildGlobalPlaystyleCorrelations,
@@ -140,6 +142,19 @@ function buildBaseWinRate(samples: PlaystyleSample[], includeBaseTurns: boolean)
   );
 
   return matching.length ? average(matching.map((sample) => sample.winFlag)) : Number.NaN;
+}
+
+function chunkPlayerTabItems(
+  items: ReadonlyArray<{ key: string; label: string }>,
+  chunkSize = 4
+) {
+  const rows: Array<Array<{ key: string; label: string }>> = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    rows.push([...items.slice(index, index + chunkSize)]);
+  }
+
+  return rows;
 }
 
 function SummaryCard({
@@ -288,6 +303,7 @@ export default function PlaystyleSection({
   selectedPlayerId,
   onSelectPlayer,
 }: Props) {
+  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const playerColorMap = useMemo(() => {
     const map = new Map<string, string>();
 
@@ -350,6 +366,39 @@ export default function PlaystyleSection({
       }),
     [globalRows, personalRows, resolvedPlayer?.name]
   );
+  const playerTabItems = useMemo(
+    () =>
+      orderedLeaderboard.map((player) => ({
+        key: player.id,
+        label: player.id === authProfileId ? "You" : player.name,
+      })),
+    [authProfileId, orderedLeaderboard]
+  );
+  const playerTabRows = useMemo(
+    () => chunkPlayerTabItems(playerTabItems),
+    [playerTabItems]
+  );
+  const filteredPlayerItems = useMemo(() => {
+    const normalizedQuery = playerSearchQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    return orderedLeaderboard
+      .filter((player) => {
+        const name = String(player.name ?? "").trim().toLowerCase();
+        const id = String(player.id ?? "").trim().toLowerCase();
+        return name.includes(normalizedQuery) || id.includes(normalizedQuery);
+      })
+      .map((player) => ({
+        id: player.id,
+        label: player.id === authProfileId ? "You" : player.name,
+        meta:
+          player.id === resolvedPlayer?.id
+            ? "Currently selected"
+            : "Switch playstyle focus",
+      }));
+  }, [authProfileId, orderedLeaderboard, playerSearchQuery, resolvedPlayer?.id]);
 
   const validPersonalSamples = personalSamples.filter((sample) =>
     Number.isFinite(sample.stayAtBaseRate)
@@ -393,44 +442,35 @@ export default function PlaystyleSection({
     <View style={styles.card}>
       <Text style={styles.eyebrow}>Playstyle</Text>
       <Text style={styles.title}>Stay at Base Profile</Text>
-      <Text style={styles.subtitle}>
-        Personal and global reads on how base-turn decisions line up with wins,
-        prestige, objectives, and support.
-      </Text>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.selectorWrap}
-      >
-        {orderedLeaderboard.map((player) => {
-          const active = player.id === resolvedPlayer.id;
-          const playerAccent = getPlayerAccentColor(player.color);
+      <View style={styles.selectorSection}>
+        <View style={styles.selectorTabStack}>
+          {playerTabRows.map((row, index) => (
+            <SegmentedControl
+              key={`playstyle-selector-row-${index}`}
+              items={row}
+              value={resolvedPlayer.id}
+              onChange={onSelectPlayer}
+              style={styles.selectorSegmentedControl}
+            />
+          ))}
+        </View>
 
-          return (
-            <Pressable
-              key={player.id}
-              onPress={() => onSelectPlayer(player.id)}
-              style={[
-                styles.selectorPill,
-                active && {
-                  borderColor: `${playerAccent}66`,
-                  backgroundColor: `${playerAccent}18`,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.selectorText,
-                  active && styles.selectorTextActive,
-                ]}
-              >
-                {player.name}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+        <PlayerSearchPicker
+          query={playerSearchQuery}
+          onQueryChange={setPlayerSearchQuery}
+          onClearQuery={() => setPlayerSearchQuery("")}
+          placeholder="Search players"
+          items={filteredPlayerItems}
+          selectedIds={[resolvedPlayer.id]}
+          onSelect={(playerId) => {
+            onSelectPlayer(playerId);
+            setPlayerSearchQuery("");
+          }}
+          inputProps={{ returnKeyType: "search" }}
+          showResultsOnlyWhenQuery
+        />
+      </View>
 
       <View style={styles.summaryGrid}>
         <SummaryCard
@@ -535,30 +575,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
   },
-  subtitle: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  selectorWrap: {
+  selectorSection: {
     gap: 10,
-    paddingRight: 12,
   },
-  selectorPill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.18)",
-    backgroundColor: "rgba(255,255,255,0.03)",
+  selectorTabStack: {
+    gap: 8,
   },
-  selectorText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  selectorTextActive: {
-    color: COLORS.textPrimary,
+  selectorSegmentedControl: {
+    width: "100%",
   },
   summaryGrid: {
     flexDirection: "row",

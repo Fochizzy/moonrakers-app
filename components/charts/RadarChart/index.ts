@@ -1,3 +1,3 @@
-export { default } from './RadarChart';
-export { default as RadarChart } from './RadarChart';
-export * from './useRadarChartModel';
+export { default } from './RadarChart.tsx';
+export { default as RadarChart } from './RadarChart.tsx';
+export * from './useRadarChartModel.ts';

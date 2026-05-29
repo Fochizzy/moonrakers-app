@@ -34,26 +34,26 @@ assertMatch(
 
 assertMatch(
   appHubsSource,
-  /key:\s*"compare"[\s\S]*?iconKey:\s*"damage"/,
-  "compare card damage artwork swap"
+  /key:\s*"compare"[\s\S]*?iconKey:\s*"compare"/,
+  "compare card semantic icon mapping"
 );
 
 assertMatch(
   appHubsSource,
-  /key:\s*"charts"[\s\S]*?iconKey:\s*"ships"/,
-  "charts card ships artwork swap"
+  /key:\s*"charts"[\s\S]*?iconKey:\s*"charts"/,
+  "charts card semantic icon mapping"
 );
 
 assertMatch(
   appHubsSource,
-  /key:\s*"stats"[\s\S]*?iconKey:\s*"shield"/,
-  "stats card shield artwork swap"
+  /key:\s*"stats"[\s\S]*?iconKey:\s*"statistics"/,
+  "stats card semantic icon mapping"
 );
 
 assertMatch(
   appHubsSource,
-  /key:\s*"elo"[\s\S]*?iconKey:\s*"billBendo"/,
-  "elo card Bill Bendo artwork swap"
+  /key:\s*"elo"[\s\S]*?iconKey:\s*"elo"/,
+  "elo card semantic icon mapping"
 );
 
 assertMatch(

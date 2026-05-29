@@ -1,4 +1,5 @@
 import { getWinnerId, type Game } from "@/utils/statsEngine";
+import { isPlayableTurnMetaType } from "@/utils/headToHeadMission";
 
 export type AssistContextEvent = {
   gameId: string;
@@ -85,7 +86,7 @@ function normalizeAssistMap(value: unknown) {
 }
 
 function isBonusRound(round: RoundLike) {
-  return round?.metaType === "bonusObjective";
+  return !isPlayableTurnMetaType(round?.metaType);
 }
 
 function getRounds(game: Game): RoundLike[] {

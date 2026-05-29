@@ -45,6 +45,7 @@ export type StoredPlayerTotals = {
   assists?: number;
   failures?: number;
   contracts?: number;
+  headToHeadScoreBonus?: number;
   performance?: number;
   efficiency?: number;
   assistedEfficiency?: number;
@@ -61,6 +62,9 @@ export type StoredRound = {
   objectiveCount: number;
   objectivePrestige: number;
   createdAt: number;
+  metaType?: "main" | "bonusObjective" | "headToHeadFirstPlace" | "headToHeadSecondPlace";
+  linkedTurnId?: string;
+  headToHeadScoreBonus?: number;
 };
 
 export type StoredGamePlayer = {
@@ -121,6 +125,8 @@ export type StoredGameDraftGameplay = {
     assistRecipients: Record<string, number>;
     assistPrestigeRecipients: Record<string, number>;
     objectiveCount: number;
+    headToHeadFirstPlaceId?: string | null;
+    headToHeadSecondPlaceId?: string | null;
   };
   roundCount: number;
   selectedWinnerId?: string | null;

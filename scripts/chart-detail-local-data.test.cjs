@@ -208,6 +208,91 @@ assert.equal(
   "expected history fallback snapshots to cover each saved game",
 );
 
+const radarTotalsOnlyState = buildLocalChartDetailState({
+  chartKey: "radar",
+  players,
+  games: [
+    {
+      id: "radar-game-1",
+      createdAt: 250,
+      players,
+      totals: {
+        luna: {
+          score: 9,
+          totalPrestige: 9,
+          directPrestige: 5,
+          assistPrestigeReceived: 2,
+          objectivePrestige: 2,
+          contracts: 3,
+          failures: 1,
+          assists: 1,
+        },
+        sol: {
+          score: 6,
+          totalPrestige: 6,
+          directPrestige: 3,
+          assistPrestigeReceived: 1,
+          objectivePrestige: 2,
+          contracts: 2,
+          failures: 0,
+          assists: 1,
+        },
+      },
+    },
+  ],
+  routePlayerId: "luna",
+});
+
+assert.equal(
+  radarTotalsOnlyState.hasData,
+  true,
+  "expected radar fallback state to report local history data when saved game totals exist",
+);
+
+assert.ok(
+  radarTotalsOnlyState.radarPrimary,
+  "expected radar fallback state to build a radar profile from saved game totals",
+);
+
+const radarDefaultPlayerState = buildLocalChartDetailState({
+  chartKey: "radar",
+  players: [
+    { id: "avery", name: "Avery" },
+    { id: "greg", name: "Greg" },
+  ],
+  games: [
+    {
+      id: "radar-game-2",
+      createdAt: 275,
+      players: [{ id: "greg", name: "Greg" }],
+      totals: {
+        greg: {
+          score: 11,
+          totalPrestige: 11,
+          directPrestige: 7,
+          assistPrestigeReceived: 2,
+          objectivePrestige: 2,
+          contracts: 4,
+          failures: 0,
+          assists: 1,
+        },
+      },
+    },
+  ],
+});
+
+assert.equal(
+  radarDefaultPlayerState.selectedPlayer?.id,
+  "greg",
+  "expected radar fallback state to pick a player with tracked games when the default player has no saved history",
+);
+
+assert.equal(
+  radarDefaultPlayerState.hasData,
+  true,
+  "expected radar fallback state to stay renderable when tracked history exists for a later player in the directory",
+);
+
 const duplicateGregState = buildLocalChartDetailState({
   chartKey: "relationship_graph",
   players: [
@@ -364,8 +449,8 @@ assert.match(
 
 assert.match(
   chartDetailSource,
-  /players:\s*rpcFallbackPlayers\.length\s*\?\s*rpcFallbackPlayers\s*:\s*cloudFallbackPlayers[\s\S]*games:\s*rpcFallbackGames\.length\s*\?\s*rpcFallbackGames\s*:\s*cloudFallbackGames/,
-  "expected the chart fallback state to derive from Supabase-published source history before falling back to the shared cloud snapshot",
+  /const hasUsableRpcFallbackHistory =\s*rpcFallbackGames\.length > 0 && rpcFallbackPlayers\.length > 0;[\s\S]*const fallbackPlayers =\s*hasUsableRpcFallbackHistory\s*\?\s*rpcFallbackPlayers\s*:\s*cloudFallbackPlayers\.length\s*\?\s*cloudFallbackPlayers\s*:\s*storePlayers;[\s\S]*const fallbackGames =\s*hasUsableRpcFallbackHistory\s*\?\s*rpcFallbackGames\s*:\s*cloudFallbackGames\.length\s*\?\s*cloudFallbackGames\s*:\s*storeGames;[\s\S]*players:\s*fallbackPlayers[\s\S]*games:\s*fallbackGames/,
+  "expected the chart fallback state to trust RPC history only when both source games and source players are present, then fall back to the shared cloud snapshot and hydrated store",
 );
 
 assert.match(

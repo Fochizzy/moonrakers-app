@@ -26,6 +26,8 @@ export type GameDraftGameplay = {
     assistRecipients: Record<string, number>;
     assistPrestigeRecipients: Record<string, number>;
     objectiveCount: number;
+    headToHeadFirstPlaceId?: string | null;
+    headToHeadSecondPlaceId?: string | null;
   };
   roundCount: number;
   selectedWinnerId?: string | null;

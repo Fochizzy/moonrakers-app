@@ -8,7 +8,7 @@ import ScreenBackground from '@/components/ui/ScreenBackground';
 
 import Sparkline from '@/components/charts/Sparkline';
 import ReplayChart from '@/components/charts/ReplayChart';
-import RadarChart from '@/components/charts/RadarChart';
+import RadarChart from '@/components/charts/RadarChart/RadarChart';
 import PrestigeOverTimeChart from '@/components/charts/PrestigeOverTimeChart';
 import StackedBarChart from '@/components/charts/StackedBarChart';
 import LineChart from '@/components/charts/LineChart';
@@ -1046,4 +1046,3 @@ function createStyles(theme: ThemeShape) {
     },
   });
 }
-

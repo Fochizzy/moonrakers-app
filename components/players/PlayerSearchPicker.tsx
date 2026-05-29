@@ -216,6 +216,7 @@ export default function PlayerSearchPicker({
 const styles = StyleSheet.create({
   container: {
     gap: 10,
+    width: "100%",
   },
   helperText: {
     color: COLORS.sub,
@@ -226,9 +227,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    width: "100%",
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     minHeight: 42,
     borderRadius: 14,
     borderWidth: 1,

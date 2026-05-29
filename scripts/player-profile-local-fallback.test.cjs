@@ -12,22 +12,28 @@ const historySource = fs.readFileSync(
   "utf8",
 );
 
-assert.doesNotMatch(
+assert.match(
+  profileSource,
+  /buildAnalyticsPlayerDirectory/,
+  "expected the player profile route to canonicalize the local analytics player directory before rebuilding empty published profiles from device history",
+);
+
+assert.match(
   profileSource,
   /buildLocalPlayerProfileFallback/,
-  "expected the player profile route to stop rebuilding recent games and Moonrakers intel locally once the published Supabase profile contract ships them directly",
+  "expected the player profile route to restore the shared local profile fallback helper when the published payload stays empty",
 );
 
 assert.match(
   profileSource,
-  /const recentGames = toArray\(payload\?\.recentGames\);/,
-  "expected the player profile route to read recent games directly from the published profile payload",
+  /const recentGames = localProfileFallback\.recentGames;/,
+  "expected the player profile route to merge local recent games through the shared fallback helper",
 );
 
 assert.match(
   profileSource,
-  /const moonrakersIntel = payload\?\.moonrakersIntel;/,
-  "expected the player profile route to pass through the published Moonrakers intel payload directly",
+  /const moonrakersIntel = localProfileFallback\.moonrakersIntel;/,
+  "expected the player profile route to merge local Moonrakers intel through the shared fallback helper",
 );
 
 assert.match(

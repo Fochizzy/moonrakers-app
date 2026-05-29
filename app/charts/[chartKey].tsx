@@ -34,7 +34,7 @@ import Heatmap from "@/components/charts/Heatmap";
 import LineChart from "@/components/charts/LineChart";
 import EloChart from "@/components/charts/ELO/EloChart";
 import PrestigeOverTimeChart from "@/components/charts/PrestigeOverTimeChart";
-import RadarChart from "@/components/charts/RadarChart";
+import RadarChart from "@/components/charts/RadarChart/RadarChart";
 import ReplayChart from "@/components/charts/ReplayChart";
 import RivalryGraph from "@/components/charts/RivalryGraph";
 import RelationshipGraph from "@/components/charts/RelationshipGraph";
@@ -44,8 +44,8 @@ import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { getChartDataset } from "@/lib/cloud/analytics/getChartDataset";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { formatSupabaseConfigError } from "@/lib/supabase";
-import { useStore } from "@/store/useStore";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { useGames, usePlayers, useStore } from "@/store/useStore";
+import { APP_ROUTES, buildChartsRoute } from "@/utils/appRoutes";
 import { buildLocalChartDetailState } from "@/utils/chartDetailLocalData";
 import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
 
@@ -143,6 +143,7 @@ function buildRouteParams(args: {
   chartKey: string;
   playerId?: string | null;
   compareId?: string | null;
+  compareIds?: string[] | null;
   selectedGameId?: string | null;
   ids?: string[];
   metric?: string | null;
@@ -153,6 +154,7 @@ function buildRouteParams(args: {
     chartKey,
     playerId,
     compareId,
+    compareIds,
     selectedGameId,
     ids,
     metric,
@@ -163,6 +165,7 @@ function buildRouteParams(args: {
     chartKey,
     ...(playerId ? { playerId } : {}),
     ...(compareId ? { compareId } : {}),
+    ...(compareIds && compareIds.length ? { compareIds: compareIds.join(",") } : {}),
     ...(selectedGameId ? { selectedGameId, gameId: selectedGameId } : {}),
     ...(ids && ids.length ? { ids: ids.join(",") } : {}),
     ...(metric ? { metric } : {}),
@@ -213,10 +216,13 @@ function DatasetStat({
 export default function ChartKeyScreen() {
   const router = useRouter();
   const authSession = useStore((state: any) => state.authSession);
+  const storePlayers = usePlayers();
+  const storeGames = useGames();
   const params = useLocalSearchParams<{
     chartKey?: string | string[];
     playerId?: string | string[];
     compareId?: string | string[];
+    compareIds?: string | string[];
     selectedGameId?: string | string[];
     gameId?: string | string[];
     ids?: string | string[];
@@ -231,6 +237,8 @@ export default function ChartKeyScreen() {
   const routeLineMode = normalizeLineMode(params.lineMode);
   const routePlayerId = getParam(params.playerId);
   const routeCompareId = getParam(params.compareId);
+  const routeCompareIds = getParamList(params.compareIds);
+  const routeCompareIdsKey = routeCompareIds.join(",");
   const routeSelectedGameId =
     getParam(params.selectedGameId) ?? getParam(params.gameId);
   const routeIds = getParamList(params.ids);
@@ -251,6 +259,7 @@ export default function ChartKeyScreen() {
       chartKey,
       routePlayerId || "none",
       routeCompareId || "none",
+      routeCompareIdsKey || "none",
       routeIdsKey || "all",
       routeSelectedGameId || "none",
       routeMetric || "none",
@@ -285,12 +294,13 @@ export default function ChartKeyScreen() {
   const loading = datasetQuery.loading;
   const isStale = datasetQuery.isStale;
   const staleMessage = datasetQuery.staleMessage;
+  const cloudFallbackResetKey = [profileId, datasetQuery.queryKey].join(":");
 
   useEffect(() => {
     setCloudFallbackSnapshot(null);
     setCloudFallbackLoading(false);
     setCloudFallbackAttempted(false);
-  }, [profileId]);
+  }, [cloudFallbackResetKey]);
 
   const datasetData = toRecord(dataset.data);
   const datasetMeta = toRecord(datasetData.meta);
@@ -320,39 +330,52 @@ export default function ChartKeyScreen() {
     routeMetric ? `Metric: ${routeMetric}` : null,
     routeLineMode && isLineModeDriven(chartKey) ? `Mode: ${routeLineMode}` : null,
     routeMode === "network" ? "Graph: network" : null,
-    routePlayerId ? `Focus: ${routePlayerId}` : null,
   ].filter(Boolean) as string[];
   const pointCount = toNumberValue(datasetMeta.pointCount, datasetPoints.length);
   const hasData = Boolean(datasetMeta.hasData) || pointCount > 0 || datasetSeries.length > 0;
-  const hasRpcFallbackSourceData =
-    rpcFallbackGames.length > 0 || rpcFallbackPlayers.length > 0;
+  const hasUsableRpcFallbackHistory =
+    rpcFallbackGames.length > 0 && rpcFallbackPlayers.length > 0;
   const cloudFallbackPlayers = cloudFallbackSnapshot?.players ?? [];
   const cloudFallbackGames = cloudFallbackSnapshot?.games ?? [];
+  const fallbackPlayers = hasUsableRpcFallbackHistory
+    ? rpcFallbackPlayers
+    : cloudFallbackPlayers.length
+      ? cloudFallbackPlayers
+      : storePlayers;
+  const fallbackGames = hasUsableRpcFallbackHistory
+    ? rpcFallbackGames
+    : cloudFallbackGames.length
+      ? cloudFallbackGames
+      : storeGames;
   const localChartData = useMemo(
     () =>
       buildLocalChartDetailState({
         chartKey,
-        players: rpcFallbackPlayers.length ? rpcFallbackPlayers : cloudFallbackPlayers,
-        games: rpcFallbackGames.length ? rpcFallbackGames : cloudFallbackGames,
+        players: fallbackPlayers,
+        games: fallbackGames,
         routePlayerId: routePlayerId ?? null,
         routeCompareId: routeCompareId ?? null,
+        routeCompareIds,
         routeSelectedGameId: routeSelectedGameId ?? null,
         routeIds,
         routeMetric: routeMetric ?? null,
+        authProfileId: profileId || null,
+        authSessionUserId: profileId || null,
       }),
     [
       chartKey,
-      cloudFallbackGames,
-      cloudFallbackPlayers,
-      rpcFallbackGames,
-      rpcFallbackPlayers,
+      fallbackGames,
+      fallbackPlayers,
       routeCompareId,
+      routeCompareIdsKey,
       routeIdsKey,
       routeMetric,
       routePlayerId,
       routeSelectedGameId,
     ],
   );
+  const shouldForceLocalRadarCompare =
+    chartKey === "radar" && routeCompareIds.length > 0;
   const serverMetricKey = toStringValue(
     datasetData.statKey ?? datasetData.metricKey ?? datasetData.activeMetricKey,
     localChartData.metricKey,
@@ -407,7 +430,7 @@ export default function ChartKeyScreen() {
           serverChartPlayers.length > 0 && serverRelationshipEdges.length > 0
         );
       case "radar":
-        return Boolean(serverPrimaryRadar);
+        return !shouldForceLocalRadarCompare && Boolean(serverPrimaryRadar);
       case "sparkline":
         return serverChartData.length > 0 || serverComparisonData.length > 0;
       case "head_to_head":
@@ -457,20 +480,21 @@ export default function ChartKeyScreen() {
     serverRelationshipEdges.length,
     serverReplayData.length,
     serverMetricDataMap,
+    shouldForceLocalRadarCompare,
   ]);
   const hasServerPayload = hasData || hasRenderableServerChart;
   const shouldUseLocalChartFallback =
-    localChartData.hasData && !loading && !hasServerPayload;
+    localChartData.hasData && !loading && !hasRenderableServerChart;
   const usingCloudFallbackData = shouldUseLocalChartFallback && localChartData.hasData;
   const shouldSkipCloudFallbackBecauseRpcSource =
-    hasServerPayload || hasRpcFallbackSourceData;
+    hasRenderableServerChart ||
+    (hasUsableRpcFallbackHistory && localChartData.hasData);
   const shouldLoadCloudFallback =
     Boolean(profileId) &&
     !cloudFallbackSnapshot &&
-    !cloudFallbackAttempted &&
-    !cloudFallbackLoading &&
     !loading &&
-    !hasServerPayload &&
+    !localChartData.hasData &&
+    !hasRenderableServerChart &&
     !shouldSkipCloudFallbackBecauseRpcSource;
   const provenance = useMemo(
     () =>
@@ -489,14 +513,16 @@ export default function ChartKeyScreen() {
       usingCloudFallbackData,
     ],
   );
-  const heroSubtitle = shouldUseLocalChartFallback
-    ? provenance.caption
-    : isStale
-      ? provenance.caption
-    : toStringValue(dataset?.subtitle, buildSubheading(chartKey));
+  const chartSubtitle = toStringValue(dataset?.subtitle, buildSubheading(chartKey));
+  const heroSubtitle = isStale ? provenance.caption : chartSubtitle;
 
   useEffect(() => {
-    if (!shouldLoadCloudFallback || !profileId) {
+    if (
+      !shouldLoadCloudFallback ||
+      !profileId ||
+      cloudFallbackAttempted ||
+      cloudFallbackLoading
+    ) {
       return;
     }
 
@@ -524,7 +550,7 @@ export default function ChartKeyScreen() {
     return () => {
       cancelled = true;
     };
-  }, [cloudFallbackAttempted, profileId, shouldLoadCloudFallback]);
+  }, [cloudFallbackResetKey, profileId, shouldLoadCloudFallback]);
 
   function renderSparklineFallback() {
     if (!localChartData.sparklineValues.length) {
@@ -553,7 +579,14 @@ export default function ChartKeyScreen() {
         return localChartData.radarPrimary ? (
           <RadarChart
             primary={localChartData.radarPrimary}
+            comparison={localChartData.radarComparison ? (localChartData.radarComparison as any) : undefined}
+            comparisons={localChartData.radarComparisons.map((entry) => ({
+              key: entry.player.id,
+              label: entry.player.name || "Comparison",
+              stats: entry.stats,
+            }))}
             primaryLabel={localChartData.selectedPlayer?.name ?? "Player"}
+            comparisonLabel={localChartData.comparePlayer?.name ?? "Comparison"}
             title={`${localChartData.selectedPlayer?.name ?? "Player"} Radar`}
             showHeader={false}
           />
@@ -957,6 +990,7 @@ export default function ChartKeyScreen() {
           chartKey: setupChartKey,
           playerId: routePlayerId ?? null,
           compareId: routeCompareId ?? null,
+          compareIds: routeCompareIds,
           selectedGameId: routeSelectedGameId ?? null,
           ids: routeIds,
           metric: routeMetric ?? null,
@@ -972,40 +1006,23 @@ export default function ChartKeyScreen() {
     router.push(APP_ROUTES.home);
   }
 
+  function openChartsPage() {
+    router.push(
+      buildChartsRoute({
+        playerId: routePlayerId ?? null,
+        compareId: routeCompareId ?? null,
+        compareIds: routeCompareIds,
+        ids: routeIds,
+      })
+    );
+  }
+
   function renderDataset() {
     if (shouldUseLocalChartFallback) {
       const localChart = renderLocalChartFallback();
       if (localChart) {
         return (
-          <ChartSurface
-            eyebrow={provenance.label}
-            title="Showing Supabase game history"
-            subtitle={provenance.caption}
-          >
-            <AnalyticsRecoveryCard
-              title="Showing Supabase game history"
-              body={
-                error
-                  ? "The published chart dataset is unavailable right now, so this view is using Supabase game history directly."
-                  : "The published chart dataset has no rows yet, so this view is using Supabase game history directly."
-              }
-              tone="warning"
-              sourceKind="supabase-fallback"
-              sourceLabel="Supabase fallback"
-              primaryAction={
-                canAdjustChartFromHub(chartKey)
-                  ? {
-                      label: "Adjust setup",
-                      onPress: openChartSetup,
-                    }
-                  : null
-              }
-              secondaryAction={{
-                label: "Command",
-                onPress: openCommandPage,
-                variant: "secondary",
-              }}
-            />
+          <ChartSurface>
             {summaryChips.length ? (
               <View style={styles.surfaceChipRow}>
                 {summaryChips.map((chip) => (
@@ -1013,7 +1030,6 @@ export default function ChartKeyScreen() {
                 ))}
               </View>
             ) : null}
-            <ChartInsightStrip label="Source" value={provenance.label} />
             {localChart}
           </ChartSurface>
         );
@@ -1023,11 +1039,7 @@ export default function ChartKeyScreen() {
     const serverChart = renderServerChart();
     if (serverChart) {
       return (
-        <ChartSurface
-          eyebrow={provenance.label}
-          title={toStringValue(dataset?.title, resolveChartTitle(chartKey))}
-          subtitle={provenance.caption}
-        >
+        <ChartSurface>
           {summaryChips.length ? (
             <View style={styles.surfaceChipRow}>
               {summaryChips.map((chip) => (
@@ -1035,7 +1047,6 @@ export default function ChartKeyScreen() {
               ))}
             </View>
           ) : null}
-          <ChartInsightStrip label="Source" value={provenance.label} />
           {serverChart}
         </ChartSurface>
       );
@@ -1049,7 +1060,7 @@ export default function ChartKeyScreen() {
       return <Text style={styles.emptyText}>{error}</Text>;
     }
 
-    if (cloudFallbackLoading && !hasData) {
+    if (cloudFallbackLoading && !hasRenderableServerChart && !localChartData.hasData) {
       return <Text style={styles.emptyText}>Loading Supabase game history.</Text>;
     }
 
@@ -1085,11 +1096,7 @@ export default function ChartKeyScreen() {
     }
 
     return (
-      <ChartSurface
-        eyebrow={provenance.label}
-        title="Dataset summary"
-        subtitle={provenance.caption}
-      >
+      <ChartSurface title="Dataset summary">
         <View style={styles.datasetSummaryRow}>
           <DatasetStat label="Points" value={pointCount} />
           <DatasetStat label="Series" value={datasetSeries.length} />
@@ -1108,7 +1115,6 @@ export default function ChartKeyScreen() {
         ) : null}
 
         <View style={styles.datasetInsightStack}>
-          <ChartInsightStrip label="Source" value={provenance.label} />
           <ChartInsightStrip
             label="Refresh state"
             value={isStale ? "Stale" : "Live"}
@@ -1184,6 +1190,12 @@ export default function ChartKeyScreen() {
             >
               <Text style={styles.primaryButtonText}>Back to Adjust</Text>
             </Pressable>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={openChartsPage}
+            >
+              <Text style={styles.secondaryButtonText}>Back to Charts</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={openCommandPage}

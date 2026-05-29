@@ -2,6 +2,8 @@ import type { StoredGame } from '@/utils/advancedStats';
 
 export const BASE_ELO = 1000;
 export const DEFAULT_K = 32;
+export const ELO_RESULT_WEIGHT = 0.8;
+export const ELO_BONUS_SCORE_WEIGHT = 0.2;
 
 export type EloMap = Record<string, number>;
 
@@ -19,12 +21,125 @@ function safeRating(value: unknown): number {
     : BASE_ELO;
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
 function getRecordedWinnerId(game: StoredGame): string | undefined {
   return game.winnerId ?? game.selectedWinnerId ?? game.manualWinnerId;
 }
 
 function getOrderedPlayerIds(game: StoredGame): string[] {
   return Object.keys(game.totals ?? {});
+}
+
+function getPlayerTotals(game: StoredGame, playerId: string) {
+  const totals =
+    game?.totals && typeof game.totals === "object" ? game.totals : null;
+
+  if (!totals || Array.isArray(totals)) {
+    return null;
+  }
+
+  const playerTotals = (totals as Record<string, unknown>)[playerId];
+  return playerTotals && typeof playerTotals === "object" && !Array.isArray(playerTotals)
+    ? (playerTotals as Record<string, unknown>)
+    : null;
+}
+
+function getBonusScoreContribution(game: StoredGame, playerId: string): number {
+  const totals = getPlayerTotals(game, playerId);
+  if (!totals) {
+    return 0;
+  }
+
+  const score = toFiniteNumber(totals.score);
+  const totalPrestige = toFiniteNumber(
+    totals.totalPrestige ?? totals.prestige
+  );
+
+  if (score !== null && totalPrestige !== null) {
+    return score - totalPrestige;
+  }
+
+  const contracts = toFiniteNumber(totals.contracts) ?? 0;
+  const assists = toFiniteNumber(totals.assists) ?? 0;
+  const failures = toFiniteNumber(totals.failures) ?? 0;
+  const headToHeadScoreBonus =
+    toFiniteNumber(totals.headToHeadScoreBonus) ?? 0;
+
+  return contracts * 5 + assists * 3 - failures * 4 + headToHeadScoreBonus;
+}
+
+function clampActualScore(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0.5;
+  }
+
+  if (value <= 0) {
+    return 0;
+  }
+
+  if (value >= 1) {
+    return 1;
+  }
+
+  return value;
+}
+
+function buildBonusScoreAdjustments(
+  game: StoredGame,
+  playerIds: string[]
+): Record<string, number> {
+  const contributions = playerIds.map((playerId) => ({
+    playerId,
+    bonusScore: getBonusScoreContribution(game, playerId),
+  }));
+
+  const values = contributions
+    .map((entry) => entry.bonusScore)
+    .filter((value) => Number.isFinite(value));
+
+  if (!values.length) {
+    return Object.fromEntries(playerIds.map((playerId) => [playerId, 0.5]));
+  }
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+
+  if (maxValue <= minValue) {
+    return Object.fromEntries(playerIds.map((playerId) => [playerId, 0.5]));
+  }
+
+  return Object.fromEntries(
+    contributions.map(({ playerId, bonusScore }) => {
+      return [playerId, (bonusScore - minValue) / (maxValue - minValue)];
+    })
+  );
+}
+
+function getEffectiveActualScore(
+  game: StoredGame,
+  playerId: string,
+  bonusScoreAdjustments: Record<string, number>
+) {
+  const winnerId = getRecordedWinnerId(game);
+  const baseActualScore = winnerId ? (winnerId === playerId ? 1 : 0) : 0.5;
+  const bonusScoreSignal = bonusScoreAdjustments[playerId] ?? 0.5;
+
+  return clampActualScore(
+    baseActualScore * ELO_RESULT_WEIGHT +
+      bonusScoreSignal * ELO_BONUS_SCORE_WEIGHT
+  );
 }
 
 /**
@@ -103,14 +218,18 @@ export function calculateElo(
     }
 
     const nextRatings: EloMap = { ...ratings };
-    const winnerId = getRecordedWinnerId(game);
+    const bonusScoreAdjustments = buildBonusScoreAdjustments(game, playerIds);
 
     for (const playerId of playerIds) {
       const opponentRatings = playerIds
         .filter((id) => id !== playerId)
         .map((id) => ratings[id]);
 
-      const actualScore = winnerId ? (winnerId === playerId ? 1 : 0) : 0.5;
+      const actualScore = getEffectiveActualScore(
+        game,
+        playerId,
+        bonusScoreAdjustments
+      );
 
       nextRatings[playerId] = updateElo(
         ratings[playerId],
@@ -155,14 +274,18 @@ export function buildRatingHistory(
     }
 
     const nextRatings: EloMap = { ...ratings };
-    const winnerId = getRecordedWinnerId(game);
+    const bonusScoreAdjustments = buildBonusScoreAdjustments(game, playerIds);
 
     for (const playerId of playerIds) {
       const opponentRatings = playerIds
         .filter((id) => id !== playerId)
         .map((id) => ratings[id]);
 
-      const actualScore = winnerId ? (winnerId === playerId ? 1 : 0) : 0.5;
+      const actualScore = getEffectiveActualScore(
+        game,
+        playerId,
+        bonusScoreAdjustments
+      );
 
       nextRatings[playerId] = updateElo(
         ratings[playerId],

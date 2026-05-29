@@ -36,14 +36,20 @@ import {
   formatMetricValue,
   formatPercentFromDecimal,
 } from "@/utils/formatters";
+import {
+  describeRecentForm,
+  replaceRecentFormSummaryInText,
+} from "@/utils/eloRecentForm";
+import {
+  resolveVisibleEloInsight,
+  resolveVisibleEloSection,
+  type VisibleEloMetricTab,
+} from "@/utils/elo/visibleMetricTabs";
 import { toNumber } from "@/utils/numbers";
 import { normalizeId } from "@/utils/strings";
 import { resolvePreferredChartPlayerId } from "@/utils/charts";
-import {
-  type EloMetricTabName,
-} from "@/utils/ratingTabFallbacks";
 
-type EloMetricTab = EloMetricTabName;
+type EloMetricTab = VisibleEloMetricTab;
 type StorePlayer = { id: string; name?: string; color?: string };
 
 const DEFAULT_ELO = 1000;
@@ -122,7 +128,17 @@ export default function EloScreen() {
       .filter((player) => Boolean(player.id));
   }, [payload?.playerOptions]);
 
-  const sortedPlayers = useMemo<StorePlayer[]>(() => [...rawPlayerOptions], [rawPlayerOptions]);
+  const storePlayerOptions = useMemo<StorePlayer[]>(() => {
+    return (Array.isArray(players) ? players : [])
+      .map((player: any) => ({
+        id: normalizeId(player?.id),
+        name:
+          String(player?.name ?? player?.label ?? player?.displayName ?? "")
+            .trim() || "Unknown",
+        color: String(player?.color ?? "").trim() || undefined,
+      }))
+      .filter((player) => Boolean(player.id));
+  }, [players]);
 
   const rawLeaderboardRows = useMemo(() => {
     const source = Array.isArray(payload?.leaderboardRows)
@@ -146,7 +162,37 @@ export default function EloScreen() {
       .filter((row) => Boolean(row.playerId));
   }, [payload?.leaderboardRows]);
 
-  const analyticsPlayers = useMemo<StorePlayer[]>(() => sortedPlayers, [sortedPlayers]);
+  const analyticsPlayers = useMemo<StorePlayer[]>(() => {
+    const mergedPlayers = new Map<string, StorePlayer>();
+
+    for (const player of rawPlayerOptions) {
+      const normalizedId = normalizeId(player?.id);
+      if (!normalizedId) {
+        continue;
+      }
+
+      mergedPlayers.set(normalizedId, {
+        ...player,
+        id: normalizedId,
+      });
+    }
+
+    for (const player of storePlayerOptions) {
+      const normalizedId = normalizeId(player?.id);
+      if (!normalizedId) {
+        continue;
+      }
+
+      const current = mergedPlayers.get(normalizedId);
+      mergedPlayers.set(normalizedId, {
+        ...player,
+        ...current,
+        id: normalizedId,
+      });
+    }
+
+    return Array.from(mergedPlayers.values());
+  }, [rawPlayerOptions, storePlayerOptions]);
 
   const preferredPlayerId = useMemo(
     () =>
@@ -191,19 +237,6 @@ export default function EloScreen() {
     });
   }, [analyticsPlayers, normalizedPlayerQuery]);
 
-  useEffect(() => {
-    const activeOpponentId = normalizeId(selectedOpponentId);
-    const isValidOpponent = analyticsPlayers.some(
-      (player) =>
-        normalizeId(player.id) === activeOpponentId &&
-        normalizeId(player.id) !== normalizeId(selectedPlayerId)
-    );
-
-    if (selectedOpponentId === selectedPlayerId || (activeOpponentId && !isValidOpponent)) {
-      setSelectedOpponentId(null);
-    }
-  }, [analyticsPlayers, selectedOpponentId, selectedPlayerId]);
-
   const selectedPlayer = useMemo(
     () =>
       analyticsPlayers.find(
@@ -219,6 +252,18 @@ export default function EloScreen() {
       ),
     [analyticsPlayers, selectedPlayerId]
   );
+
+  useEffect(() => {
+    const activeOpponentId = normalizeId(selectedOpponentId);
+    const isValidOpponent = opponentOptions.some(
+      (player) => normalizeId(player.id) === activeOpponentId
+    );
+
+    if (selectedOpponentId === selectedPlayerId || (activeOpponentId && !isValidOpponent)) {
+      setSelectedOpponentId(null);
+    }
+  }, [opponentOptions, selectedOpponentId, selectedPlayerId]);
+
   const selectedSummary = useMemo<EloSummary>(() => {
     const summary = payload?.summary;
     return {
@@ -271,13 +316,19 @@ export default function EloScreen() {
       };
     }
 
-    const section = (payload.sections as Record<string, any>)[activeTab];
+    const section = resolveVisibleEloSection(
+      payload.sections as Record<string, any>,
+      activeTab,
+    );
     const cards = Array.isArray(section?.cards)
       ? section.cards
           .map((card: any) => ({
             key: String(card?.key ?? ""),
             label: String(card?.label ?? ""),
-            value: String(card?.value ?? "0"),
+            value:
+              String(card?.key ?? "") === "recent-form"
+                ? describeRecentForm(String(card?.value ?? ""))
+                : String(card?.value ?? "0"),
             sub:
               typeof card?.sub === "string" && card.sub.trim()
                 ? card.sub.trim()
@@ -311,19 +362,28 @@ export default function EloScreen() {
       };
     }
 
-    const insight = (payload.insights as Record<string, any>)[activeTab];
+    const insight = resolveVisibleEloInsight(
+      payload.insights as Record<string, any>,
+      activeTab,
+    );
 
     return {
       title:
         typeof insight?.title === "string" && insight.title.trim()
           ? insight.title.trim()
           : `${activeTab} Insight`,
-      body:
-        typeof insight?.body === "string" && insight.body.trim()
-          ? insight.body.trim()
-          : "No server-authored insight is available yet.",
+      body: (() => {
+        const rawBody =
+          typeof insight?.body === "string" && insight.body.trim()
+            ? insight.body.trim()
+            : "No server-authored insight is available yet.";
+
+        return activeTab === "Momentum"
+          ? replaceRecentFormSummaryInText(rawBody, selectedSummary.recentForm)
+          : rawBody;
+      })(),
     };
-  }, [activeTab, payload?.insights]);
+  }, [activeTab, payload?.insights, selectedSummary.recentForm]);
 
   const hasData = selectedSummary.gamesPlayed > 0;
 
@@ -532,14 +592,14 @@ export default function EloScreen() {
           })}
         </View>
 
-        <View style={styles.tabGridRowThree}>
-          {(["Skills", "Context", "Projection"] as EloMetricTab[]).map(
+        <View style={styles.tabGridRowTwo}>
+          {(["Skills", "Context"] as EloMetricTab[]).map(
             (tab) => {
               const active = tab === activeTab;
               return (
                 <Pressable
                   key={tab}
-                  style={({ pressed }) => [styles.underlineMainTab, styles.underlineMainTabThreeCol, pressed && { opacity: 0.9 }]}
+                  style={({ pressed }) => [styles.underlineMainTab, styles.underlineMainTabTwoCol, pressed && { opacity: 0.9 }]}
                   onPress={() => setActiveTab(tab)}
                 >
                   <Text

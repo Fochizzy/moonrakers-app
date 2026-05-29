@@ -11,10 +11,10 @@ const correlationRows = normalizeStatsCorrelationRows([
   {
     key: "objectives-vs-wins",
     label: "Objective prestige",
-    whenWin: 2.8,
-    whenLose: 1.4,
-    delta: 1.4,
-    description: "Objectives track with winning.",
+    whenWin: 3,
+    whenLose: 0.88,
+    delta: 2.12,
+    description: "Avg 3.00 in wins vs 0.88 in losses -- objectives track with winning",
   },
   {
     key: "assists-vs-wins",
@@ -28,8 +28,8 @@ assert.deepEqual(correlationRows, [
   {
     key: "objectives-vs-wins",
     label: "Objective prestige",
-    value: "Win 2.8 | Loss 1.4",
-    detail: "Delta +1.4 | Objectives track with winning.",
+    value: "Win 3 | Loss 0.88",
+    detail: "Swing +2.12\nAvg 3.00 in wins vs 0.88 in losses\nObjectives track with winning.",
   },
   {
     key: "assists-vs-wins",
@@ -38,6 +38,25 @@ assert.deepEqual(correlationRows, [
     detail: "Moderate correlation",
   },
 ]);
+
+assert.deepEqual(
+  normalizeStatsCorrelationRows([
+    {
+      key: "legacy-correlation-summary",
+      label: "Objective prestige",
+      value: "Win 3 | Loss 0.88",
+      description: "Published from an older stats rollup summary.",
+    },
+  ]),
+  [
+    {
+      key: "legacy-correlation-summary",
+      label: "Objective prestige",
+      value: "Win 3 | Loss 0.88",
+      detail: "Published from an older stats rollup summary.",
+    },
+  ],
+);
 
 const gameRows = normalizeStatsGameRows([
   {
@@ -76,6 +95,25 @@ assert.deepEqual(gameRows, [
     detail: "Winner Nova | Spread 7 | 4 contracts | 1 assist | 3 failures",
   },
 ]);
+
+assert.deepEqual(
+  normalizeStatsGameRows([
+    {
+      key: "latest-finish",
+      label: "Latest tracked game",
+      value: "Won latest tracked game on 2026-05-24",
+      detail: "Tracked prestige 84",
+    },
+  ]),
+  [
+    {
+      key: "latest-finish",
+      label: "Latest tracked game",
+      value: "Won latest tracked game on 2026-05-24",
+      detail: "Tracked prestige 84",
+    },
+  ],
+);
 
 const playerCountOverviewRows = normalizeStatsPlayerCountOverviewRows([
   {

@@ -66,6 +66,11 @@ assert.deepEqual(
   ["Recent Form", "Avg ELO Change", "Wins", "Losses", "Win Rate", "Confidence"],
   "expected Momentum fallback cards to expose real momentum metrics from the published summary",
 );
+assert.equal(
+  momentum.cards[0].value,
+  "3 wins in last 4",
+  "expected Momentum fallback cards to summarize recent form as wins over the trailing sample",
+);
 assert.equal(momentum.cards[1].value, "+2.4");
 
 const context = buildFallbackEloSection("Context", summary, "Corey");
@@ -90,7 +95,7 @@ assert.equal(projection.cards[3].value, "-13");
 
 const momentumInsight = buildFallbackEloInsight("Momentum", summary, null);
 assert.equal(momentumInsight.title, "Momentum Insight");
-assert.match(momentumInsight.body, /recent form: WWLW/i);
+assert.match(momentumInsight.body, /recent form: 3 wins in last 4/i);
 assert.match(momentumInsight.body, /Avg ELO change: \+2\.4/i);
 
 const contextInsight = buildFallbackEloInsight("Context", summary, "Corey");

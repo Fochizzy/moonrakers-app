@@ -63,16 +63,17 @@ export default function CompareTelemetryRow({
   );
 
   const headline = useMemo(() => getHeadline(safeInsight), [safeInsight]);
+  const sampleCount = n(safeInsight.samples);
 
   return (
     <View style={styles.telemetryRow}>
       <View style={styles.telemetryCardWide}>
-        <Text style={styles.telemetryHeadline} numberOfLines={1}>
-          Turn {formatCorrelation(n(safeInsight.correlation))} • {headline} • {n(safeInsight.samples)} sample{n(safeInsight.samples) === 1 ? '' : 's'}
+        <Text style={styles.telemetryHeadline}>{headline}</Text>
+        <Text style={styles.telemetryMeta}>
+          Turn {formatCorrelation(n(safeInsight.correlation))} - {sampleCount} sample
+          {sampleCount === 1 ? '' : 's'}
         </Text>
       </View>
     </View>
   );
 }
-
-

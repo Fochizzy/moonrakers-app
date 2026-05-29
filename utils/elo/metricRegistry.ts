@@ -607,6 +607,12 @@ export const metricOrderByTab: Record<EloMetricTab, MetricKey[]> = {
     "conversionScore",
     "clutchScore",
     "pressureReliability",
+    "elo_expected_win_prob",
+    "elo_projection_5",
+    "elo_projection_10",
+    "promotionOdds",
+    "trajectoryGrade",
+    "futurePeakEstimate",
   ],
   Context: [
     "elo_h2h_trend",

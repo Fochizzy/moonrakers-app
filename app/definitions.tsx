@@ -20,6 +20,13 @@ import {
   getRelatedDefinitionKeys,
 } from "@/utils/definitionCatalog";
 
+const SORTED_DEFINITION_GROUPS = [...DEFINITION_GROUPS].sort((left, right) =>
+  left.title.localeCompare(right.title, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  })
+);
+
 export default function DefinitionsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -44,13 +51,13 @@ export default function DefinitionsScreen() {
     }
 
     return (
-      DEFINITION_GROUPS.find((group) =>
+      SORTED_DEFINITION_GROUPS.find((group) =>
         group.items.some((item) => item.key === targetMetric)
       )?.key ?? null
     );
   }, [targetMetric]);
   const targetGroupKey = targetMetricGroupKey ?? (
-    DEFINITION_GROUPS.some((group) => group.key === targetCategory)
+    SORTED_DEFINITION_GROUPS.some((group) => group.key === targetCategory)
       ? targetCategory
       : null
   );
@@ -75,7 +82,7 @@ export default function DefinitionsScreen() {
 
   useEffect(() => {
     if (targetMetric) {
-      const matchingGroup = DEFINITION_GROUPS.find((group) =>
+      const matchingGroup = SORTED_DEFINITION_GROUPS.find((group) =>
         group.items.some((item) => item.key === targetMetric)
       );
 
@@ -87,7 +94,7 @@ export default function DefinitionsScreen() {
     }
 
     if (!targetMetric && targetCategory) {
-      const hasMatchingCategory = DEFINITION_GROUPS.some(
+      const hasMatchingCategory = SORTED_DEFINITION_GROUPS.some(
         (group) => group.key === targetCategory
       );
 
@@ -151,7 +158,7 @@ export default function DefinitionsScreen() {
   const visibleGroups = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return DEFINITION_GROUPS.filter((group) => {
+    return SORTED_DEFINITION_GROUPS.filter((group) => {
       if (activeCategory !== "all" && group.key !== activeCategory) {
         return false;
       }
@@ -189,7 +196,6 @@ export default function DefinitionsScreen() {
       >
         <SectionCard
           title="Definitions"
-          subtitle="Search metrics or jump to a category so this page works like a reference, not a long flat glossary."
           actions={
             sourceLabel ? (
               <Pressable
@@ -235,7 +241,7 @@ export default function DefinitionsScreen() {
               active={activeCategory === "all"}
               onPress={() => setActiveCategory("all")}
             />
-            {DEFINITION_GROUPS.map((group) => (
+            {SORTED_DEFINITION_GROUPS.map((group) => (
               <CategoryTab
                 key={group.key}
                 label={group.title}

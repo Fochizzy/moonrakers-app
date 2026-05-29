@@ -41,6 +41,7 @@ export type PlayerGameTotals = {
   assists: number;
   failures: number;
   contracts: number;
+  headToHeadScoreBonus?: number;
   performance?: number;
   efficiency?: number;
   assistedEfficiency?: number;
@@ -68,6 +69,9 @@ export type StoredRound = {
   objectiveCount: number;
   objectivePrestige: number;
   createdAt: number;
+  metaType?: "main" | "bonusObjective" | "headToHeadFirstPlace" | "headToHeadSecondPlace";
+  linkedTurnId?: string;
+  headToHeadScoreBonus?: number;
 };
 
 export type ActiveGameCurrent = {
@@ -77,6 +81,8 @@ export type ActiveGameCurrent = {
   assistRecipients: Record<string, number>;
   assistPrestigeRecipients: Record<string, number>;
   objectiveCount: number;
+  headToHeadFirstPlaceId?: string | null;
+  headToHeadSecondPlaceId?: string | null;
 };
 
 export type Game = {
@@ -224,6 +230,15 @@ function normalizeRound(raw: any): StoredRound | null {
     objectiveCount,
     objectivePrestige: objectiveCount,
     createdAt: safeNumber(raw?.createdAt) || Date.now(),
+    metaType:
+      raw?.metaType === 'main' ||
+      raw?.metaType === 'bonusObjective' ||
+      raw?.metaType === 'headToHeadFirstPlace' ||
+      raw?.metaType === 'headToHeadSecondPlace'
+        ? raw.metaType
+        : undefined,
+    linkedTurnId: normalizeId(raw?.linkedTurnId) || undefined,
+    headToHeadScoreBonus: safeNumber(raw?.headToHeadScoreBonus),
   };
 }
 
@@ -242,6 +257,8 @@ function createEmptyCurrent(): ActiveGameCurrent {
     assistRecipients: {},
     assistPrestigeRecipients: {},
     objectiveCount: 0,
+    headToHeadFirstPlaceId: null,
+    headToHeadSecondPlaceId: null,
   };
 }
 
@@ -435,6 +452,7 @@ function normalizeImportedGame(raw: any): Game {
       assists: safeNumber(t?.assists),
       failures: safeNumber(t?.failures),
       contracts: safeNumber(t?.contracts),
+      headToHeadScoreBonus: safeNumber(t?.headToHeadScoreBonus),
       performance: safeNumber(t?.performance),
       efficiency: safeNumber(t?.efficiency),
       assistedEfficiency: safeNumber(t?.assistedEfficiency),

@@ -85,26 +85,26 @@ const cards = getAnalyticsHubCards();
 
 assert.equal(
   cards.find((card) => card.key === "compare")?.iconKey,
-  "damage",
-  "expected Compare to use the damage tile on the analytics landing"
+  "compare",
+  "expected Compare to use the semantic compare icon mapping on the analytics landing"
 );
 
 assert.equal(
   cards.find((card) => card.key === "charts")?.iconKey,
-  "reactor",
-  "expected Charts to use the reactor tile on the analytics landing"
+  "charts",
+  "expected Charts to use the semantic charts icon mapping on the analytics landing"
 );
 
 assert.equal(
   cards.find((card) => card.key === "stats")?.iconKey,
-  "thruster",
-  "expected Stats to use the thruster tile on the analytics landing"
+  "statistics",
+  "expected Stats to use the semantic statistics icon mapping on the analytics landing"
 );
 
 assert.equal(
   cards.find((card) => card.key === "elo")?.iconKey,
-  "billBendo",
-  "expected ELO to use the Bill Bendo tile on the analytics landing"
+  "elo",
+  "expected ELO to use the semantic elo icon mapping on the analytics landing"
 );
 
 assert.equal(

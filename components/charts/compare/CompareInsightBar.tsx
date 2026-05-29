@@ -2,6 +2,10 @@ import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import DefinitionRichText from '@/components/ui/DefinitionRichText';
 import Text from '@/components/ui/Text';
+import {
+  PLAYER_FIELD_OPPONENTS_ROW_ID,
+  PLAYER_FIELD_SELF_ROW_ID,
+} from '@/utils/compareHelpers';
 import { styles } from '@/utils/compareStyles';
 import { CompareRow } from '@/utils/compareTypes';
 
@@ -72,6 +76,153 @@ function focusLabel(group: FocusGroup): string {
     default:
       return 'Overview';
   }
+}
+
+function buildTwoPlayerPlaystyleRead(rows: CompareRow[]): string[] {
+  if (rows.length !== 2) return [];
+
+  const [firstRow, secondRow] = rows;
+  const paceLeader = pickHighest(rows, ['avgPrestigePerGame', 'avgScorePerGame', 'prestige']);
+  const supportLeader = pickHighest(rows, ['netAssistBenefit', 'avgAssists', 'assistsPerGame', 'assists']);
+  const synergyLeader = pickHighest(rows, ['synergyIndex']);
+  const objectiveLeader = pickHighest(rows, ['objectiveShareOfPrestige', 'avgObjectivesPerTrackedGame']);
+  const efficiencyLeader = pickHighest(rows, ['efficiency', 'directEfficiency']);
+  const seatSensitive = pickHighest(rows, ['turnOrderWinCorrelation']);
+  const seatNeutral =
+    [...rows].sort(
+      (a, b) =>
+        Math.abs(getMetric(a, ['turnOrderWinCorrelation'])) -
+        Math.abs(getMetric(b, ['turnOrderWinCorrelation']))
+    )[0] ?? null;
+
+  const paceTrailer =
+    paceLeader?.id === firstRow.id ? secondRow : paceLeader?.id === secondRow.id ? firstRow : secondRow;
+  const supportTrailer =
+    supportLeader?.id === firstRow.id
+      ? secondRow
+      : supportLeader?.id === secondRow.id
+        ? firstRow
+        : secondRow;
+  const objectiveTrailer =
+    objectiveLeader?.id === firstRow.id
+      ? secondRow
+      : objectiveLeader?.id === secondRow.id
+        ? firstRow
+        : secondRow;
+  const efficiencyTrailer =
+    efficiencyLeader?.id === firstRow.id
+      ? secondRow
+      : efficiencyLeader?.id === secondRow.id
+        ? firstRow
+        : secondRow;
+
+  const lines: string[] = [];
+
+  if (paceLeader && paceTrailer) {
+    lines.push(
+      `Their pace is different: ${paceLeader.label} pushes the faster scoring game at ${formatFixed(getMetric(paceLeader, ['avgPrestigePerGame', 'avgScorePerGame', 'prestige']), 1)} Prestige / Game, while ${paceTrailer.label} sits at ${formatFixed(getMetric(paceTrailer, ['avgPrestigePerGame', 'avgScorePerGame', 'prestige']), 1)} and looks more measured from turn to turn.`
+    );
+  }
+
+  if (
+    supportLeader &&
+    supportTrailer &&
+    hasMetricData(rows, ['netAssistBenefit', 'avgAssists', 'assistsPerGame', 'assists', 'synergyIndex'])
+  ) {
+    if (synergyLeader && synergyLeader.id !== supportLeader.id) {
+      lines.push(
+        `At the table, ${supportLeader.label} creates more direct assist value at ${formatFixed(getMetric(supportLeader, ['netAssistBenefit', 'avgAssists', 'assistsPerGame', 'assists']), 1)}, but ${synergyLeader.label} carries the stronger synergy profile at ${formatFixed(getMetric(synergyLeader, ['synergyIndex']), 2)}, so one looks more like the feeder and the other more like the cleaner team fit.`
+      );
+    } else {
+      lines.push(
+        `At the table, ${supportLeader.label} plays the more connective style with ${formatFixed(getMetric(supportLeader, ['netAssistBenefit', 'avgAssists', 'assistsPerGame', 'assists']), 1)} assist value and ${formatFixed(getMetric(supportLeader, ['synergyIndex']), 2)} synergy, while ${supportTrailer.label} looks more self-contained in how they turn actions into points.`
+      );
+    }
+  }
+
+  if (
+    objectiveLeader &&
+    objectiveTrailer &&
+    hasMetricData(rows, ['objectiveShareOfPrestige', 'avgObjectivesPerTrackedGame'])
+  ) {
+    lines.push(
+      `Objectives push ${objectiveLeader.label}'s game more heavily, with ${formatPercent(getMetric(objectiveLeader, ['objectiveShareOfPrestige']))} of their prestige coming from objectives compared with ${formatPercent(getMetric(objectiveTrailer, ['objectiveShareOfPrestige']))} for ${objectiveTrailer.label}.`
+    );
+  } else {
+    lines.push(
+      `Objectives push neither player far away from their base plan, so this matchup is being decided more by pace and table role than by objective spikes.`
+    );
+  }
+
+  if (efficiencyLeader && efficiencyTrailer) {
+    const seatGap =
+      seatSensitive && seatNeutral
+        ? Math.abs(getMetric(seatSensitive, ['turnOrderWinCorrelation'])) -
+          Math.abs(getMetric(seatNeutral, ['turnOrderWinCorrelation']))
+        : 0;
+
+    if (seatSensitive && seatNeutral && seatSensitive.id !== seatNeutral.id && seatGap >= 0.18) {
+      lines.push(
+        `The cleaner closer is ${efficiencyLeader.label}, but ${seatSensitive.label} also shows more seat-order swing at ${formatFixed(getMetric(seatSensitive, ['turnOrderWinCorrelation']), 2)}, so their ceiling looks a little more sensitive to turn timing than ${seatNeutral.label}'s.`
+      );
+    } else {
+      lines.push(
+        `The cleaner closer is ${efficiencyLeader.label}, who pairs ${formatFixed(getMetric(efficiencyLeader, ['efficiency', 'directEfficiency']), 2)} efficiency with a ${formatPercent(toNumber(efficiencyLeader.winRate))} Win Rate while ${efficiencyTrailer.label} leaves a bit more value on the table.`
+      );
+    }
+  } else {
+    lines.push(
+      `Neither player shows a major seat-order dependency, so the cleaner separator here is how each one chooses to pressure the table and convert that pressure into wins.`
+    );
+  }
+
+  return lines.slice(0, 4);
+}
+
+function buildPlayerVsFieldAggregateRead(rows: CompareRow[]): string[] {
+  const selfRow = rows.find((row) => row.id === PLAYER_FIELD_SELF_ROW_ID) ?? null;
+  const fieldRow = rows.find((row) => row.id === PLAYER_FIELD_OPPONENTS_ROW_ID) ?? null;
+  if (!selfRow || !fieldRow) return [];
+
+  const paceLeader =
+    getMetric(selfRow, ['avgPrestigePerGame', 'avgScorePerGame']) >=
+    getMetric(fieldRow, ['avgPrestigePerGame', 'avgScorePerGame'])
+      ? selfRow
+      : fieldRow;
+  const paceTrailer = paceLeader.id === selfRow.id ? fieldRow : selfRow;
+  const supportLeader =
+    getMetric(selfRow, ['netAssistBenefit', 'synergyIndex']) >=
+    getMetric(fieldRow, ['netAssistBenefit', 'synergyIndex'])
+      ? selfRow
+      : fieldRow;
+  const supportTrailer = supportLeader.id === selfRow.id ? fieldRow : selfRow;
+  const objectiveLeader =
+    getMetric(selfRow, ['objectiveShareOfPrestige', 'avgObjectivesPerTrackedGame']) >=
+    getMetric(fieldRow, ['objectiveShareOfPrestige', 'avgObjectivesPerTrackedGame'])
+      ? selfRow
+      : fieldRow;
+  const objectiveTrailer = objectiveLeader.id === selfRow.id ? fieldRow : selfRow;
+  const efficiencyLeader =
+    getMetric(selfRow, ['efficiency', 'directEfficiency']) >=
+    getMetric(fieldRow, ['efficiency', 'directEfficiency'])
+      ? selfRow
+      : fieldRow;
+  const efficiencyTrailer = efficiencyLeader.id === selfRow.id ? fieldRow : selfRow;
+  const seatSensitive =
+    Math.abs(getMetric(selfRow, ['turnOrderWinCorrelation'])) >=
+    Math.abs(getMetric(fieldRow, ['turnOrderWinCorrelation']))
+      ? selfRow
+      : fieldRow;
+  const seatNeutral = seatSensitive.id === selfRow.id ? fieldRow : selfRow;
+
+  return [
+    `Compared with the field, ${selfRow.label} wins ${formatPercent(toNumber(selfRow.winRate))} of the time while the aggregate opponent seat wins ${formatPercent(toNumber(fieldRow.winRate))}, so the current results gap ${toNumber(selfRow.winRate) >= toNumber(fieldRow.winRate) ? 'leans toward your side of the matchup.' : 'still leans toward the opponents as a group.'}`,
+    `On pace, ${paceLeader.label} produces ${formatFixed(getMetric(paceLeader, ['avgPrestigePerGame', 'avgScorePerGame']), 1)} Prestige / Game compared with ${formatFixed(getMetric(paceTrailer, ['avgPrestigePerGame', 'avgScorePerGame']), 1)} for ${paceTrailer.label}, which is the clearest read on who is forcing the scoring rhythm.`,
+    `${supportLeader.label} carries the stronger support footprint here, pairing ${formatFixed(getMetric(supportLeader, ['netAssistBenefit']), 1)} Net Assist Benefit with ${formatFixed(getMetric(supportLeader, ['synergyIndex']), 2)} Synergy Index, while ${supportTrailer.label} looks more self-driven in how value is created.`,
+    `Objectives matter more for ${objectiveLeader.label}, with ${formatPercent(getMetric(objectiveLeader, ['objectiveShareOfPrestige']))} of total prestige coming from objective lines compared with ${formatPercent(getMetric(objectiveTrailer, ['objectiveShareOfPrestige']))} for ${objectiveTrailer.label}.`,
+    `The cleaner closer is ${efficiencyLeader.label}, who is converting opportunities at ${formatFixed(getMetric(efficiencyLeader, ['efficiency', 'directEfficiency']), 2)} efficiency versus ${formatFixed(getMetric(efficiencyTrailer, ['efficiency', 'directEfficiency']), 2)} for ${efficiencyTrailer.label}.`,
+    `Positioning ${Math.abs(getMetric(seatSensitive, ['turnOrderWinCorrelation'])) >= 0.18 ? `matters more for ${seatSensitive.label}, whose seat-order swing reaches ${formatFixed(getMetric(seatSensitive, ['turnOrderWinCorrelation']), 2)} while ${seatNeutral.label} stays steadier.` : `does not look like the primary separator in this sample, because both sides stay fairly close in seat-order sensitivity.`}`,
+  ].slice(0, 6);
 }
 
 function buildInterpretation(rows: CompareRow[], activeFocusGroup: FocusGroup): string[] {
@@ -306,6 +457,8 @@ export default function CompareInsightBar({
     () => buildInterpretation(rows, activeFocusGroup),
     [rows, activeFocusGroup]
   );
+  const fieldAggregateRead = useMemo(() => buildPlayerVsFieldAggregateRead(rows), [rows]);
+  const playstyleRead = useMemo(() => buildTwoPlayerPlaystyleRead(rows), [rows]);
   const readLines = useMemo(() => {
     const seen = new Set<string>();
 
@@ -317,6 +470,12 @@ export default function CompareInsightBar({
       })
       .slice(0, 4);
   }, [insights, interpretations]);
+  const isPlayerVsFieldAggregate = rows.some((row) => row.id === PLAYER_FIELD_SELF_ROW_ID) && rows.some((row) => row.id === PLAYER_FIELD_OPPONENTS_ROW_ID);
+  const bottomLines = isPlayerVsFieldAggregate && fieldAggregateRead.length >= 5
+    ? fieldAggregateRead
+    : modeLabel === 'players' && rows.length === 2 && playstyleRead.length >= 3
+      ? playstyleRead
+      : readLines;
 
   if (!rows.length) return null;
 
@@ -338,27 +497,19 @@ export default function CompareInsightBar({
       </View>
 
       <Text style={styles.cardTitle}>Current read</Text>
-      <Text style={styles.helper} numberOfLines={2}>
-        Based on this selection: {comparedLabel}.
-      </Text>
 
-      <View style={styles.insightBadgeRow}>
-        <View style={styles.insightBadge}>
-          <Text style={styles.insightBadgeText}>Compared: {comparedLabel}</Text>
-        </View>
-        <View style={styles.insightBadge}>
-          <DefinitionRichText
-            text={`Focus: ${focusLabel(activeFocusGroup)}`}
-            style={styles.insightBadgeText}
-          />
-        </View>
+      <View style={styles.selectionContextCard}>
+        <Text style={styles.selectionContextLabel}>Selection</Text>
+        <Text style={styles.selectionContextValue}>{comparedLabel}</Text>
       </View>
 
-      <View style={{ gap: 8 }}>
-        {readLines.map((line) => (
-          <View key={line} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
-            <Text style={[styles.matrixWhyText, { marginTop: 0 }]}>{'\u2022'}</Text>
-            <DefinitionRichText text={line} style={[styles.matrixWhyText, { marginTop: 0, flex: 1 }]} numberOfLines={3} />
+      <View style={styles.insightLineList}>
+        {bottomLines.map((line) => (
+          <View key={line} style={styles.insightLineCard}>
+            <DefinitionRichText
+              text={line}
+              style={styles.insightLineText}
+            />
           </View>
         ))}
       </View>

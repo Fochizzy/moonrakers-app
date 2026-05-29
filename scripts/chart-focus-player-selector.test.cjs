@@ -43,40 +43,40 @@ assert.match(
   "expected the chart setup screen to default the focus player to the preferred signed-in user before falling back",
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
-  /subtitle="You first, then your most-played tablemates\."/,
-  "expected the focus-player section to explain the quick-pick ordering",
+  /You first, then your most-played tablemates\./,
+  "expected the focus-player helper copy to be removed from the setup rail",
 );
 
 assert.match(
   source,
-  /items=\{quickFocusPlayerOptions\}/,
-  "expected the focus-player section to render quick picks for the signed-in player and common teammates",
+  /<SetupSection[\s\S]*title="Focus player"[\s\S]*contentStyle=\{styles\.setupFullWidthSectionContent\}[\s\S]*<SetupSegmentedTabs[\s\S]*items=\{primaryFocusPlayerOptions\}/s,
+  "expected the focus-player section to render its signed-in-first quick picks inside the full-width setup layout",
 );
 
 assert.match(
   source,
-  /badge:\s*String\(option\.key\) === signedInId \?\s*"You"\s*:\s*null/,
-  "expected the focus-player quick picks to badge the signed-in player as You",
+  /const\s+primaryFocusPlayerOptions\s*=\s*useMemo\(\s*\(\)\s*=>[\s\S]*buildPrimarySetupOptions\([\s\S]*orderedFocusPlayerOptions,[\s\S]*\[selectedPlayerId,\s*signedInFocusPlayerOptionId\],[\s\S]*4,/s,
+  "expected the focus-player quick picks to prioritize the signed-in player in the primary segmented row",
 );
 
 assert.match(
   source,
-  /key:\s*ALL_FOCUS_PLAYERS_CHIP_ID,[\s\S]*label:\s*"All players",[\s\S]*kind:\s*"action"/,
-  "expected the focus-player quick picks to append an All players action chip after the signed-in-first shortlist",
+  /placeholder="Search player"/,
+  "expected the chart setup screen to render a Search player input underneath the quick picks",
 );
 
 assert.match(
   source,
-  /placeholder="Search for Player"/,
-  "expected the chart setup screen to render a Search for Player input underneath the quick picks",
+  /inputProps=\{\{\s*placeholderTextColor:\s*CHART_COLORS\.sub,\s*returnKeyType:\s*"search",\s*style:\s*styles\.setupSearchInput,\s*\}\}/,
+  "expected the focus-player search field to use the chart-specific muted placeholder styling",
 );
 
 assert.match(
   source,
-  /focusPlayerSearch\.trim\(\)\s*\|\|\s*showAllFocusPlayerOptions/,
-  "expected the chart setup screen to expand focus-player browsing when the All players chip is opened or a search query exists",
+  /focusPlayerSearch\.trim\(\)\s*\?\s*\([\s\S]*filteredFocusPlayerOptions\.length[\s\S]*<SetupSegmentedTabs[\s\S]*items=\{filteredFocusPlayerOptions\}/s,
+  "expected the chart setup screen to expand focus-player browsing when a search query is present",
 );
 
 console.log("chart-focus-player-selector.test.cjs passed");

@@ -748,7 +748,7 @@ const games = [
 {
   const profileSource = read(path.join("app", "player-profile", "[playerId].tsx"));
   assert.match(profileSource, /MoonrakersIntelSection/);
-  assert.match(profileSource, /<MoonrakersIntelSection profile=\{moonrakersIntel\} \/>/);
+  assert.match(profileSource, /<MoonrakersIntelSection profile=\{moonrakersIntel as any\} \/>/);
 
   const componentSource = read(path.join("components", "player", "MoonrakersIntelSection.tsx"));
   assert.match(componentSource, /Moonrakers Intel/);
@@ -764,6 +764,10 @@ const games = [
   assert.doesNotMatch(componentSource, /Objective Pts \/ Game/);
   assert.doesNotMatch(componentSource, /objective points/);
   assert.match(componentSource, /Support Profile/);
+  assert.match(componentSource, /Assist Received \/ Game/);
+  assert.match(componentSource, /Assists Received \/ Game/);
+  assert.doesNotMatch(componentSource, /Assist Rec \/ Game/);
+  assert.doesNotMatch(componentSource, /Assists Rec \/ Game/);
   assert.match(componentSource, /Assist Context/);
   assert.match(componentSource, /Assist Gap to Target/);
   assert.match(componentSource, /Assist Gap to Leader/);

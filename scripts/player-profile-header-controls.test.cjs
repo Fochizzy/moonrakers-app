@@ -63,8 +63,14 @@ assert.match(
 
 assert.match(
   source,
-  /badge:\s*[\s\S]*\?\s*"You"/,
-  "expected the player profile screen to mark the signed-in player chip with a You badge",
+  /label:\s*String\(player\.id\) === String\(signedInPlayerChipId \?\? ""\)\.trim\(\)\s*\?\s*"You"\s*:\s*player\.name \|\| "Player"/,
+  "expected the player profile screen to show You instead of duplicating the signed-in player's name",
+);
+
+assert.doesNotMatch(
+  source,
+  /badge:\s*String\(player\.id\) === String\(signedInPlayerChipId \?\? ""\)\.trim\(\)\s*\?\s*"You"\s*:\s*null/,
+  "expected the player profile screen to drop the separate You badge in the selector items",
 );
 
 assert.match(

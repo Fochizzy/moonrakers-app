@@ -202,7 +202,7 @@ export default function MoonrakersIntelSection({
           tone="accent"
         />
         <MetricCard
-          label="Assist Rec / Game"
+          label="Assist Received / Game"
           value={profile.playstyle.assistPrestigeReceivedPerGameLabel}
           sub="Support prestige received"
           tone="blue"
@@ -409,7 +409,7 @@ export default function MoonrakersIntelSection({
           tone="blue"
         />
         <MetricCard
-          label="Assists Rec / Game"
+          label="Assists Received / Game"
           value={profile.supportProfile.assistsReceivedPerGameLabel}
           sub="Average incoming assists"
           tone="blue"

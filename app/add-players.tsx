@@ -41,6 +41,7 @@ import {
   canonicalizeSelectablePlayers,
   isLikelyRegisteredProfileId,
 } from "@/utils/registeredProfilePlayer";
+import { buildPlayerSelectionPreview } from "@/utils/playerSelectionPreview";
 import {
   buildProfileAppearanceSavePayload,
   normalizePreferredProfileColor,
@@ -211,6 +212,7 @@ export default function AddPlayersScreen() {
   const [groupSearchQuery, setGroupSearchQuery] = useState("");
   const [groupSortMode, setGroupSortMode] = useState<GroupSortMode>("most-played");
   const [selectedGroupPlayerIds, setSelectedGroupPlayerIds] = useState<string[]>([]);
+  const [showAllGroupPlayers, setShowAllGroupPlayers] = useState(false);
 
   const currentFavoriteColor = useMemo(
     () => normalizePreferredProfileColor(authProfile?.favorite_color),
@@ -307,6 +309,17 @@ export default function AddPlayersScreen() {
 
   const hasSavedGroups = groups.length > 0;
   const hasGroupSearchQuery = groupSearchQuery.trim().length > 0;
+  const signedInUserId = String(authSession?.user?.id ?? "").trim();
+  const collapsedGroupPlayerPreview = useMemo(
+    () =>
+      buildPlayerSelectionPreview(sortedPlayers, {
+        priorityPlayerIds: [signedInUserId, ...selectedGroupPlayerIds],
+        maxVisible: 6,
+      }),
+    [selectedGroupPlayerIds, signedInUserId, sortedPlayers],
+  );
+  const visibleGroupPlayers = showAllGroupPlayers ? sortedPlayers : collapsedGroupPlayerPreview;
+  const canToggleGroupPlayerPreview = sortedPlayers.length > collapsedGroupPlayerPreview.length;
 
   useEffect(() => {
     const validPlayerIds = new Set(sortedPlayers.map((player) => player.id));
@@ -315,7 +328,6 @@ export default function AddPlayersScreen() {
     );
   }, [sortedPlayers]);
 
-  const signedInUserId = String(authSession?.user?.id ?? "").trim();
   const activePlayerId = signedInUserId;
   const profileReady = Boolean(signedInUserId && authProfile?.player_name);
   const profileName =
@@ -783,9 +795,26 @@ export default function AddPlayersScreen() {
             <Text style={styles.smallLabel}>
               Select players ({selectedGroupPlayerIds.length}/5)
             </Text>
+            <View style={styles.groupPlayerMetaRow}>
+              <Text style={styles.groupPlayerMetaText}>
+                {canToggleGroupPlayerPreview
+                  ? `Showing ${visibleGroupPlayers.length} of ${sortedPlayers.length}`
+                  : `${visibleGroupPlayers.length} available`}
+              </Text>
+              {canToggleGroupPlayerPreview ? (
+                <Pressable
+                  onPress={() => setShowAllGroupPlayers((current) => !current)}
+                  style={styles.groupPlayerToggleButton}
+                >
+                  <Text style={styles.groupPlayerToggleText}>
+                    {showAllGroupPlayers ? "Show Less" : "Show All"}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
 
             <View style={styles.groupPlayerGrid}>
-              {sortedPlayers.map((player) => {
+              {visibleGroupPlayers.map((player) => {
                 const active = selectedGroupPlayerIds.includes(player.id);
                 const accent = getPlayerAccentColor(player.color ?? "blue");
 
@@ -1147,6 +1176,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
+  },
+  groupPlayerMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  groupPlayerMetaText: {
+    flex: 1,
+    color: "#A9C1E7",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  groupPlayerToggleButton: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "rgba(96,165,250,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.24)",
+  },
+  groupPlayerToggleText: {
+    color: "#BFE4FF",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
   groupPlayerTile: {
     width: "22.8%",

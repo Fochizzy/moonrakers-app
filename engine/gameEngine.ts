@@ -1,3 +1,5 @@
+import { isPlayableTurnMetaType } from "../utils/headToHeadMission";
+
 export type PlayerLike = {
   id: string;
   name: string;
@@ -12,6 +14,8 @@ export type CurrentTurnStats = {
   assistRecipients: Record<string, number>;
   assistPrestigeRecipients: Record<string, number>;
   objectiveCount: number;
+  headToHeadFirstPlaceId?: string | null;
+  headToHeadSecondPlaceId?: string | null;
 };
 
 export type Round = {
@@ -25,6 +29,9 @@ export type Round = {
   objectiveCount: number;
   objectivePrestige: number;
   createdAt: number;
+  metaType?: "main" | "bonusObjective" | "headToHeadFirstPlace" | "headToHeadSecondPlace";
+  linkedTurnId?: string;
+  headToHeadScoreBonus?: number;
 };
 
 export type PlayerTotals = {
@@ -40,6 +47,7 @@ export type PlayerTotals = {
   assists: number;
   failures: number;
   contracts: number;
+  headToHeadScoreBonus: number;
 
   // Clean metric set
   allContractsEfficiency: number;
@@ -63,6 +71,7 @@ export type LeaderboardEntry = {
   assists: number;
   failures: number;
   contracts: number;
+  headToHeadScoreBonus: number;
   allContractsEfficiency: number;
   assistEfficiency: number;
   directEfficiency: number;
@@ -98,6 +107,7 @@ function emptyTotals(): PlayerTotals {
     assists: 0,
     failures: 0,
     contracts: 0,
+    headToHeadScoreBonus: 0,
     allContractsEfficiency: 0,
     assistEfficiency: 0,
     directEfficiency: 0,
@@ -188,37 +198,40 @@ export function buildTotals(
     actorTotals.objectivePrestige += roundObjectiveCount;
     actorTotals.contracts += Math.max(0, Math.min(1, n(round.contracts)));
     actorTotals.failures += Math.max(0, Math.min(1, n(round.failures)));
+    actorTotals.headToHeadScoreBonus += n(round.headToHeadScoreBonus);
 
-    for (const rawAssist of Object.values(round.assistRecipients ?? {})) {
-      if (n(rawAssist) > 0) {
-        actorTotals.assists += 1;
-      }
-    }
-
-    for (const [recipientId, rawAssistPrestige] of Object.entries(
-      round.assistPrestigeRecipients ?? {}
-    )) {
-      if (!totals[recipientId]) {
-        totals[recipientId] = emptyTotals();
+    if (isPlayableTurnMetaType(round.metaType)) {
+      for (const rawAssist of Object.values(round.assistRecipients ?? {})) {
+        if (n(rawAssist) > 0) {
+          actorTotals.assists += 1;
+        }
       }
 
-      const recipientTotals = totals[recipientId];
-      const assistPrestige = n(rawAssistPrestige);
-      const assistCountForRecipient =
-        n((round.assistRecipients ?? {})[recipientId]) > 0 ? 1 : 0;
+      for (const [recipientId, rawAssistPrestige] of Object.entries(
+        round.assistPrestigeRecipients ?? {}
+      )) {
+        if (!totals[recipientId]) {
+          totals[recipientId] = emptyTotals();
+        }
 
-      if (assistPrestige === 0 && assistCountForRecipient === 0) continue;
+        const recipientTotals = totals[recipientId];
+        const assistPrestige = n(rawAssistPrestige);
+        const assistCountForRecipient =
+          n((round.assistRecipients ?? {})[recipientId]) > 0 ? 1 : 0;
 
-      recipientTotals.assistPrestigeReceived += assistPrestige;
-      recipientTotals.assistPrestigeBySource[round.playerId] =
-        n(recipientTotals.assistPrestigeBySource[round.playerId]) +
-        assistPrestige;
+        if (assistPrestige === 0 && assistCountForRecipient === 0) continue;
 
-      recipientTotals.assistCountBySource[round.playerId] =
-        n(recipientTotals.assistCountBySource[round.playerId]) +
-        assistCountForRecipient;
+        recipientTotals.assistPrestigeReceived += assistPrestige;
+        recipientTotals.assistPrestigeBySource[round.playerId] =
+          n(recipientTotals.assistPrestigeBySource[round.playerId]) +
+          assistPrestige;
 
-      actorTotals.assistPrestigeSent += assistPrestige;
+        recipientTotals.assistCountBySource[round.playerId] =
+          n(recipientTotals.assistCountBySource[round.playerId]) +
+          assistCountForRecipient;
+
+        actorTotals.assistPrestigeSent += assistPrestige;
+      }
     }
   }
 
@@ -231,7 +244,8 @@ export function buildTotals(
       totalsForPlayer.totalPrestige +
       getScoreForContracts(totalsForPlayer.contracts) +
       getScoreForAssist(totalsForPlayer.assists) -
-      getScoreForFailures(totalsForPlayer.failures);
+      getScoreForFailures(totalsForPlayer.failures) +
+      n(totalsForPlayer.headToHeadScoreBonus);
 
     const allEffNumerator =
       n(totalsForPlayer.directPrestige) +
@@ -283,6 +297,7 @@ export function getLeaderboard(
         assists: nonNegativeInt(playerTotals.assists),
         failures: nonNegativeInt(playerTotals.failures),
         contracts: nonNegativeInt(playerTotals.contracts),
+        headToHeadScoreBonus: n(playerTotals.headToHeadScoreBonus),
         allContractsEfficiency: n(playerTotals.allContractsEfficiency),
         assistEfficiency: n(playerTotals.assistEfficiency),
         directEfficiency: n(playerTotals.directEfficiency),

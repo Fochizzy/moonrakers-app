@@ -26,11 +26,13 @@ function createInitialGameplay(): GameDraftGameplay {
     current: {
       prestige: 0,
       contracts: 0,
-      failures: 0,
-      assistRecipients: {},
-      assistPrestigeRecipients: {},
-      objectiveCount: 0,
-    },
+    failures: 0,
+    assistRecipients: {},
+    assistPrestigeRecipients: {},
+    objectiveCount: 0,
+    headToHeadFirstPlaceId: null,
+    headToHeadSecondPlaceId: null,
+  },
     roundCount: 0,
     selectedWinnerId: null,
   };

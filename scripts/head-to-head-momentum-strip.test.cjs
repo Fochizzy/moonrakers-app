@@ -9,14 +9,26 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /const MIN_MOMENTUM_HEIGHT_PCT = 22/,
-  "expected the head-to-head strip to keep readable minimum momentum bar height"
+  /const MOMENTUM_TRACK_HEIGHT = 96/,
+  "expected the simplified head-to-head strip to use a dedicated shared track height"
 );
 
 assert.match(
   source,
-  /const MOMENTUM_BAR_WIDTH = 18/,
-  "expected the head-to-head strip to keep readable momentum bar width"
+  /styles\.momentumTrack/,
+  "expected the simplified head-to-head strip to use a single momentum track per game"
+);
+
+assert.match(
+  source,
+  /styles\.momentumCapsule/,
+  "expected the simplified head-to-head strip to render cleaner vertical result capsules"
+);
+
+assert.match(
+  source,
+  /styles\.latestResultFrame/,
+  "expected the latest head-to-head result to get a dedicated highlight frame"
 );
 
 assert.match(

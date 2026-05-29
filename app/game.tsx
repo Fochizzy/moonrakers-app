@@ -49,6 +49,10 @@ import {
   withAlpha,
 } from '@/utils/gameScreenTheme';
 import {
+  isPlayableTurnMetaType,
+  sanitizeHeadToHeadSelection,
+} from '@/utils/headToHeadMission';
+import {
   PLAYER_STRIP_CARD_WIDTH,
   PLAYER_STRIP_GAP,
   PLAYER_STRIP_SIDE_INSET,
@@ -70,6 +74,11 @@ type Player = {
 
 type BinaryChoice = 0 | 1 | null;
 
+type HeadToHeadMissionSummary = {
+  firstPlaceName: string;
+  secondPlaceName: string;
+};
+
 type StoredRound = {
   id: string;
   playerId: string;
@@ -81,8 +90,9 @@ type StoredRound = {
   objectiveCount: number;
   objectivePrestige: number;
   createdAt: number;
-  metaType?: 'main' | 'bonusObjective';
+  metaType?: 'main' | 'bonusObjective' | 'headToHeadFirstPlace' | 'headToHeadSecondPlace';
   linkedTurnId?: string;
+  headToHeadScoreBonus?: number;
 };
 
 const initialCurrentState: CurrentTurnStats = {
@@ -92,6 +102,8 @@ const initialCurrentState: CurrentTurnStats = {
   assistRecipients: {},
   assistPrestigeRecipients: {},
   objectiveCount: 0,
+  headToHeadFirstPlaceId: null,
+  headToHeadSecondPlaceId: null,
 };
 
 const UI = {
@@ -119,7 +131,7 @@ function clampCount(value: unknown): number {
 }
 
 function getDisplayRounds(rounds: StoredRound[]) {
-  return rounds.filter((round) => round.metaType !== 'bonusObjective');
+  return rounds.filter((round) => isPlayableTurnMetaType(round.metaType));
 }
 
 function buildEditStateFromRound(
@@ -130,7 +142,17 @@ function buildEditStateFromRound(
   contractChoice: BinaryChoice;
   failureChoice: BinaryChoice;
   bonusObjectiveCounts: Record<string, number>;
+  headToHeadFirstPlaceId: string | null;
+  headToHeadSecondPlaceId: string | null;
 } {
+  const firstPlaceRound =
+    linkedRounds.find((linkedRound) => linkedRound.metaType === 'headToHeadFirstPlace') ?? null;
+  const secondPlaceRound =
+    linkedRounds.find((linkedRound) => linkedRound.metaType === 'headToHeadSecondPlace') ?? null;
+  const headToHeadSelection = sanitizeHeadToHeadSelection(
+    firstPlaceRound?.playerId,
+    secondPlaceRound?.playerId,
+  );
   const current: CurrentTurnStats = {
     prestige: toNumber(round?.prestige),
     contracts: Math.min(Math.max(toNumber(round?.contracts), 0), 1),
@@ -138,6 +160,8 @@ function buildEditStateFromRound(
     assistRecipients: { ...(round?.assistRecipients ?? {}) },
     assistPrestigeRecipients: { ...(round?.assistPrestigeRecipients ?? {}) },
     objectiveCount: clampCount(round?.objectiveCount ?? round?.objectivePrestige),
+    headToHeadFirstPlaceId: headToHeadSelection.firstPlaceId,
+    headToHeadSecondPlaceId: headToHeadSelection.secondPlaceId,
   };
 
   const bonusObjectiveCounts: Record<string, number> = {};
@@ -145,6 +169,7 @@ function buildEditStateFromRound(
   for (const linkedRound of linkedRounds) {
     if (!linkedRound?.playerId) continue;
     if (linkedRound.playerId === round.playerId) continue;
+    if (linkedRound.metaType !== 'bonusObjective') continue;
     bonusObjectiveCounts[linkedRound.playerId] = clampCount(
       linkedRound.objectiveCount ?? linkedRound.objectivePrestige
     );
@@ -155,6 +180,8 @@ function buildEditStateFromRound(
     contractChoice: current.contracts === 1 ? 1 : 0,
     failureChoice: current.failures === 1 ? 1 : 0,
     bonusObjectiveCounts,
+    headToHeadFirstPlaceId: headToHeadSelection.firstPlaceId,
+    headToHeadSecondPlaceId: headToHeadSelection.secondPlaceId,
   };
 }
 
@@ -321,6 +348,16 @@ function ScaleButton({
   );
 }
 
+function HeadToHeadMissionSummaryText({
+  summary,
+}: {
+  summary: HeadToHeadMissionSummary;
+}) {
+  return (
+    <Text style={styles.headToHeadActiveMeta}>1st: {summary.firstPlaceName} / 2nd: {summary.secondPlaceName}</Text>
+  );
+}
+
 function DirectPrestigeSection({
   currentDirectPrestige,
   currentAccent,
@@ -330,6 +367,9 @@ function DirectPrestigeSection({
   onSelectContract,
   onSelectFailure,
   stayAtBaseSelected,
+  headToHeadMissionSummary,
+  onOpenHeadToHeadMission,
+  onClearHeadToHeadMission,
 }: {
   currentDirectPrestige: number;
   currentAccent: string;
@@ -339,10 +379,14 @@ function DirectPrestigeSection({
   onSelectContract: (value: 0 | 1) => void;
   onSelectFailure: (value: 0 | 1) => void;
   stayAtBaseSelected: boolean;
+  headToHeadMissionSummary: HeadToHeadMissionSummary | null;
+  onOpenHeadToHeadMission: () => void;
+  onClearHeadToHeadMission: () => void;
 }) {
   const successSelected = contractChoice === 1;
   const failureSelected = failureChoice === 1;
   const darkerAccent = mixWithBlack(currentAccent, 0.82);
+  const headToHeadMissionActive = Boolean(headToHeadMissionSummary);
 
   const counterTintAlpha =
     currentDirectPrestige <= 0 ? 0.1 : Math.min(0.1 + currentDirectPrestige * 0.025, 0.22);
@@ -352,10 +396,14 @@ function DirectPrestigeSection({
       style={[
         styles.sectionCard,
         {
-          borderColor: withAlpha(currentAccent, 0.36),
-          backgroundColor: mixWithBlack(currentAccent, 0.84),
+          borderColor: headToHeadMissionActive
+            ? withAlpha(UI.silver, 0.5)
+            : withAlpha(currentAccent, 0.36),
+          backgroundColor: headToHeadMissionActive
+            ? withAlpha(UI.silver, 0.12)
+            : mixWithBlack(currentAccent, 0.84),
         },
-        glowStyle(withAlpha(currentAccent, 0.95), 0.16, 8, 6),
+        glowStyle(withAlpha(headToHeadMissionActive ? UI.silver : currentAccent, 0.95), 0.16, 8, 6),
       ]}
     >
       <View
@@ -365,13 +413,19 @@ function DirectPrestigeSection({
           {
             backgroundColor: stayAtBaseSelected
               ? withAlpha(UI.gold, 0.05)
+              : headToHeadMissionActive
+              ? withAlpha(UI.silver, 0.12)
               : withAlpha(currentAccent, 0.09),
             borderColor: stayAtBaseSelected
               ? withAlpha(UI.gold, 0.44)
+              : headToHeadMissionActive
+              ? withAlpha(UI.silver, 0.5)
               : withAlpha(currentAccent, 0.38),
           },
           stayAtBaseSelected
             ? glowStyle(withAlpha(UI.gold, 0.92), 0.12, 6, 4)
+            : headToHeadMissionActive
+            ? glowStyle(withAlpha(UI.silver, 0.88), 0.16, 8, 5)
             : glowStyle(withAlpha(currentAccent, 0.95), 0.1, 6, 4),
         ]}
       >
@@ -380,6 +434,34 @@ function DirectPrestigeSection({
         {stayAtBaseSelected ? (
           <View style={styles.baseModeBoxElite}>
             <Text style={styles.baseModeTextElite}>BASE</Text>
+          </View>
+        ) : headToHeadMissionActive ? (
+          <View
+            style={[
+              styles.headToHeadActiveBox,
+              {
+                borderColor: withAlpha(UI.silver, 0.5),
+                backgroundColor: withAlpha(UI.silver, 0.12),
+              },
+              glowStyle(withAlpha(UI.silver, 0.82), 0.14, 8, 5),
+            ]}
+          >
+            <ScaleButton onPress={onOpenHeadToHeadMission} style={styles.headToHeadActiveBody}>
+              <Text style={styles.headToHeadActiveTitle}>Head to Head Mission</Text>
+              {headToHeadMissionSummary ? (
+                <View style={styles.headToHeadActiveSummaryWrap}>
+                  <HeadToHeadMissionSummaryText summary={headToHeadMissionSummary} />
+                </View>
+              ) : null}
+            </ScaleButton>
+            <View style={styles.headToHeadActiveFooter}>
+              <ScaleButton
+                onPress={onClearHeadToHeadMission}
+                style={styles.headToHeadActiveClearButton}
+              >
+                <Text style={styles.headToHeadActiveClearText}>Clear</Text>
+              </ScaleButton>
+            </View>
           </View>
         ) : (
           <>
@@ -458,6 +540,19 @@ function DirectPrestigeSection({
                 {!successSelected ? <Text style={styles.contractLabel}>Contract Failed</Text> : null}
               </ScaleButton>
             </View>
+
+            <ScaleButton
+              onPress={onOpenHeadToHeadMission}
+              style={[
+                styles.headToHeadButton,
+                {
+                  borderColor: withAlpha(currentAccent, 0.36),
+                  backgroundColor: withAlpha(currentAccent, 0.08),
+                },
+              ]}
+            >
+              <Text style={styles.headToHeadButtonTitle}>Head to Head Mission</Text>
+            </ScaleButton>
           </>
         )}
       </View>
@@ -485,12 +580,12 @@ function AssistAnimatedRow({
 
   const animatedHeight = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 56],
+    outputRange: [0, 52],
   });
 
   const animatedMarginBottom = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 5],
+    outputRange: [0, 2],
   });
 
   return (
@@ -804,19 +899,11 @@ function ObjectivesSection({
   onToggleCollapsed: () => void;
   onSelectNone: () => void;
 }) {
-  const totalAwarded = playersInTurnOrder.reduce((sum, player) => {
-    const count =
-      player.id === currentPlayerId
-        ? clampCount(currentObjectiveCount)
-        : clampCount(objectiveAwardsByPlayer[player.id]);
-    return sum + count;
-  }, 0);
-
   return (
     <View style={[styles.sectionCard, { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: UI.card }, glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8)]}>
       <View style={styles.sectionHeaderRow}>
         <ScaleButton onPress={onToggleCollapsed} style={styles.headerTapZone}>
-          <Text style={styles.sectionTitle}>Objectives {totalAwarded} awarded</Text>
+          <Text style={styles.sectionTitle}>Objectives</Text>
         </ScaleButton>
         <View style={styles.headerActions}>
           <Text style={styles.chevron}>{collapsed ? '▾' : '▴'}</Text>
@@ -1066,6 +1153,26 @@ export default function Game() {
     () => getLeaderboard(totals as any, players as any, rounds as any),
     [totals, players, rounds]
   );
+  const headToHeadMissionSummary = useMemo<HeadToHeadMissionSummary | null>(() => {
+    const selection = sanitizeHeadToHeadSelection(
+      current.headToHeadFirstPlaceId,
+      current.headToHeadSecondPlaceId,
+    );
+    if (!selection.firstPlaceId || !selection.secondPlaceId) {
+      return null;
+    }
+
+    const firstPlaceName =
+      players.find((player) => player.id === selection.firstPlaceId)?.name ?? '1st place set';
+    const secondPlaceName =
+      players.find((player) => player.id === selection.secondPlaceId)?.name ?? '2nd place set';
+
+    return {
+      firstPlaceName,
+      secondPlaceName,
+    };
+  }, [current.headToHeadFirstPlaceId, current.headToHeadSecondPlaceId, players]);
+  const headToHeadMissionActive = Boolean(headToHeadMissionSummary);
   const finishWinnerId = leaderboardEntries[0]?.id ?? null;
   const {
     currentStatus,
@@ -1104,7 +1211,7 @@ export default function Game() {
   const canSubmitTurn = useMemo(() => {
     if (!activeGame || !currentPlayer) return false;
     if (players.length < 2) return false;
-    if (!stayAtBaseSelected && !hasOutcomeSelection) return false;
+    if (!stayAtBaseSelected && !headToHeadMissionActive && !hasOutcomeSelection) return false;
     if (current.contracts === 1 && current.failures === 1) return false;
     return true;
   }, [
@@ -1112,6 +1219,7 @@ export default function Game() {
     currentPlayer,
     players.length,
     stayAtBaseSelected,
+    headToHeadMissionActive,
     hasOutcomeSelection,
     current.contracts,
     current.failures,
@@ -1172,6 +1280,46 @@ export default function Game() {
 
   function updateCurrent(patch: Partial<CurrentTurnStats>) {
     commitGameplayPatch({ current: patch });
+  }
+
+  function clearHeadToHeadMission() {
+    updateCurrent({ headToHeadFirstPlaceId: null, headToHeadSecondPlaceId: null });
+  }
+
+  function syncHeadToHeadMissionMode() {
+    const assistRecipients: Record<string, number> = {};
+    const assistPrestigeRecipients: Record<string, number> = {};
+    const nextCollapsed: Record<string, boolean> = {};
+    const nextHidden: Record<string, boolean> = {};
+
+    for (const player of otherPlayers) {
+      assistRecipients[player.id] = 0;
+      assistPrestigeRecipients[player.id] = 0;
+      nextCollapsed[player.id] = false;
+      nextHidden[player.id] = true;
+    }
+
+    preBaseSnapshotRef.current = null;
+    setStayAtBaseSelected(false);
+    setContractChoice(0);
+    setFailureChoice(0);
+    setAssistsCollapsed(false);
+    setCollapsedAssistPlayers(nextCollapsed);
+    setHiddenAssistPlayers(nextHidden);
+    setCollapsingAssistPlayers({});
+
+    commitGameplayPatch({
+      current: {
+        prestige: 0,
+        contracts: 0,
+        failures: 0,
+        assistRecipients,
+        assistPrestigeRecipients,
+        objectiveCount: current.objectiveCount ?? 0,
+        headToHeadFirstPlaceId: current.headToHeadFirstPlaceId ?? null,
+        headToHeadSecondPlaceId: current.headToHeadSecondPlaceId ?? null,
+      },
+    });
   }
 
   function applyContractChoice(next: 0 | 1) {
@@ -1311,6 +1459,11 @@ export default function Game() {
     setAssistsCollapsed(false);
   }
 
+  useEffect(() => {
+    if (!headToHeadMissionActive) return;
+    syncHeadToHeadMissionMode();
+  }, [headToHeadMissionActive]);
+
   function resetTurnEditorState() {
     setContractChoice(0);
     setFailureChoice(0);
@@ -1391,6 +1544,8 @@ export default function Game() {
         assistRecipients: current.assistRecipients ?? {},
         assistPrestigeRecipients: current.assistPrestigeRecipients ?? {},
         objectiveCount: current.objectiveCount ?? 0,
+        headToHeadFirstPlaceId: null,
+        headToHeadSecondPlaceId: null,
       },
     });
   }
@@ -1647,6 +1802,9 @@ export default function Game() {
           onSelectContract={applyContractChoice}
           onSelectFailure={applyFailureChoice}
           stayAtBaseSelected={stayAtBaseSelected}
+          headToHeadMissionSummary={headToHeadMissionSummary}
+          onOpenHeadToHeadMission={() => router.push(APP_ROUTES.headToHeadMission)}
+          onClearHeadToHeadMission={clearHeadToHeadMission}
         />
 
         <AssistSection
@@ -1933,6 +2091,86 @@ const styles = StyleSheet.create({
   contractLabel: {
     color: UI.text,
     fontSize: 10,
+    fontWeight: '700',
+  },
+  headToHeadButton: {
+    minHeight: 50,
+    marginTop: 8,
+    borderRadius: 10,
+    borderWidth: 1.25,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  headToHeadButtonTitle: {
+    color: UI.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  headToHeadButtonMeta: {
+    color: UI.textMuted,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  headToHeadActiveBox: {
+    marginTop: 8,
+    minHeight: 112,
+    position: 'relative',
+    borderRadius: 10,
+    borderWidth: 1.25,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    overflow: 'hidden',
+  },
+  headToHeadActiveBody: {
+    minHeight: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  headToHeadActiveTitle: {
+    color: UI.text,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  headToHeadActiveSummaryWrap: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+  },
+  headToHeadActiveMeta: {
+    color: '#eef2f7',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'left',
+  },
+  headToHeadOrdinalSuffix: {
+    fontSize: 7,
+    lineHeight: 10,
+    fontWeight: '700',
+    transform: [{ translateY: -3 }],
+  },
+  headToHeadActiveFooter: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
+  headToHeadActiveClearButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: withAlpha(UI.silver, 0.42),
+    backgroundColor: withAlpha(UI.silver, 0.14),
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  headToHeadActiveClearText: {
+    color: UI.text,
+    fontSize: 9,
     fontWeight: '700',
   },
   baseModeBoxElite: {

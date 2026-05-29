@@ -4,6 +4,7 @@ import {
   normalizeTotals,
   toNumber,
 } from '@/utils/gameTotals';
+import { isPlayableTurnMetaType } from '@/utils/headToHeadMission';
 import {
   getRecordedSeat,
   type Game,
@@ -41,7 +42,7 @@ function getRounds(game: Game): any[] {
 }
 
 function isBonusRound(round: any) {
-  return round?.metaType === 'bonusObjective';
+  return !isPlayableTurnMetaType(round?.metaType);
 }
 
 function getStayAtBaseTurnsForRound(round: any) {
