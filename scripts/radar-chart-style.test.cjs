@@ -6,28 +6,17 @@ const radarSource = fs.readFileSync(
   path.join(__dirname, "..", "components", "charts", "RadarChart", "RadarChart.tsx"),
   "utf8"
 );
-const inspectorSource = fs.readFileSync(
-  path.join(
-    __dirname,
-    "..",
-    "components",
-    "charts",
-    "RadarChart",
-    "RadarChartInspector.tsx"
-  ),
-  "utf8"
+
+assert.match(
+  radarSource,
+  /<ChartFocusCard[\s\S]*<ChartStage[\s\S]*Comparison Summary[\s\S]*Deep Comparison Report[\s\S]*Trait Definitions/s,
+  "expected the radar chart to keep the focus card, staged plot, comparison summary, deep comparison report, and trait glossary seam"
 );
 
 assert.match(
   radarSource,
-  /<ChartFocusCard[\s\S]*<ChartStage[\s\S]*<RadarChartInspector/s,
-  "expected the radar chart to keep the focus card, staged plot, and inspector seam"
-);
-
-assert.match(
-  inspectorSource,
-  /<ChartFocusCard[\s\S]*Delta/s,
-  "expected the radar inspector to keep the shared focus card and delta readout"
+  /Tap a point to highlight its matching axis definition\./,
+  "expected the radar chart to keep the tap-to-highlight helper copy for the trait glossary"
 );
 
 console.log("radar-chart-style.test.cjs passed");
