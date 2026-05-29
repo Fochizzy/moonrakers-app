@@ -19,4 +19,10 @@ assert.match(
   "expected the radar chart to keep the tap-to-highlight helper copy for the trait glossary"
 );
 
+assert.match(
+  radarSource,
+  /Deep Comparison Report[\s\S]*<ReportParagraphPanels[\s\S]*Trait Definitions/s,
+  "expected the radar chart to keep inset paragraph panels inside the deep comparison report before the glossary"
+);
+
 console.log("radar-chart-style.test.cjs passed");

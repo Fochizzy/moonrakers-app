@@ -434,6 +434,24 @@ function getReportSectionSubtitle(args: {
   return "";
 }
 
+function ReportParagraphPanels({
+  paragraphs,
+  sectionTitle,
+}: {
+  paragraphs: string[];
+  sectionTitle: string;
+}) {
+  return (
+    <View style={styles.reportParagraphStack}>
+      {paragraphs.map((paragraph, index) => (
+        <View key={`${sectionTitle}-${index}`} style={styles.reportParagraphPanel}>
+          <Text style={styles.reportParagraph}>{paragraph}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function SectionHeader({
   title,
   sub,
@@ -881,16 +899,10 @@ export default function RadarChart({
                   </Text>
                 </View>
               </View>
-              <View style={styles.reportParagraphStack}>
-                {overviewReportSection.paragraphs.map((paragraph, index) => (
-                  <Text
-                    key={`${overviewReportSection.title}-${index}`}
-                    style={styles.reportParagraph}
-                  >
-                    {paragraph}
-                  </Text>
-                ))}
-              </View>
+              <ReportParagraphPanels
+                paragraphs={overviewReportSection.paragraphs}
+                sectionTitle={overviewReportSection.title}
+              />
             </View>
           ) : null}
 
@@ -914,17 +926,14 @@ export default function RadarChart({
                         identity,
                         primaryLabel,
                         title: section.title,
-                      })}
+                    })}
                     </Text>
                   </View>
                 </View>
-                <View style={styles.reportParagraphStack}>
-                  {section.paragraphs.map((paragraph, index) => (
-                    <Text key={`${section.title}-${index}`} style={styles.reportParagraph}>
-                      {paragraph}
-                    </Text>
-                  ))}
-                </View>
+                <ReportParagraphPanels
+                  paragraphs={section.paragraphs}
+                  sectionTitle={section.title}
+                />
               </View>
             );
           })}
@@ -943,16 +952,10 @@ export default function RadarChart({
                   </Text>
                 </View>
               </View>
-              <View style={styles.reportParagraphStack}>
-                {consistencyReportSection.paragraphs.map((paragraph, index) => (
-                  <Text
-                    key={`${consistencyReportSection.title}-${index}`}
-                    style={styles.reportParagraph}
-                  >
-                    {paragraph}
-                  </Text>
-                ))}
-              </View>
+              <ReportParagraphPanels
+                paragraphs={consistencyReportSection.paragraphs}
+                sectionTitle={consistencyReportSection.title}
+              />
             </View>
           ) : null}
         </View>
@@ -1179,18 +1182,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   deepReportSectionCard: {
-    gap: 8,
+    gap: 10,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: CHART_COLORS.borderStrong,
     backgroundColor: CHART_COLORS.cardAlt,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   reportSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   reportSectionBadge: {
     minWidth: 34,
@@ -1210,7 +1213,7 @@ const styles = StyleSheet.create({
   },
   reportSectionHeaderCopy: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   reportSectionTitle: {
     color: CHART_COLORS.textStrong,
@@ -1220,15 +1223,23 @@ const styles = StyleSheet.create({
   reportSectionSubtitle: {
     color: CHART_COLORS.sub,
     fontSize: 11,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   reportParagraphStack: {
-    gap: 8,
+    gap: 10,
+  },
+  reportParagraphPanel: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: CHART_COLORS.border,
+    backgroundColor: "rgba(8,16,34,0.56)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   reportParagraph: {
     color: CHART_COLORS.text,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   definitionCard: {
     gap: 8,

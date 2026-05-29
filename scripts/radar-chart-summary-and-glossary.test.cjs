@@ -31,6 +31,18 @@ assert.match(
   "expected the radar chart to render stacked deep-report section cards"
 );
 
+assert.match(
+  radarSource,
+  /reportParagraphPanel/,
+  "expected the radar chart to render inset paragraph panels inside deep report cards"
+);
+
+assert.match(
+  radarSource,
+  /style={styles\.reportParagraphPanel}/,
+  "expected each deep report paragraph to render inside a dedicated panel wrapper"
+);
+
 assert.doesNotMatch(
   radarSource,
   /<View style={styles\.deepReportCard}>[\s\S]*reportSectionStack/s,
