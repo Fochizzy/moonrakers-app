@@ -6,6 +6,14 @@ const radarSource = fs.readFileSync(
   path.join(__dirname, "..", "components", "charts", "RadarChart", "RadarChart.tsx"),
   "utf8"
 );
+const definitionTargetsSource = fs.readFileSync(
+  path.join(__dirname, "..", "utils", "definitionTargets.ts"),
+  "utf8"
+);
+const definitionCatalogSource = fs.readFileSync(
+  path.join(__dirname, "..", "utils", "definitionCatalog.ts"),
+  "utf8"
+);
 
 assert.match(
   radarSource,
@@ -39,6 +47,12 @@ assert.match(
 
 assert.match(
   radarSource,
+  /function BulletRows\(/,
+  "expected the radar chart to define a generic bullet-row helper that can be reused outside the summary card"
+);
+
+assert.match(
+  radarSource,
   /summaryBulletRow/,
   "expected the radar chart to define bullet-row styling for summary lines"
 );
@@ -54,6 +68,46 @@ assert.match(
   /style={styles\.reportParagraphPanel}/,
   "expected each deep report paragraph to render inside a dedicated panel wrapper"
 );
+
+assert.match(
+  radarSource,
+  /function ReportParagraphPanels[\s\S]*<BulletRows/s,
+  "expected each deep report paragraph panel to render through the shared bullet-row helper"
+);
+
+assert.match(
+  radarSource,
+  /Trait Definitions[\s\S]*<Pressable[\s\S]*styles\.definitionItem/s,
+  "expected trait definition rows to be pressable cards rather than static views"
+);
+
+assert.match(
+  radarSource,
+  /useRouter[\s\S]*usePathname[\s\S]*buildDefinitionsRoute/s,
+  "expected the radar chart to build exact definitions routes for the pressable trait glossary rows"
+);
+
+for (const [metricKey, title] of [
+  ["finisher", "Finisher"],
+  ["starter", "Starter"],
+  ["supporter", "Supporter"],
+  ["receiver", "Receiver"],
+  ["stability", "Stability"],
+  ["risk", "Risk"],
+  ["conversion", "Conversion"],
+]) {
+  assert.match(
+    definitionTargetsSource,
+    new RegExp(`"${metricKey}"`),
+    `expected definitionTargets to recognize the ${metricKey} radar trait`
+  );
+
+  assert.match(
+    definitionCatalogSource,
+    new RegExp(`key: "${metricKey}"[\\s\\S]*title: "${title}"`),
+    `expected definitionCatalog to include an exact glossary term for ${title}`
+  );
+}
 
 assert.doesNotMatch(
   radarSource,

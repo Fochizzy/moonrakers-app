@@ -1,10 +1,22 @@
 import React, { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import {
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
+import { usePathname, useRouter } from "expo-router";
 import Svg, { Circle, Line, Path, Polygon, Text as SvgText } from "react-native-svg";
 
 import ChartFocusCard from "@/components/charts/ChartFocusCard";
 import ChartStage from "@/components/charts/ChartStage";
 import Text from "@/components/ui/Text";
+import {
+  buildDefinitionsRoute,
+  resolveDefinitionSourceLabel,
+} from "@/utils/appRoutes";
 import { CHART_COLORS } from "../chartVisualSystem";
 import {
   buildRadarChartModel,
@@ -445,7 +457,41 @@ function ReportParagraphPanels({
     <View style={styles.reportParagraphStack}>
       {paragraphs.map((paragraph, index) => (
         <View key={`${sectionTitle}-${index}`} style={styles.reportParagraphPanel}>
-          <Text style={styles.reportParagraph}>{paragraph}</Text>
+          <BulletRows
+            keyPrefix={`${sectionTitle}-${index}`}
+            lines={[paragraph]}
+            stackStyle={styles.reportBulletStack}
+            rowStyle={styles.reportBulletRow}
+            dotStyle={styles.reportBulletDot}
+            textStyle={styles.reportParagraph}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function BulletRows({
+  dotStyle,
+  keyPrefix,
+  lines,
+  rowStyle,
+  stackStyle,
+  textStyle,
+}: {
+  dotStyle?: StyleProp<ViewStyle>;
+  keyPrefix: string;
+  lines: string[];
+  rowStyle?: StyleProp<ViewStyle>;
+  stackStyle?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+}) {
+  return (
+    <View style={[styles.summaryBulletStack, stackStyle]}>
+      {lines.map((line, index) => (
+        <View key={`${keyPrefix}-${index}`} style={[styles.summaryBulletRow, rowStyle]}>
+          <View style={[styles.summaryBulletDot, dotStyle]} />
+          <Text style={[styles.summaryLine, textStyle]}>{line}</Text>
         </View>
       ))}
     </View>
@@ -459,16 +505,7 @@ function SummaryBulletRows({
   keyPrefix: string;
   lines: string[];
 }) {
-  return (
-    <View style={styles.summaryBulletStack}>
-      {lines.map((line, index) => (
-        <View key={`${keyPrefix}-${index}`} style={styles.summaryBulletRow}>
-          <View style={styles.summaryBulletDot} />
-          <Text style={styles.summaryLine}>{line}</Text>
-        </View>
-      ))}
-    </View>
-  );
+  return <BulletRows keyPrefix={keyPrefix} lines={lines} />;
 }
 
 function SectionHeader({
@@ -495,6 +532,8 @@ export default function RadarChart({
   title = "Player Radar",
   showHeader = true,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const normalizedComparisons = useMemo(() => {
     if (comparisons?.length) {
       return comparisons.slice(0, 4);
@@ -578,6 +617,7 @@ export default function RadarChart({
   const heroAccent = heroSeriesEntry?.series.stroke ?? CHART_COLORS.accent;
   const validPrimaryPath = typeof model.primaryPath === "string" && model.primaryPath.length > 0;
   const comparisonCount = comparisonSeriesModels.length;
+  const definitionSourceLabel = resolveDefinitionSourceLabel(pathname);
 
   return (
     <View style={styles.wrap}>
@@ -975,21 +1015,35 @@ export default function RadarChart({
       <View style={styles.definitionCard}>
         <Text style={styles.definitionTitle}>Trait Definitions</Text>
         <Text style={styles.definitionSubtitle}>
-          Tap a point to highlight its matching axis definition.
+          Tap a point to highlight its matching axis definition, or tap a row to open the full glossary term.
         </Text>
         <View style={styles.definitionList}>
           {model.entries.map((entry) => {
             const active = entry.key === focused?.key;
             return (
-              <View
+              <Pressable
                 key={entry.key}
-                style={[styles.definitionItem, active ? styles.definitionItemActive : null]}
+                accessibilityRole="button"
+                accessibilityLabel={`Open glossary term for ${entry.label}`}
+                onPress={() =>
+                  router.push(
+                    buildDefinitionsRoute({
+                      metric: entry.key,
+                      sourceLabel: definitionSourceLabel,
+                    }),
+                  )
+                }
+                style={({ pressed }) => [
+                  styles.definitionItem,
+                  active ? styles.definitionItemActive : null,
+                  pressed ? styles.definitionItemPressed : null,
+                ]}
               >
                 <Text style={[styles.definitionLabel, active ? styles.definitionLabelActive : null]}>
                   {entry.label}
                 </Text>
                 <Text style={styles.definitionBody}>{entry.meaning}</Text>
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -1265,9 +1319,22 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   reportParagraph: {
+    flex: 1,
     color: CHART_COLORS.text,
     fontSize: 12,
     lineHeight: 20,
+  },
+  reportBulletStack: {
+    gap: 0,
+  },
+  reportBulletRow: {
+    gap: 12,
+  },
+  reportBulletDot: {
+    width: 7,
+    height: 7,
+    marginTop: 7,
+    backgroundColor: "rgba(103,232,249,0.82)",
   },
   definitionCard: {
     gap: 8,
@@ -1303,6 +1370,9 @@ const styles = StyleSheet.create({
   definitionItemActive: {
     borderColor: "rgba(168,85,247,0.42)",
     backgroundColor: "rgba(168,85,247,0.12)",
+  },
+  definitionItemPressed: {
+    opacity: 0.84,
   },
   definitionLabel: {
     color: CHART_COLORS.textStrong,

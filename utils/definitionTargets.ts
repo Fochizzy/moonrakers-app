@@ -165,12 +165,19 @@ const DEFINITION_METRIC_KEYS = new Set([
   "bestSupportPartner",
   "mostCommonAssistTarget",
   "importHealth",
+  "finisher",
+  "starter",
+  "supporter",
+  "receiver",
+  "stability",
   "playstyle",
   "dependency",
   "aggressor",
   "supportEngine",
   "opportunist",
   "closer",
+  "risk",
+  "conversion",
 ]);
 
 const DEFINITION_METRIC_ALIASES: Record<string, string> = {

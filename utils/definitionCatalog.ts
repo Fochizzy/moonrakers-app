@@ -11,7 +11,20 @@ export type DefinitionGroup = {
   items: DefinitionItem[];
 };
 
-export const DEFINITION_GROUPS: DefinitionGroup[] = [
+function compareDefinitionTitles(left: string, right: string) {
+  return left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function sortDefinitionItems(items: DefinitionItem[]) {
+  return [...items].sort((left, right) =>
+    compareDefinitionTitles(left.title, right.title)
+  );
+}
+
+const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
   {
     key: "scoring",
     title: "Scoring",
@@ -40,7 +53,7 @@ export const DEFINITION_GROUPS: DefinitionGroup[] = [
       {
         key: "score",
         title: "Score",
-        body: "A broader production total that rolls prestige, contracts, assists, and other tracked output together.",
+        body: "Score does not outrank total prestige in the final result. The game ranks by total prestige first, then uses score as a tiebreak. It also has a lighter influence on ELO: wins stay primary, while the non-prestige part of score gives each rated result a smaller nudge. Score is calculated as:\n- Total Prestige: +1 score per prestige\n- Contract Success: +5 score per contract\n- Assist: +3 score per assist given\n- Failure: -4 score per failure\n- Head-to-Head Mission bonus: add any linked mission score bonus",
       },
       {
         key: "wins",
@@ -377,7 +390,7 @@ export const DEFINITION_GROUPS: DefinitionGroup[] = [
       {
         key: "elo_current",
         title: "Current ELO",
-        body: "The live rating used for leaderboard ordering and current strength reads.",
+        body: "The live rating used for leaderboard ordering and current strength reads. Each player starts at 1000. After every recorded game, the app computes an expected win chance against the field from the rating gaps, then updates rating with round(current + 32 * (actual - expected)). In that formula, actual starts at 1 for a win, 0 for a loss, and 0.5 if no winner is recorded, then gets a smaller bonus-score adjustment based on score excluding raw prestige.",
       },
       {
         key: "elo_peak",
@@ -699,6 +712,31 @@ export const DEFINITION_GROUPS: DefinitionGroup[] = [
         body: "A quick read of whether the player acts more like a Giver, Receiver, or Balanced support profile.",
       },
       {
+        key: "finisher",
+        title: "Finisher",
+        body: "How strongly a player's good positions turn into actual prestige and wins. High finisher profiles cash in when the table gives them a window instead of leaving value stranded.",
+      },
+      {
+        key: "starter",
+        title: "Starter",
+        body: "How reliably a player gets into strong positions early. High starter profiles create tempo, initiative, or board footing before the table fully settles.",
+      },
+      {
+        key: "supporter",
+        title: "Supporter",
+        body: "How much a player's game creates value for teammates through assists, enabling lines, or table support. High supporter profiles lift surrounding players even when they are not finishing the points themselves.",
+      },
+      {
+        key: "receiver",
+        title: "Receiver",
+        body: "How well a player turns incoming help into personal value. High receiver profiles are especially good at converting team support into prestige, tempo, or stronger finishing positions.",
+      },
+      {
+        key: "stability",
+        title: "Stability",
+        body: "How repeatable the player's outcomes stay across different games, tables, and pressure states. High stability profiles preserve their identity without swinging wildly from matchup to matchup.",
+      },
+      {
         key: "bestCondition",
         title: "Best Condition",
         body: "The strongest supported split for this player, based on tracked sample, win rate, and average prestige.",
@@ -744,6 +782,16 @@ export const DEFINITION_GROUPS: DefinitionGroup[] = [
         body: "A playstyle that creates value for others, feeds assists, and amplifies synergy across the table.",
       },
       {
+        key: "risk",
+        title: "Risk",
+        body: "How willing the profile is to take volatile lines, absorb instability, or trade steadiness for upside. High risk profiles often create sharper swings in both ceiling and floor.",
+      },
+      {
+        key: "conversion",
+        title: "Conversion",
+        body: "How often opportunities become actual results. High conversion profiles close the loop from setup to payoff instead of leaving strong positions unfinished.",
+      },
+      {
         key: "opportunist",
         title: "Opportunist",
         body: "A playstyle that wins through timing, efficiency, and capitalizing on strong windows instead of forcing pace every turn.",
@@ -757,6 +805,13 @@ export const DEFINITION_GROUPS: DefinitionGroup[] = [
   },
 ];
 
+export const DEFINITION_GROUPS: DefinitionGroup[] = RAW_DEFINITION_GROUPS.map(
+  (group) => ({
+    ...group,
+    items: sortDefinitionItems(group.items),
+  })
+);
+
 export const RELATED_DEFINITION_KEYS: Record<string, string[]> = {
   elo_current: ["elo_peak", "elo_confidence", "elo_expected_vs_actual", "elo_momentum"],
   elo_peak: ["elo_current", "trajectoryGrade", "promotionOdds", "elo_momentum"],
@@ -767,6 +822,13 @@ export const RELATED_DEFINITION_KEYS: Record<string, string[]> = {
   playstyle: ["baseRate", "baseTurnsPerGame", "styleRead", "supportStyle"],
   styleRead: ["playstyle", "baseRate", "baseTurnsPerGame", "supportStyle"],
   supportStyle: ["playstyle", "assistShare", "netAssistValue", "assistEfficiency"],
+  finisher: ["conversion", "closer", "leadConversion", "lateLeadConversion"],
+  starter: ["tempoIndex", "tempoControl", "aggroIndex", "leadConversion"],
+  supporter: ["supportStyle", "supportEngine", "assistEfficiency", "bestSupportPartner"],
+  receiver: ["supportStyle", "assistShare", "assistPrestigeReceived", "dependency"],
+  stability: ["consistencyScore", "pressureReliability", "momentum", "clutchScore"],
+  risk: ["aggroIndex", "failureRate", "tempoIndex", "pressureReliability"],
+  conversion: ["finisher", "leadConversion", "lateLeadConversion", "objectiveConversionRate"],
   tempoControl: ["tempoIndex", "momentum", "recentFormDelta", "consistencyScore"],
   consistencyScore: ["clutchScore", "momentum", "recentFormDelta", "pressureReliability"],
   synergyIndex: ["topSynergyPairs", "pairingCorrelations", "cohesionAffect", "assistEfficiency"],
@@ -775,6 +837,15 @@ export const RELATED_DEFINITION_KEYS: Record<string, string[]> = {
 const GROUP_BY_KEY = new Map(DEFINITION_GROUPS.map((group) => [group.key, group]));
 const ITEM_BY_KEY = new Map(DEFINITION_GROUPS.flatMap((group) => group.items.map((item) => [item.key, item])));
 const GROUP_KEY_BY_ITEM_KEY = new Map(DEFINITION_GROUPS.flatMap((group) => group.items.map((item) => [item.key, group.key])));
+
+function sortDefinitionKeysByTitle(keys: string[]) {
+  return [...keys].sort((left, right) =>
+    compareDefinitionTitles(
+      ITEM_BY_KEY.get(left)?.title ?? left,
+      ITEM_BY_KEY.get(right)?.title ?? right
+    )
+  );
+}
 
 export function getDefinitionGroup(groupKey: string | null | undefined) {
   const normalized = String(groupKey ?? '').trim();
@@ -804,9 +875,11 @@ export function getRelatedDefinitionKeys(itemKey: string | null | undefined, lim
     return [];
   }
 
-  const explicit = RELATED_DEFINITION_KEYS[normalized] ?? [];
+  const explicit = (RELATED_DEFINITION_KEYS[normalized] ?? []).filter((key) =>
+    ITEM_BY_KEY.has(key)
+  );
   if (explicit.length > 0) {
-    return explicit.filter((key) => ITEM_BY_KEY.has(key)).slice(0, limit);
+    return sortDefinitionKeysByTitle(explicit).slice(0, limit);
   }
 
   const groupKey = GROUP_KEY_BY_ITEM_KEY.get(normalized);
@@ -819,7 +892,11 @@ export function getRelatedDefinitionKeys(itemKey: string | null | undefined, lim
     return [];
   }
 
-  return group.items.filter((item) => item.key !== normalized).slice(0, limit).map((item) => item.key);
+  return sortDefinitionItems(
+    group.items.filter((item) => item.key !== normalized)
+  )
+    .slice(0, limit)
+    .map((item) => item.key);
 }
 
 function isBoundaryCharacter(value: string | undefined) {
