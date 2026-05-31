@@ -745,27 +745,47 @@ export default function StatsScreen() {
             </Text>
             {spotlightEntry ? (
               <View style={styles.playstyleSpotlightCard}>
-                <Text style={styles.playstyleSpotlightEyebrow}>Stay-at-Base Spotlight</Text>
-                <Text style={styles.playstyleSpotlightLabel}>
-                  {toStringValue(spotlightEntry.label, "Playstyle signal")}
-                </Text>
-                <Text style={styles.playstyleSpotlightValue}>
-                  {toDisplayValue(spotlightEntry.value)}
-                </Text>
-              </View>
-            ) : null}
-            {supportingEntries.map((entry, index) => (
-              <View key={toStringValue(entry.key, `playstyle-${index}`)} style={styles.signalCard}>
-                <Text style={styles.signalRank}>#{index + 2}</Text>
-                <View style={styles.signalBody}>
-                  <DefinitionTermText
-                    label={toStringValue(entry.label, `Highlight ${index + 2}`)}
-                    style={styles.signalLabel}
-                  />
-                  <Text style={styles.signalValue}>{toDisplayValue(entry.value)}</Text>
+                <View style={styles.playstyleSpotlightHeader}>
+                  <Text style={styles.playstyleSpotlightEyebrow}>Stay-at-Base Spotlight</Text>
+                  <View style={styles.playstyleSpotlightRankBadge}>
+                    <Text style={styles.playstyleSpotlightRankText}>#1</Text>
+                  </View>
+                </View>
+                <View style={styles.playstyleSpotlightMetricRow}>
+                  <View style={styles.playstyleSpotlightMetricBody}>
+                    <Text style={styles.playstyleSpotlightLabel}>
+                      {toStringValue(spotlightEntry.label, "Playstyle signal")}
+                    </Text>
+                  </View>
+                  <Text style={styles.playstyleSpotlightValue}>
+                    {toDisplayValue(spotlightEntry.value)}
+                  </Text>
                 </View>
               </View>
-            ))}
+            ) : null}
+            {supportingEntries.length > 0 ? (
+              <View style={styles.playstyleSupportGrid}>
+                {supportingEntries.map((entry, index) => (
+                  <View
+                    key={toStringValue(entry.key, `playstyle-${index}`)}
+                    style={styles.playstyleSupportCard}
+                  >
+                    <View style={styles.playstyleSupportRankBadge}>
+                      <Text style={styles.playstyleSupportRankText}>#{index + 2}</Text>
+                    </View>
+                    <View style={styles.playstyleSupportBody}>
+                      <DefinitionTermText
+                        label={toStringValue(entry.label, `Highlight ${index + 2}`)}
+                        style={styles.playstyleSupportLabel}
+                      />
+                      <Text style={styles.playstyleSupportValue}>
+                        {toDisplayValue(entry.value)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         ) : (
           <Text style={styles.emptyInlineText}>
@@ -1193,13 +1213,19 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   playstyleSpotlightCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.28)",
+    borderColor: "rgba(34,197,94,0.32)",
     backgroundColor: "rgba(11,28,25,0.94)",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  playstyleSpotlightHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   playstyleSpotlightEyebrow: {
     color: COLORS.green,
@@ -1208,15 +1234,88 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
+  playstyleSpotlightRankBadge: {
+    minWidth: 40,
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(103,232,249,0.26)",
+    backgroundColor: "rgba(103,232,249,0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  playstyleSpotlightRankText: {
+    color: COLORS.cyan,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+  playstyleSpotlightMetricRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  playstyleSpotlightMetricBody: {
+    flex: 1,
+    minWidth: 0,
+  },
   playstyleSpotlightLabel: {
     color: COLORS.textPrimary,
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 20,
     fontWeight: "900",
   },
   playstyleSpotlightValue: {
-    color: COLORS.gold,
-    fontSize: 12,
+    color: COLORS.cyan,
+    fontSize: 24,
+    lineHeight: 28,
     fontWeight: "900",
+  },
+  playstyleSupportGrid: {
+    gap: 8,
+  },
+  playstyleSupportCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    backgroundColor: "rgba(10,19,38,0.92)",
+  },
+  playstyleSupportRankBadge: {
+    minWidth: 38,
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(103,232,249,0.22)",
+    backgroundColor: "rgba(103,232,249,0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  playstyleSupportRankText: {
+    color: COLORS.cyan,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  playstyleSupportBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  playstyleSupportLabel: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  playstyleSupportValue: {
+    color: COLORS.gold,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.25,
   },
   metricSubsection: {
     gap: 6,

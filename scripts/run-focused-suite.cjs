@@ -23,6 +23,7 @@ const suites = {
     "scripts/chart-guided-rail-route.test.cjs",
     "scripts/chart-setup-primary-cta.test.cjs",
     "scripts/chart-setup-back-pill.test.cjs",
+    "scripts/playstyle-spotlight-layout.test.cjs",
   ],
 };
 
