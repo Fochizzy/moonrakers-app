@@ -243,10 +243,42 @@ export default function StatsScreen() {
       return playerOptions;
     }
 
-    return playerOptions.filter((player) =>
-      player.label.toLowerCase().includes(normalizedQuery),
-    );
+    return playerOptions.filter((player) => {
+      const searchableValues = [
+        player.label,
+        player.displayName,
+        player.playerName,
+        player.id,
+      ]
+        .map((value) => String(value ?? "").trim().toLowerCase())
+        .filter(Boolean);
+
+      return searchableValues.some((value) => value.includes(normalizedQuery));
+    });
   }, [normalizedQuery, playerOptions]);
+  const selectedFocusPlayerOption = useMemo(
+    () => playerOptions.find((player) => player.id === selectedPlayerId) ?? null,
+    [playerOptions, selectedPlayerId]
+  );
+  const focusPlayerSearchItems = useMemo(
+    () =>
+      filteredPlayerOptions.map((player) => ({
+        id: player.id,
+        label: player.label,
+        meta:
+          player.id === selectedPlayerId
+            ? "Currently focused across the stats page"
+            : player.displayName ||
+              player.playerName ||
+              "Switch the page focus to this player",
+      })),
+    [filteredPlayerOptions, selectedPlayerId]
+  );
+  const showSharedFocusPicker = !loading && !error && playerOptions.length > 0;
+  const handleSharedPlayerSelect = (playerId: string) => {
+    setSelectedPlayerId(playerId);
+    setPlayerSearchQuery("");
+  };
 
   const selectedPlayerDetail = useMemo(() => {
     const detail = toRecord(playersSection.detail);
@@ -625,37 +657,15 @@ export default function StatsScreen() {
 
     return (
       <View style={styles.playersList}>
-        <SectionCard title="Player Directory">
-          <PlayerSearchPicker
-            query={playerSearchQuery}
-            onQueryChange={setPlayerSearchQuery}
-            placeholder="Search players"
-            items={filteredPlayerOptions.map((player) => ({
-              id: player.id,
-              label: player.label,
-              meta:
-                player.displayName ||
-                player.playerName ||
-                "Supabase-authored player entry",
-            }))}
-            selectedIds={selectedPlayerId ? [selectedPlayerId] : []}
-            onSelect={setSelectedPlayerId}
-            nestedScrollEnabled
-          />
-        </SectionCard>
-
         <AnalyticsStateSection
           eyebrow="Player Detail"
           title={toStringValue(selectedPlayerDetail.label, "Selected player")}
-          subtitle={toStringValue(
-            selectedPlayerDetail.summary,
-            "Supabase will populate this panel with richer player detail as analytics contracts expand.",
-          )}
+          subtitle="This panel follows the shared Focus Player selection at the top of the stats page."
           actions={<DefinitionsJumpLink category="efficiency" />}
           helpCategory="efficiency"
           state="ready"
           sourceCaption={freshness.sourceCaption(
-            "This detail card is published from the shared stats payload, so the same player read can be reused across analytics surfaces.",
+            "This detail card follows the shared Focus Player selection so the same player read carries across the stats surface.",
           )}
         >
           {detailStats.length > 0 ? (
@@ -951,6 +961,30 @@ export default function StatsScreen() {
         activeTabKey={activeTab}
         onTabChange={(key) => setActiveTab(key as StatsTab)}
       />
+
+      {showSharedFocusPicker ? (
+        <SectionCard
+          title="Focus Player"
+          subtitle={
+            selectedFocusPlayerOption
+              ? `Current focus: ${selectedFocusPlayerOption.label}`
+              : "Change the player-specific focus without leaving the current stats tab."
+          }
+        >
+          <PlayerSearchPicker
+            query={playerSearchQuery}
+            onQueryChange={setPlayerSearchQuery}
+            onClearQuery={() => setPlayerSearchQuery("")}
+            placeholder="Search players"
+            helperText="Use one shared player search here, then browse any stats tab with that same focus."
+            items={focusPlayerSearchItems}
+            selectedIds={selectedPlayerId ? [selectedPlayerId] : []}
+            onSelect={handleSharedPlayerSelect}
+            inputProps={{ returnKeyType: "search" }}
+            showResultsOnlyWhenQuery
+          />
+        </SectionCard>
+      ) : null}
 
       {activeTab === "overview" && renderOverviewTab()}
       {activeTab === "players" && renderPlayersTab()}

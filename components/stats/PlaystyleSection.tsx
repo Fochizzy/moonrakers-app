@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
-import PlayerSearchPicker from "@/components/players/PlayerSearchPicker";
 import PlaystyleScatterCard, {
   type PlaystyleScatterPoint,
 } from "@/components/stats/PlaystyleScatterCard";
@@ -303,7 +302,6 @@ export default function PlaystyleSection({
   selectedPlayerId,
   onSelectPlayer,
 }: Props) {
-  const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const playerColorMap = useMemo(() => {
     const map = new Map<string, string>();
 
@@ -378,27 +376,6 @@ export default function PlaystyleSection({
     () => chunkPlayerTabItems(playerTabItems),
     [playerTabItems]
   );
-  const filteredPlayerItems = useMemo(() => {
-    const normalizedQuery = playerSearchQuery.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return [];
-    }
-
-    return orderedLeaderboard
-      .filter((player) => {
-        const name = String(player.name ?? "").trim().toLowerCase();
-        const id = String(player.id ?? "").trim().toLowerCase();
-        return name.includes(normalizedQuery) || id.includes(normalizedQuery);
-      })
-      .map((player) => ({
-        id: player.id,
-        label: player.id === authProfileId ? "You" : player.name,
-        meta:
-          player.id === resolvedPlayer?.id
-            ? "Currently selected"
-            : "Switch playstyle focus",
-      }));
-  }, [authProfileId, orderedLeaderboard, playerSearchQuery, resolvedPlayer?.id]);
 
   const validPersonalSamples = personalSamples.filter((sample) =>
     Number.isFinite(sample.stayAtBaseRate)
@@ -455,21 +432,6 @@ export default function PlaystyleSection({
             />
           ))}
         </View>
-
-        <PlayerSearchPicker
-          query={playerSearchQuery}
-          onQueryChange={setPlayerSearchQuery}
-          onClearQuery={() => setPlayerSearchQuery("")}
-          placeholder="Search players"
-          items={filteredPlayerItems}
-          selectedIds={[resolvedPlayer.id]}
-          onSelect={(playerId) => {
-            onSelectPlayer(playerId);
-            setPlayerSearchQuery("");
-          }}
-          inputProps={{ returnKeyType: "search" }}
-          showResultsOnlyWhenQuery
-        />
       </View>
 
       <View style={styles.summaryGrid}>

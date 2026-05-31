@@ -13,31 +13,25 @@ const source = read(path.join("components", "stats", "PlaystyleSection.tsx"));
 assert.match(
   source,
   /import SegmentedControl/,
-  "expected PlaystyleSection to reuse the shared segmented selector control",
+  "expected PlaystyleSection to keep the shared segmented selector control",
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
   /import PlayerSearchPicker/,
-  "expected PlaystyleSection to reuse the shared player search picker",
+  "expected PlaystyleSection to stop importing the nested player search picker",
+);
+
+assert.doesNotMatch(
+  source,
+  /const \[playerSearchQuery, setPlayerSearchQuery\] = useState\(""\);/,
+  "expected PlaystyleSection to stop owning its own search query state",
 );
 
 assert.match(
   source,
-  /<SegmentedControl[\s\S]*<PlayerSearchPicker/s,
-  "expected the playstyle player tabs to render as segmented controls above the player search",
-);
-
-assert.match(
-  source,
-  /placeholder="Search players"/,
-  "expected the playstyle player search to use the shared search input underneath the tabs",
-);
-
-assert.match(
-  source,
-  /showResultsOnlyWhenQuery/,
-  "expected the playstyle player search to stay quiet until the user starts typing",
+  /<View style=\{styles\.selectorSection\}>[\s\S]*<SegmentedControl/s,
+  "expected the playstyle selector section to keep the segmented quick-switch rows",
 );
 
 assert.match(
@@ -60,8 +54,8 @@ assert.doesNotMatch(
 
 assert.doesNotMatch(
   source,
-  /Quick tabs stay above\. Search here when you want a specific player\./,
-  "expected the playstyle search helper copy to be removed",
+  /<PlayerSearchPicker[\s\S]*placeholder="Search players"/s,
+  "expected the playstyle search box to be removed in favor of the shared stats-page focus picker",
 );
 
 assert.doesNotMatch(
