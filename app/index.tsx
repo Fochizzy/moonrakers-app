@@ -86,6 +86,7 @@ export default function HomeScreen() {
   const {
     gameDraft,
     replaceDraft,
+    ensureDraftForLegacyActiveGame,
   } = useSyncedGameDraft();
 
   const bridgeDestinations = useMemo(() => getBridgeDestinations(), []);
@@ -551,6 +552,14 @@ export default function HomeScreen() {
     );
   };
 
+  const continueActiveGame = async () => {
+    if (activeGame) {
+      await ensureDraftForLegacyActiveGame(activeGame);
+    }
+
+    router.push(APP_ROUTES.game as any);
+  };
+
   const launchSeededDraft = async () => {
     if (!canStart || !authSession?.user?.id) {
       return;
@@ -652,7 +661,9 @@ export default function HomeScreen() {
                   <View style={styles.commandActionRow}>
                     <ActionButton
                       title="Continue"
-                      onPress={() => router.push(APP_ROUTES.game)}
+                      onPress={() => {
+                        void continueActiveGame();
+                      }}
                       style={styles.commandHalfButton}
                     />
                     <ActionButton

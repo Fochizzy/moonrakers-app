@@ -1081,6 +1081,7 @@ export default function Game() {
     gameDraft,
     updateGameplay,
     hydrateGameDraft,
+    ensureDraftForLegacyActiveGame,
     deleteUserGameDraft,
     clearGameDraft,
   } = useSyncedGameDraft();
@@ -1122,6 +1123,14 @@ export default function Game() {
   const rounds = (activeGame?.rounds ?? []) as StoredRound[];
   const current = (activeGame?.current ?? initialCurrentState) as CurrentTurnStats;
   const displayRounds = useMemo(() => getDisplayRounds(rounds), [rounds]);
+
+  useEffect(() => {
+    if (!activeGame || gameDraft || !authSession?.user?.id) {
+      return;
+    }
+
+    void ensureDraftForLegacyActiveGame(activeGame);
+  }, [activeGame, authSession?.user?.id, ensureDraftForLegacyActiveGame, gameDraft]);
 
   useEffect(() => {
     if (

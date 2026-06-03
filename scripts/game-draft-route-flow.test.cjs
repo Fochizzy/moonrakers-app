@@ -22,6 +22,8 @@ assert.match(
   home,
   /if \(activeGame\) \{\s*confirmDeleteActiveGame\(\);\s*return;\s*\}/s,
 );
+assert.match(home, /ensureDraftForLegacyActiveGame/);
+assert.match(home, /router\.push\(APP_ROUTES\.game/);
 assert.doesNotMatch(home, /Unfinished Draft/);
 assert.doesNotMatch(home, /Resume where you left off/);
 assert.doesNotMatch(home, /promptForExistingDraft/);
