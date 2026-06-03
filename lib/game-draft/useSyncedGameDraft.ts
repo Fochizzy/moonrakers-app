@@ -4,9 +4,11 @@ import { publishAppStatus } from "@/lib/app-status/store";
 import { deleteUserGameDraft } from "@/lib/cloud/game-drafts/deleteUserGameDraft";
 import { loadUserGameDraft } from "@/lib/cloud/game-drafts/loadUserGameDraft";
 import { saveUserGameDraft } from "@/lib/cloud/game-drafts/saveUserGameDraft";
-import { useStore } from "@/store/useStore";
+import { resolveCloudGameSaveState } from "@/lib/game-save/resolveCloudGameSave";
+import { useStore, type ActiveGame } from "@/store/useStore";
 import { load, remove, save } from "@/utils/storage/storage";
 
+import { buildDraftFromLegacyActiveGame } from "./buildDraftFromLegacyActiveGame";
 import { resolveDraftResumeRoute } from "./phase";
 import type {
   GameDraft,
@@ -40,6 +42,8 @@ function createInitialGameplay(): GameDraftGameplay {
 
 export function useSyncedGameDraft() {
   const authSession = useStore((state) => state.authSession);
+  const players = useStore((state) => state.players);
+  const groups = useStore((state) => state.groups);
   const gameDraft = useStore((state) => state.gameDraft);
   const syncState = useStore((state) => state.gameDraftSyncState);
   const hydrateGameDraft = useStore((state) => state.hydrateGameDraft);
@@ -157,6 +161,41 @@ export function useSyncedGameDraft() {
     return effectiveDraft;
   }
 
+  async function ensureDraftForLegacyActiveGame(activeGame: ActiveGame | null) {
+    if (!activeGame || gameDraft) {
+      return gameDraft;
+    }
+
+    const profileId = String(authSession?.user?.id ?? "").trim();
+    if (!profileId) {
+      return null;
+    }
+
+    const convertedDraft = buildDraftFromLegacyActiveGame({
+      profileId,
+      activeGame,
+    });
+
+    const cloudPreview = resolveCloudGameSaveState({
+      activeGame,
+      winnerId: activeGame.selectedWinnerId ?? null,
+      playerDirectory: players,
+      groupDirectory: groups,
+    });
+
+    if (cloudPreview.unresolvedPlayerNames.length) {
+      publishAppStatus({
+        scope: "game_draft",
+        state: "success_with_warning",
+        title: "Cloud finish may be blocked",
+        detail: `${cloudPreview.unresolvedPlayerNames.join(", ")} need Moonrakers accounts before this game can finish to Supabase.`,
+      });
+    }
+
+    await replaceDraft(convertedDraft);
+    return convertedDraft;
+  }
+
   function queueRemoteSave(nextDraft: GameDraft) {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -213,9 +252,9 @@ export function useSyncedGameDraft() {
 
         publishAppStatus({
           scope: "game_draft",
-          state: "failed",
-          title: "Draft save failed",
-          detail: message,
+          state: "stale",
+          title: "Continuing locally",
+          detail: "Draft sync could not be saved yet. Local gameplay can continue on this device.",
         });
       }
     }, 250);
@@ -328,6 +367,7 @@ export function useSyncedGameDraft() {
     queueRemoteSave,
     beginGameplay,
     updateGameplay,
+    ensureDraftForLegacyActiveGame,
     discardDraft,
     clearGameDraft,
     hydrateGameDraft,
