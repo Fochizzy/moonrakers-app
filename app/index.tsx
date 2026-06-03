@@ -34,7 +34,6 @@ import {
   useGroups,
   usePlayers,
   useActiveGame,
-  useClearActiveGame,
 } from "@/store/useStore";
 import { getBridgeDestinations, type HubCard } from "@/utils/appHubs";
 import {
@@ -82,11 +81,12 @@ export default function HomeScreen() {
   const rawGroups = useGroups() ?? [];
   const rawGames = useGames() ?? [];
   const activeGame = useActiveGame();
-  const clearActiveGame = useClearActiveGame();
   const {
     gameDraft,
     replaceDraft,
     ensureDraftForLegacyActiveGame,
+    discardUnfinishedGame,
+    isDiscardingUnfinishedGame,
   } = useSyncedGameDraft();
 
   const bridgeDestinations = useMemo(() => getBridgeDestinations(), []);
@@ -542,12 +542,25 @@ export default function HomeScreen() {
   };
 
   const confirmDeleteActiveGame = () => {
+    if (isDiscardingUnfinishedGame) {
+      return;
+    }
+
     Alert.alert(
       "Delete Active Game",
       "This will permanently discard the current game in progress. Are you sure?",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: clearActiveGame },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const result = await discardUnfinishedGame();
+            if ("message" in result) {
+              Alert.alert("Couldn't discard unfinished game", result.message);
+            }
+          },
+        },
       ]
     );
   };
@@ -664,12 +677,14 @@ export default function HomeScreen() {
                       onPress={() => {
                         void continueActiveGame();
                       }}
+                      disabled={isDiscardingUnfinishedGame}
                       style={styles.commandHalfButton}
                     />
                     <ActionButton
                       title="Delete"
                       variant="danger"
                       onPress={confirmDeleteActiveGame}
+                      disabled={isDiscardingUnfinishedGame}
                       style={styles.commandHalfButton}
                     />
                   </View>

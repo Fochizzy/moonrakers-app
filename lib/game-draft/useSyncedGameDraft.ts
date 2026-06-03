@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { publishAppStatus } from "@/lib/app-status/store";
 import { deleteUserGameDraft } from "@/lib/cloud/game-drafts/deleteUserGameDraft";
@@ -20,6 +20,10 @@ function nowTimestamp() {
   return Date.now();
 }
 
+type DiscardUnfinishedGameResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
 function createInitialGameplay(): GameDraftGameplay {
   return {
     turnIndex: 0,
@@ -28,13 +32,13 @@ function createInitialGameplay(): GameDraftGameplay {
     current: {
       prestige: 0,
       contracts: 0,
-    failures: 0,
-    assistRecipients: {},
-    assistPrestigeRecipients: {},
-    objectiveCount: 0,
-    headToHeadFirstPlaceId: null,
-    headToHeadSecondPlaceId: null,
-  },
+      failures: 0,
+      assistRecipients: {},
+      assistPrestigeRecipients: {},
+      objectiveCount: 0,
+      headToHeadFirstPlaceId: null,
+      headToHeadSecondPlaceId: null,
+    },
     roundCount: 0,
     selectedWinnerId: null,
   };
@@ -49,8 +53,11 @@ export function useSyncedGameDraft() {
   const hydrateGameDraft = useStore((state) => state.hydrateGameDraft);
   const setGameDraftSyncState = useStore((state) => state.setGameDraftSyncState);
   const clearGameDraft = useStore((state) => state.clearGameDraft);
+  const clearActiveGame = useStore((state) => state.clearActiveGame);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const [isDiscardingUnfinishedGame, setIsDiscardingUnfinishedGame] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -161,6 +168,24 @@ export function useSyncedGameDraft() {
     return effectiveDraft;
   }
 
+  async function waitForDraftSaveIdle() {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    const inFlightSave = saveInFlightRef.current;
+    if (!inFlightSave) {
+      return;
+    }
+
+    try {
+      await inFlightSave;
+    } catch {
+      // Save failures are already reflected in sync state and should not block explicit discard.
+    }
+  }
+
   async function ensureDraftForLegacyActiveGame(activeGame: ActiveGame | null) {
     if (!activeGame || gameDraft) {
       return gameDraft;
@@ -201,62 +226,73 @@ export function useSyncedGameDraft() {
       clearTimeout(saveTimerRef.current);
     }
 
-    saveTimerRef.current = setTimeout(async () => {
-      setGameDraftSyncState({ state: "saving" });
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
 
-      try {
-        const savedDraft = await saveUserGameDraft(nextDraft);
+      const savePromise = (async () => {
+        setGameDraftSyncState({ state: "saving" });
 
-        hydrateGameDraft({
-          draft: savedDraft,
-          syncState: {
-            state: savedDraft ? "saved" : "idle",
+        try {
+          const savedDraft = await saveUserGameDraft(nextDraft);
+
+          hydrateGameDraft({
+            draft: savedDraft,
+            syncState: {
+              state: savedDraft ? "saved" : "idle",
+              dirty: false,
+              lastSyncedAt: savedDraft?.updatedAt ?? null,
+              conflictMessage: null,
+            },
+          });
+
+          await persistDraftShadow({
+            profileId: nextDraft.profileId,
+            draft: savedDraft,
             dirty: false,
+            syncStatus: "saved",
             lastSyncedAt: savedDraft?.updatedAt ?? null,
-            conflictMessage: null,
-          },
-        });
+          });
 
-        await persistDraftShadow({
-          profileId: nextDraft.profileId,
-          draft: savedDraft,
-          dirty: false,
-          syncStatus: "saved",
-          lastSyncedAt: savedDraft?.updatedAt ?? null,
-        });
+          publishAppStatus({
+            scope: "game_draft",
+            state: "success",
+            title: "Draft saved",
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error ?? "Unable to save the unfinished draft.");
 
-        publishAppStatus({
-          scope: "game_draft",
-          state: "success",
-          title: "Draft saved",
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : String(error ?? "Unable to save the unfinished draft.");
+          setGameDraftSyncState({
+            state: "failed",
+            dirty: true,
+            conflictMessage: message,
+          });
 
-        setGameDraftSyncState({
-          state: "failed",
-          dirty: true,
-          conflictMessage: message,
-        });
+          await persistDraftShadow({
+            profileId: nextDraft.profileId,
+            draft: nextDraft,
+            dirty: true,
+            syncStatus: "failed",
+            lastSyncedAt: nextDraft.updatedAt,
+          });
 
-        await persistDraftShadow({
-          profileId: nextDraft.profileId,
-          draft: nextDraft,
-          dirty: true,
-          syncStatus: "failed",
-          lastSyncedAt: nextDraft.updatedAt,
-        });
+          publishAppStatus({
+            scope: "game_draft",
+            state: "stale",
+            title: "Continuing locally",
+            detail: "Draft sync could not be saved yet. Local gameplay can continue on this device.",
+          });
+        }
+      })();
 
-        publishAppStatus({
-          scope: "game_draft",
-          state: "stale",
-          title: "Continuing locally",
-          detail: "Draft sync could not be saved yet. Local gameplay can continue on this device.",
-        });
-      }
+      saveInFlightRef.current = savePromise;
+      void savePromise.finally(() => {
+        if (saveInFlightRef.current === savePromise) {
+          saveInFlightRef.current = null;
+        }
+      });
     }, 250);
   }
 
@@ -341,22 +377,61 @@ export function useSyncedGameDraft() {
     return nextDraft;
   }
 
-  async function discardDraft(profileIdOverride?: string | null) {
+  async function discardUnfinishedGame(profileIdOverride?: string | null): Promise<DiscardUnfinishedGameResult> {
+    if (isDiscardingUnfinishedGame) {
+      return { ok: false, message: "An unfinished-game discard is already running." };
+    }
+
     const normalizedProfileId = String(
       profileIdOverride ?? gameDraft?.profileId ?? authSession?.user?.id ?? "",
     ).trim();
 
-    if (normalizedProfileId) {
-      await deleteUserGameDraft(normalizedProfileId);
-    }
-
-    clearGameDraft();
-    await remove("gameDraft");
+    setIsDiscardingUnfinishedGame(true);
     publishAppStatus({
       scope: "game_draft",
-      state: "success",
-      title: "Draft discarded",
+      state: "running",
+      title: "Discarding unfinished game",
     });
+
+    try {
+      await waitForDraftSaveIdle();
+
+      if (normalizedProfileId) {
+        await deleteUserGameDraft(normalizedProfileId);
+      }
+
+      clearActiveGame();
+      clearGameDraft();
+      await remove("gameDraft");
+
+      publishAppStatus({
+        scope: "game_draft",
+        state: "success",
+        title: "Unfinished game discarded",
+      });
+
+      return { ok: true };
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error ?? "Unable to discard the unfinished game.");
+
+      publishAppStatus({
+        scope: "game_draft",
+        state: "failed",
+        title: "Couldn't discard unfinished game",
+        detail: message,
+      });
+
+      return { ok: false, message };
+    } finally {
+      setIsDiscardingUnfinishedGame(false);
+    }
+  }
+
+  async function discardDraft(profileIdOverride?: string | null) {
+    return discardUnfinishedGame(profileIdOverride);
   }
 
   return {
@@ -369,6 +444,8 @@ export function useSyncedGameDraft() {
     updateGameplay,
     ensureDraftForLegacyActiveGame,
     discardDraft,
+    isDiscardingUnfinishedGame,
+    discardUnfinishedGame,
     clearGameDraft,
     hydrateGameDraft,
     setGameDraftSyncState,

@@ -18,12 +18,14 @@ const phase = fs.readFileSync(
 
 assert.match(home, /useSyncedGameDraft/);
 assert.match(home, /confirmDeleteActiveGame/);
+assert.match(home, /discardUnfinishedGame/);
 assert.match(
   home,
   /if \(activeGame\) \{\s*confirmDeleteActiveGame\(\);\s*return;\s*\}/s,
 );
 assert.match(home, /ensureDraftForLegacyActiveGame/);
 assert.match(home, /router\.push\(APP_ROUTES\.game/);
+assert.doesNotMatch(home, /onPress:\s*clearActiveGame/);
 assert.doesNotMatch(home, /Unfinished Draft/);
 assert.doesNotMatch(home, /Resume where you left off/);
 assert.doesNotMatch(home, /promptForExistingDraft/);
