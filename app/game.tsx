@@ -394,15 +394,8 @@ function DirectPrestigeSection({
     <View
       style={[
         styles.sectionCard,
-        {
-          borderColor: headToHeadMissionActive
-            ? withAlpha(UI.silver, 0.5)
-            : withAlpha(currentAccent, 0.36),
-          backgroundColor: headToHeadMissionActive
-            ? withAlpha(UI.silver, 0.12)
-            : mixWithBlack(currentAccent, 0.84),
-        },
-        glowStyle(withAlpha(headToHeadMissionActive ? UI.silver : currentAccent, 0.95), 0.16, 8, 6),
+        { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: UI.card },
+        glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8),
       ]}
     >
       <View
@@ -412,19 +405,13 @@ function DirectPrestigeSection({
           {
             backgroundColor: stayAtBaseSelected
               ? withAlpha(UI.gold, 0.05)
-              : headToHeadMissionActive
-              ? withAlpha(UI.silver, 0.12)
               : withAlpha(currentAccent, 0.09),
             borderColor: stayAtBaseSelected
               ? withAlpha(UI.gold, 0.44)
-              : headToHeadMissionActive
-              ? withAlpha(UI.silver, 0.5)
               : withAlpha(currentAccent, 0.38),
           },
           stayAtBaseSelected
             ? glowStyle(withAlpha(UI.gold, 0.92), 0.12, 6, 4)
-            : headToHeadMissionActive
-            ? glowStyle(withAlpha(UI.silver, 0.88), 0.16, 8, 5)
             : glowStyle(withAlpha(currentAccent, 0.95), 0.1, 6, 4),
         ]}
       >
@@ -2109,7 +2096,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.25,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
@@ -2117,11 +2104,13 @@ const styles = StyleSheet.create({
     color: UI.text,
     fontSize: 12,
     fontWeight: '800',
+    textAlign: 'center',
   },
   headToHeadButtonMeta: {
     color: UI.textMuted,
     fontSize: 10,
     fontWeight: '600',
+    textAlign: 'center',
   },
   headToHeadActiveBox: {
     marginTop: 8,
