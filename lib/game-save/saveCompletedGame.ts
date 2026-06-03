@@ -1,5 +1,4 @@
 import { buildCompletedGamePayload } from "./buildCompletedGamePayload";
-import { refreshServerAuthoredAnalytics } from "../cloud/analytics/refreshServerAuthoredAnalytics";
 
 export async function saveCompletedGame(input: Parameters<typeof buildCompletedGamePayload>[0]) {
   const payload = buildCompletedGamePayload(input);
@@ -11,10 +10,6 @@ export async function saveCompletedGame(input: Parameters<typeof buildCompletedG
   if (error) {
     throw error;
   }
-
-  await refreshServerAuthoredAnalytics({
-    profileId: input.hostProfileId,
-  });
 
   return data;
 }

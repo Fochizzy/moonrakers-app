@@ -40,7 +40,6 @@ import {
   getPlayerAccentColor,
   getPlayerBackgroundColor,
 } from '@/utils/turnTheme';
-import { loadHydratedCloudState } from '@/lib/cloud/loadHydratedCloudState';
 import { APP_ROUTES } from '@/utils/appRoutes';
 import {
   glowStyle,
@@ -950,6 +949,7 @@ function ActionsSection({
   canEditPreviousTurn,
   showPreviousRounds,
   stayAtBaseSelected,
+  finishDisabled,
   onStayAtBase,
   onEditPreviousTurn,
   onSaveOrAdvance,
@@ -961,6 +961,7 @@ function ActionsSection({
   canEditPreviousTurn: boolean;
   showPreviousRounds: boolean;
   stayAtBaseSelected: boolean;
+  finishDisabled: boolean;
   onStayAtBase: () => void;
   onEditPreviousTurn: () => void;
   onSaveOrAdvance: () => void;
@@ -1008,6 +1009,7 @@ function ActionsSection({
         </ScaleButton>
 
         <ScaleButton
+          disabled={finishDisabled}
           onPress={onFinishGame}
           style={[styles.actionButton, styles.actionButtonTall, styles.finishAction]}
         >
@@ -1184,6 +1186,7 @@ export default function Game() {
   const headToHeadMissionActive = Boolean(headToHeadMissionSummary);
   const finishWinnerId = leaderboardEntries[0]?.id ?? null;
   const {
+    isFinishingGame,
     currentStatus,
     clearCurrentStatus,
     commitFinishGame,
@@ -1665,6 +1668,10 @@ export default function Game() {
   }
 
   function confirmFinishGame() {
+    if (isFinishingGame) {
+      return;
+    }
+
     if (!rounds.length || !finishWinnerId) {
       Alert.alert('No turns saved', 'Save at least one turn before finishing.');
       return;
@@ -1678,14 +1685,6 @@ export default function Game() {
         onPress: () => {
           void (async () => {
             await commitFinishGame();
-            if (authSession?.user?.id) {
-              try {
-                const hydratedSnapshot = await loadHydratedCloudState(authSession as any);
-                hydrateCloudSnapshot(hydratedSnapshot);
-              } catch {
-                // Keep the finish flow intact if the post-submit refresh misses.
-              }
-            }
           })();
         },
       },
@@ -1863,6 +1862,7 @@ export default function Game() {
           canEditPreviousTurn={!!latestDisplayRound}
           showPreviousRounds={showPreviousRounds}
           stayAtBaseSelected={stayAtBaseSelected}
+          finishDisabled={isFinishingGame}
           onStayAtBase={toggleStayAtBase}
           onEditPreviousTurn={togglePreviousRounds}
           onSaveOrAdvance={editingRoundId ? saveEdit : saveRoundAndAdvance}

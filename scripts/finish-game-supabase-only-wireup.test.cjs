@@ -9,6 +9,7 @@ function read(relPath) {
 }
 
 const gameSource = read(path.join("app", "game.tsx"));
+const gameSessionSource = read(path.join("lib", "game-session", "useGameSessionController.ts"));
 
 assert.doesNotMatch(
   gameSource,
@@ -17,15 +18,15 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  gameSource,
+  gameSessionSource,
   /hydrateCloudSnapshot\(\s*hydratedSnapshot\s*\)/,
-  "expected app/game.tsx to refresh the hydrated cloud snapshot after finishing a game",
+  "expected the shared game session controller to refresh the hydrated cloud snapshot after finishing a game",
 );
 
 assert.match(
-  gameSource,
+  gameSessionSource,
   /loadHydratedCloudState|loadHydratedSharedSnapshot/,
-  "expected app/game.tsx to refresh finished-game data through the shared hydration helper",
+  "expected the shared game session controller to refresh finished-game data through the shared hydration helper",
 );
 
 assert.doesNotMatch(

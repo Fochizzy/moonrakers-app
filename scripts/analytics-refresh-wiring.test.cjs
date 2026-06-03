@@ -13,8 +13,14 @@ const importSource = read(path.join("lib", "migration", "refreshRollupsAfterLega
 
 assert.match(
   saveSource,
+  /rpc\("save_completed_game"/,
+  "expected saveCompletedGame to persist completed games through the save_completed_game RPC",
+);
+
+assert.doesNotMatch(
+  saveSource,
   /refreshServerAuthoredAnalytics/,
-  "expected saveCompletedGame to refresh server-authored analytics after a successful save",
+  "expected saveCompletedGame to avoid a redundant client-side analytics refresh after the server save",
 );
 
 assert.match(

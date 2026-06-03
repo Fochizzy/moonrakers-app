@@ -86,6 +86,7 @@ export async function loadCloudSnapshot(profileId: string) {
           )
         `,
       )
+      .eq("status", "finished")
       .order("created_at", { ascending: false }),
   ]);
 

@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { Alert } from "react-native";
 
 import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/app-status/store";
@@ -40,8 +41,21 @@ type HookArgs = {
 export function useGameSessionController(args: HookArgs) {
   const clearStatus = useClearAppStatus();
   const currentStatus = useCurrentAppStatus();
+  const finishInFlightRef = useRef(false);
+  const [isFinishingGame, setIsFinishingGame] = useState(false);
 
   async function commitFinishGame() {
+    if (isFinishingGame) {
+      return;
+    }
+
+    if (finishInFlightRef.current) {
+      return;
+    }
+
+    finishInFlightRef.current = true;
+    setIsFinishingGame(true);
+
     try {
       if (!args.activeGame) {
         return;
@@ -168,6 +182,9 @@ export function useGameSessionController(args: HookArgs) {
         detail,
       });
       Alert.alert("Couldn't save game", detail);
+    } finally {
+      finishInFlightRef.current = false;
+      setIsFinishingGame(false);
     }
   }
 
@@ -180,6 +197,7 @@ export function useGameSessionController(args: HookArgs) {
       clearStatus("cloud_save");
       clearStatus("cloud_refresh");
     },
+    isFinishingGame,
     commitFinishGame,
   };
 }
