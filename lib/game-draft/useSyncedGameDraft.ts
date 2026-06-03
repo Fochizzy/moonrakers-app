@@ -177,7 +177,7 @@ export function useSyncedGameDraft() {
     });
 
     const cloudPreview = resolveCloudGameSaveState({
-      activeGame,
+      activeGame: activeGame as any,
       winnerId: activeGame.selectedWinnerId ?? null,
       playerDirectory: players,
       groupDirectory: groups,
