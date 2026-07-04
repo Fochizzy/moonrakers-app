@@ -43,6 +43,11 @@ assert.equal(
   "@moonrakers/dashboard",
   "expected the dashboard workspace name to be @moonrakers/dashboard",
 );
+assert.equal(
+  dashboardPackage.dependencies?.["@supabase/supabase-js"],
+  "^2.104.0",
+  "expected the dashboard workspace to declare its own supabase-js dependency",
+);
 
 const nextConfig = readText(path.join("apps", "dashboard", "next.config.ts"));
 assert.match(
@@ -80,6 +85,19 @@ assert.equal(
 const layoutText = readText(path.join("apps", "dashboard", "src", "app", "layout.tsx"));
 assert.match(layoutText, /Moonrakers Dashboard/);
 
+assert.equal(
+  fs.existsSync(
+    path.join(projectRoot, "apps", "dashboard", "src", "app", "launchpad", "page.tsx"),
+  ),
+  true,
+  "expected the temporary scaffold page to live under /launchpad instead of /",
+);
+assert.equal(
+  fs.existsSync(path.join(projectRoot, "apps", "dashboard", "src", "app", "page.tsx")),
+  false,
+  "expected the scaffold to leave the root route free for the planned protected dashboard home",
+);
+
 const globalsCss = readText(path.join("apps", "dashboard", "src", "app", "globals.css"));
 assert.match(
   globalsCss,
@@ -100,6 +118,13 @@ assert.match(
   globalsCss,
   /radial-gradient/i,
   "expected globals.css to use layered atmospheric backgrounds instead of a flat fill",
+);
+
+const dashboardGitignore = readText(path.join("apps", "dashboard", ".gitignore"));
+assert.match(
+  dashboardGitignore,
+  /^\/\.open-next\/$/m,
+  "expected dashboard .gitignore to ignore OpenNext build output",
 );
 
 console.log("dashboard-workspace-scaffold.test.cjs passed");
