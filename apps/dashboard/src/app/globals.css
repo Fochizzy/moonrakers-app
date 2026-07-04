@@ -66,3 +66,108 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.dashboard-panel {
+  backdrop-filter: blur(18px);
+}
+
+.dashboard-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(16rem, 19rem) minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: 1.25rem;
+}
+
+.dashboard-sidebar-rail {
+  position: sticky;
+  top: 1.25rem;
+  align-self: start;
+  min-height: calc(100vh - 2.5rem);
+}
+
+.dashboard-main {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-main-slot {
+  min-width: 0;
+  padding-bottom: 2rem;
+}
+
+.dashboard-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.75rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-strong);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.section-eyebrow {
+  color: var(--gold);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.view-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.loading-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.loading-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 48%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: dashboard-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes dashboard-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 960px) {
+  .dashboard-shell {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .dashboard-sidebar-rail {
+    position: relative;
+    top: auto;
+    min-height: auto;
+  }
+}
