@@ -8,6 +8,8 @@ Scope: Separate in-repo web app for signed-in player analytics
 
 Build a separate Next.js web app inside this repository that gives each player a signed-in personal analytics dashboard backed by the same Supabase auth and analytics contracts the Expo app already uses. The web app should feel like a real desktop dashboard, not a stretched mobile layout, while preserving the meaning and source of the underlying Moonrakers stats.
 
+The dashboard should explicitly cover graphs, statistics, insights, correlations, and compare workflows rather than limiting the site to a lightweight summary view.
+
 The web app should support both sign in and account creation from its auth entry point. After account creation, a player who does not yet have a complete Moonrakers profile should be routed through a lightweight onboarding step before entering the dashboard.
 
 ## Goals
@@ -15,6 +17,7 @@ The web app should support both sign in and account creation from its auth entry
 - Provide a real website experience for Moonrakers analytics.
 - Reuse the same Supabase backend and analytics RPC contracts already used by the mobile app.
 - Support sign in, create account, password recovery, and verified-session return flows in the web app.
+- Provide first-class access to graphs, statistics, insights, correlations, and compare flows for the signed-in player.
 - Keep analytics answers aligned between mobile and web for the same signed-in player.
 - Separate shared data logic from platform-specific presentation so the web app can evolve without bending the mobile UI around desktop needs.
 
@@ -71,10 +74,12 @@ The first-pass route map should be:
   - Lightweight profile bootstrap for newly created accounts that are not yet Moonrakers-ready
 - `/`
   - Analytics home dashboard equivalent to the mobile analytics hub
+- `/compare`
+  - Dedicated compare workflow for direct player-to-player analysis
 - `/stats`
   - Personal stats surface driven by the existing server-authored stats payload
 - `/charts`
-  - Chart browser and chart setup landing page
+  - Graph browser and chart setup landing page
 - `/charts/[chartKey]`
   - Individual chart detail pages
 - `/insights`
@@ -142,7 +147,7 @@ Desired characteristics:
 - Top identity/session bar showing signed-in player context
 - Wider chart canvases and multi-column layouts where helpful
 - Side-by-side filters on stats and chart pages
-- Faster drill-down between home, stats, charts, insights, ELO, and profile
+- Faster drill-down between home, compare, stats, charts, insights, correlations, ELO, and profile
 
 The web app should not attempt to match the mobile layout line-for-line. It should preserve meaning and route coverage while taking advantage of desktop space.
 
@@ -220,9 +225,9 @@ Suggested implementation order:
 1. App scaffolding, auth plumbing, and protected layout shell
 2. Account creation plus onboarding flow
 3. Home dashboard
-4. Stats and profile routes
+4. Compare, stats, and profile routes
 5. Charts index and chart detail routes
-6. Insights and ELO routes
+6. Insights, correlations, and ELO routes
 7. Test hardening and deployment preparation
 
 This sequence ships the foundation first without changing the agreed product scope.
@@ -238,6 +243,7 @@ Proceed with a separate in-repo Next.js web app that:
 - uses the same Supabase auth and analytics backend as the mobile app
 - lets users create accounts directly from the web auth page
 - routes incomplete accounts through a small profile bootstrap flow
+- exposes graphs, statistics, insights, correlations, and compare as real dashboard surfaces
 - reuses shared analytics contract logic instead of duplicating backend semantics
 - implements a desktop-first analytics dashboard rather than stretching the mobile UI to fit the browser
 
