@@ -2,11 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a separate in-repo Next.js dashboard that lets a signed-in Moonrakers player create an account, complete profile onboarding, and use desktop-first home, compare, stats, charts, insights, correlations, ELO, and profile analytics surfaces backed by the existing Supabase contracts.
+**Goal:** Build a separate in-repo Next.js dashboard that lets a signed-in Moonrakers player create an account, complete profile onboarding, and use desktop-first home, compare, stats, charts, insights, correlations, ELO, and profile analytics surfaces backed by the existing Supabase contracts and styled to match the Moonrakers app.
 
-**Architecture:** Add `apps/dashboard` as a Next.js App Router workspace and extract the current analytics RPC wrappers into a shared workspace package so both Expo and Next can consume the same typed Supabase contract layer. Keep auth and route protection web-native with `@supabase/ssr`, make route pages thin server components, and render desktop-specific view components that consume server-loaded payloads for home, compare, stats/correlations, charts, insights, ELO, and profile.
+**Architecture:** Add `apps/dashboard` as a Next.js App Router workspace and extract the current analytics RPC wrappers into a shared workspace package so both Expo and Next can consume the same typed Supabase contract layer. Keep auth and route protection web-native with `@supabase/ssr`, make route pages thin server components, and render desktop-specific view components that consume server-loaded payloads for home, compare, stats/correlations, charts, insights, ELO, and profile. Derive the web visual system from the existing app tokens in `utils/colors.ts`, `utils/chartTheme.ts`, and `components/charts/chartVisualSystem.ts` so the browser UI feels like the same Moonrakers analytics product.
 
 **Tech Stack:** Next.js App Router, React 19, TypeScript, npm workspaces, `@supabase/supabase-js`, `@supabase/ssr`, Recharts, Vitest, React Testing Library, Playwright, existing Moonrakers Supabase analytics RPCs, `npm.cmd`, `npx.cmd`
+
+**Visual Direction:** Reuse the app's dark-space palette, chart accent hierarchy, and compact analytics chrome. The site should feel like a Moonrakers command board with luminous purple/blue/green/teal signals, translucent tactical panels, and dense intel cards, not a generic white or gray SaaS dashboard.
 
 ---
 
@@ -66,7 +68,7 @@
   - Vitest + Testing Library setup.
 - Create: `apps/dashboard/src/app/layout.tsx`
 - Create: `apps/dashboard/src/app/globals.css`
-  - Shared dashboard shell, font loading, and visual system variables.
+  - Shared dashboard shell, font loading, app-aligned color tokens, and board-game atmosphere rules.
 - Create: `apps/dashboard/src/lib/env.ts`
 - Create: `apps/dashboard/src/lib/supabase/browser.ts`
 - Create: `apps/dashboard/src/lib/supabase/server.ts`
@@ -104,10 +106,11 @@
   - Protected dashboard routes.
 - Create: `apps/dashboard/src/components/layout/DashboardSidebar.tsx`
 - Create: `apps/dashboard/src/components/layout/DashboardTopbar.tsx`
+- Create: `apps/dashboard/src/components/ui/DashboardPanel.tsx`
 - Create: `apps/dashboard/src/components/ui/MetricCard.tsx`
 - Create: `apps/dashboard/src/components/ui/EmptyStatePanel.tsx`
 - Create: `apps/dashboard/src/components/ui/SectionHeading.tsx`
-  - Shared layout and card primitives.
+  - Shared layout and card primitives, including the default Moonrakers panel chrome used across routes.
 - Create: `apps/dashboard/src/components/auth/AuthPanel.tsx`
 - Create: `apps/dashboard/src/components/auth/OnboardingForm.tsx`
   - Public forms for sign in, account creation, password recovery, and profile bootstrap.
@@ -218,6 +221,28 @@ assert.equal(
   fs.existsSync(path.join(projectRoot, "apps", "dashboard", "vitest.config.ts")),
   true,
   "expected the dashboard workspace to include a Vitest config",
+);
+
+const globalsCss = readText(path.join("apps", "dashboard", "src", "app", "globals.css"));
+assert.match(
+  globalsCss,
+  /--accent:\s*#A855F7/i,
+  "expected globals.css to keep the app primary accent color",
+);
+assert.match(
+  globalsCss,
+  /--blue:\s*#3B82F6/i,
+  "expected globals.css to keep the app comparison accent color",
+);
+assert.match(
+  globalsCss,
+  /--green:\s*#22C55E/i,
+  "expected globals.css to keep the app success accent color",
+);
+assert.match(
+  globalsCss,
+  /radial-gradient/i,
+  "expected globals.css to use layered atmospheric backgrounds instead of a flat fill",
 );
 
 console.log("dashboard-workspace-scaffold.test.cjs passed");
@@ -348,15 +373,28 @@ Replace `apps/dashboard/src/app/globals.css` with:
 
 ```css
 :root {
-  --bg: #08111a;
-  --panel: rgba(9, 22, 34, 0.86);
-  --panel-strong: rgba(13, 30, 46, 0.96);
-  --border: rgba(125, 211, 252, 0.16);
-  --text: #f3fbff;
-  --muted: #9cb6c8;
-  --accent: #7dd3fc;
-  --accent-2: #34d399;
-  --accent-3: #f59e0b;
+  --bg: #081120;
+  --bg-deep: #040814;
+  --card: rgba(12, 18, 38, 0.92);
+  --card-alt: rgba(16, 24, 48, 0.95);
+  --surface: #0a1428;
+  --surface-alt: #0f172a;
+  --text: #e2e8f0;
+  --text-strong: #f8fbff;
+  --sub: #94a3b8;
+  --muted: #64748b;
+  --accent: #a855f7;
+  --accent-soft: rgba(168, 85, 247, 0.18);
+  --blue: #3b82f6;
+  --blue-soft: rgba(59, 130, 246, 0.18);
+  --green: #22c55e;
+  --green-soft: rgba(34, 197, 94, 0.16);
+  --gold: #2dd4bf;
+  --danger: #ef4444;
+  --danger-soft: rgba(239, 68, 68, 0.16);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --grid: rgba(255, 255, 255, 0.06);
 }
 
 * {
@@ -368,11 +406,25 @@ body {
   margin: 0;
   min-height: 100%;
   background:
-    radial-gradient(circle at top left, rgba(125, 211, 252, 0.14), transparent 38%),
-    radial-gradient(circle at top right, rgba(52, 211, 153, 0.12), transparent 32%),
-    linear-gradient(180deg, #08111a 0%, #050b11 100%);
+    radial-gradient(circle at 14% 10%, rgba(168, 85, 247, 0.18), transparent 28%),
+    radial-gradient(circle at 84% 12%, rgba(59, 130, 246, 0.16), transparent 26%),
+    radial-gradient(circle at 52% 100%, rgba(45, 212, 191, 0.1), transparent 34%),
+    linear-gradient(180deg, #081120 0%, #040814 100%);
   color: var(--text);
-  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black 48%, transparent 100%);
+  opacity: 0.24;
 }
 
 a {
@@ -380,6 +432,8 @@ a {
   text-decoration: none;
 }
 ```
+
+Keep these tokens aligned with `utils/colors.ts`, `utils/chartTheme.ts`, and `components/charts/chartVisualSystem.ts`. Do not swap them for a generic web palette.
 
 - [ ] **Step 4: Install dashboard test dependencies and run the scaffold checks**
 
@@ -1220,6 +1274,8 @@ export async function saveOnboardingProfile(formData: FormData) {
 
 Implement `apps/dashboard/src/components/auth/OnboardingForm.tsx` as a progressive `<form>` that posts to `saveOnboardingProfile`, then redirects to `/` on success.
 
+Render `AuthPanel` and `OnboardingForm` inside the same `dashboard-panel` chrome from Task 1 and Task 5. The public entry flow should already look like the Moonrakers analytics product, with uppercase eyebrows, luminous mode toggles, and dark command-table surfaces instead of a default white sign-in form.
+
 - [ ] **Step 4: Run the dashboard tests and typecheck**
 
 Run:
@@ -1246,6 +1302,7 @@ git commit -m "feat: add dashboard auth and onboarding flows"
 - Create: `apps/dashboard/src/app/(dashboard)/loading.tsx`
 - Create: `apps/dashboard/src/components/layout/DashboardSidebar.tsx`
 - Create: `apps/dashboard/src/components/layout/DashboardTopbar.tsx`
+- Create: `apps/dashboard/src/components/ui/DashboardPanel.tsx`
 - Create: `apps/dashboard/src/components/ui/MetricCard.tsx`
 - Create: `apps/dashboard/src/components/ui/EmptyStatePanel.tsx`
 - Create: `apps/dashboard/src/components/ui/SectionHeading.tsx`
@@ -1311,9 +1368,15 @@ const navItems = [
 
 export function DashboardSidebar() {
   return (
-    <aside>
-      <h1>Moonrakers</h1>
-      <nav>
+    <aside className="dashboard-panel sidebar-shell">
+      <div className="sidebar-brand">
+        <p className="section-eyebrow">Fleet Intel</p>
+        <h1>Moonrakers</h1>
+        <p className="sidebar-copy">
+          Command table for your crew, rivals, trends, and published analytics.
+        </p>
+      </div>
+      <nav aria-label="Primary">
         <ul>
           {navItems.map(([href, label]) => (
             <li key={href}>
@@ -1344,12 +1407,15 @@ export function HomeView({
   };
 }) {
   return (
-    <section>
-      <header>
-        <p>Signed in as</p>
-        <h2>{profileName}</h2>
+    <section className="view-stack">
+      <header className="dashboard-panel hero-panel">
+        <p className="section-eyebrow">Signed in as</p>
+        <h2 className="hero-title">{profileName}</h2>
+        <p className="hero-copy">
+          Track momentum, rival patterns, and table tendencies across your Moonrakers history.
+        </p>
       </header>
-      <div>
+      <div className="metric-grid">
         {payload.cards.map((card) => (
           <MetricCard key={card.key} label={card.label} value={card.value} />
         ))}
@@ -1377,6 +1443,8 @@ export default async function DashboardHomePage() {
 ```
 
 Keep `apps/dashboard/src/app/(dashboard)/layout.tsx` thin: it should call `requireDashboardAccess()`, render `DashboardSidebar`, `DashboardTopbar`, and a main content slot.
+
+Create `apps/dashboard/src/components/ui/DashboardPanel.tsx` as the default shell for route cards, sidebars, filters, and chart panels. It should encapsulate the shared Moonrakers chrome: layered dark background, 1px soft border, inset highlight, subtle outer glow, and tone-aware accent ring so later routes do not re-implement panel styling ad hoc.
 
 - [ ] **Step 4: Run the home-view test and dashboard typecheck**
 
@@ -1522,6 +1590,8 @@ export async function loadCompareScreen(searchParams: {
 
 Use `StatsView` to mirror the mobile `stats.tsx` tab model with concrete tabs for `Home`, `Players`, `Playstyle`, `Correlations`, and `Games`, and surface `payload.correlations` directly instead of burying it under a generic insights bucket.
 
+Style `CompareView` and `StatsView` with the same Moonrakers panel system used on home. Compare-specific controls should lean on the app's comparison accent family (`blue` / `blue-soft`) while high-priority takeaways and selected states keep the app's primary `accent` purple. Correlation rows should read like tactical intel cards, not plain admin tables.
+
 `apps/dashboard/src/app/(dashboard)/compare/page.tsx` should parse `searchParams`, call `loadCompareScreen`, and render `CompareView`.
 
 `apps/dashboard/src/app/(dashboard)/stats/page.tsx` should call `loadStatsScreen` and render `StatsView`.
@@ -1624,6 +1694,8 @@ export async function loadInsightsScreen() {
 `EloView` should keep player and opponent filters visible above the leaderboard instead of hiding them behind mobile tabs.
 
 `InsightsView` should show both server-authored takeaways and correlations language clearly, since the user explicitly wants insight and correlation coverage on web.
+
+All three views should continue the shared visual language: dark chart-shell panels, compact stat density, accent chips, and board-game command-table framing. Do not let these text-heavy routes fall back to generic document styling.
 
 - [ ] **Step 4: Run the route-view tests and typecheck**
 
@@ -1775,6 +1847,8 @@ export function ChartRenderer({
 ```
 
 `ChartsIndexView` should present chart choices by section and link into `/charts/[chartKey]`, while `ChartDetailView` should surface the setup filters above the graph and render the route through `ChartRenderer`.
+
+Each renderer family should map its colors from the same app tokens already used in `chartVisualSystem.ts` and `chartTheme.ts`. Do not accept Recharts defaults or invent a separate web chart palette, because the compare, risk, success, and spotlight tones already carry meaning in the mobile app.
 
 - [ ] **Step 4: Run the chart tests and typecheck**
 
@@ -1939,6 +2013,7 @@ git commit -m "test: add dashboard verification coverage"
 - Sign in, create account, reset, and callback return: covered by Task 4.
 - Onboarding/profile bootstrap: covered by Task 4.
 - Desktop-first home dashboard: covered by Task 5.
+- App-aligned visual system and Moonrakers board-game styling: covered by Tasks 1, 4, 5, 6, 7, and 8.
 - Compare surface: covered by Task 6.
 - Statistics and correlations: covered by Task 6.
 - Insights, ELO, and profile: covered by Task 7.

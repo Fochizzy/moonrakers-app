@@ -8,6 +8,8 @@ Scope: Separate in-repo web app for signed-in player analytics
 
 Build a separate Next.js web app inside this repository that gives each player a signed-in personal analytics dashboard backed by the same Supabase auth and analytics contracts the Expo app already uses. The web app should feel like a real desktop dashboard, not a stretched mobile layout, while preserving the meaning and source of the underlying Moonrakers stats.
 
+The visual design should match the current app's analytics language and extend it into a richer browser surface using cues from the Moonrakers board game: deep space-command backgrounds, luminous purple/blue/green/teal signal accents, metallic card framing, and dense "intel board" presentation rather than generic SaaS dashboard styling.
+
 The dashboard should explicitly cover graphs, statistics, insights, correlations, and compare workflows rather than limiting the site to a lightweight summary view.
 
 The web app should support both sign in and account creation from its auth entry point. After account creation, a player who does not yet have a complete Moonrakers profile should be routed through a lightweight onboarding step before entering the dashboard.
@@ -18,6 +20,7 @@ The web app should support both sign in and account creation from its auth entry
 - Reuse the same Supabase backend and analytics RPC contracts already used by the mobile app.
 - Support sign in, create account, password recovery, and verified-session return flows in the web app.
 - Provide first-class access to graphs, statistics, insights, correlations, and compare flows for the signed-in player.
+- Match the current app's colors, chrome, and chart styling while letting the web UI feel like a premium Moonrakers command table.
 - Keep analytics answers aligned between mobile and web for the same signed-in player.
 - Separate shared data logic from platform-specific presentation so the web app can evolve without bending the mobile UI around desktop needs.
 
@@ -40,6 +43,15 @@ The current app already centralizes analytics reads through reusable helpers rat
 - `lib/cloud/analytics/getPlayerProfileScreen.ts`
 
 This makes a separate web app viable because the backend contract already exists and can be reused without duplicating the analytics schema logic.
+
+The current app also already exposes a reusable analytics visual system that the website should treat as source material instead of replacing:
+
+- `utils/colors.ts`
+- `utils/chartTheme.ts`
+- `components/charts/chartVisualSystem.ts`
+- `components/charts/ChartShell.tsx`
+
+These files establish the dark-space palette, accent hierarchy, card borders, chart glow treatment, and uppercase takeaway language that the website should inherit.
 
 ## Recommended Architecture
 
@@ -148,8 +160,23 @@ Desired characteristics:
 - Wider chart canvases and multi-column layouts where helpful
 - Side-by-side filters on stats and chart pages
 - Faster drill-down between home, compare, stats, charts, insights, correlations, ELO, and profile
+- A premium control-room feel that still reads as Moonrakers rather than a generic admin console
 
 The web app should not attempt to match the mobile layout line-for-line. It should preserve meaning and route coverage while taking advantage of desktop space.
+
+## Visual Direction
+
+The website should deliberately inherit the app's existing analytics presentation rather than inventing a second design system.
+
+Required visual rules:
+
+- Reuse the core app palette from `COLORS`, `chartColors`, and `CHART_COLORS`, especially the deep navy background, bright off-white text, purple primary accent, blue comparison accent, green success accent, red danger accent, and teal secondary signal accent.
+- Keep the base surface dark and layered, with subtle starfield or nebula depth and panel glow, rather than plain flat fills or white cards.
+- Use translucent command-console panels, bright-but-thin borders, inset highlights, and dense metric cards so the UI feels closer to Moonrakers chart shells and premium board-game player aids.
+- Carry over the app's typography patterns for analytics surfaces: uppercase eyebrow labels, strong stat numerals, concise takeaways, and compact support copy.
+- Keep chart colors aligned with the mobile app's meaning. Do not introduce a separate web-only chart palette that changes what accent, comparison, success, or risk tones mean.
+- Let the Moonrakers board game influence come through as framing, texture, spacing, and signal treatment, not literal art reproduction or a novelty sci-fi skin.
+- Avoid default "SaaS dashboard" styling such as white surfaces, neutral gray chrome, generic rounded cards without hierarchy, or unrelated accent colors.
 
 ## Data Flow
 
@@ -222,7 +249,7 @@ The web app should still be built in slices even though the target is a full ana
 
 Suggested implementation order:
 
-1. App scaffolding, auth plumbing, and protected layout shell
+1. App scaffolding, shared visual system, auth plumbing, and protected layout shell
 2. Account creation plus onboarding flow
 3. Home dashboard
 4. Compare, stats, and profile routes
@@ -245,6 +272,7 @@ Proceed with a separate in-repo Next.js web app that:
 - routes incomplete accounts through a small profile bootstrap flow
 - exposes graphs, statistics, insights, correlations, and compare as real dashboard surfaces
 - reuses shared analytics contract logic instead of duplicating backend semantics
+- visually matches the app's analytics palette and chrome while borrowing board-game command-table cues from Moonrakers
 - implements a desktop-first analytics dashboard rather than stretching the mobile UI to fit the browser
 
 ## References
