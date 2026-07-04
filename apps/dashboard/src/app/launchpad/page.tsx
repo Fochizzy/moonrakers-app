@@ -1,4 +1,4 @@
-export default function Home() {
+export default function LaunchpadPage() {
   return (
     <main
       style={{
@@ -39,7 +39,7 @@ export default function Home() {
             lineHeight: 1.05,
           }}
         >
-          Cloudflare-ready analytics command table
+          Cloudflare-ready analytics launchpad
         </h1>
         <p
           style={{
@@ -49,8 +49,9 @@ export default function Home() {
             lineHeight: 1.7,
           }}
         >
-          The full signed-in dashboard routes will land here next. This scaffold already
-          carries the Moonrakers visual system and is wired for Cloudflare Workers.
+          The protected dashboard home route will take over `/` in the next task. This
+          temporary launchpad keeps the scaffold previewable without colliding with the
+          planned route structure.
         </p>
       </section>
     </main>

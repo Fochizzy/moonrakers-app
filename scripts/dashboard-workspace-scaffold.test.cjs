@@ -56,6 +56,29 @@ assert.equal(
   true,
   "expected the dashboard workspace to include a Vitest config",
 );
+assert.equal(
+  fs.existsSync(path.join(projectRoot, "apps", "dashboard", "open-next.config.ts")),
+  true,
+  "expected the dashboard workspace to include an OpenNext config",
+);
+assert.equal(
+  fs.existsSync(path.join(projectRoot, "apps", "dashboard", "wrangler.jsonc")),
+  true,
+  "expected the dashboard workspace to include a wrangler config",
+);
+assert.equal(
+  fs.existsSync(path.join(projectRoot, "apps", "dashboard", "cloudflare-env.d.ts")),
+  true,
+  "expected the dashboard workspace to generate cloudflare-env.d.ts",
+);
+assert.equal(
+  fs.existsSync(path.join(projectRoot, "apps", "dashboard", "src", "test", "setup.ts")),
+  true,
+  "expected the dashboard workspace to include test setup",
+);
+
+const layoutText = readText(path.join("apps", "dashboard", "src", "app", "layout.tsx"));
+assert.match(layoutText, /Moonrakers Dashboard/);
 
 const globalsCss = readText(path.join("apps", "dashboard", "src", "app", "globals.css"));
 assert.match(
