@@ -9,8 +9,8 @@ export default async function DashboardLayout({
 }>) {
   const { profile } = await requireDashboardAccess();
   const profileName =
-    profile?.display_name?.trim() ||
     profile?.player_name?.trim() ||
+    profile?.display_name?.trim() ||
     "Commander";
 
   return (
