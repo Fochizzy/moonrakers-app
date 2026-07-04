@@ -1,11 +1,10 @@
 import {
-  getDefaultAnalyticsRpcClient,
-  resolveAnalyticsCall,
+  getChartSetup as getSharedChartSetup,
   type AnalyticsRpcClient,
   type ChartSetupParams,
   type ChartSetupPayload,
-  unwrapAnalyticsResult,
-} from "./types.ts";
+} from "@moonrakers/analytics-contract";
+import { getDefaultAnalyticsRpcClient, resolveAnalyticsCall } from "./types.ts";
 
 export async function getChartSetup(
   params: ChartSetupParams,
@@ -23,10 +22,6 @@ export async function getChartSetup(
     clientOrParams,
     maybeParams,
   );
-  const result = await client.rpc<ChartSetupPayload>("get_chart_setup", {
-    chart_key: params.chartKey,
-    profile_id: params.profileId,
-  });
 
-  return unwrapAnalyticsResult("get_chart_setup", result);
+  return getSharedChartSetup(client, params);
 }

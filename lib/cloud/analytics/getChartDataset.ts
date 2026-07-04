@@ -1,11 +1,10 @@
 import {
-  executeAnalyticsReadRpc,
-  getDefaultAnalyticsRpcClient,
-  resolveAnalyticsCall,
+  getChartDataset as getSharedChartDataset,
   type AnalyticsRpcClient,
   type ChartDatasetParams,
   type ChartDatasetPayload,
-} from "./types.ts";
+} from "@moonrakers/analytics-contract";
+import { getDefaultAnalyticsRpcClient, resolveAnalyticsCall } from "./types.ts";
 
 export async function getChartDataset(
   params: ChartDatasetParams,
@@ -23,21 +22,6 @@ export async function getChartDataset(
     clientOrParams,
     maybeParams,
   );
-  return executeAnalyticsReadRpc(
-    client,
-    "get_chart_dataset",
-    {
-      chart_key: params.chartKey,
-      profile_id: params.profileId,
-      focus_player_id: params.focusPlayerId,
-      compare_player_id: params.comparePlayerId,
-      scoped_player_ids: params.scopedPlayerIds,
-      selected_game_id: params.selectedGameId,
-      metric_key: params.metricKey,
-      line_mode: params.lineMode,
-      graph_mode: params.graphMode,
-      opponent_id: params.opponentId,
-    },
-    params.profileId,
-  );
+
+  return getSharedChartDataset(client, params);
 }

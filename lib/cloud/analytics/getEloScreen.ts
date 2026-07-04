@@ -1,11 +1,10 @@
 import {
-  executeAnalyticsReadRpc,
-  getDefaultAnalyticsRpcClient,
-  resolveAnalyticsCall,
+  getEloScreen as getSharedEloScreen,
   type AnalyticsRpcClient,
   type EloScreenParams,
   type EloScreenPayload,
-} from "./types.ts";
+} from "@moonrakers/analytics-contract";
+import { getDefaultAnalyticsRpcClient, resolveAnalyticsCall } from "./types.ts";
 
 export async function getEloScreen(
   params: EloScreenParams,
@@ -24,15 +23,5 @@ export async function getEloScreen(
     maybeParams,
   );
 
-  return executeAnalyticsReadRpc(
-    client,
-    "get_elo_screen",
-    {
-      profile_id: params.profileId,
-      focus_player_id: params.focusPlayerId,
-      opponent_id: params.opponentId,
-      sort_key: params.sortKey,
-    },
-    params.profileId,
-  );
+  return getSharedEloScreen(client, params);
 }

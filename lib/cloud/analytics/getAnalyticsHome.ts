@@ -1,11 +1,10 @@
 import {
-  executeAnalyticsReadRpc,
-  getDefaultAnalyticsRpcClient,
-  resolveAnalyticsCall,
+  getAnalyticsHome as getSharedAnalyticsHome,
   type AnalyticsHomeParams,
   type AnalyticsHomePayload,
   type AnalyticsRpcClient,
-} from "./types.ts";
+} from "@moonrakers/analytics-contract";
+import { getDefaultAnalyticsRpcClient, resolveAnalyticsCall } from "./types.ts";
 
 export async function getAnalyticsHome(
   params: AnalyticsHomeParams,
@@ -23,12 +22,6 @@ export async function getAnalyticsHome(
     clientOrParams,
     maybeParams,
   );
-  return executeAnalyticsReadRpc(
-    client,
-    "get_analytics_home",
-    {
-      profile_id: params.profileId,
-    },
-    params.profileId,
-  );
+
+  return getSharedAnalyticsHome(client, params);
 }

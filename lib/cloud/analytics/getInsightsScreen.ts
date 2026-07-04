@@ -1,11 +1,10 @@
 import {
-  executeAnalyticsReadRpc,
-  getDefaultAnalyticsRpcClient,
-  resolveAnalyticsCall,
+  getInsightsScreen as getSharedInsightsScreen,
   type AnalyticsRpcClient,
   type InsightsScreenParams,
   type InsightsScreenPayload,
-} from "./types.ts";
+} from "@moonrakers/analytics-contract";
+import { getDefaultAnalyticsRpcClient, resolveAnalyticsCall } from "./types.ts";
 
 export async function getInsightsScreen(
   params: InsightsScreenParams,
@@ -23,12 +22,6 @@ export async function getInsightsScreen(
     clientOrParams,
     maybeParams,
   );
-  return executeAnalyticsReadRpc(
-    client,
-    "get_insights_screen",
-    {
-      profile_id: params.profileId,
-    },
-    params.profileId,
-  );
+
+  return getSharedInsightsScreen(client, params);
 }
