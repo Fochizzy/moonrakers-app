@@ -26,6 +26,7 @@ import {
   type RenderSeries,
 } from "@/components/charts/ELO/eloChartUtils";
 import { type EloChartMode } from "./buildEloChartState";
+import { buildEloModeInspectorCopy } from "./eloChartModeHelpers";
 
 type Props = {
   games?: Game[];
@@ -129,42 +130,6 @@ function buildSeriesGeometry(
   });
 }
 
-function buildModeHelperText(
-  selectedMode: EloChartMode,
-  safeSelectedIndex: number,
-  totalGames: number
-) {
-  switch (selectedMode) {
-    case "eloDelta":
-      return `Game ${safeSelectedIndex + 1} swing versus the prior result`;
-    case "matchupGap":
-      return `Game ${safeSelectedIndex + 1} gap versus average opponents`;
-    case "elo":
-    default:
-      return `Game ${safeSelectedIndex + 1} of ${Math.max(totalGames, 1)}`;
-  }
-}
-
-function buildModeStory(
-  selectedMode: EloChartMode,
-  focusedPeakValue: number,
-  focusedDeltaValue: number,
-  selectedValue: number
-) {
-  switch (selectedMode) {
-    case "eloDelta":
-      return `Selected game change ${formatModeValue(selectedValue, "eloDelta")}`;
-    case "matchupGap":
-      return `Selected matchup gap ${formatModeValue(selectedValue, "matchupGap")}`;
-    case "elo":
-    default:
-      return `Peak ${formatModeValue(focusedPeakValue, "elo")} | Delta ${formatModeValue(
-        focusedDeltaValue,
-        "eloDelta"
-      )}`;
-  }
-}
-
 export default function EloChartPlot({
   games = [],
   seriesPaths = [],
@@ -232,6 +197,14 @@ export default function EloChartPlot({
     : 0;
   const focusedDeltaValue =
     (selectedFocusedPoint?.value ?? 0) - toNumber(asArray(focusedRow?.values)[0]);
+  const { helperText, storyText } = buildEloModeInspectorCopy({
+    selectedMode,
+    selectedIndex: safeSelectedIndex,
+    totalGames,
+    focusedPeakValue,
+    focusedDeltaValue,
+    selectedValue: selectedFocusedPoint?.value ?? 0,
+  });
 
   return (
     <View style={styles.wrap}>
@@ -502,15 +475,10 @@ export default function EloChartPlot({
           </View>
 
           <Text style={styles.inspectorSubtext}>
-            {buildModeHelperText(selectedMode, safeSelectedIndex, totalGames)}
+            {helperText}
           </Text>
           <Text style={styles.inspectorStory}>
-            {buildModeStory(
-              selectedMode,
-              focusedPeakValue,
-              focusedDeltaValue,
-              selectedFocusedPoint?.value ?? 0
-            )}
+            {storyText}
           </Text>
         </View>
       ) : null}
