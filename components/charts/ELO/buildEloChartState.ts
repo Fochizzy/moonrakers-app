@@ -1,3 +1,5 @@
+import { filterGamesForFocusedPlayer } from "../../../utils/gameParticipation.ts";
+
 export const ELO_CHART_MODE_OPTIONS = [
   { key: "elo", label: "ELO" },
   { key: "eloDelta", label: "Delta" },
@@ -363,8 +365,11 @@ export function buildEloChartState(args: {
   primaryPlayerId?: string | null;
 }): EloChartState {
   const players = normalizePlayers(args.players);
-  const games = buildDerivedGames(normalizeGames(args.games), players);
   const requestedFocusId = normalizeId(args.primaryPlayerId);
+  const games = buildDerivedGames(
+    normalizeGames(filterGamesForFocusedPlayer(args.games, requestedFocusId)),
+    players
+  );
   const focusedPlayerId =
     (requestedFocusId && players.some((player) => player.id === requestedFocusId)
       ? requestedFocusId
