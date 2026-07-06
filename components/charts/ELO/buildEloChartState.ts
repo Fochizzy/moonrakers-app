@@ -1,6 +1,12 @@
+export const ELO_CHART_MODE_OPTIONS = [
+  { key: "elo", label: "ELO" },
+  { key: "eloDelta", label: "Delta" },
+  { key: "matchupGap", label: "Gap" },
+] as const;
+
 export const DEFAULT_ELO_MODE = "elo" as const;
 
-export type EloChartMode = typeof DEFAULT_ELO_MODE;
+export type EloChartMode = "elo" | "eloDelta" | "matchupGap";
 
 export type EloChartPlayer = {
   id: string;
@@ -42,12 +48,17 @@ export type EloChartSeries = {
 export type EloChartState = {
   games: EloChartGame[];
   players: EloChartPlayer[];
-  seriesPaths: EloChartSeries[];
+  eloSeriesPaths: EloChartSeries[];
   focusedPlayerId: string | null;
+  focusedSeries: EloChartSeries | null;
+  focusedMetricValues: {
+    eloValues: number[];
+    eloDelta: number[];
+    matchupGap: number[];
+  };
+  modeRanges: Record<EloChartMode, { minValue: number; maxValue: number }>;
   selectedIndex: number;
   selectedMode: EloChartMode;
-  minValue: number;
-  maxValue: number;
 };
 
 const FALLBACK_COLORS = [
@@ -91,6 +102,12 @@ function getColorValue(color: unknown, index: number): string {
   const safe = String(color ?? "").trim();
   if (safe) return safe;
   return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+}
+
+function average(values: number[]) {
+  const safeValues = values.filter((value) => Number.isFinite(value));
+  if (!safeValues.length) return 0;
+  return safeValues.reduce((sum, value) => sum + value, 0) / safeValues.length;
 }
 
 function buildRange(values: number[]) {
@@ -297,6 +314,49 @@ function normalizeGames(games?: EloChartGame[]): EloChartGame[] {
   });
 }
 
+function buildFocusedMetricValues(args: {
+  games: EloChartGame[];
+  focusedPlayerId: string | null;
+  eloSeriesPaths: EloChartSeries[];
+  playerIds: string[];
+}) {
+  const focusedSeries =
+    args.eloSeriesPaths.find((row) => row.id === args.focusedPlayerId) ?? null;
+  const eloValues = focusedSeries?.values ?? [];
+
+  const eloDelta = eloValues.map((value, index) =>
+    index === 0 ? 0 : value - (eloValues[index - 1] ?? 0)
+  );
+
+  const matchupGap = args.games.map((game, index) => {
+    if (!args.focusedPlayerId) {
+      return 0;
+    }
+
+    const participantIds = getGameParticipantIds(game, args.playerIds).filter(
+      (playerId) => playerId !== args.focusedPlayerId
+    );
+
+    const opponentElos = participantIds.map((playerId) =>
+      getEloValue(game?.eloSnapshot?.[playerId])
+    );
+
+    const focusedElo =
+      eloValues[index] ?? getEloValue(game?.eloSnapshot?.[args.focusedPlayerId]);
+
+    return focusedElo - average(opponentElos);
+  });
+
+  return {
+    focusedSeries,
+    focusedMetricValues: {
+      eloValues,
+      eloDelta,
+      matchupGap,
+    },
+  };
+}
+
 export function buildEloChartState(args: {
   games?: EloChartGame[];
   players?: EloChartPlayer[];
@@ -310,7 +370,8 @@ export function buildEloChartState(args: {
       ? requestedFocusId
       : players[0]?.id) ?? null;
 
-  const seriesPaths = players.map((player, index) => ({
+  const playerIds = players.map((player) => player.id);
+  const eloSeriesPaths = players.map((player, index) => ({
     id: player.id,
     name: normalizeName(player.name, `Player ${index + 1}`),
     colorValue: getColorValue(player.color, index),
@@ -318,17 +379,28 @@ export function buildEloChartState(args: {
     isFocused: player.id === focusedPlayerId,
   }));
 
-  const allValues = seriesPaths.flatMap((row) => row.values);
-  const { minValue, maxValue } = buildRange(allValues);
+  const { focusedSeries, focusedMetricValues } = buildFocusedMetricValues({
+    games,
+    focusedPlayerId,
+    eloSeriesPaths,
+    playerIds,
+  });
+
+  const modeRanges = {
+    elo: buildRange(eloSeriesPaths.flatMap((row) => row.values)),
+    eloDelta: buildRange(focusedMetricValues.eloDelta),
+    matchupGap: buildRange(focusedMetricValues.matchupGap),
+  };
 
   return {
     games,
     players,
-    seriesPaths,
+    eloSeriesPaths,
     focusedPlayerId,
+    focusedSeries,
+    focusedMetricValues,
+    modeRanges,
     selectedIndex: games.length > 0 ? games.length - 1 : 0,
     selectedMode: DEFAULT_ELO_MODE,
-    minValue,
-    maxValue,
   };
 }
