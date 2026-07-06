@@ -1,5 +1,3 @@
-import { filterGamesForFocusedPlayer } from "../../../utils/gameParticipation.ts";
-
 export const ELO_CHART_MODE_OPTIONS = [
   { key: "elo", label: "ELO" },
   { key: "eloDelta", label: "Delta" },
@@ -51,6 +49,7 @@ export type EloChartState = {
   games: EloChartGame[];
   players: EloChartPlayer[];
   eloSeriesPaths: EloChartSeries[];
+  seriesPaths: EloChartSeries[];
   focusedPlayerId: string | null;
   focusedSeries: EloChartSeries | null;
   focusedMetricValues: {
@@ -61,6 +60,8 @@ export type EloChartState = {
   modeRanges: Record<EloChartMode, { minValue: number; maxValue: number }>;
   selectedIndex: number;
   selectedMode: EloChartMode;
+  minValue: number;
+  maxValue: number;
 };
 
 const FALLBACK_COLORS = [
@@ -316,6 +317,20 @@ function normalizeGames(games?: EloChartGame[]): EloChartGame[] {
   });
 }
 
+function filterGamesForFocusedPlayer(
+  games: EloChartGame[] | undefined,
+  focusedPlayerId: string | null,
+  playerIds: string[]
+) {
+  if (!focusedPlayerId) {
+    return Array.isArray(games) ? games : [];
+  }
+
+  return (Array.isArray(games) ? games : []).filter((game) =>
+    getGameParticipantIds(game, playerIds).includes(focusedPlayerId)
+  );
+}
+
 function buildFocusedMetricValues(args: {
   games: EloChartGame[];
   focusedPlayerId: string | null;
@@ -338,15 +353,22 @@ function buildFocusedMetricValues(args: {
     const participantIds = getGameParticipantIds(game, args.playerIds).filter(
       (playerId) => playerId !== args.focusedPlayerId
     );
+    if (!participantIds.length) {
+      return 0;
+    }
 
     const opponentElos = participantIds.map((playerId) =>
       getEloValue(game?.eloSnapshot?.[playerId])
     );
+    const safeOpponentElos = opponentElos.filter((value) => Number.isFinite(value));
+    if (!safeOpponentElos.length) {
+      return 0;
+    }
 
     const focusedElo =
       eloValues[index] ?? getEloValue(game?.eloSnapshot?.[args.focusedPlayerId]);
 
-    return focusedElo - average(opponentElos);
+    return focusedElo - average(safeOpponentElos);
   });
 
   return {
@@ -359,23 +381,27 @@ function buildFocusedMetricValues(args: {
   };
 }
 
+type EloChartStateWithLegacyAliases = EloChartState & {
+  selectedMode: typeof DEFAULT_ELO_MODE;
+};
+
 export function buildEloChartState(args: {
   games?: EloChartGame[];
   players?: EloChartPlayer[];
   primaryPlayerId?: string | null;
-}): EloChartState {
+}): EloChartStateWithLegacyAliases {
   const players = normalizePlayers(args.players);
   const requestedFocusId = normalizeId(args.primaryPlayerId);
-  const games = buildDerivedGames(
-    normalizeGames(filterGamesForFocusedPlayer(args.games, requestedFocusId)),
-    players
-  );
   const focusedPlayerId =
     (requestedFocusId && players.some((player) => player.id === requestedFocusId)
       ? requestedFocusId
       : players[0]?.id) ?? null;
-
   const playerIds = players.map((player) => player.id);
+  const games = buildDerivedGames(
+    normalizeGames(filterGamesForFocusedPlayer(args.games, focusedPlayerId, playerIds)),
+    players
+  );
+
   const eloSeriesPaths = players.map((player, index) => ({
     id: player.id,
     name: normalizeName(player.name, `Player ${index + 1}`),
@@ -396,16 +422,20 @@ export function buildEloChartState(args: {
     eloDelta: buildRange(focusedMetricValues.eloDelta),
     matchupGap: buildRange(focusedMetricValues.matchupGap),
   };
+  const { minValue, maxValue } = modeRanges.elo;
 
   return {
     games,
     players,
     eloSeriesPaths,
+    seriesPaths: eloSeriesPaths,
     focusedPlayerId,
     focusedSeries,
     focusedMetricValues,
     modeRanges,
     selectedIndex: games.length > 0 ? games.length - 1 : 0,
     selectedMode: DEFAULT_ELO_MODE,
+    minValue,
+    maxValue,
   };
 }
