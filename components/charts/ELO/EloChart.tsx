@@ -6,8 +6,12 @@ import { CHART_COLORS } from "../chartVisualSystem";
 import EloChartPlot from "./EloChartPlot";
 import {
   buildEloChartState,
+  DEFAULT_ELO_MODE,
+  ELO_CHART_MODE_OPTIONS,
+  type EloChartMode,
   type EloChartGame,
   type EloChartPlayer,
+  type EloChartSeries,
 } from "./buildEloChartState";
 
 type Props = {
@@ -32,12 +36,47 @@ export default function EloChart({
     [games, players, primaryPlayerId]
   );
   const [selectedIndex, setSelectedIndex] = useState(chartState.selectedIndex);
+  const [selectedMode, setSelectedMode] = useState<EloChartMode>(DEFAULT_ELO_MODE);
+
+  const activeSeriesPaths = useMemo<EloChartSeries[]>(() => {
+    if (selectedMode === "elo") {
+      return chartState.eloSeriesPaths;
+    }
+
+    if (!chartState.focusedSeries) {
+      return [];
+    }
+
+    const values =
+      selectedMode === "eloDelta"
+        ? chartState.focusedMetricValues.eloDelta
+        : chartState.focusedMetricValues.matchupGap;
+
+    return [
+      {
+        ...chartState.focusedSeries,
+        values,
+        isFocused: true,
+      },
+    ];
+  }, [
+    chartState.eloSeriesPaths,
+    chartState.focusedMetricValues.eloDelta,
+    chartState.focusedMetricValues.matchupGap,
+    chartState.focusedSeries,
+    selectedMode,
+  ]);
+  const activeRange = chartState.modeRanges[selectedMode];
 
   useEffect(() => {
     setSelectedIndex(chartState.selectedIndex);
   }, [chartState.selectedIndex, chartState.games.length, chartState.focusedPlayerId]);
 
-  if (!chartState.games.length || !chartState.players.length || !chartState.seriesPaths.length) {
+  if (
+    !chartState.games.length ||
+    !chartState.players.length ||
+    !chartState.eloSeriesPaths.length
+  ) {
     return (
       <View style={styles.emptyCard}>
         {showHeader ? (
@@ -62,12 +101,14 @@ export default function EloChart({
 
       <EloChartPlot
         games={chartState.games as any}
-        seriesPaths={chartState.seriesPaths as any}
+        seriesPaths={activeSeriesPaths as any}
         selectedIndex={selectedIndex}
-        selectedMode={chartState.selectedMode}
-        minValue={chartState.minValue}
-        maxValue={chartState.maxValue}
+        selectedMode={selectedMode}
+        modeOptions={ELO_CHART_MODE_OPTIONS}
+        minValue={activeRange.minValue}
+        maxValue={activeRange.maxValue}
         onSelectGame={setSelectedIndex}
+        onChangeMode={setSelectedMode}
         focusedPlayerId={chartState.focusedPlayerId ?? undefined}
       />
     </View>
