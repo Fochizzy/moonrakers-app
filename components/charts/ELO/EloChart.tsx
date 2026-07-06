@@ -11,8 +11,8 @@ import {
   type EloChartMode,
   type EloChartGame,
   type EloChartPlayer,
-  type EloChartSeries,
 } from "./buildEloChartState";
+import { deriveActiveEloChartView } from "./eloChartModeHelpers";
 
 type Props = {
   games?: EloChartGame[];
@@ -38,35 +38,10 @@ export default function EloChart({
   const [selectedIndex, setSelectedIndex] = useState(chartState.selectedIndex);
   const [selectedMode, setSelectedMode] = useState<EloChartMode>(DEFAULT_ELO_MODE);
 
-  const activeSeriesPaths = useMemo<EloChartSeries[]>(() => {
-    if (selectedMode === "elo") {
-      return chartState.eloSeriesPaths;
-    }
-
-    if (!chartState.focusedSeries) {
-      return [];
-    }
-
-    const values =
-      selectedMode === "eloDelta"
-        ? chartState.focusedMetricValues.eloDelta
-        : chartState.focusedMetricValues.matchupGap;
-
-    return [
-      {
-        ...chartState.focusedSeries,
-        values,
-        isFocused: true,
-      },
-    ];
-  }, [
-    chartState.eloSeriesPaths,
-    chartState.focusedMetricValues.eloDelta,
-    chartState.focusedMetricValues.matchupGap,
-    chartState.focusedSeries,
-    selectedMode,
-  ]);
-  const activeRange = chartState.modeRanges[selectedMode];
+  const { seriesPaths: activeSeriesPaths, activeRange } = useMemo(
+    () => deriveActiveEloChartView(chartState, selectedMode),
+    [chartState, selectedMode]
+  );
 
   useEffect(() => {
     setSelectedIndex(chartState.selectedIndex);

@@ -19,8 +19,8 @@ assert.match(
 
 assert.match(
   eloChartSource,
-  /selectedMode === "elo"[\s\S]*chartState\.eloSeriesPaths[\s\S]*chartState\.focusedMetricValues\.eloDelta[\s\S]*chartState\.focusedMetricValues\.matchupGap/,
-  "expected the ELO chart container to map ELO, Delta, and Gap onto the rendered series",
+  /deriveActiveEloChartView[\s\S]*deriveActiveEloChartView\(chartState,\s*selectedMode\)/,
+  "expected the ELO chart container to reuse the shared derived-mode helper for rendered series and range state",
 );
 
 assert.match(
