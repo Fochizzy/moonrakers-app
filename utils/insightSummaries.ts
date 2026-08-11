@@ -19,6 +19,22 @@ type InsightSummaryPlayer = {
   name?: string | null;
 };
 
+type InsightSummaryTurnOrderRow = {
+  seat?: number | null;
+  label?: string | null;
+  appearances?: number | null;
+  wins?: number | null;
+  winRate?: number | null;
+};
+
+type InsightSummaryTurnOrderSummary = {
+  totalGames?: number | null;
+  turnOrderWinCorrelation?: number | null;
+  bestSeat?: InsightSummaryTurnOrderRow | null;
+  worstSeat?: InsightSummaryTurnOrderRow | null;
+  summary?: string | null;
+};
+
 type BuildInsightSummaryStatementsInput = {
   tab: InsightSummaryTab;
   selectedPlayerLabel: string | null;
@@ -26,6 +42,7 @@ type BuildInsightSummaryStatementsInput = {
   personalRows: InsightSummaryRow[];
   pairingRows: InsightSummaryRow[];
   macroRows: InsightSummaryRow[];
+  turnOrderSummary: InsightSummaryTurnOrderSummary | null;
   synergyPairs: InsightSummaryPair[];
   players: InsightSummaryPlayer[];
 };
@@ -46,6 +63,14 @@ function formatSigned(value: number) {
   const normalized = toFiniteNumber(value);
   const sign = normalized > 0 ? "+" : "";
   return `${sign}${normalized.toFixed(2)}`;
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(toFiniteNumber(value) * 100)}%`;
+}
+
+function normalizeStatementLabel(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function buildPlayerNameMap(players: InsightSummaryPlayer[]) {
@@ -83,6 +108,118 @@ function resolveSynergyLabel(
   return `${leftName} + ${rightName}`;
 }
 
+function resolveTurnOrderSeatLabel(row: InsightSummaryTurnOrderRow | null | undefined) {
+  const explicitLabel = String(row?.label ?? "").trim();
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+
+  const seat = Math.round(toFiniteNumber(row?.seat));
+  return seat > 0 ? `Seat ${seat}` : "Seat";
+}
+
+function buildMacroFactorStatement(macroRows: InsightSummaryRow[]) {
+  const strongestRow = findStrongestRow(macroRows);
+  if (!strongestRow) {
+    return "No macro correlation signals are published yet.";
+  }
+
+  return `${toCountLabel(macroRows.length, "macro factor")} live; top read: ${
+    strongestRow.label || "Macro factor"
+  } at ${formatSigned(toFiniteNumber(strongestRow.value))}.`;
+}
+
+function buildTurnOrderContextStatement(
+  turnOrderSummary: InsightSummaryTurnOrderSummary | null,
+  fallbackGamesLabel: string,
+) {
+  if (!turnOrderSummary) {
+    return fallbackGamesLabel;
+  }
+
+  const totalGames = Math.max(0, Math.round(toFiniteNumber(turnOrderSummary.totalGames)));
+  const publishedSummary = String(turnOrderSummary.summary ?? "").trim();
+  const baseStatement =
+    publishedSummary ||
+    (totalGames > 0
+      ? `Turn-order sample: ${toCountLabel(totalGames, "finished game")}.`
+      : fallbackGamesLabel);
+
+  if (totalGames <= 0 && !publishedSummary) {
+    return fallbackGamesLabel;
+  }
+
+  if (totalGames <= 0) {
+    return baseStatement;
+  }
+
+  return `${baseStatement} Influence: ${formatSigned(
+    toFiniteNumber(turnOrderSummary.turnOrderWinCorrelation),
+  )}.`;
+}
+
+function buildTurnOrderSeatStatement(
+  turnOrderSummary: InsightSummaryTurnOrderSummary | null,
+) {
+  if (!turnOrderSummary) {
+    return "No published turn-order interpretation yet.";
+  }
+
+  const bestSeat = turnOrderSummary.bestSeat ?? null;
+  const worstSeat = turnOrderSummary.worstSeat ?? null;
+
+  if (!bestSeat && !worstSeat) {
+    return "No seat-level turn-order split is published yet.";
+  }
+
+  const sameSeatRow =
+    bestSeat &&
+    worstSeat &&
+    Math.round(toFiniteNumber(bestSeat.seat)) ===
+      Math.round(toFiniteNumber(worstSeat.seat)) &&
+    Math.round(toFiniteNumber(bestSeat.appearances)) ===
+      Math.round(toFiniteNumber(worstSeat.appearances)) &&
+    Math.round(toFiniteNumber(bestSeat.wins)) ===
+      Math.round(toFiniteNumber(worstSeat.wins)) &&
+    toFiniteNumber(bestSeat.winRate) === toFiniteNumber(worstSeat.winRate) &&
+    normalizeStatementLabel(bestSeat.label) === normalizeStatementLabel(worstSeat.label);
+
+  if (sameSeatRow && bestSeat) {
+    return `Turn-order split is flat so far: ${resolveTurnOrderSeatLabel(
+      bestSeat,
+    )} at ${formatPercent(toFiniteNumber(bestSeat.winRate))} in ${toCountLabel(
+      Math.max(0, Math.round(toFiniteNumber(bestSeat.appearances))),
+      "start",
+    )}.`;
+  }
+
+  const segments: string[] = [];
+
+  if (bestSeat) {
+    segments.push(
+      `Best seat: ${resolveTurnOrderSeatLabel(bestSeat)} at ${formatPercent(
+        toFiniteNumber(bestSeat.winRate),
+      )} in ${toCountLabel(
+        Math.max(0, Math.round(toFiniteNumber(bestSeat.appearances))),
+        "start",
+      )}`,
+    );
+  }
+
+  if (worstSeat) {
+    segments.push(
+      `${bestSeat ? "lowest" : "Worst seat"}: ${resolveTurnOrderSeatLabel(
+        worstSeat,
+      )} at ${formatPercent(toFiniteNumber(worstSeat.winRate))} in ${toCountLabel(
+        Math.max(0, Math.round(toFiniteNumber(worstSeat.appearances))),
+        "start",
+      )}`,
+    );
+  }
+
+  return `${segments.join("; ")}.`;
+}
+
 export function buildInsightSummaryStatements({
   tab,
   selectedPlayerLabel,
@@ -90,6 +227,7 @@ export function buildInsightSummaryStatements({
   personalRows,
   pairingRows,
   macroRows,
+  turnOrderSummary,
   synergyPairs,
   players,
 }: BuildInsightSummaryStatementsInput) {
@@ -118,15 +256,11 @@ export function buildInsightSummaryStatements({
   }
 
   if (tab === "macroCorrelations") {
-    const strongestRow = findStrongestRow(macroRows);
-
     return [
       "Reading tablewide win patterns.",
-      publishedGamesLabel,
-      `${toCountLabel(macroRows.length, "macro factor")} live.`,
-      strongestRow
-        ? `Top read: ${strongestRow.label || "Macro factor"} at ${formatSigned(toFiniteNumber(strongestRow.value))}.`
-        : "No macro correlation signals are published yet.",
+      buildMacroFactorStatement(macroRows),
+      buildTurnOrderContextStatement(turnOrderSummary, publishedGamesLabel),
+      buildTurnOrderSeatStatement(turnOrderSummary),
     ];
   }
 

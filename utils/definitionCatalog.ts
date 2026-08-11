@@ -175,6 +175,11 @@ const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
     subtitle: "How support timing relates to the board state.",
     items: [
       {
+        key: "supportContext",
+        title: "Support Context",
+        body: "A section-level shorthand for support-timing reads, spotlight cards, and support-state context that explain when assist value tends to appear.",
+      },
+      {
         key: "assistGapToTarget",
         title: "Assist Gap to Target",
         body: "Average prestige difference between you and the player you helped immediately before each tracked assist.",
@@ -206,6 +211,11 @@ const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
     title: "Pressure",
     subtitle: "How a player handles lead states, close games, and active table pressure.",
     items: [
+      {
+        key: "pressureContext",
+        title: "Pressure & Context",
+        body: "A section-level shorthand for pressure reads that mix closing, lead conversion, and surrounding game context into one view.",
+      },
       {
         key: "failureRate",
         title: "Failure Rate",
@@ -264,6 +274,11 @@ const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
     subtitle: "Trend, tempo, and non-ELO directional reads.",
     items: [
       {
+        key: "formClosing",
+        title: "Form & Closing",
+        body: "A section-level shorthand that pairs recent-form movement with closing and lead-conversion discipline.",
+      },
+      {
         key: "consistencyScore",
         title: "Consistency Score",
         body: "How stable performance stays from game to game. Some screens shorten this to Consistency.",
@@ -299,16 +314,6 @@ const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
         body: "Estimated ability to dictate the pace of value generation and game flow.",
       },
       {
-        key: "avgStartSeat",
-        title: "Average Start Seat",
-        body: "The player's average recorded starting seat across the sample.",
-      },
-      {
-        key: "turnOrderWinCorrelation",
-        title: "Seat to Win Correlation",
-        body: "How strongly starting seat appears to influence winning outcomes. Some screens shorten this to Seat vs Win Correlation.",
-      },
-      {
         key: "defenseDenialScore",
         title: "Defense Denial Score",
         body: "Estimated ability to suppress opposing production or deny clean value windows.",
@@ -322,6 +327,38 @@ const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
         key: "metaImpactScore",
         title: "Meta Impact Score",
         body: "Composite read for how strongly a player shapes the broader environment around them.",
+      },
+    ],
+  },
+  {
+    key: "turnOrder",
+    title: "Turn Order",
+    subtitle: "Seat order, table-size splits, and how starting position relates to outcomes.",
+    items: [
+      {
+        key: "turnOrderOverview",
+        title: "Turn Order Overview",
+        body: "The top-level turn-order surface that summarizes how each starting seat has performed across the tracked sample.",
+      },
+      {
+        key: "turnOrderByTableSize",
+        title: "By Table Size",
+        body: "A turn-order split that re-checks seat performance inside each tracked table size instead of blending all seat data together.",
+      },
+      {
+        key: "avgStartSeat",
+        title: "Average Start Seat",
+        body: "The player's average recorded starting seat across the sample.",
+      },
+      {
+        key: "seatWinRate",
+        title: "Seat Win Rate",
+        body: "How often a specific starting seat converts appearances into wins across the active sample.",
+      },
+      {
+        key: "turnOrderWinCorrelation",
+        title: "Seat to Win Correlation",
+        body: "How strongly starting seat appears to influence winning outcomes. Some screens shorten this to Seat vs Win Correlation or Turn Order Win Correlation.",
       },
     ],
   },
@@ -816,6 +853,9 @@ export const RELATED_DEFINITION_KEYS: Record<string, string[]> = {
   elo_current: ["elo_peak", "elo_confidence", "elo_expected_vs_actual", "elo_momentum"],
   elo_peak: ["elo_current", "trajectoryGrade", "promotionOdds", "elo_momentum"],
   elo_confidence: ["ratedGames", "contextConfidence", "dataConfidence", "elo_current"],
+  turnOrderOverview: ["turnOrderByTableSize", "avgStartSeat", "seatWinRate", "turnOrderWinCorrelation"],
+  turnOrderByTableSize: ["turnOrderOverview", "seatWinRate", "avgStartSeat", "turnOrderWinCorrelation"],
+  seatWinRate: ["turnOrderOverview", "turnOrderByTableSize", "avgStartSeat", "turnOrderWinCorrelation"],
   pairingCorrelations: ["macroCorrelations", "topSynergyPairs", "dataConfidence", "synergyIndex"],
   macroCorrelations: ["pairingCorrelations", "topSynergyPairs", "cohesionAffect", "conditionalAffect"],
   topSynergyPairs: ["pairingCorrelations", "synergyIndex", "cohesionAffect", "bestSupportPartner"],

@@ -42,6 +42,30 @@ function read(relPath) {
   return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
 }
 
+function assertStatementsMatch(statements, patterns, message) {
+  assert.equal(
+    statements.length,
+    patterns.length,
+    `${message} (expected ${patterns.length} statements)`
+  );
+
+  for (const [index, pattern] of patterns.entries()) {
+    assert.match(
+      statements[index],
+      pattern,
+      `${message} (statement ${index + 1})`
+    );
+  }
+}
+
+function assertUniqueStatements(statements, message) {
+  assert.equal(
+    new Set(statements).size,
+    statements.length,
+    `${message} (expected unique statement strings)`
+  );
+}
+
 const {
   buildInsightSummaryStatements,
 } = require("../utils/insightSummaries.ts");
@@ -59,6 +83,7 @@ const personalStatements = buildInsightSummaryStatements({
     { label: "With GregMTG vs win rate", value: -0.42 },
   ],
   macroRows: [],
+  turnOrderSummary: null,
   synergyPairs: [],
   players: [
     { id: "corey", name: "Corey" },
@@ -71,10 +96,15 @@ assert.equal(
   4,
   "expected personal insights summaries to render four short statements"
 );
-assert.match(
-  personalStatements.join("\n"),
-  /Personal focus: Fochizzy|9 finished games|Corey|0\.71/i,
-  "expected personal summaries to mention the focus player, sample size, and strongest partner read"
+assertStatementsMatch(
+  personalStatements,
+  [
+    /Personal focus: Fochizzy\./i,
+    /9 finished games are in sample\./i,
+    /2 personal signals, 2 partner trends\./i,
+    /Top read: With Corey vs win rate at \+0\.71\./i,
+  ],
+  "expected personal summaries to mention the focus player, sample size, counts, and strongest partner read"
 );
 
 const macroStatements = buildInsightSummaryStatements({
@@ -87,6 +117,7 @@ const macroStatements = buildInsightSummaryStatements({
     { label: "Contracts / Failures Ratio vs Win Rate", value: 0.51 },
     { label: "Assists Given vs Win Rate", value: -0.18 },
   ],
+  turnOrderSummary: null,
   synergyPairs: [],
   players: [],
 });
@@ -96,10 +127,116 @@ assert.equal(
   4,
   "expected macro insights summaries to render four short statements"
 );
-assert.match(
-  macroStatements.join("\n"),
-  /Reading tablewide win patterns|7 finished games|2 macro factors live|0\.51/i,
-  "expected macro summaries to describe the sample, factor count, and strongest macro read"
+assertUniqueStatements(
+  macroStatements,
+  "expected macro fallback summaries to avoid duplicate strings"
+);
+assertStatementsMatch(
+  macroStatements,
+  [
+    /Reading tablewide win patterns\./i,
+    /2 macro factors live; top read: Contracts \/ Failures Ratio vs Win Rate at \+0\.51\./i,
+    /7 finished games are in sample\./i,
+    /No published turn-order interpretation yet\./i,
+  ],
+  "expected macro summaries to describe the sample, factor count, strongest macro read, and missing turn-order state"
+);
+
+const macroTurnOrderStatements = buildInsightSummaryStatements({
+  tab: "macroCorrelations",
+  selectedPlayerLabel: "Fochizzy",
+  metaGames: 11,
+  personalRows: [],
+  pairingRows: [],
+  macroRows: [
+    { label: "Contracts / Failures Ratio vs Win Rate", value: 0.51 },
+    { label: "Turn Order vs Win Rate", value: 0.31 },
+  ],
+  turnOrderSummary: {
+    totalGames: 7,
+    turnOrderWinCorrelation: 0.31,
+    summary: "Seat-to-win correlation across 7 finished games.",
+    bestSeat: {
+      seat: 4,
+      label: "Seat 4",
+      appearances: 4,
+      wins: 3,
+      winRate: 0.75,
+    },
+    worstSeat: {
+      seat: 1,
+      label: "Seat 1",
+      appearances: 5,
+      wins: 1,
+      winRate: 0.2,
+    },
+  },
+  synergyPairs: [],
+  players: [],
+});
+
+assert.equal(
+  macroTurnOrderStatements.length,
+  4,
+  "expected turn-order-enhanced macro summaries to keep the four short statements layout"
+);
+assertStatementsMatch(
+  macroTurnOrderStatements,
+  [
+    /Reading tablewide win patterns\./i,
+    /2 macro factors live; top read: Contracts \/ Failures Ratio vs Win Rate at \+0\.51\./i,
+    /Seat-to-win correlation across 7 finished games\. Influence: \+0\.31\./i,
+    /Best seat: Seat 4 at 75% in 4 starts; lowest: Seat 1 at 20% in 5 starts\./i,
+  ],
+  "expected turn-order-enhanced macro summaries to mention the strongest macro factor plus the full seat interpretation layer"
+);
+
+const macroSameSeatStatements = buildInsightSummaryStatements({
+  tab: "macroCorrelations",
+  selectedPlayerLabel: "Fochizzy",
+  metaGames: 6,
+  personalRows: [],
+  pairingRows: [],
+  macroRows: [
+    { label: "Turn Order vs Win Rate", value: 0.12 },
+  ],
+  turnOrderSummary: {
+    totalGames: 6,
+    turnOrderWinCorrelation: 0.12,
+    summary: "Seat-to-win correlation across 6 finished games.",
+    bestSeat: {
+      seat: 2,
+      label: "Seat 2",
+      appearances: 4,
+      wins: 2,
+      winRate: 0.5,
+    },
+    worstSeat: {
+      seat: 2,
+      label: "Seat 2",
+      appearances: 4,
+      wins: 2,
+      winRate: 0.5,
+    },
+  },
+  synergyPairs: [],
+  players: [],
+});
+
+assertStatementsMatch(
+  macroSameSeatStatements,
+  [
+    /Reading tablewide win patterns\./i,
+    /1 macro factor live; top read: Turn Order vs Win Rate at \+0\.12\./i,
+    /Seat-to-win correlation across 6 finished games\. Influence: \+0\.12\./i,
+    /Turn-order split is flat so far: Seat 2 at 50% in 4 starts\./i,
+  ],
+  "expected same-seat turn-order summaries to collapse to one sane seat statement"
+);
+assert.doesNotMatch(
+  macroSameSeatStatements[3],
+  /Best seat:.*lowest:/i,
+  "expected same-seat turn-order summaries to avoid contradictory best-vs-lowest wording"
 );
 
 const synergyStatements = buildInsightSummaryStatements({
@@ -109,6 +246,7 @@ const synergyStatements = buildInsightSummaryStatements({
   personalRows: [],
   pairingRows: [],
   macroRows: [],
+  turnOrderSummary: null,
   synergyPairs: [
     { a: "corey", b: "greg", score: 88 },
     { a: "greg", b: "izzy", score: 77 },
@@ -125,9 +263,14 @@ assert.equal(
   4,
   "expected synergy insights summaries to render four short statements"
 );
-assert.match(
-  synergyStatements.join("\n"),
-  /Ranking repeat pair chemistry|12 finished games|2 alliance pairs live|Corey \+ GregMTG|88/i,
+assertStatementsMatch(
+  synergyStatements,
+  [
+    /Ranking repeat pair chemistry\./i,
+    /12 finished games are in sample\./i,
+    /2 alliance pairs live\./i,
+    /Top live pair: Corey \+ GregMTG at 88\./i,
+  ],
   "expected synergy summaries to mention the sample, pair count, and top pair"
 );
 

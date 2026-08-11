@@ -14,7 +14,12 @@ export type SimpleMetricKey =
   | "directEfficiency"
   | "contractSuccessRate"
   | "netPrestige"
-  | "supportBalance";
+  | "supportBalance"
+  | "avgStartSeat"
+  | "turnOrderWinCorrelation"
+  | "recentFormDelta"
+  | "leadConversion"
+  | "lateLeadConversion";
 
 export type ReplayMetricKey =
   | "totalPrestige"
@@ -58,6 +63,14 @@ export type PlayerTotals = {
   assistEfficiency?: number;
   directEfficiency?: number;
   assistedEfficiency?: number;
+  startSeat?: number;
+  seat?: number;
+  turnOrder?: number;
+  avgStartSeat?: number;
+  turnOrderWinCorrelation?: number;
+  recentFormDelta?: number;
+  leadConversion?: number;
+  lateLeadConversion?: number;
   assistPrestigeBySource?: Record<string, number>;
   assistPrestigeByPlayer?: Record<string, number>;
   assistPrestigeFromPlayers?: Record<string, number>;
@@ -171,6 +184,12 @@ export const METRIC_OPTIONS: SimpleMetricKey[] = [
   "supportBalance",
 ];
 
+export const PHASE1_AGGREGATE_METRIC_OPTIONS: SimpleMetricKey[] = [
+  "avgStartSeat",
+  "leadConversion",
+  "lateLeadConversion",
+];
+
 export const REPLAY_METRICS: ReplayMetricKey[] = [
   "totalPrestige",
   "score",
@@ -182,6 +201,7 @@ export const REPLAY_METRICS: ReplayMetricKey[] = [
 ];
 
 const REPLAY_CHART_KEYS = new Set(["replay_chart", "replay"]);
+const PHASE1_AGGREGATE_CHART_KEYS = new Set(["heatmap"]);
 const FULL_METRIC_CHART_KEYS = new Set([
   "compare",
   "bar_chart",
@@ -213,6 +233,48 @@ function toNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : Number(value) || 0;
+}
+
+function maybeNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : Number.isFinite(Number(value))
+      ? Number(value)
+      : null;
+}
+
+function averageNumbers(values: number[]): number {
+  return values.length
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : 0;
+}
+
+function getPearsonCorrelation(points: Array<{ x: number; y: number }>): number {
+  if (points.length < 2) return 0;
+
+  const meanX = averageNumbers(points.map((point) => point.x));
+  const meanY = averageNumbers(points.map((point) => point.y));
+
+  let numerator = 0;
+  let sumX = 0;
+  let sumY = 0;
+
+  for (const point of points) {
+    const dx = point.x - meanX;
+    const dy = point.y - meanY;
+    numerator += dx * dy;
+    sumX += dx * dx;
+    sumY += dy * dy;
+  }
+
+  if (sumX === 0 || sumY === 0) return 0;
+  return numerator / Math.sqrt(sumX * sumY);
+}
+
+function normalizePercentValue(value: unknown): number {
+  const parsed = maybeNumber(value);
+  if (parsed == null) return 0;
+  return Math.abs(parsed) <= 1 ? parsed * 100 : parsed;
 }
 
 function ensureObject(value: unknown): Record<string, any> {
@@ -285,6 +347,293 @@ function totalPrestigeFromTotals(totals?: PlayerTotals | null): number {
   );
 }
 
+function getGameWinnerId(game?: NormalizedGame | null): string | null {
+  const winnerId =
+    game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId ?? null;
+  return normalizeId(winnerId) || null;
+}
+
+function resolvePlayerTotalsForGame(
+  game: NormalizedGame | null | undefined,
+  player: StorePlayer | null | undefined
+): PlayerTotals | null {
+  const playerId = normalizeId(player?.id);
+  if (!playerId || !game) return null;
+
+  let totals = game?.totals?.[playerId];
+  if (totals) {
+    return totals;
+  }
+
+  const matchKey = Object.keys(game?.totals ?? {}).find((key) => {
+    const entry = game?.totals?.[key];
+    return (
+      normalizeId(key) === playerId ||
+      normalizeLooseName(entry?.name) === normalizeLooseName(player?.name) ||
+      normalizeLooseName(entry?.playerName) === normalizeLooseName(player?.name)
+    );
+  });
+
+  return matchKey ? game?.totals?.[matchKey] ?? null : null;
+}
+
+function resolvePlayerSeatForGame(
+  game: NormalizedGame | null | undefined,
+  playerId: string,
+  totals?: PlayerTotals | null
+): number | null {
+  const normalizedPlayerId = normalizeId(playerId);
+  if (!normalizedPlayerId || !game) return null;
+
+  const gamePlayer = (game.players ?? []).find(
+    (candidate) => normalizeId(candidate?.id) === normalizedPlayerId
+  );
+
+  const indexedSeat = maybeNumber(
+    (gamePlayer as Record<string, unknown> | undefined)?.startOrder ??
+      (gamePlayer as Record<string, unknown> | undefined)?.turnOrder ??
+      (gamePlayer as Record<string, unknown> | undefined)?.position
+  );
+  if (indexedSeat != null) {
+    return indexedSeat + 1;
+  }
+
+  for (const value of [totals?.startSeat, totals?.seat]) {
+    const parsed = maybeNumber(value);
+    if (parsed != null && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function getGameRounds(game?: NormalizedGame | null): NormalizedRound[] {
+  if (Array.isArray(game?.rounds) && game.rounds.length > 0) {
+    return game.rounds;
+  }
+
+  return Array.isArray(game?.timeline) ? game.timeline : [];
+}
+
+function getRoundTotalPrestige(round: NormalizedRound | null | undefined): number {
+  return (
+    toNumber(round?.directPrestige ?? round?.prestige) +
+    toNumber(round?.assistPrestigeReceived) +
+    toNumber(round?.objectivePrestige)
+  );
+}
+
+function getFinalLeaderIds(game: NormalizedGame | null | undefined): Set<string> {
+  const totals = Object.entries(game?.totals ?? {});
+  if (!totals.length) {
+    return new Set<string>();
+  }
+
+  const bestValue = Math.max(
+    ...totals.map(([, totalsEntry]) => totalPrestigeFromTotals(totalsEntry)),
+    0
+  );
+  if (bestValue <= 0) {
+    return new Set<string>();
+  }
+
+  return new Set(
+    totals
+      .filter(([, totalsEntry]) => totalPrestigeFromTotals(totalsEntry) === bestValue)
+      .map(([playerId]) => normalizeId(playerId))
+      .filter(Boolean)
+  );
+}
+
+function getLeaderIdsAtFraction(
+  game: NormalizedGame | null | undefined,
+  fraction: number
+): Set<string> {
+  const rounds = getGameRounds(game);
+  if (!rounds.length) {
+    return getFinalLeaderIds(game);
+  }
+
+  const cappedFraction = Math.max(0, Math.min(1, fraction));
+  const targetIndex = Math.max(
+    0,
+    Math.min(rounds.length - 1, Math.floor((rounds.length - 1) * cappedFraction))
+  );
+  const totalsByPlayer = new Map<string, number>();
+
+  for (let index = 0; index <= targetIndex; index += 1) {
+    const round = rounds[index];
+    const playerId = normalizeId(round?.playerId);
+    if (!playerId) continue;
+
+    totalsByPlayer.set(
+      playerId,
+      (totalsByPlayer.get(playerId) ?? 0) + getRoundTotalPrestige(round)
+    );
+  }
+
+  const bestValue = Math.max(...totalsByPlayer.values(), 0);
+  if (bestValue <= 0) {
+    return new Set<string>();
+  }
+
+  return new Set(
+    [...totalsByPlayer.entries()]
+      .filter(([, value]) => value === bestValue)
+      .map(([playerId]) => playerId)
+  );
+}
+
+type DerivedSnapshotMetrics = {
+  avgStartSeat: number;
+  currentSeat: number;
+  turnOrderWinCorrelation: number;
+  recentFormDelta: number;
+  leadConversion: number;
+  lateLeadConversion: number;
+};
+
+function buildDerivedSnapshotMetricHistory(
+  games: NormalizedGame[],
+  players: StorePlayer[]
+): Array<Record<string, DerivedSnapshotMetrics>> {
+  const byPlayer: Record<
+    string,
+    {
+      prestigeSamples: number[];
+      seatSamples: number[];
+      seatWinPoints: Array<{ x: number; y: number }>;
+      earlyLeadGames: number;
+      earlyLeadConvertedWins: number;
+      lateLeadGames: number;
+      lateLeadConvertedWins: number;
+    }
+  > = {};
+
+  for (const player of players ?? []) {
+    const playerId = normalizeId(player?.id);
+    if (!playerId) continue;
+    byPlayer[playerId] = {
+      prestigeSamples: [],
+      seatSamples: [],
+      seatWinPoints: [],
+      earlyLeadGames: 0,
+      earlyLeadConvertedWins: 0,
+      lateLeadGames: 0,
+      lateLeadConvertedWins: 0,
+    };
+  }
+
+  return (games ?? []).map((game) => {
+    const winnerId = getGameWinnerId(game);
+    const earlyLeaderIds = getLeaderIdsAtFraction(game, 0.25);
+    const lateLeaderIds = getLeaderIdsAtFraction(game, 0.75);
+    const derivedForGame: Record<string, DerivedSnapshotMetrics> = {};
+
+    for (const player of players ?? []) {
+      const playerId = normalizeId(player?.id);
+      if (!playerId) continue;
+
+      const history = byPlayer[playerId];
+      const totals = resolvePlayerTotalsForGame(game, player);
+      if (!history || !totals) continue;
+
+      const totalPrestige = totalPrestigeFromTotals(totals);
+      const currentSeat = resolvePlayerSeatForGame(game, playerId, totals) ?? 0;
+      const won = winnerId === playerId ? 1 : 0;
+
+      history.prestigeSamples.push(totalPrestige);
+
+      if (currentSeat > 0) {
+        history.seatSamples.push(currentSeat);
+        history.seatWinPoints.push({ x: currentSeat, y: won });
+      }
+
+      if (earlyLeaderIds.has(playerId)) {
+        history.earlyLeadGames += 1;
+        if (won) {
+          history.earlyLeadConvertedWins += 1;
+        }
+      }
+
+      if (lateLeaderIds.has(playerId)) {
+        history.lateLeadGames += 1;
+        if (won) {
+          history.lateLeadConvertedWins += 1;
+        }
+      }
+
+      const recentPrestige = history.prestigeSamples.slice(-5);
+      const recentAverage = averageNumbers(recentPrestige);
+      const overallAverage = averageNumbers(history.prestigeSamples);
+
+      derivedForGame[playerId] = {
+        avgStartSeat: averageNumbers(history.seatSamples),
+        currentSeat,
+        turnOrderWinCorrelation: getPearsonCorrelation(history.seatWinPoints),
+        recentFormDelta: recentAverage - overallAverage,
+        leadConversion: normalizePercentValue(
+          history.earlyLeadGames > 0
+            ? history.earlyLeadConvertedWins / history.earlyLeadGames
+            : 0
+        ),
+        lateLeadConversion: normalizePercentValue(
+          history.lateLeadGames > 0
+            ? history.lateLeadConvertedWins / history.lateLeadGames
+            : 0
+        ),
+      };
+    }
+
+    return derivedForGame;
+  });
+}
+
+type ReplaySnapshotPhase1Metrics = {
+  avgStartSeat: number;
+  startSeat: number;
+  seat: number;
+  turnOrder: number;
+  leadConversion: number;
+  lateLeadConversion: number;
+};
+
+function buildReplayPhase1MetricMap(
+  game?: NormalizedGame | null
+): Record<string, ReplaySnapshotPhase1Metrics> {
+  const winnerId = getGameWinnerId(game);
+  const earlyLeaderIds = getLeaderIdsAtFraction(game, 0.25);
+  const lateLeaderIds = getLeaderIdsAtFraction(game, 0.75);
+  const metricMap: Record<string, ReplaySnapshotPhase1Metrics> = {};
+  const gamePlayers = Array.isArray(game?.players) ? game.players : [];
+
+  for (const player of gamePlayers) {
+    const playerId = normalizeId(player?.id);
+    if (!playerId) continue;
+
+    const totals = resolvePlayerTotalsForGame(game, player);
+    const currentSeat = resolvePlayerSeatForGame(game, playerId, totals) ?? 0;
+    const explicitAvgStartSeat = maybeNumber(totals?.avgStartSeat);
+
+    metricMap[playerId] = {
+      avgStartSeat:
+        explicitAvgStartSeat != null && explicitAvgStartSeat > 0
+          ? explicitAvgStartSeat
+          : currentSeat,
+      startSeat: currentSeat,
+      seat: currentSeat,
+      turnOrder: currentSeat,
+      leadConversion:
+        earlyLeaderIds.has(playerId) && winnerId === playerId ? 100 : 0,
+      lateLeadConversion:
+        lateLeaderIds.has(playerId) && winnerId === playerId ? 100 : 0,
+    };
+  }
+
+  return metricMap;
+}
+
 function getMetricValue(
   totals: PlayerTotals | undefined,
   metricKey: SimpleMetricKey | ReplayMetricKey
@@ -343,6 +692,21 @@ function getMetricValue(
       return directPrestige + assistPrestigeReceived + objectivePrestige;
     case "supportBalance":
       return assistPrestigeReceived - directPrestige;
+    case "avgStartSeat":
+      return (
+        maybeNumber(totals?.avgStartSeat) ??
+        maybeNumber(totals?.startSeat) ??
+        maybeNumber(totals?.seat) ??
+        0
+      );
+    case "turnOrderWinCorrelation":
+      return maybeNumber(totals?.turnOrderWinCorrelation) ?? 0;
+    case "recentFormDelta":
+      return maybeNumber(totals?.recentFormDelta) ?? 0;
+    case "leadConversion":
+      return normalizePercentValue(totals?.leadConversion);
+    case "lateLeadConversion":
+      return normalizePercentValue(totals?.lateLeadConversion);
     default:
       return 0;
   }
@@ -1305,30 +1669,17 @@ export function buildUnifiedSnapshots(
   games: NormalizedGame[],
   players: StorePlayer[]
 ): SnapshotPoint[] {
+  const derivedMetricHistory = buildDerivedSnapshotMetricHistory(games, players);
+
   return (games ?? []).map((game, index) => {
     const snapshot: Record<string, Record<string, number | string>> = {};
+    const derivedMetrics = derivedMetricHistory[index] ?? {};
 
     for (const player of players ?? []) {
       const playerId = String(player?.id ?? "").trim();
       if (!playerId) continue;
 
-      let totals = game?.totals?.[playerId];
-
-      if (!totals) {
-        const matchKey = Object.keys(game?.totals ?? {}).find((key) => {
-          const entry = game?.totals?.[key];
-          return (
-            String(key) === String(playerId) ||
-            normalizeLooseName(entry?.name) === normalizeLooseName(player?.name) ||
-            normalizeLooseName(entry?.playerName) === normalizeLooseName(player?.name)
-          );
-        });
-
-        if (matchKey) {
-          totals = game?.totals?.[matchKey];
-        }
-      }
-
+      const totals = resolvePlayerTotalsForGame(game, player);
       if (!totals) continue;
 
       const inferredTurns = inferTurnsFromGame(game, playerId);
@@ -1340,6 +1691,29 @@ export function buildUnifiedSnapshots(
       const contracts = getMetricValue(totals, "contracts");
       const failures = getMetricValue(totals, "failures");
       const assists = getMetricValue(totals, "assists");
+      const seatMetrics = derivedMetrics[playerId];
+      const currentSeat = seatMetrics?.currentSeat ?? resolvePlayerSeatForGame(game, playerId, totals) ?? 0;
+      const explicitAvgStartSeat = maybeNumber((totals as PlayerTotals).avgStartSeat);
+      const avgStartSeat =
+        explicitAvgStartSeat != null && explicitAvgStartSeat > 0
+          ? explicitAvgStartSeat
+          : seatMetrics?.avgStartSeat ?? currentSeat;
+      const turnOrderWinCorrelation =
+        maybeNumber((totals as PlayerTotals).turnOrderWinCorrelation) ??
+        seatMetrics?.turnOrderWinCorrelation ??
+        0;
+      const recentFormDelta =
+        maybeNumber((totals as PlayerTotals).recentFormDelta) ??
+        seatMetrics?.recentFormDelta ??
+        0;
+      const leadConversion =
+        maybeNumber((totals as PlayerTotals).leadConversion) != null
+          ? normalizePercentValue((totals as PlayerTotals).leadConversion)
+          : seatMetrics?.leadConversion ?? 0;
+      const lateLeadConversion =
+        maybeNumber((totals as PlayerTotals).lateLeadConversion) != null
+          ? normalizePercentValue((totals as PlayerTotals).lateLeadConversion)
+          : seatMetrics?.lateLeadConversion ?? 0;
 
       snapshot[playerId] = {
         playerId,
@@ -1375,6 +1749,14 @@ export function buildUnifiedSnapshots(
           contracts + failures > 0 ? (contracts / (contracts + failures)) * 100 : 0,
         netPrestige: directPrestige + assistPrestigeReceived + objectivePrestige,
         supportBalance: assistPrestigeReceived - directPrestige,
+        startSeat: currentSeat,
+        seat: currentSeat,
+        turnOrder: currentSeat,
+        avgStartSeat,
+        turnOrderWinCorrelation,
+        recentFormDelta,
+        leadConversion,
+        lateLeadConversion,
       };
     }
 
@@ -1400,6 +1782,46 @@ export function buildReplaySnapshotsFromGame(
   if (!replayRounds.length) return [];
 
   const running: Record<string, Record<string, number | string>> = {};
+  const replayPhase1Metrics = buildReplayPhase1MetricMap(game);
+  const winnerId = getGameWinnerId(game) ?? undefined;
+
+  for (const player of game.players ?? []) {
+    const playerId = String(player?.id ?? "").trim();
+    if (!playerId) continue;
+
+    const phase1Metrics = replayPhase1Metrics[playerId] ?? {
+      avgStartSeat: 0,
+      startSeat: 0,
+      seat: 0,
+      turnOrder: 0,
+      leadConversion: 0,
+      lateLeadConversion: 0,
+    };
+
+    running[playerId] = {
+      playerId,
+      playerName: String(player?.name ?? "Player"),
+      label: String(player?.name ?? "Player"),
+      color: String(player?.color ?? ""),
+      score: 0,
+      totalPrestige: 0,
+      prestige: 0,
+      directPrestige: 0,
+      assistPrestigeReceived: 0,
+      objectivePrestige: 0,
+      assists: 0,
+      contracts: 0,
+      failures: 0,
+      turns: 0,
+      efficiency: 0,
+      assistEfficiency: 0,
+      directEfficiency: 0,
+      contractSuccessRate: 0,
+      netPrestige: 0,
+      supportBalance: 0,
+      ...phase1Metrics,
+    };
+  }
 
   return replayRounds.map((round, index) => {
     const playerId = String(round?.playerId ?? "").trim();
@@ -1408,6 +1830,9 @@ export function buildReplaySnapshotsFromGame(
         round: index + 1,
         gameIndex: index + 1,
         label: `Round ${index + 1}`,
+        winnerId,
+        selectedWinnerId: game?.selectedWinnerId,
+        manualWinnerId: game?.manualWinnerId,
         snapshot: { ...running },
       };
     }
@@ -1441,6 +1866,14 @@ export function buildReplaySnapshotsFromGame(
     const failures = toNumber(round?.failures);
     const assists = toNumber(round?.assists);
     const turns = toNumber(existing.turns) + 1;
+    const phase1Metrics = replayPhase1Metrics[playerId] ?? {
+      avgStartSeat: 0,
+      startSeat: 0,
+      seat: 0,
+      turnOrder: 0,
+      leadConversion: 0,
+      lateLeadConversion: 0,
+    };
 
     running[playerId] = {
       playerId,
@@ -1490,12 +1923,16 @@ export function buildReplaySnapshotsFromGame(
         toNumber(existing.assistPrestigeReceived) +
         assistPrestigeReceived -
         (toNumber(existing.directPrestige) + directPrestige),
+      ...phase1Metrics,
     };
 
     return {
       round: index + 1,
       gameIndex: index + 1,
       label: `Round ${index + 1}`,
+      winnerId,
+      selectedWinnerId: game?.selectedWinnerId,
+      manualWinnerId: game?.manualWinnerId,
       snapshot: JSON.parse(JSON.stringify(running)),
     };
   });
@@ -1551,6 +1988,10 @@ export function getSupportedMetricKeysForChart(chartKey?: string | null): Simple
 
   if (STACKED_METRIC_CHART_KEYS.has(normalized)) {
     return ["totalPrestige", "score", "contracts", "assists", "failures"];
+  }
+
+  if (PHASE1_AGGREGATE_CHART_KEYS.has(normalized)) {
+    return [...METRIC_OPTIONS, ...PHASE1_AGGREGATE_METRIC_OPTIONS];
   }
 
   if (FULL_METRIC_CHART_KEYS.has(normalized)) {

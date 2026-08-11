@@ -129,6 +129,24 @@ assert.match(
   "expected Insights help links to target the correlations Definitions category",
 );
 
+assert.match(
+  insightsSource,
+  /normalizeTurnOrderSummary\(correlationPayload\.turnOrderSummary\)/,
+  "expected Insights to normalize the published turn-order summary from the correlations payload",
+);
+
+assert.match(
+  insightsSource,
+  /hasTurnOrderDefinitionsJump[\s\S]*activeSectionTab === "macroCorrelations"[\s\S]*summaryTurnOrder/s,
+  "expected Insights to gate the turn-order Definitions jump to the macro view when turn-order summary data is present",
+);
+
+assert.match(
+  insightsSource,
+  /\{hasTurnOrderDefinitionsJump \? \([\s\S]*<DefinitionsJumpLink[\s\S]*metric="turnOrderWinCorrelation"/s,
+  "expected Insights to expose a metric-targeted Definitions jump for the turn-order interpretation read",
+);
+
 assert.ok(
   insightsSource.indexOf("Open compare for this player") >
     insightsSource.lastIndexOf('view="synergy"'),

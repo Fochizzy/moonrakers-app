@@ -74,6 +74,81 @@ export type AnalyticsMetricCard = {
   metricKey?: string;
 };
 
+export type AnalyticsTurnOrderRow = {
+  seat: number;
+  label: string;
+  appearances: number;
+  wins: number;
+  winRate: number;
+  avgPrestige: number;
+  tableSize?: number | null;
+  correlation?: number | null;
+};
+
+export type AnalyticsTurnOrderGroup = {
+  tableSize: number;
+  label: string;
+  summary?: string;
+  rows: AnalyticsTurnOrderRow[];
+};
+
+export type AnalyticsMetricCluster = {
+  key: string;
+  label: string;
+  summary: string;
+  highlightKey?: string | null;
+  metrics: AnalyticsMetricCard[];
+};
+
+export type AnalyticsTurnOrderSummary = {
+  totalGames: number;
+  turnOrderWinCorrelation: number;
+  bestSeat: AnalyticsTurnOrderRow | null;
+  worstSeat: AnalyticsTurnOrderRow | null;
+  summary: string;
+};
+
+export type AnalyticsCorrelationRow = {
+  key?: string;
+  label: string;
+  value?: number | string | null;
+  strength?: string;
+  meaning?: string;
+  whenWin?: number;
+  whenLose?: number;
+  delta?: number;
+  direction?: string;
+  description?: string;
+};
+
+export type AnalyticsCorrelationPlayerOption = {
+  id: string;
+  label: string;
+  displayName?: string;
+  playerName?: string;
+};
+
+export type AnalyticsSynergyPairRow = {
+  a: string;
+  b: string;
+  score: number;
+};
+
+export type InsightsCorrelationsPayload = Record<string, unknown> & {
+  macro?: AnalyticsCorrelationRow[];
+  pairing?: AnalyticsCorrelationRow[];
+  items?: AnalyticsCorrelationRow[];
+  personal?: AnalyticsCorrelationRow[];
+  players?: AnalyticsCorrelationPlayerOption[];
+  playerOptions?: AnalyticsCorrelationPlayerOption[];
+  winLoseSplit?: AnalyticsCorrelationRow[];
+  synergyPairs?: AnalyticsSynergyPairRow[];
+  relationships?: Record<string, unknown>;
+  turnOrderSummary?: AnalyticsTurnOrderSummary | null;
+  selectedKey?: string | null;
+  summary?: string;
+};
+
 export type AnalyticsTopSignal = {
   key: string;
   label: string;
@@ -100,6 +175,15 @@ export type AnalyticsHomePayload = {
   cards: AnalyticsMetricCard[];
 };
 
+export type AnalyticsPlayerDetail = {
+  playerId: string;
+  label: string;
+  summary: string;
+  stats: Record<string, unknown>;
+  pressureContext?: AnalyticsMetricCluster;
+  [key: string]: unknown;
+};
+
 export type StatsScreenPayload = {
   generatedAt: string;
   overview: {
@@ -112,15 +196,21 @@ export type StatsScreenPayload = {
     topSignals: AnalyticsTopSignal[];
     halftimeProfile?: Record<string, unknown>;
     playerCountSplit?: Record<string, unknown>[];
+    formClosing?: AnalyticsMetricCluster;
   };
   players: {
     options: AnalyticsPlayerOption[];
     selectedPlayerId: string | null;
-    detail: Record<string, unknown> | null;
+    detail: AnalyticsPlayerDetail | null;
   };
   playstyle: Record<string, unknown>;
-  correlations: Record<string, unknown>;
-  games: Record<string, unknown>;
+  correlations: Record<string, unknown> & {
+    turnOrderSummary?: AnalyticsTurnOrderSummary | null;
+  };
+  games: Record<string, unknown> & {
+    turnOrderOverview?: AnalyticsTurnOrderRow[];
+    turnOrderByTableSize?: AnalyticsTurnOrderGroup[];
+  };
   contractEfficiency?: Record<string, unknown>;
   groupMeta?: Record<string, unknown>;
   headToHead?: Record<string, unknown>[];
@@ -133,8 +223,8 @@ export type InsightsScreenPayload = {
   };
   cards: AnalyticsMetricCard[];
   topSignals: AnalyticsTopSignal[];
-  relationships: Record<string, unknown>;
-  correlations: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
+  correlations: InsightsCorrelationsPayload;
 };
 
 export type ChartDatasetPayload = {

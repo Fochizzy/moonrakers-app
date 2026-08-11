@@ -46,6 +46,25 @@ type PlayerOption = {
   playerName: string;
 };
 
+type TurnOrderSummaryRow = {
+  seat: number;
+  label: string;
+  appearances: number;
+  wins: number;
+  winRate: number;
+  avgPrestige: number;
+  tableSize: number | null;
+  correlation: number | null;
+};
+
+type TurnOrderSummary = {
+  totalGames: number;
+  turnOrderWinCorrelation: number;
+  bestSeat: TurnOrderSummaryRow | null;
+  worstSeat: TurnOrderSummaryRow | null;
+  summary: string;
+};
+
 const insightSectionTabs: Array<{
   key: InsightSectionTab;
   label: string;
@@ -107,6 +126,76 @@ function normalizeSynergyPairs(value: unknown) {
     b: toStringValue(entry.b, `pair-b-${index}`),
     score: toFiniteNumber(entry.score),
   }));
+}
+
+function normalizeTurnOrderSummaryRow(value: unknown): TurnOrderSummaryRow | null {
+  const entry = toRecord(value);
+  if (!Object.keys(entry).length) {
+    return null;
+  }
+
+  const seat = Math.max(0, Math.round(toFiniteNumber(entry.seat)));
+  const label = toStringValue(entry.label, seat > 0 ? `Seat ${seat}` : "Seat");
+  const appearances = Math.max(0, Math.round(toFiniteNumber(entry.appearances)));
+  const wins = Math.max(0, Math.round(toFiniteNumber(entry.wins)));
+  const hasRow =
+    seat > 0 ||
+    appearances > 0 ||
+    wins > 0 ||
+    Boolean(label) ||
+    typeof entry.winRate === "number" ||
+    typeof entry.avgPrestige === "number";
+
+  if (!hasRow) {
+    return null;
+  }
+
+  return {
+    seat,
+    label,
+    appearances,
+    wins,
+    winRate: toFiniteNumber(entry.winRate),
+    avgPrestige: toFiniteNumber(entry.avgPrestige),
+    tableSize:
+      typeof entry.tableSize === "number" && Number.isFinite(entry.tableSize)
+        ? Math.round(entry.tableSize)
+        : null,
+    correlation:
+      typeof entry.correlation === "number" && Number.isFinite(entry.correlation)
+        ? entry.correlation
+        : null,
+  };
+}
+
+function normalizeTurnOrderSummary(value: unknown): TurnOrderSummary | null {
+  const entry = toRecord(value);
+  if (!Object.keys(entry).length) {
+    return null;
+  }
+
+  const bestSeat = normalizeTurnOrderSummaryRow(entry.bestSeat);
+  const worstSeat = normalizeTurnOrderSummaryRow(entry.worstSeat);
+  const totalGames = Math.max(0, Math.round(toFiniteNumber(entry.totalGames)));
+  const summary = toStringValue(entry.summary, "");
+  const hasSummary =
+    totalGames > 0 ||
+    summary.length > 0 ||
+    Boolean(bestSeat) ||
+    Boolean(worstSeat) ||
+    typeof entry.turnOrderWinCorrelation === "number";
+
+  if (!hasSummary) {
+    return null;
+  }
+
+  return {
+    totalGames,
+    turnOrderWinCorrelation: toFiniteNumber(entry.turnOrderWinCorrelation),
+    bestSeat,
+    worstSeat,
+    summary,
+  };
 }
 
 function normalizePlayerOption(entry: PayloadRecord, index: number): PlayerOption {
@@ -340,6 +429,10 @@ export default function InsightsScreen() {
     () => normalizeSummaryRows(correlationPayload.macro),
     [correlationPayload.macro],
   );
+  const summaryTurnOrder = useMemo(
+    () => normalizeTurnOrderSummary(correlationPayload.turnOrderSummary),
+    [correlationPayload.turnOrderSummary],
+  );
   const summarySynergyPairs = useMemo(
     () => normalizeSynergyPairs(correlationPayload.synergyPairs),
     [correlationPayload.synergyPairs],
@@ -372,6 +465,7 @@ export default function InsightsScreen() {
         personalRows: summaryPersonalRows,
         pairingRows: summaryPairingRows,
         macroRows: summaryMacroRows,
+        turnOrderSummary: summaryTurnOrder,
         synergyPairs: summarySynergyPairs,
         players: summaryPlayers,
       }),
@@ -384,10 +478,13 @@ export default function InsightsScreen() {
       summaryPersonalRows,
       summaryPlayers,
       summarySynergyPairs,
+      summaryTurnOrder,
     ],
   );
 
   const hasPlayerAwareActions = Boolean(selectedPlayer && activeProfileId);
+  const hasTurnOrderDefinitionsJump =
+    activeSectionTab === "macroCorrelations" && Boolean(summaryTurnOrder);
   const {
     recoveryState,
     sectionState: baseSectionState,
@@ -441,7 +538,17 @@ export default function InsightsScreen() {
         tabs={insightSectionTabs}
         activeTabKey={activeSectionTab}
         onTabChange={(key) => setActiveSectionTab(key as InsightSectionTab)}
-        actions={<DefinitionsJumpLink category="correlations" />}
+        actions={
+          <View style={styles.controlRailActions}>
+            <DefinitionsJumpLink category="correlations" />
+            {hasTurnOrderDefinitionsJump ? (
+              <DefinitionsJumpLink
+                label="Turn-order read"
+                metric="turnOrderWinCorrelation"
+              />
+            ) : null}
+          </View>
+        }
         style={styles.focusRail}
         search={
           activeSectionTab === "pairingCorrelations"
@@ -618,6 +725,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginTop: -2,
+  },
+  controlRailActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 12,
   },
   linkButton: {
     flex: 1,
