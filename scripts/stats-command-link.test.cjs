@@ -32,10 +32,13 @@ assert.match(
   "expected the stats hero card to use the tighter compact spacing treatment"
 );
 
+// buildHomeRoute() is the canonical Command navigation across every screen —
+// see scripts/home-route-canonical-navigation.test.cjs. Raw APP_ROUTES.home
+// leaves stale query params on web links.
 assert.match(
   source,
-  /router\.push\(APP_ROUTES\.home\)/,
-  "expected the stats screen to keep the shared Command navigation path"
+  /router\.push\(buildHomeRoute\(\)\)/,
+  "expected the stats screen to keep the shared canonical Command navigation path"
 );
 
 assert.match(

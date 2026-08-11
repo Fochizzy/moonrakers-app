@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { resolveDraftResumeRoute } from "../lib/game-draft/phase.ts";
 import { buildActiveGameProjection } from "../lib/game-draft/buildActiveGameProjection.ts";
 import { buildDraftFromLegacyActiveGame } from "../lib/game-draft/buildDraftFromLegacyActiveGame.ts";
+import { isUuid } from "../lib/ids/uuid.ts";
 import type { GameDraft } from "../lib/game-draft/types.ts";
 
 const sampleDraft: GameDraft = {
@@ -138,7 +139,29 @@ const convertedDraft = buildDraftFromLegacyActiveGame({
 });
 
 assert.equal(convertedDraft.profileId, "captain-1");
-assert.equal(convertedDraft.draftId, "legacy-active-1");
+assert.ok(
+  isUuid(convertedDraft.draftId),
+  "expected the legacy timestamp id to be upgraded to a UUID draft id",
+);
+
+// Converting the same legacy game twice must resolve to the same draftId:
+// activeGame.id is reprojected from the draft and feeds the client_game_id
+// finish-idempotency key, so a fresh random id each call would duplicate saves.
+const reconvertedDraft = buildDraftFromLegacyActiveGame({
+  profileId: "captain-1",
+  activeGame: legacyActiveGame,
+  now: 1716653000000,
+});
+
+assert.equal(reconvertedDraft.draftId, convertedDraft.draftId);
+assert.notEqual(
+  buildDraftFromLegacyActiveGame({
+    profileId: "captain-1",
+    activeGame: { ...legacyActiveGame, id: "legacy-active-2" },
+    now: 1716652000000,
+  }).draftId,
+  convertedDraft.draftId,
+);
 assert.equal(convertedDraft.phase, "in_progress");
 assert.deepEqual(convertedDraft.selectedPlayerIds, ["captain-2", "captain-1"]);
 assert.deepEqual(convertedDraft.turnOrder, ["captain-2", "captain-1"]);

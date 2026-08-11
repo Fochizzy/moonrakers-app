@@ -164,7 +164,6 @@ describe('analytics service', () => {
     const expected = buildExpectedOutcome({
       player,
       leaderboard,
-      activeGameCount: games.length,
     });
 
     expect(expected.expectedWinRateLow).toBeLessThan(expected.expectedWinRateHigh);

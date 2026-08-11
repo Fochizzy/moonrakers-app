@@ -15,7 +15,7 @@ assert.match(
 
 assert.match(
   source,
-  /<View\s+style=\{\[\s*styles\.heroStickyShell,[\s\S]*<Pressable[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*>Command<[\s\S]*<\/View>\s*<ScrollView/s,
+  /<View\s+style=\{\[\s*styles\.heroStickyShell,[\s\S]*<Pressable[\s\S]*router\.push\(buildHomeRoute\(\)\)[\s\S]*>Command<[\s\S]*<\/View>\s*<ScrollView/s,
   "expected the game screen to render a sticky hero shell above the main ScrollView with a Command button",
 );
 
@@ -46,7 +46,7 @@ assert.ok(
 
 assert.ok(
   source.includes("style={styles.commandButton}") &&
-    source.includes("router.push(APP_ROUTES.home)") &&
+    source.includes("router.push(buildHomeRoute())") &&
     source.includes("<Text style={styles.commandButtonText}>Command</Text>"),
   "expected the sticky game header to keep the Command action on the right side of the hero top row",
 );

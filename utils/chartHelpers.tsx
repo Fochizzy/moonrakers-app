@@ -22,6 +22,7 @@ import {
   getWinnerIdFromGame,
   normalizeGameWithComputedTotals,
 } from '@/utils/gameTotals';
+import { filterGamesForFocusedPlayer } from '@/utils/gameParticipation';
 
 type Player = {
   id: string;
@@ -734,35 +735,60 @@ export default function ChartDetailScreen() {
     };
   }, [games, selectedGame, selectedPlayer]);
 
+  // Multi-series charts plot the focused player against the compare player, so
+  // they only make sense over games both took part in (AND semantics).
+  const scopedHistoryGames = useMemo(
+    () =>
+      isGlobalChart
+        ? games
+        : filterGamesForFocusedPlayer(
+            games,
+            selectedPlayer?.id ?? null,
+            selectedComparePlayer ? [selectedComparePlayer.id] : []
+          ),
+    [games, isGlobalChart, selectedComparePlayer, selectedPlayer]
+  );
+
+  // Single-player charts must not inherit that AND filter. selectedComparePlayer
+  // is auto-picked when the user has not chosen one, so scoping these to it
+  // would silently drop every game the focused player played without them.
+  const focusedHistoryGames = useMemo(
+    () =>
+      isGlobalChart
+        ? games
+        : filterGamesForFocusedPlayer(games, selectedPlayer?.id ?? null),
+    [games, isGlobalChart, selectedPlayer]
+  );
+
   const replayData = useMemo(() => buildReplayFromGame(replayGame), [replayGame]);
 
   const prestigeTimelineData = useMemo(
     () =>
       selectedGame
         ? buildTimelineFromGame(selectedGame, 'totalPrestige')
-        : buildHistoryTimeline(games, selectedPlayers, 'totalPrestige'),
-    [games, selectedGame, selectedPlayers]
+        : buildHistoryTimeline(scopedHistoryGames, selectedPlayers, 'totalPrestige'),
+    [scopedHistoryGames, selectedGame, selectedPlayers]
   );
 
   const lineChartData = useMemo(
     () =>
       selectedGame
         ? buildTimelineFromGame(selectedGame, 'score')
-        : buildHistoryTimeline(games, selectedPlayers, 'score'),
-    [games, selectedGame, selectedPlayers]
+        : buildHistoryTimeline(scopedHistoryGames, selectedPlayers, 'score'),
+    [scopedHistoryGames, selectedGame, selectedPlayers]
   );
 
   const heatmapData = useMemo(
     () =>
       selectedGame
         ? buildTimelineFromGame(selectedGame, 'totalPrestige')
-        : buildHistoryTimeline(games, selectedPlayers, 'totalPrestige'),
-    [games, selectedGame, selectedPlayers]
+        : buildHistoryTimeline(scopedHistoryGames, selectedPlayers, 'totalPrestige'),
+    [scopedHistoryGames, selectedGame, selectedPlayers]
   );
 
   const sparklineData = useMemo(
-    () => buildSparklineDataForPlayer(games, selectedPlayer),
-    [games, selectedPlayer]
+    () => buildSparklineDataForPlayer(focusedHistoryGames, selectedPlayer),
+    [focusedHistoryGames, selectedPlayer]
   );
 
   const radarStats = useMemo(() => buildRadarStats(selectedPlayerTotals), [selectedPlayerTotals]);
@@ -772,8 +798,8 @@ export default function ChartDetailScreen() {
       return buildStackedRowsFromGame(selectedGame);
     }
 
-    return buildStackedRowsFromPlayerHistory(games, selectedPlayer);
-  }, [games, selectedGame, selectedPlayer]);
+    return buildStackedRowsFromPlayerHistory(focusedHistoryGames, selectedPlayer);
+  }, [focusedHistoryGames, selectedGame, selectedPlayer]);
 
   const barData = useMemo(() => {
     return selectedGame
@@ -910,7 +936,13 @@ export default function ChartDetailScreen() {
         );
 
       case 'elo-chart':
-        return <EloChart games={games} players={selectedPlayers} />;
+        return (
+          <EloChart
+            games={scopedHistoryGames}
+            players={selectedPlayers}
+            primaryPlayerId={selectedPlayer?.id ?? null}
+          />
+        );
 
       case 'efficiency-failure-scatter':
         return <EfficiencyFailureScatter games={games} players={selectedPlayers} />;

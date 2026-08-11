@@ -30,7 +30,7 @@ import { sortHistoryGames } from '@/lib/history/historyGameOrdering';
 import { useHistoryDataManager } from '@/lib/history/useHistoryDataManager';
 import { loadHydratedCloudState } from '@/lib/cloud/loadHydratedCloudState';
 import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
-import { APP_ROUTES, buildSummaryRoute } from '@/utils/appRoutes';
+import { APP_ROUTES, buildHomeRoute, buildSummaryRoute } from '@/utils/appRoutes';
 
 import {
   getWinnerIdFromGame,
@@ -492,7 +492,7 @@ export default function HistoryScreen() {
           <ActionButton
             variant="ghost"
             title="Command"
-            onPress={() => router.push(APP_ROUTES.home)}
+            onPress={() => router.push(buildHomeRoute())}
             style={styles.backButton}
           />
         }

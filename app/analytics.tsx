@@ -239,7 +239,7 @@ export default function AnalyticsScreen() {
         headerAction={
           <Pressable
             style={styles.commandButton}
-            onPress={() => router.push(APP_ROUTES.home)}
+            onPress={() => router.push(buildHomeRoute())}
           >
             <Text style={styles.commandButtonText}>Command</Text>
           </Pressable>

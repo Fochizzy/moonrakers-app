@@ -81,7 +81,7 @@ assert.match(
 
 assert.match(
   source,
-  /router\.push\(APP_ROUTES\.home\)/,
+  /router\.push\(buildHomeRoute\(\)\)/,
   "expected the Elo screen to route Command to the shared Command page",
 );
 

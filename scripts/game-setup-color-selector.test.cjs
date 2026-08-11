@@ -41,6 +41,8 @@ for (const extension of [".ts", ".tsx"]) {
 const {
   applyTurnOrderPlayerColorOverride,
   buildActiveGamePlayersFromTurnOrder,
+  buildGameSetupDraftFromTurnOrder,
+  buildGameSetupPlayersFromDraft,
 } = require("../utils/gameSetupTurnOrder.ts");
 
 const gameSetupSource = fs.readFileSync(
@@ -67,6 +69,39 @@ const updatedPlayers = applyTurnOrderPlayerColorOverride(
   originalPlayers,
   "corey",
   "yellow",
+);
+
+const restoredSetupPlayers = buildGameSetupPlayersFromDraft({
+  availablePlayers: originalPlayers,
+  orderedPlayerIds: ["corey", "greg"],
+  playerSnapshots: [
+    {
+      id: "corey",
+      name: "Corey",
+      color: "yellow",
+      initials: "CO",
+      assignedCardArtIndex: 14,
+    },
+    {
+      id: "greg",
+      name: "Greg",
+      color: "green",
+      initials: "GR",
+      assignedCardArtIndex: 11,
+    },
+  ],
+});
+
+assert.equal(
+  restoredSetupPlayers[0]?.color,
+  "yellow",
+  "expected setup draft snapshots to preserve the game-only color instead of falling back to the profile color",
+);
+
+assert.equal(
+  restoredSetupPlayers[0]?.assignedCardArtIndex,
+  14,
+  "expected setup draft snapshots to preserve the matching game-only card art",
 );
 
 assert.notEqual(
@@ -111,6 +146,64 @@ const activePlayers = buildActiveGamePlayersFromTurnOrder(updatedPlayers);
 assert.equal(activePlayers[0]?.color, "yellow");
 assert.equal(activePlayers[0]?.assignedCardArtIndex, 14);
 
+const syncedDraft = buildGameSetupDraftFromTurnOrder({
+  draft: {
+    profileId: "host-1",
+    draftId: "draft-1",
+    phase: "setup",
+    revision: 5,
+    updatedAt: 10,
+    deviceUpdatedAt: 10,
+    selectedPlayerIds: ["greg", "corey"],
+    selectedGroupId: null,
+    selectedGroupName: null,
+    turnOrder: ["greg", "corey"],
+    playerSnapshots: [
+      {
+        id: "greg",
+        name: "Greg",
+        color: "green",
+        initials: "GR",
+        assignedCardArtIndex: 11,
+      },
+      {
+        id: "corey",
+        name: "Corey",
+        color: "blue",
+        initials: "CO",
+        assignedCardArtIndex: 10,
+      },
+    ],
+    gameplay: null,
+  },
+  players: updatedPlayers,
+  now: 42,
+});
+
+assert.deepEqual(
+  syncedDraft.turnOrder,
+  ["corey", "greg"],
+  "expected synced setup drafts to keep the latest local turn order",
+);
+
+assert.deepEqual(
+  syncedDraft.selectedPlayerIds,
+  ["corey", "greg"],
+  "expected synced setup drafts to keep selected player ids aligned with the turn order",
+);
+
+assert.equal(
+  syncedDraft.playerSnapshots[0]?.color,
+  "yellow",
+  "expected synced setup drafts to carry the game-only color into gameplay",
+);
+
+assert.equal(
+  syncedDraft.updatedAt,
+  42,
+  "expected synced setup drafts to refresh their timestamp when setup colors change",
+);
+
 assert.match(
   gameSetupSource,
   /const \[selectedPlayerId, setSelectedPlayerId\] = useState<string \| null>\(null\);/,
@@ -137,8 +230,26 @@ assert.match(
 
 assert.match(
   gameSetupSource,
+  /Tap a Player to Change Color, Drag to Reorder/,
+  "expected the turn-order helper copy to use the shorter tap-and-drag instruction",
+);
+
+assert.match(
+  gameSetupSource,
   /Game-only color/,
   "expected the setup screen to render game-only color chooser copy",
+);
+
+assert.match(
+  gameSetupSource,
+  /buildGameSetupPlayersFromDraft\(\{[\s\S]*playerSnapshots: gameDraft\?\.playerSnapshots/s,
+  "expected the setup screen to prefer draft snapshots so game-only colors survive setup rehydration",
+);
+
+assert.match(
+  gameSetupSource,
+  /const handleSelectGameColor = useCallback\(\(nextColor: CardColor\) => \{[\s\S]*const nextPlayers = applyTurnOrderPlayerColorOverride\([\s\S]*void replaceDraft\(\s*buildGameSetupDraftFromTurnOrder\(\{[\s\S]*players: nextPlayers/s,
+  "expected setup color changes to sync the draft before starting gameplay",
 );
 
 assert.match(

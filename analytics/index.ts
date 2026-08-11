@@ -298,9 +298,8 @@ export function getPredictionConfidence(gamesPlayed: number): PredictionConfiden
 export function buildExpectedOutcome(params: {
   player: LeaderboardRow;
   leaderboard: SortableLeaderboard;
-  activeGameCount: number;
 }): ExpectedOutcome {
-  const { player, leaderboard, activeGameCount } = params;
+  const { player, leaderboard } = params;
   const ratings = leaderboard.map((entry) => entry.rating);
   const avgRating = average(ratings);
   const ratingSpread = Math.max(1, Math.max(...ratings, player.rating) - Math.min(...ratings, player.rating));
@@ -318,7 +317,7 @@ export function buildExpectedOutcome(params: {
     0.82
   );
 
-  const confidence = getPredictionConfidence(Math.max(player.gamesPlayed, activeGameCount));
+  const confidence = getPredictionConfidence(player.gamesPlayed);
   const uncertainty = confidence === 'high' ? 0.06 : confidence === 'moderate' ? 0.1 : 0.16;
 
   const centerPlacement = clamp(

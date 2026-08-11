@@ -14,6 +14,7 @@ import DraggableFlatList, {
   ScaleDecorator,
   type RenderItemParams,
 } from "react-native-draggable-flatlist";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ActionButton from "@/components/ui/ActionButton";
 import AppHeader from "@/components/ui/AppHeader";
@@ -25,7 +26,8 @@ import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { APP_ROUTES } from "@/utils/appRoutes";
 import {
   applyTurnOrderPlayerColorOverride,
-  buildActiveGamePlayersFromTurnOrder,
+  buildGameSetupDraftFromTurnOrder,
+  buildGameSetupPlayersFromDraft,
   buildTurnOrderSummary,
   canSubmitGameSetup,
   type GameSetupTurnOrderPlayer,
@@ -338,8 +340,8 @@ function TurnOrderRow({
             <View style={[styles.rowAvatarWrap, { borderColor: `${accent}55` }]}>
               <PlayerCardIcon
                 player={item as any}
-                size={72}
-                borderRadius={14}
+                size={64}
+                borderRadius={12}
                 showInitial={false}
               />
             </View>
@@ -425,6 +427,7 @@ function GameOnlyColorOverlay({
 export default function GameSetup() {
   const router = useRouter();
   const params = useLocalSearchParams<SetupParams>();
+  const insets = useSafeAreaInsets();
   const storedPlayers = useStore((state) => state.players ?? []);
   const storedGroups = useStore((state) => state.groups ?? []);
   const { gameDraft, replaceDraft, beginGameplay } = useSyncedGameDraft();
@@ -461,7 +464,6 @@ export default function GameSetup() {
     const availablePlayers = Array.isArray(storedPlayers) && storedPlayers.length
       ? (storedPlayers as PlayerLike[])
       : allPlayers;
-    const playerMap = new Map(availablePlayers.map((player) => [player.id, player]));
 
     const draftPlayerIds =
       gameDraft?.turnOrder?.length
@@ -469,10 +471,14 @@ export default function GameSetup() {
         : gameDraft?.selectedPlayerIds ?? [];
 
     if (draftPlayerIds.length > 0) {
-      return draftPlayerIds
-        .map((playerId) => playerMap.get(playerId))
-        .filter(Boolean) as PlayerLike[];
+      return buildGameSetupPlayersFromDraft({
+        availablePlayers,
+        orderedPlayerIds: draftPlayerIds,
+        playerSnapshots: gameDraft?.playerSnapshots ?? [],
+      });
     }
+
+    const playerMap = new Map(availablePlayers.map((player) => [player.id, player]));
 
     if (mode === "players") return selectedPlayers;
 
@@ -521,6 +527,7 @@ export default function GameSetup() {
   );
   const selectedPlayer =
     selectedPlayerIndex >= 0 ? turnOrder[selectedPlayerIndex] ?? null : null;
+  const turnOrderListBottomInset = Math.max(insets.bottom, 14) + 8;
 
   const playStartAnimation = useCallback(async () => {
     setIsStarting(true);
@@ -575,21 +582,12 @@ export default function GameSetup() {
       return;
     }
 
-    const timestamp = Date.now();
-    void replaceDraft({
-      ...gameDraft,
-      phase: "setup",
-      turnOrder: data.map((player) => player.id),
-      playerSnapshots: data.map((player) => ({
-        id: player.id,
-        name: player.name ?? "Unknown",
-        initials: player.initials,
-        color: player.color,
-        assignedCardArtIndex: player.assignedCardArtIndex ?? null,
-      })),
-      updatedAt: timestamp,
-      deviceUpdatedAt: timestamp,
-    });
+    void replaceDraft(
+      buildGameSetupDraftFromTurnOrder({
+        draft: gameDraft,
+        players: data,
+      })
+    );
   }, [gameDraft, replaceDraft]);
 
   const handleDragBegin = useCallback(() => {
@@ -613,12 +611,24 @@ export default function GameSetup() {
 
   const handleSelectGameColor = useCallback((nextColor: CardColor) => {
     if (!selectedPlayerId) return;
-    setTurnOrder((currentPlayers) =>
-      applyTurnOrderPlayerColorOverride(currentPlayers, selectedPlayerId, nextColor)
+    const nextPlayers = applyTurnOrderPlayerColorOverride(
+      turnOrder,
+      selectedPlayerId,
+      nextColor
     );
+
+    setTurnOrder(nextPlayers);
+    if (gameDraft) {
+      void replaceDraft(
+        buildGameSetupDraftFromTurnOrder({
+          draft: gameDraft,
+          players: nextPlayers,
+        })
+      );
+    }
     Haptics.selectionAsync().catch(() => {});
     setIsColorPickerOpen(false);
-  }, [selectedPlayerId]);
+  }, [gameDraft, replaceDraft, selectedPlayerId, turnOrder]);
 
   const renderItem = useCallback(
     (params: RenderItemParams<PlayerLike>) => (
@@ -683,7 +693,7 @@ export default function GameSetup() {
                 Turn Order
               </Text>
               <Text style={styles.listHint}>
-                Tap a tile to select a captain, then change this game's color.
+                Tap a Player to Change Color, Drag to Reorder
               </Text>
             </View>
 
@@ -708,8 +718,14 @@ export default function GameSetup() {
             onDragBegin={handleDragBegin}
             onDragEnd={handleDragEnd}
             activationDistance={6}
+            containerStyle={styles.list}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              {
+                paddingBottom: turnOrderListBottomInset,
+              },
+            ]}
             ListEmptyComponent={<View style={styles.listEmptyState} />}
           />
         </View>
@@ -975,7 +991,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: 4,
-    paddingBottom: 8,
   },
   listEmptyState: {
     paddingVertical: 20,
@@ -989,7 +1004,7 @@ const styles = StyleSheet.create({
     opacity: 0.98,
   },
   rowCard: {
-    minHeight: 132,
+    minHeight: 116,
     borderRadius: 22,
     borderWidth: 1,
     paddingHorizontal: 12,
@@ -1029,8 +1044,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   rowAvatarWrap: {
-    width: 84,
-    height: 112,
+    width: 76,
+    height: 96,
     borderRadius: 16,
     borderWidth: 1,
     alignItems: "center",

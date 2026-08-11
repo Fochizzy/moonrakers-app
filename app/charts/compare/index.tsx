@@ -30,7 +30,7 @@ import MetricInfoModal from "@/components/charts/compare/MetricInfoModal";
 import CompareFocusBar from "@/components/charts/compare/CompareFocusBar";
 
 import { METRICS, METRIC_GROUPS } from "@/utils/compareMetrics";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { buildHomeRoute } from "@/utils/appRoutes";
 import {
   buildConditionalAnalysis,
   conditionalReducer,
@@ -737,7 +737,7 @@ export default function IndexScreen() {
             <ActionButton
               title="Command"
               variant="ghost"
-              onPress={() => router.push(APP_ROUTES.home)}
+              onPress={() => router.push(buildHomeRoute())}
               style={styles.heroActionButton}
             />
           }

@@ -25,6 +25,18 @@ assert.match(
   "expected the turn-order pill to render from rowIndex instead of a possibly undefined index value",
 );
 
+assert.match(
+  source,
+  /rowCard:\s*\{[\s\S]*?minHeight:\s*116,/,
+  "expected the turn-order player card shell to stay more compact vertically",
+);
+
+assert.match(
+  source,
+  /rowAvatarWrap:\s*\{[\s\S]*?width:\s*76,[\s\S]*?height:\s*96,/,
+  "expected the player art frame to use a shorter portrait size so each turn-order row is less tall",
+);
+
 assert.doesNotMatch(
   source,
   /tapSelectChip:\s*\{[^}]*borderWidth:\s*1,/,

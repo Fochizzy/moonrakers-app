@@ -78,6 +78,11 @@ if (fs.existsSync(missionScreenPath)) {
   assert.match(missionSource, /Choose 1st Player/);
   assert.match(missionSource, /1 Direct Prestige/);
   assert.match(missionSource, /Choose 2nd Place/);
+  assert.doesNotMatch(
+    missionSource,
+    /patchActiveGame/,
+    "expected the mission screen to persist placements through the draft rather than patching the activeGame projection, which is overwritten on the next hydration",
+  );
   assert.match(
     missionSource,
     /const selectionReady = hasHeadToHeadSelection\(\{[\s\S]*headToHeadFirstPlaceId:\s*firstPlaceId,[\s\S]*headToHeadSecondPlaceId:\s*secondPlaceId,[\s\S]*\}\);/s,
@@ -85,8 +90,26 @@ if (fs.existsSync(missionScreenPath)) {
   );
   assert.match(
     missionSource,
-    /<Pressable[\s\S]*disabled=\{!selectionReady\}[\s\S]*style=\{\[styles\.primaryAction,\s*!selectionReady && styles\.primaryActionDisabled\]\}[\s\S]*>\s*<Text style=\{styles\.primaryActionText\}>Apply Mission<\/Text>/s,
-    "expected Apply Mission to be disabled until both placements are chosen",
+    /const nextGameplay = \{[\s\S]*current:\s*\{[\s\S]*headToHeadFirstPlaceId:\s*nextSelection\.firstPlaceId,[\s\S]*headToHeadSecondPlaceId:\s*nextSelection\.secondPlaceId,[\s\S]*\};[\s\S]*const savedDraft = await updateGameplay\(nextGameplay, "in_progress"\);/s,
+    "expected saving a mission selection to write the placements into the draft before returning so the main screen does not reset them",
+  );
+
+  assert.match(
+    missionSource,
+    /if \(!savedDraft\) \{[\s\S]*Alert\.alert\([\s\S]*return;\s*\}\s*router\.back\(\);/s,
+    "expected a failed draft write to surface an alert instead of silently returning with the placements dropped",
+  );
+
+  assert.match(
+    missionSource,
+    /router\.back\(\);/,
+    "expected saving a mission selection to close back to the main game screen",
+  );
+
+  assert.match(
+    missionSource,
+    /<Pressable[\s\S]*disabled=\{!selectionReady\}[\s\S]*style=\{\[styles\.primaryAction,\s*!selectionReady && styles\.primaryActionDisabled\]\}[\s\S]*>\s*<Text style=\{styles\.primaryActionText\}>Save<\/Text>/s,
+    "expected Save to be disabled until both placements are chosen",
   );
 
   assert.doesNotMatch(

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -11,13 +12,17 @@ import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard"
 import ChartInsightStrip from "@/components/charts/ChartInsightStrip";
 import ChartMetricChip from "@/components/charts/ChartMetricChip";
 import ChartSurface from "@/components/charts/ChartSurface";
+import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
 import HeroCard from "@/components/ui/HeroCard";
+import DefinitionRichText from "@/components/ui/DefinitionRichText";
+import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import AssistNetworkOverview from "@/components/charts/AssistNetworkOverview";
 import BarChart from "@/components/charts/BarChart";
 import BumpChart from "@/components/charts/BumpChart";
+import CompareChart from "@/components/charts/CompareChart";
 import { resolveChartDetailProvenance } from "@/lib/charts/chartDetailProvenance";
 import {
   CHART_COLORS,
@@ -37,7 +42,6 @@ import PrestigeOverTimeChart from "@/components/charts/PrestigeOverTimeChart";
 import RadarChart from "@/components/charts/RadarChart/RadarChart";
 import ReplayChart from "@/components/charts/ReplayChart";
 import RivalryGraph from "@/components/charts/RivalryGraph";
-import RelationshipGraph from "@/components/charts/RelationshipGraph";
 import Sparkline from "@/components/charts/Sparkline";
 import StackedBarChart from "@/components/charts/StackedBarChart";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
@@ -45,12 +49,34 @@ import { getChartDataset } from "@/lib/cloud/analytics/getChartDataset";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useGames, usePlayers, useStore } from "@/store/useStore";
-import { APP_ROUTES, buildChartsRoute } from "@/utils/appRoutes";
+import { APP_ROUTES, buildChartsRoute, buildHomeRoute } from "@/utils/appRoutes";
 import { buildLocalChartDetailState } from "@/utils/chartDetailLocalData";
 import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
+import { getSupportedMetricKeysForChart } from "@/utils/charts";
+import { getMetricOrFallback } from "@/utils/metricMap";
 
 type PayloadRecord = Record<string, unknown>;
 type CloudFallbackSnapshot = Awaited<ReturnType<typeof loadCloudSnapshot>>;
+type ChartMetricOption = {
+  key: string;
+  label: string;
+  shortLabel?: string;
+  category?: string;
+};
+
+const DETAIL_METRIC_CONTROL_KEYS = new Set([
+  "compare",
+  "line_chart",
+  "multi_line_chart",
+  "sparkline",
+  "bar_chart",
+  "bar",
+  "bump_chart",
+  "consistency_band",
+  "heatmap",
+  "replay_chart",
+  "stacked_bar_chart",
+]);
 
 function getParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -107,6 +133,22 @@ function toArray(value: unknown): PayloadRecord[] {
 
 function toList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function toMetricOptions(value: unknown): ChartMetricOption[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry, index) => ({
+      key: String(entry.key ?? `metric-${index}`).trim(),
+      label: String(entry.label ?? entry.title ?? entry.name ?? entry.key ?? `Metric ${index + 1}`).trim(),
+      shortLabel: String(entry.shortLabel ?? entry.short_label ?? entry.label ?? entry.key ?? "").trim() || undefined,
+      category: String(entry.category ?? "").trim() || undefined,
+    }))
+    .filter((entry) => entry.key.length > 0 && entry.label.length > 0);
 }
 
 function toStringArray(value: unknown): string[] {
@@ -221,12 +263,14 @@ export default function ChartKeyScreen() {
   const params = useLocalSearchParams<{
     chartKey?: string | string[];
     playerId?: string | string[];
+    focusPlayerId?: string | string[];
     compareId?: string | string[];
     compareIds?: string | string[];
     selectedGameId?: string | string[];
     gameId?: string | string[];
     ids?: string | string[];
     metric?: string | string[];
+    metricKey?: string | string[];
     mode?: string | string[];
     lineMode?: string | string[];
     opponentId?: string | string[];
@@ -235,7 +279,7 @@ export default function ChartKeyScreen() {
   const chartKey = normalizeChartKey(params.chartKey);
   const routeMode = normalizeGraphMode(params.mode);
   const routeLineMode = normalizeLineMode(params.lineMode);
-  const routePlayerId = getParam(params.playerId);
+  const routePlayerId = getParam(params.playerId) ?? getParam(params.focusPlayerId);
   const routeCompareId = getParam(params.compareId);
   const routeCompareIds = getParamList(params.compareIds);
   const routeCompareIdsKey = routeCompareIds.join(",");
@@ -243,7 +287,7 @@ export default function ChartKeyScreen() {
     getParam(params.selectedGameId) ?? getParam(params.gameId);
   const routeIds = getParamList(params.ids);
   const routeIdsKey = routeIds.join(",");
-  const routeMetric = getParam(params.metric);
+  const routeMetric = getParam(params.metric) ?? getParam(params.metricKey);
   const routeOpponentId = getParam(params.opponentId);
   const setupChartKey = useMemo(() => resolveSetupChartKey(chartKey), [chartKey]);
   const profileId = String(authSession?.user?.id ?? "").trim();
@@ -294,7 +338,10 @@ export default function ChartKeyScreen() {
   const loading = datasetQuery.loading;
   const isStale = datasetQuery.isStale;
   const staleMessage = datasetQuery.staleMessage;
-  const cloudFallbackResetKey = [profileId, datasetQuery.queryKey].join(":");
+  // The fallback is a whole-account snapshot keyed only by profile, so it must
+  // not reset on datasetQuery.queryKey: that key carries the route metric, and
+  // every metric tab tap would throw the snapshot away and re-download it.
+  const cloudFallbackResetKey = profileId;
 
   useEffect(() => {
     setCloudFallbackSnapshot(null);
@@ -321,16 +368,10 @@ export default function ChartKeyScreen() {
   const rpcFallbackGames = toArray(datasetData.sourceGames) as any[];
   const serverChartPlayers = serverPlayers.length ? serverPlayers : rpcFallbackPlayers;
   const serverChartGames = serverGames.length ? serverGames : rpcFallbackGames;
-  const serverRelationshipPlayers = serverPlayers;
   const serverRelationshipEdges = toArray(
     datasetData.relationships ?? datasetData.edges,
   ) as any[];
   const emptyState = toRecord(dataset?.emptyState);
-  const summaryChips = [
-    routeMetric ? `Metric: ${routeMetric}` : null,
-    routeLineMode && isLineModeDriven(chartKey) ? `Mode: ${routeLineMode}` : null,
-    routeMode === "network" ? "Graph: network" : null,
-  ].filter(Boolean) as string[];
   const pointCount = toNumberValue(datasetMeta.pointCount, datasetPoints.length);
   const hasData = Boolean(datasetMeta.hasData) || pointCount > 0 || datasetSeries.length > 0;
   const hasUsableRpcFallbackHistory =
@@ -385,6 +426,54 @@ export default function ChartKeyScreen() {
     datasetData.activeMetricKey,
     serverMetricKey,
   );
+  const metricOptions = useMemo(() => {
+    const directOptions = toMetricOptions(serverMetricOptions);
+    if (directOptions.length > 0) {
+      return directOptions;
+    }
+
+    const metricMapOptions = Object.keys(serverMetricDataMap)
+      .filter((key) => Array.isArray(serverMetricDataMap[key]))
+      .map((key) => ({
+        key,
+        label: titleCase(key),
+        shortLabel: titleCase(key),
+      }));
+    if (metricMapOptions.length > 0) {
+      return metricMapOptions;
+    }
+
+    return getSupportedMetricKeysForChart(chartKey).map((key) => {
+      const metric = getMetricOrFallback(key);
+      return {
+        key,
+        label: metric.label,
+        shortLabel: metric.label,
+      };
+    });
+  }, [chartKey, serverMetricDataMap, serverMetricOptions]);
+  const activeMetric = useMemo(() => {
+    const normalized = toStringValue(
+      routeMetric,
+      serverActiveMetricKey ?? serverMetricKey ?? localChartData.metricKey,
+    ).trim();
+    return normalized.length > 0 ? normalized : null;
+  }, [localChartData.metricKey, routeMetric, serverActiveMetricKey, serverMetricKey]);
+  const activeMetricLabel = useMemo(() => {
+    if (!activeMetric) {
+      return null;
+    }
+
+    return (
+      metricOptions.find((option) => option.key === activeMetric)?.label ??
+      titleCase(activeMetric)
+    );
+  }, [activeMetric, metricOptions]);
+  const detailMetricControlKey =
+    chartKey === "compare" ? "compare" : resolveChartMetadata(chartKey).key;
+  const showDetailMetricRail =
+    metricOptions.length > 1 &&
+    DETAIL_METRIC_CONTROL_KEYS.has(detailMetricControlKey);
   const serverScopeIds =
     serverScopedPlayerIds.length > 0 ? serverScopedPlayerIds : routeIds;
   const serverSelectedIds =
@@ -423,11 +512,23 @@ export default function ChartKeyScreen() {
     ? serverPlayerDirectory.get(serverComparePlayerId) ?? null
     : null;
   const scopedPlayerIds = localChartData.scopedPlayerIds;
+  const unifiedGames = localChartData.games;
+  const resolvedPlayers = fallbackPlayers;
+  // AssistNetworkOverview derives the network from games, not from the published
+  // edge list, so the server branch has to fall back to the payload's own games
+  // and players. Requiring local data here would blank the chart on a device
+  // that has nothing hydrated yet, even though the server sent usable edges.
+  const relationshipGames = unifiedGames.length ? unifiedGames : serverChartGames;
+  const relationshipPlayers = resolvedPlayers.length
+    ? resolvedPlayers
+    : serverChartPlayers;
   const hasRenderableServerChart = useMemo(() => {
     switch (chartKey) {
       case "relationship_graph":
         return (
-          serverChartPlayers.length > 0 && serverRelationshipEdges.length > 0
+          serverRelationshipEdges.length > 0 &&
+          relationshipGames.length > 0 &&
+          relationshipPlayers.length > 0
         );
       case "radar":
         return !shouldForceLocalRadarCompare && Boolean(serverPrimaryRadar);
@@ -481,6 +582,10 @@ export default function ChartKeyScreen() {
     serverReplayData.length,
     serverMetricDataMap,
     shouldForceLocalRadarCompare,
+    relationshipGames.length,
+    relationshipPlayers.length,
+    unifiedGames.length,
+    resolvedPlayers.length,
   ]);
   const hasServerPayload = hasData || hasRenderableServerChart;
   const shouldUseLocalChartFallback =
@@ -515,6 +620,11 @@ export default function ChartKeyScreen() {
   );
   const chartSubtitle = toStringValue(dataset?.subtitle, buildSubheading(chartKey));
   const heroSubtitle = isStale ? provenance.caption : chartSubtitle;
+  const summaryChips = [
+    activeMetricLabel ? `Metric: ${activeMetricLabel}` : null,
+    routeLineMode && isLineModeDriven(chartKey) ? `Mode: ${routeLineMode}` : null,
+    routeMode === "network" ? "Graph: network" : null,
+  ].filter(Boolean) as string[];
 
   useEffect(() => {
     if (
@@ -551,6 +661,46 @@ export default function ChartKeyScreen() {
       cancelled = true;
     };
   }, [cloudFallbackResetKey, profileId, shouldLoadCloudFallback]);
+
+  function handleMetricChange(nextMetric: string) {
+    const normalized = String(nextMetric ?? "").trim();
+    if (!normalized || normalized === activeMetric) {
+      return;
+    }
+
+    router.setParams({ metric: normalized } as any);
+  }
+
+  function renderMetricRail() {
+    if (!showDetailMetricRail) {
+      return null;
+    }
+
+    return (
+      <View style={styles.detailMetricRail}>
+        <View style={styles.detailMetricRailHeader}>
+          <Text style={styles.detailMetricRailTitle}>Metric</Text>
+          <Text style={styles.detailMetricRailValue}>
+            {activeMetricLabel ?? titleCase(activeMetric ?? "metric")}
+          </Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.detailMetricTabsScroll}
+        >
+          <ChartUnderlineTabs
+            items={metricOptions.map((option) => ({
+              key: option.key,
+              label: option.shortLabel ?? option.label,
+            }))}
+            activeKey={activeMetric ?? metricOptions[0]?.key ?? ""}
+            onChange={handleMetricChange}
+          />
+        </ScrollView>
+      </View>
+    );
+  }
 
   function renderSparklineFallback() {
     if (!localChartData.sparklineValues.length) {
@@ -595,11 +745,22 @@ export default function ChartKeyScreen() {
         );
       case "sparkline":
         return renderSparklineFallback();
+      case "compare":
+        return (
+          <CompareChart
+            data={localChartData.snapshots as any}
+            players={localChartData.chartPlayers as any}
+            statKey={activeMetric ?? localChartData.metricKey}
+            focusPlayerId={localChartData.selectedPlayer?.id ?? null}
+            comparePlayerId={localChartData.comparePlayer?.id ?? null}
+            showHeader={false}
+          />
+        );
       case "relationship_graph":
         return (
           <AssistNetworkOverview
-            games={cloudFallbackGames as any}
-            players={cloudFallbackPlayers as any}
+            games={unifiedGames as any}
+            players={resolvedPlayers as any}
             scopedPlayerIds={routeIds.length ? routeIds : scopedPlayerIds}
             exactScopePlayerIds={routeIds.length >= 2 ? routeIds : undefined}
             mode={routeMode}
@@ -644,7 +805,7 @@ export default function ChartKeyScreen() {
           <LineChart
             data={localChartData.snapshots as any}
             players={localChartData.chartPlayers as any}
-            statKey={localChartData.metricKey}
+            statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             mode={routeLineMode}
             showModeSelector={false}
@@ -675,7 +836,7 @@ export default function ChartKeyScreen() {
           <BarChart
             data={localChartData.snapshots as any}
             players={localChartData.chartPlayers as any}
-            statKey={localChartData.metricKey}
+            statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
           />
@@ -685,7 +846,7 @@ export default function ChartKeyScreen() {
           <Heatmap
             data={localChartData.snapshots as any}
             players={localChartData.chartPlayers as any}
-            statKey={localChartData.metricKey}
+            statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
           />
@@ -712,7 +873,7 @@ export default function ChartKeyScreen() {
           <BumpChart
             data={localChartData.snapshots as any}
             players={localChartData.chartPlayers as any}
-            statKey={localChartData.metricKey}
+            statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
           />
@@ -722,7 +883,7 @@ export default function ChartKeyScreen() {
           <ConsistencyBandChart
             data={localChartData.snapshots as any}
             players={localChartData.chartPlayers as any}
-            statKey={localChartData.metricKey}
+            statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
           />
@@ -732,7 +893,7 @@ export default function ChartKeyScreen() {
           <ReplayChart
             replay={localChartData.snapshots as any}
             players={localChartData.chartPlayers as any}
-            statKey={localChartData.metricKey as any}
+            statKey={(activeMetric ?? localChartData.metricKey) as any}
             title="Replay Chart"
             showHeader={false}
           />
@@ -742,30 +903,21 @@ export default function ChartKeyScreen() {
     }
   }
 
-  function renderServerRelationshipGraph() {
-    if (!hasRenderableServerChart || chartKey !== "relationship_graph") {
-      return null;
-    }
-
-    return (
-      <RelationshipGraph
-        players={serverRelationshipPlayers as any}
-        relationships={serverRelationshipEdges as any}
-        scopedPlayerIds={routeIds.length ? routeIds : undefined}
-        variant="assist_network"
-        mode={routeMode}
-        title="Assist Network"
-        subtitle="Directed assist flow across the published Supabase analytics dataset."
-        showHeader={false}
-        showReadoutCards={false}
-      />
-    );
-  }
-
   function renderServerChart() {
     switch (chartKey) {
       case "relationship_graph":
-        return renderServerRelationshipGraph();
+        if (!hasRenderableServerChart) {
+          return null;
+        }
+        return (
+          <AssistNetworkOverview
+            games={relationshipGames as any}
+            players={relationshipPlayers as any}
+            scopedPlayerIds={routeIds.length ? routeIds : scopedPlayerIds}
+            exactScopePlayerIds={routeIds.length >= 2 ? routeIds : undefined}
+            mode={routeMode}
+          />
+        );
       case "radar":
         if (!serverPrimaryRadar) {
           return null;
@@ -788,7 +940,11 @@ export default function ChartKeyScreen() {
           <Sparkline
             data={serverChartData as any}
             comparisonData={serverComparisonData as any}
+            metricOptions={serverMetricOptions as any}
+            metricSeriesMap={serverMetricDataMap as any}
+            activeMetricKey={activeMetric ?? undefined}
             defaultMetricKey={serverMetricKey}
+            onChangeMetric={handleMetricChange}
             primaryLabel={toStringValue(
               datasetData.primaryLabel,
               serverFocusPlayer?.name ?? "Player",
@@ -845,7 +1001,7 @@ export default function ChartKeyScreen() {
           <LineChart
             data={serverChartData as any}
             players={serverChartPlayers as any}
-            statKey={serverMetricKey}
+            statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
             mode={serverLineMode as any}
@@ -877,8 +1033,12 @@ export default function ChartKeyScreen() {
             players={serverChartPlayers as any}
             metricDataMap={serverMetricDataMap as any}
             metricOptions={serverMetricOptions as any}
-            activeMetricKey={serverActiveMetricKey}
+            activeMetricKey={activeMetric ?? undefined}
+            onChangeMetric={handleMetricChange}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
+            // stacked_bar_chart is in DETAIL_METRIC_CONTROL_KEYS, so the detail
+            // rail already owns metric choice. Leaving the chart's own selectors
+            // on would render a second, independent picker above the same chart.
             showMetricSelector={false}
             showCategorySelector={false}
             showHeader={false}
@@ -893,7 +1053,7 @@ export default function ChartKeyScreen() {
           <BarChart
             data={serverChartData as any}
             players={serverChartPlayers as any}
-            statKey={serverMetricKey}
+            statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             showHeader={false}
           />
@@ -906,7 +1066,7 @@ export default function ChartKeyScreen() {
           <Heatmap
             data={serverChartData as any}
             players={serverChartPlayers as any}
-            statKey={serverMetricKey}
+            statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             showHeader={false}
           />
@@ -942,7 +1102,7 @@ export default function ChartKeyScreen() {
           <BumpChart
             data={serverChartData as any}
             players={serverChartPlayers as any}
-            statKey={serverMetricKey}
+            statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
             showHeader={false}
@@ -956,7 +1116,7 @@ export default function ChartKeyScreen() {
           <ConsistencyBandChart
             data={serverChartData as any}
             players={serverChartPlayers as any}
-            statKey={serverMetricKey}
+            statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
             showHeader={false}
@@ -970,7 +1130,7 @@ export default function ChartKeyScreen() {
           <ReplayChart
             replay={serverReplayData as any}
             players={serverChartPlayers as any}
-            statKey={serverMetricKey as any}
+            statKey={(activeMetric ?? serverMetricKey) as any}
             title="Replay Chart"
             showHeader={false}
           />
@@ -1003,7 +1163,7 @@ export default function ChartKeyScreen() {
   }
 
   function openCommandPage() {
-    router.push(APP_ROUTES.home);
+    router.push(buildHomeRoute());
   }
 
   function openChartsPage() {
@@ -1023,6 +1183,7 @@ export default function ChartKeyScreen() {
       if (localChart) {
         return (
           <ChartSurface>
+            {renderMetricRail()}
             {summaryChips.length ? (
               <View style={styles.surfaceChipRow}>
                 {summaryChips.map((chip) => (
@@ -1040,6 +1201,7 @@ export default function ChartKeyScreen() {
     if (serverChart) {
       return (
         <ChartSurface>
+          {renderMetricRail()}
           {summaryChips.length ? (
             <View style={styles.surfaceChipRow}>
               {summaryChips.map((chip) => (
@@ -1179,9 +1341,18 @@ export default function ChartKeyScreen() {
         size="compact"
         style={styles.heroCard}
       >
-        <Text style={styles.heroSubtitle} numberOfLines={2}>
-          {heroSubtitle}
-        </Text>
+        <DefinitionRichText
+          text={heroSubtitle}
+          style={styles.heroSubtitle}
+          numberOfLines={2}
+        />
+        {activeMetric ? (
+          <DefinitionsJumpLink
+            metric={activeMetric}
+            label="Definition"
+            textStyle={styles.heroDefinitionText}
+          />
+        ) : null}
         {setupChartKey ? (
           <View style={styles.heroActionRow}>
             <Pressable
@@ -1226,6 +1397,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "700",
+  },
+  heroDefinitionText: {
+    color: "#DFF6FF",
   },
   heroActionRow: {
     flexDirection: "row",
@@ -1288,6 +1462,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
+  },
+  detailMetricRail: {
+    gap: 6,
+  },
+  detailMetricRailHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  detailMetricRailTitle: {
+    color: CHART_COLORS.textStrong,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  detailMetricRailValue: {
+    color: CHART_COLORS.sub,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  detailMetricTabsScroll: {
+    paddingRight: 10,
   },
   datasetInsightStack: {
     gap: 0,

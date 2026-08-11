@@ -35,16 +35,28 @@ assert.match(
   "expected the mode rail to expose ELO, Delta, and Gap tabs",
 );
 
+// Per-mode branching lives in the shared helper module so the plot and the
+// container cannot drift; the plot consumes it rather than re-implementing it.
+const eloChartModeHelpersSource = read(
+  path.join("components", "charts", "ELO", "eloChartModeHelpers.ts"),
+);
+
 assert.match(
-  eloChartPlotSource,
+  eloChartModeHelpersSource,
   /selectedMode === "eloDelta"|case "eloDelta"/,
-  "expected the ELO plot to branch on Delta mode",
+  "expected the shared ELO mode helpers to branch on Delta mode",
+);
+
+assert.match(
+  eloChartModeHelpersSource,
+  /selectedMode === "matchupGap"|case "matchupGap"/,
+  "expected the shared ELO mode helpers to branch on Gap mode",
 );
 
 assert.match(
   eloChartPlotSource,
-  /selectedMode === "matchupGap"|case "matchupGap"/,
-  "expected the ELO plot to branch on Gap mode",
+  /import \{\s*buildEloModeInspectorCopy,\s*formatModeValue,\s*\} from "\.\/eloChartModeHelpers";/,
+  "expected the ELO plot to consume the shared mode helpers rather than re-implementing formatModeValue",
 );
 
 console.log("elo-chart-mode-rail.test.cjs passed");

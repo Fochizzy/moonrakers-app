@@ -10,6 +10,7 @@ import { load, remove, save } from "@/utils/storage/storage";
 
 import { buildDraftFromLegacyActiveGame } from "./buildDraftFromLegacyActiveGame";
 import { resolveDraftResumeRoute } from "./phase";
+import { shouldRemoteDraftWin } from "./resolveDraftRestoreWinner";
 import type {
   GameDraft,
   GameDraftGameplay,
@@ -120,10 +121,12 @@ export function useSyncedGameDraft() {
 
     const remoteRevision = Number(remoteDraft?.revision ?? -1);
     const localRevision = Number(localDraft?.revision ?? -1);
-    const remoteWins = Boolean(
-      remoteDraft &&
-        (!hasLocalUnsyncedChanges || remoteRevision >= localRevision),
-    );
+    const remoteWins = shouldRemoteDraftWin({
+      hasRemoteDraft: Boolean(remoteDraft),
+      hasLocalUnsyncedChanges,
+      remoteRevision,
+      localRevision,
+    });
 
     const effectiveDraft = remoteWins ? remoteDraft : localDraft;
     const conflictMessage =
@@ -430,10 +433,6 @@ export function useSyncedGameDraft() {
     }
   }
 
-  async function discardDraft(profileIdOverride?: string | null) {
-    return discardUnfinishedGame(profileIdOverride);
-  }
-
   return {
     gameDraft,
     syncState,
@@ -443,7 +442,6 @@ export function useSyncedGameDraft() {
     beginGameplay,
     updateGameplay,
     ensureDraftForLegacyActiveGame,
-    discardDraft,
     isDiscardingUnfinishedGame,
     discardUnfinishedGame,
     clearGameDraft,

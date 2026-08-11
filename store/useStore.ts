@@ -1,6 +1,7 @@
 
 import { create } from 'zustand';
 import { buildActiveGameProjection } from '../lib/game-draft/buildActiveGameProjection.ts';
+import { createUuid } from '../lib/ids/uuid.ts';
 import {
   isGameplayDraftPhase,
 } from '../lib/game-draft/phase.ts';
@@ -609,7 +610,6 @@ type Store = {
   clearChartSelections: () => void;
 
   startActiveGame: (input: StartActiveGameInput) => void;
-  patchActiveGame: (patch: Partial<ActiveGame>) => void;
   clearActiveGame: () => void;
   hydrateGameDraft: (input: {
     draft: GameDraft | null;
@@ -1165,7 +1165,7 @@ export const useStore = create<Store>((set, get) => ({
 
     set({
       activeGame: {
-        id: `${Date.now()}`,
+        id: createUuid(),
         players: normalizedPlayers,
         turnIndex: 0,
         rounds: [],
@@ -1181,17 +1181,6 @@ export const useStore = create<Store>((set, get) => ({
       selectedGroupId: groupId ?? null,
     });
   },
-
-  patchActiveGame: (patch) =>
-    set((state) => {
-      if (!state.activeGame) return {};
-      return {
-        activeGame: {
-          ...state.activeGame,
-          ...patch,
-        },
-      };
-    }),
 
   clearActiveGame: () =>
     set({
@@ -1312,7 +1301,6 @@ export function useSelectedPlayerId() { return useStore((s: Store) => s.selected
 export function useSelectedGameId() { return useStore((s: Store) => s.selectedGameId); }
 export function useSelectedComparePlayerIds() { return useStore((s: Store) => s.selectedComparePlayerIds); }
 export function useSetSelectedPlayerId() { return useStore((s: Store) => s.setSelectedPlayerId); }
-export function usePatchActiveGame() { return useStore((s: Store) => s.patchActiveGame); }
 export function useClearActiveGame() { return useStore((s: Store) => s.clearActiveGame); }
 export function useGameDraft() { return useStore((s: Store) => s.gameDraft); }
 export function useGameDraftSyncState() { return useStore((s: Store) => s.gameDraftSyncState); }

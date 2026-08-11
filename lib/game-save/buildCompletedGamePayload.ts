@@ -1,3 +1,5 @@
+import { coerceUuid } from "../ids/uuid.ts";
+
 type Input = {
   hostProfileId: string;
   activeGame: {
@@ -48,8 +50,11 @@ function toNumber(value: unknown) {
 }
 
 export function buildCompletedGamePayload(input: Input) {
+  const clientGameId = coerceUuid(input.activeGame.id);
+
   return {
     host_profile_id: input.hostProfileId,
+    ...(clientGameId ? { client_game_id: clientGameId } : {}),
     created_at: input.activeGame.createdAt
       ? new Date(input.activeGame.createdAt).toISOString()
       : undefined,

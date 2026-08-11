@@ -20,7 +20,7 @@ assert.match(
 
 assert.match(
   analyticsSource,
-  /<HeroCard[\s\S]*headerAction=\{[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*Command[\s\S]*\}/,
+  /<HeroCard[\s\S]*headerAction=\{[\s\S]*router\.push\(buildHomeRoute\(\)\)[\s\S]*Command[\s\S]*\}/,
   "expected the analytics hero to pass a top-right Command action into the shared hero card"
 );
 

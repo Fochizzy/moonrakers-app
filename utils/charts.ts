@@ -183,6 +183,7 @@ export const REPLAY_METRICS: ReplayMetricKey[] = [
 
 const REPLAY_CHART_KEYS = new Set(["replay_chart", "replay"]);
 const FULL_METRIC_CHART_KEYS = new Set([
+  "compare",
   "bar_chart",
   "bar",
   "bump_chart",

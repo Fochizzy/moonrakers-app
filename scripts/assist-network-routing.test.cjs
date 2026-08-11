@@ -41,6 +41,28 @@ run("Relationship graph detail route mounts AssistNetworkOverview from unified g
   );
 });
 
+run("Relationship graph server renderer keeps the full assist-network overview instead of a bare graph", () => {
+  const detailSource = read(path.join("app", "charts", "[chartKey].tsx"));
+
+  assert.match(
+    detailSource,
+    /function renderServerChart\(\)\s*\{[\s\S]*case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*games=\{relationshipGames as any\}[\s\S]*players=\{relationshipPlayers as any\}[\s\S]*scopedPlayerIds=\{routeIds.length \? routeIds : scopedPlayerIds\}[\s\S]*exactScopePlayerIds=\{routeIds.length >= 2 \? routeIds : undefined\}[\s\S]*mode=\{routeMode\}/,
+    "expected the relationship_graph server renderer to keep mounting AssistNetworkOverview from the resolved relationship games and exact route ids"
+  );
+
+  assert.match(
+    detailSource,
+    /const relationshipGames = unifiedGames\.length \? unifiedGames : serverChartGames;/,
+    "expected the relationship_graph server renderer to fall back to the payload's own games so a device with nothing hydrated can still render published edges"
+  );
+
+  assert.doesNotMatch(
+    detailSource,
+    /function renderServerChart\(\)\s*\{[\s\S]*case "relationship_graph":[\s\S]*renderServerRelationshipGraph\(\)/,
+    "expected the relationship_graph server renderer to stop delegating to the bare server relationship graph helper"
+  );
+});
+
 run("Insights stops owning a duplicate assist network section", () => {
   const insightsSource = read(path.join("app", "insights.tsx"));
 

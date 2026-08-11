@@ -10,7 +10,16 @@ function main() {
   });
 
   assert.equal(freshServer.kind, "server");
-  assert.equal(freshServer.label, "Server");
+  // Same wording as every other analytics surface, via buildAnalyticsFreshnessPresentation.
+  assert.equal(freshServer.label, "Server data");
+
+  const staleLabel = resolveChartDetailProvenance({
+    hasServerPayload: true,
+    isStale: true,
+    usingCloudFallbackData: false,
+  }).label;
+
+  assert.equal(staleLabel, "Stale server data");
 
   const staleServer = resolveChartDetailProvenance({
     hasServerPayload: true,

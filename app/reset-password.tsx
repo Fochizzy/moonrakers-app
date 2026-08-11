@@ -18,7 +18,7 @@ import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
 import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { useTheme } from "@/theme";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
@@ -124,7 +124,7 @@ export default function ResetPasswordScreen() {
       await clearPendingAuthIntent();
       setPasswordRecoveryPending(false);
       setMessage("Password updated. Redirecting back into Moonrakers...");
-      router.replace(APP_ROUTES.home);
+      router.replace(buildHomeRoute());
     } catch (error) {
       setMessage(formatSupabaseConfigError(error));
       setSubmitting(false);

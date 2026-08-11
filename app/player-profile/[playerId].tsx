@@ -35,6 +35,7 @@ import { buildAnalyticsFreshnessPresentation } from "@/utils/analyticsFreshness"
 import { buildAnalyticsPlayerDirectory } from "@/utils/analyticsPlayers";
 import {
   APP_ROUTES,
+  buildHomeRoute,
   buildChartsRoute,
   buildCompareRoute,
   buildPlayerProfileRoute,
@@ -512,7 +513,7 @@ export default function PlayerProfileDetailScreen() {
   }, [playerId, resolvedPlayerId, router]);
 
   const openCommandPage = () => {
-    router.push(APP_ROUTES.home);
+    router.push(buildHomeRoute());
   };
 
   const handleSelectPlayer = (nextPlayerId: string) => {

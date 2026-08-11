@@ -9,19 +9,19 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /<PlayerCardIcon[\s\S]*size=\{72\}[\s\S]*borderRadius=\{14\}/,
+  /<PlayerCardIcon[\s\S]*size=\{64\}[\s\S]*borderRadius=\{12\}/,
   "expected setup tiles to shrink the player card art for a denser four-up vertical layout",
 );
 
 assert.match(
   source,
-  /rowCard:\s*\{[\s\S]*minHeight:\s*132,[\s\S]*paddingHorizontal:\s*12,[\s\S]*paddingVertical:\s*10,/,
+  /rowCard:\s*\{[\s\S]*minHeight:\s*116,[\s\S]*paddingHorizontal:\s*12,[\s\S]*paddingVertical:\s*10,/,
   "expected setup tiles to use a more compact card shell so four players fit vertically",
 );
 
 assert.match(
   source,
-  /rowAvatarWrap:\s*\{[\s\S]*width:\s*84,[\s\S]*height:\s*112,[\s\S]*borderRadius:\s*16,/,
+  /rowAvatarWrap:\s*\{[\s\S]*width:\s*76,[\s\S]*height:\s*96,[\s\S]*borderRadius:\s*16,/,
   "expected setup tiles to reduce the card-art frame dimensions",
 );
 

@@ -20,7 +20,7 @@ assert.match(
 
 assert.match(
   source,
-  /<ChartSetupHeroBar[\s\S]*onBackToCommand=\{\(\) => router\.push\(APP_ROUTES\.home\)\}/,
+  /<ChartSetupHeroBar[\s\S]*onBackToCommand=\{\(\) => router\.push\(buildHomeRoute\(\)\)\}/,
   "expected the charts hub hero shell to wire the shared Command route into ChartSetupHeroBar"
 );
 

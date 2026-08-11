@@ -26,7 +26,7 @@ assert.match(
 
 assert.match(
   definitionsSource,
-  /<SectionCard[\s\S]*actions=\{[\s\S]*router\.push\(APP_ROUTES\.home\)[\s\S]*Command[\s\S]*\}/,
+  /<SectionCard[\s\S]*actions=\{[\s\S]*router\.push\(buildHomeRoute\(\)\)[\s\S]*Command[\s\S]*\}/,
   "expected the Definitions hero card to render a top-right Command action"
 );
 

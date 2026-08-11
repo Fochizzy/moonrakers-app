@@ -12,7 +12,7 @@ import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import { useStore } from "@/store/useStore";
 import {
-  APP_ROUTES,
+  buildHomeRoute,
   buildHistoryRoute,
   buildPlayerProfileRoute,
   buildSummaryRoute,
@@ -316,7 +316,7 @@ export default function GameTrendsScreen() {
               <ActionButton
                 title="Home"
                 variant="ghost"
-                onPress={() => router.push(APP_ROUTES.home)}
+                onPress={() => router.push(buildHomeRoute())}
                 style={styles.heroAction}
               />
             </View>
@@ -350,7 +350,7 @@ export default function GameTrendsScreen() {
               <ActionButton
                 title="Home"
                 variant="ghost"
-                onPress={() => router.push(APP_ROUTES.home)}
+                onPress={() => router.push(buildHomeRoute())}
                 style={styles.heroAction}
               />
             </View>

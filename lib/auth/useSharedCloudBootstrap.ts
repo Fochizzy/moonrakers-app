@@ -11,7 +11,7 @@ import {
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 import { remove } from "@/utils/storage/storage";
 
 const PUBLIC_AUTH_ROUTES = new Set<string>([
@@ -285,7 +285,7 @@ export function useSharedCloudBootstrap() {
 
     if (launchRoute === APP_ROUTES.home) {
       if (PUBLIC_AUTH_ROUTES.has(pathname)) {
-        router.replace(APP_ROUTES.home as any);
+        router.replace(buildHomeRoute() as any);
       }
       return;
     }

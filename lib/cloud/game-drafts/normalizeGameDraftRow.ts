@@ -81,6 +81,8 @@ function normalizeGameplay(value: unknown): GameDraftGameplay | null {
           ? (currentRecord.assistPrestigeRecipients as Record<string, number>)
           : {},
       objectiveCount: normalizeNumber(currentRecord.objectiveCount),
+      headToHeadFirstPlaceId: normalizeNullableString(currentRecord.headToHeadFirstPlaceId),
+      headToHeadSecondPlaceId: normalizeNullableString(currentRecord.headToHeadSecondPlaceId),
     },
     roundCount: normalizeNumber(record.roundCount),
     selectedWinnerId: normalizeNullableString(record.selectedWinnerId),

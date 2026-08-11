@@ -15,14 +15,23 @@ assert.match(
 
 assert.match(
   source,
-  /const analyticsPlayers = useMemo<StorePlayer\[]>\(\(\) => \{\s*const playersWithSavedGames = sortedPlayers\.filter/s,
-  "expected Elo screen to build an analytics player list from saved-game participants",
+  /const analyticsPlayers = useMemo<StorePlayer\[]>\(\(\) => \{[\s\S]*const playersWithAnalytics = sortedPlayers\.filter/s,
+  "expected Elo screen to build an analytics player list from tracked players",
+);
+
+// A player counts as tracked when this device has their games OR the server
+// already ranked them; filtering on local games alone drops server rows whenever
+// the store is only partially hydrated.
+assert.match(
+  source,
+  /gameDrivenPlayerIds\.has\(playerId\) \|\| leaderboardPlayerIds\.has\(playerId\)/,
+  "expected Elo screen to keep server-ranked players that have no locally hydrated games",
 );
 
 assert.match(
   source,
-  /return playersWithSavedGames\.length \? playersWithSavedGames : sortedPlayers;/,
-  "expected Elo screen to fall back to the full roster only when no saved-game players exist",
+  /return playersWithAnalytics\.length \? playersWithAnalytics : sortedPlayers;/,
+  "expected Elo screen to fall back to the full roster only when no tracked players exist",
 );
 
 assert.match(

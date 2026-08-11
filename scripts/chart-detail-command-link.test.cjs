@@ -10,7 +10,7 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /function openCommandPage\(\)\s*\{[\s\S]*router\.push\(APP_ROUTES\.home\);[\s\S]*\}/,
+  /function openCommandPage\(\)\s*\{[\s\S]*router\.push\(buildHomeRoute\(\)\);[\s\S]*\}/,
   "expected the chart detail screen to define a Command-page navigation helper"
 );
 

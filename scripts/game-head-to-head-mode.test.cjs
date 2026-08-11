@@ -21,8 +21,8 @@ assert.match(
 
 assert.match(
   source,
-  /useEffect\(\(\) => \{[\s\S]*if \(!headToHeadMissionActive\) return;[\s\S]*syncHeadToHeadMissionMode\(\);[\s\S]*\}, \[headToHeadMissionActive\]\);/s,
-  "expected the game screen to auto-apply mission mode whenever a head-to-head selection becomes active",
+  /useEffect\(\(\) => \{[\s\S]*if \(!headToHeadMissionActive\) return;[\s\S]*syncHeadToHeadMissionMode\(\);[\s\S]*\}, \[\s*headToHeadMissionActive,\s*current\.headToHeadFirstPlaceId,\s*current\.headToHeadSecondPlaceId,\s*\]\);/s,
+  "expected the game screen to re-apply mission mode whenever the active head-to-head selection changes so assists reset back to none",
 );
 
 assert.match(
@@ -47,6 +47,12 @@ assert.match(
   source,
   /styles\.directPrestigeFrame,[\s\S]*backgroundColor:\s*stayAtBaseSelected\s*\?\s*withAlpha\(UI\.gold,\s*0\.05\)\s*:\s*headToHeadMissionActive\s*\?\s*withAlpha\(UI\.silver,\s*0\.12\)\s*:\s*withAlpha\(currentAccent,\s*0\.09\),[\s\S]*borderColor:\s*stayAtBaseSelected\s*\?\s*withAlpha\(UI\.gold,\s*0\.44\)\s*:\s*headToHeadMissionActive\s*\?\s*withAlpha\(UI\.silver,\s*0\.5\)\s*:\s*withAlpha\(currentAccent,\s*0\.38\),[\s\S]*stayAtBaseSelected\s*\?\s*glowStyle\(withAlpha\(UI\.gold,\s*0\.92\),\s*0\.12,\s*6,\s*4\)\s*:\s*headToHeadMissionActive\s*\?\s*glowStyle\(withAlpha\(UI\.silver,\s*0\.88\),\s*0\.16,\s*8,\s*5\)\s*:\s*glowStyle\(withAlpha\(currentAccent,\s*0\.95\),\s*0\.1,\s*6,\s*4\)/s,
   "expected the inner Direct Prestige frame to use the same silver glow treatment while head-to-head mode is selected",
+);
+
+assert.match(
+  source,
+  /<Text style=\{styles\.headToHeadActiveTitle\}>Head to Head<\/Text>/,
+  "expected the active mission state to replace the old Direct Prestige label with a simple Head to Head label",
 );
 
 assert.match(

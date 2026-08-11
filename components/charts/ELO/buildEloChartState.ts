@@ -49,7 +49,6 @@ export type EloChartState = {
   games: EloChartGame[];
   players: EloChartPlayer[];
   eloSeriesPaths: EloChartSeries[];
-  seriesPaths: EloChartSeries[];
   focusedPlayerId: string | null;
   focusedSeries: EloChartSeries | null;
   focusedMetricValues: {
@@ -59,7 +58,6 @@ export type EloChartState = {
   };
   modeRanges: Record<EloChartMode, { minValue: number; maxValue: number }>;
   selectedIndex: number;
-  selectedMode: EloChartMode;
   minValue: number;
   maxValue: number;
 };
@@ -381,15 +379,11 @@ function buildFocusedMetricValues(args: {
   };
 }
 
-type EloChartStateWithLegacyAliases = EloChartState & {
-  selectedMode: typeof DEFAULT_ELO_MODE;
-};
-
 export function buildEloChartState(args: {
   games?: EloChartGame[];
   players?: EloChartPlayer[];
   primaryPlayerId?: string | null;
-}): EloChartStateWithLegacyAliases {
+}): EloChartState {
   const players = normalizePlayers(args.players);
   const requestedFocusId = normalizeId(args.primaryPlayerId);
   const focusedPlayerId =
@@ -428,13 +422,11 @@ export function buildEloChartState(args: {
     games,
     players,
     eloSeriesPaths,
-    seriesPaths: eloSeriesPaths,
     focusedPlayerId,
     focusedSeries,
     focusedMetricValues,
     modeRanges,
     selectedIndex: games.length > 0 ? games.length - 1 : 0,
-    selectedMode: DEFAULT_ELO_MODE,
     minValue,
     maxValue,
   };

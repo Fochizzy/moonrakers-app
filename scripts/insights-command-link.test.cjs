@@ -14,10 +14,12 @@ assert.match(
   "expected the insights route to import the shared app route helpers for Command navigation",
 );
 
+// buildHomeRoute() is the canonical Command navigation across every screen —
+// see scripts/home-route-canonical-navigation.test.cjs.
 assert.match(
   source,
-  /<HeroCard[\s\S]*headerAction=\{[\s\S]*<ActionButton[\s\S]*title="Command"[\s\S]*onPress=\{\(\) => router\.push\(APP_ROUTES\.home\)\}[\s\S]*style=\{styles\.heroActionButton\}/,
-  "expected the Insights hero to include a Command header action wired to the shared Command route",
+  /<HeroCard[\s\S]*headerAction=\{[\s\S]*<ActionButton[\s\S]*title="Command"[\s\S]*onPress=\{\(\) => router\.push\(buildHomeRoute\(\)\)\}[\s\S]*style=\{styles\.heroActionButton\}/,
+  "expected the Insights hero to include a Command header action wired to the canonical Command route",
 );
 
 console.log("insights-command-link.test.cjs passed");

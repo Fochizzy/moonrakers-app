@@ -114,23 +114,33 @@ export default function HeadToHeadMissionScreen() {
       nextFirstPlaceId,
       nextSecondPlaceId,
     );
-
-    await updateGameplay(
-      {
-        turnIndex: activeGame.turnIndex,
-        rounds: activeGame.rounds ?? [],
-        totals: activeGame.totals ?? {},
-        current: {
-          ...EMPTY_CURRENT_STATE,
-          ...current,
-          headToHeadFirstPlaceId: nextSelection.firstPlaceId,
-          headToHeadSecondPlaceId: nextSelection.secondPlaceId,
-        },
-        roundCount: activeGame.roundCount ?? (activeGame.rounds ?? []).length,
-        selectedWinnerId: activeGame.selectedWinnerId ?? null,
+    const nextGameplay = {
+      turnIndex: activeGame.turnIndex,
+      rounds: activeGame.rounds ?? [],
+      totals: activeGame.totals ?? {},
+      current: {
+        ...EMPTY_CURRENT_STATE,
+        ...current,
+        headToHeadFirstPlaceId: nextSelection.firstPlaceId,
+        headToHeadSecondPlaceId: nextSelection.secondPlaceId,
       },
-      "in_progress",
-    );
+      roundCount: activeGame.roundCount ?? (activeGame.rounds ?? []).length,
+      selectedWinnerId: activeGame.selectedWinnerId ?? null,
+    };
+
+    // The draft is the only durable home for this selection; activeGame is a
+    // pure projection of it, refreshed synchronously by updateGameplay. Patching
+    // activeGame directly would be overwritten by that projection, and would be
+    // silently lost on the next hydration if the draft write never happened.
+    const savedDraft = await updateGameplay(nextGameplay, "in_progress");
+
+    if (!savedDraft) {
+      Alert.alert(
+        "Couldn't save placements",
+        "This game is no longer open for edits, so the mission placements were not saved.",
+      );
+      return;
+    }
 
     router.back();
   }
@@ -242,7 +252,7 @@ export default function HeadToHeadMissionScreen() {
           onPress={applySelection}
           style={[styles.primaryAction, !selectionReady && styles.primaryActionDisabled]}
         >
-          <Text style={styles.primaryActionText}>Apply Mission</Text>
+          <Text style={styles.primaryActionText}>Save</Text>
         </Pressable>
       </ScrollView>
     </View>

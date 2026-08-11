@@ -1,6 +1,13 @@
 import type { ActiveGame } from "../../store/useStore.ts";
 
+import { resolveStableUuid } from "../ids/uuid.ts";
 import type { GameDraft } from "./types.ts";
+
+// Legacy active games carry timestamp ids that Supabase will not accept as a
+// draft uuid. Derive the replacement from the legacy id so every conversion of
+// the same game resolves to the same draftId — a random id here would churn the
+// projected activeGame.id and, with it, the client_game_id finish-idempotency key.
+export const LEGACY_ACTIVE_GAME_DRAFT_NAMESPACE = "moonrakers.legacy-active-game";
 
 type BuildDraftFromLegacyActiveGameInput = {
   profileId: string;
@@ -64,7 +71,10 @@ export function buildDraftFromLegacyActiveGame({
 
   return {
     profileId: String(profileId ?? "").trim(),
-    draftId: String(activeGame.id),
+    draftId: resolveStableUuid(
+      LEGACY_ACTIVE_GAME_DRAFT_NAMESPACE,
+      activeGame.id,
+    ),
     phase: "in_progress",
     revision: 0,
     updatedAt: now,

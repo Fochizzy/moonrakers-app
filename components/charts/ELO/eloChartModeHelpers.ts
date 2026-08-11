@@ -24,7 +24,7 @@ function toSignedFixed(value: number, digits: number) {
   return `${safeValue > 0 ? "+" : ""}${safeValue.toFixed(digits)}`;
 }
 
-function formatModeValue(value: number, mode: EloChartMode) {
+export function formatModeValue(value: number, mode: EloChartMode) {
   switch (mode) {
     case "elo":
       return (Number.isFinite(value) ? value : 0).toFixed(0);

@@ -21,6 +21,7 @@ import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
 import { resolveHomeRedirect } from "@/lib/auth/launchRoute";
 import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
+import { runSignOutFlow } from "@/lib/auth/signOutFlow";
 import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
 import { supabase } from "@/lib/supabase";
 import {
@@ -55,6 +56,7 @@ import { PlayerSelectionCard } from "@/components/home/PlayerSelectionCard";
 import type { PlayerLike, GroupLike, GameLike } from "@/components/home/homeTypes";
 import { canResumeDraft } from "@/lib/game-draft/phase";
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
+import { createUuid } from "@/lib/ids/uuid";
 
 type Tab = "game" | "leaderboard" | "hubs";
 import {
@@ -531,14 +533,11 @@ export default function HomeScreen() {
   };
 
   const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      await clearPendingAuthIntent();
-      setPasswordRecoveryPending(false);
-      clearAuthState();
-      router.replace(APP_ROUTES.login);
-    }
+    await runSignOutFlow({
+      setPasswordRecoveryPending,
+      clearAuthState,
+      router,
+    });
   };
 
   const confirmDeleteActiveGame = () => {
@@ -589,7 +588,7 @@ export default function HomeScreen() {
 
     await replaceDraft({
       profileId: authSession.user.id,
-      draftId: gameDraft?.draftId ?? `${timestamp}`,
+      draftId: gameDraft?.draftId ?? createUuid(),
       phase: "setup",
       revision: gameDraft?.revision ?? 0,
       updatedAt: timestamp,

@@ -1,4 +1,6 @@
-import { buildAnalyticsFreshnessPresentation } from "@/utils/analyticsFreshness";
+// Relative rather than "@/": scripts/chart-detail-provenance.test.ts runs under
+// plain node, which does not resolve the bundler alias.
+import { buildAnalyticsFreshnessPresentation } from "../../utils/analyticsFreshness.ts";
 
 export type ChartDetailProvenanceInput = {
   hasServerPayload: boolean;
@@ -17,6 +19,9 @@ export function resolveChartDetailProvenance(
   input: ChartDetailProvenanceInput,
 ): ChartDetailProvenance {
   if (input.hasServerPayload) {
+    // Compose through the shared presenter so chart detail reports provenance in
+    // the same words as stats, insights and player profile, and picks up any
+    // future change to the stale threshold or wording for free.
     const freshness = buildAnalyticsFreshnessPresentation({
       error: null,
       isStale: input.isStale,

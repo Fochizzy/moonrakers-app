@@ -116,6 +116,7 @@ async function main() {
     readRpcName: "get_stats_screen",
     readRpcArgs: {
       profile_id: "stats-profile",
+      focus_player_id: null,
     },
     successPayload: {
       generatedAt: "2026-05-24T00:00:00.000Z",
@@ -140,6 +141,7 @@ async function main() {
     run: (client) =>
       getStatsScreen(client as any, {
         profileId: "stats-profile",
+        focusPlayerId: null,
       }),
   });
 
@@ -219,6 +221,7 @@ async function main() {
         } as any,
         {
           profileId: "stats-profile",
+          focusPlayerId: null,
         },
       ),
     /get_stats_screen failed: permission denied/i,

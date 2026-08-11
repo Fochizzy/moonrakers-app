@@ -5,8 +5,10 @@ import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { createSharedGroup } from "@/lib/cloud/sharedGroups";
 import { resolveCloudGameSaveState } from "@/lib/game-save/resolveCloudGameSave";
+import { refreshFinishedGameCloudState } from "@/lib/game-save/refreshFinishedGameCloudState";
 import { saveCompletedGame } from "@/lib/game-save/saveCompletedGame";
 import { formatSupabaseConfigError } from "@/lib/supabase";
+import { buildHomeRoute } from "@/utils/appRoutes";
 
 import { prepareFinishGameState, type SessionRound } from "./gameSessionController.ts";
 
@@ -17,7 +19,7 @@ type AuthSessionLike = {
 } | null;
 
 type RouterLike = {
-  replace: (href: string) => void;
+  replace: (href: string | ReturnType<typeof buildHomeRoute>) => void;
 };
 
 type HookArgs = {
@@ -43,6 +45,21 @@ export function useGameSessionController(args: HookArgs) {
   const currentStatus = useCurrentAppStatus();
   const finishInFlightRef = useRef(false);
   const [isFinishingGame, setIsFinishingGame] = useState(false);
+
+  // Runs after navigation starts so the game screen never paints its
+  // no-active-game fallback, but stays awaited: a promise continuation still
+  // runs when the app is backgrounded, whereas a requestAnimationFrame callback
+  // is throttled or dropped entirely. Stranding it there would leave the draft
+  // row in Supabase and the finished game resumable on the next launch.
+  async function runFinishedGameCleanup() {
+    try {
+      await args.onDraftFinished?.();
+    } catch (cleanupError) {
+      console.error("Finished game cleanup failed:", cleanupError);
+    } finally {
+      args.clearActiveGame();
+    }
+  }
 
   async function commitFinishGame() {
     if (isFinishingGame) {
@@ -128,14 +145,11 @@ export function useGameSessionController(args: HookArgs) {
         };
       }
 
-      await saveCompletedGame({
+      const savedGameId = await saveCompletedGame({
         hostProfileId: args.authSession.user.id!,
         activeGame: cloudGame,
         winnerId: cloudSave.winnerId,
       });
-
-      await args.onDraftFinished?.();
-      args.clearActiveGame();
 
       try {
         publishAppStatus({
@@ -143,6 +157,13 @@ export function useGameSessionController(args: HookArgs) {
           state: "running",
           title: "Refreshing saved game state",
           detail: "Pulling the latest Supabase snapshot and analytics into this device.",
+        });
+
+        await refreshFinishedGameCloudState({
+          gameId: String(savedGameId),
+          participantProfileIds: (cloudGame.players ?? [])
+            .map((player) => String((player as { id?: string | null })?.id ?? "").trim())
+            .filter(Boolean),
         });
 
         const hydratedSnapshot = await loadHydratedCloudState(args.authSession as any);
@@ -162,7 +183,8 @@ export function useGameSessionController(args: HookArgs) {
           title: "Game saved with refresh pending",
           detail: "The game was saved to Supabase, but the local view could not refresh yet.",
         });
-        args.router.replace("/");
+        args.router.replace(buildHomeRoute());
+        await runFinishedGameCleanup();
         Alert.alert(
           "Game saved",
           "The game was saved to Supabase, but the local view could not refresh yet.",
@@ -170,7 +192,8 @@ export function useGameSessionController(args: HookArgs) {
         return;
       }
 
-      args.router.replace("/");
+      args.router.replace(buildHomeRoute());
+      await runFinishedGameCleanup();
     } catch (error) {
       console.error("Finish Game failed:", error);
       const detail =

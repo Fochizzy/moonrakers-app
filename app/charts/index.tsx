@@ -57,7 +57,7 @@ import {
 } from "@/lib/cloud/analytics/resolveChartSetupPayload";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { useStore } from "@/store/useStore";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { buildHomeRoute } from "@/utils/appRoutes";
 import {
   buildRouteScopeSeedKey,
   getPreferredScopeIdsForChart,
@@ -490,10 +490,12 @@ export default function ChartsIndexScreen() {
   const params = useLocalSearchParams<{
     chartKey?: string | string[];
     playerId?: string | string[];
+    focusPlayerId?: string | string[];
     compareId?: string | string[];
     compareIds?: string | string[];
     ids?: string | string[];
     metric?: string | string[];
+    metricKey?: string | string[];
     lineMode?: string | string[];
     eloTab?: string | string[];
     opponentId?: string | string[];
@@ -509,7 +511,7 @@ export default function ChartsIndexScreen() {
   const routeChartKey = normalizeChartHubSelection(
     getParam(params.chartKey)
   ).key;
-  const routePlayerId = getParam(params.playerId);
+  const routePlayerId = getParam(params.playerId) ?? getParam(params.focusPlayerId);
   const routeCompareId = getParam(params.compareId);
   const routeCompareIdsParam = getParam(params.compareIds);
   const routeCompareIds = useMemo(
@@ -519,7 +521,7 @@ export default function ChartsIndexScreen() {
   const routeCompareIdsKey = routeCompareIds.join(",");
   const routeIdsParam = getParam(params.ids);
   const routeIds = useMemo(() => getParamList(routeIdsParam), [routeIdsParam]);
-  const routeMetric = getParam(params.metric);
+  const routeMetric = getParam(params.metric) ?? getParam(params.metricKey);
   const routeLineMode = normalizeLineMode(params.lineMode);
   const routeEloTab = normalizeEloTab(params.eloTab);
   const routeOpponentId = getParam(params.opponentId);
@@ -728,7 +730,7 @@ export default function ChartsIndexScreen() {
       ),
     [comparePlayerOptions, selectedPlayerId],
   );
-  const setupScopePlayerOptions = useMemo(
+  const scopePlayerOptions = useMemo(
     () =>
       hasScopePlayerToggle
         ? toSetupOptions(effectiveSetupPayload?.scopePlayerOptions)
@@ -783,7 +785,7 @@ export default function ChartsIndexScreen() {
       analyticsDirectory.players.map((player) => [String(player.id), player])
     );
 
-    return setupScopePlayerOptions.map((option) => {
+    return scopePlayerOptions.map((option) => {
       const matched = playerById.get(String(option.key));
       return {
         id: String(option.key),
@@ -800,7 +802,7 @@ export default function ChartsIndexScreen() {
             : null,
         };
     });
-  }, [analyticsDirectory.players, setupScopePlayerOptions]);
+  }, [analyticsDirectory.players, scopePlayerOptions]);
   const authProfilePlayer = useMemo(() => {
     const authProfilePlayerId = String(
       authProfile?.id ?? authSession?.user?.id ?? ""
@@ -975,20 +977,20 @@ export default function ChartsIndexScreen() {
 
     return next;
   }, [allPlayedScopePlayers, preferredScopePlayerId, signedInScopePlayerOptionId]);
-  const scopePlayerOptions = useMemo(() => {
+  const availableScopePlayerOptions = useMemo(() => {
     if (!scopeAllowedPlayerIds.size) {
-      return setupScopePlayerOptions;
+      return scopePlayerOptions;
     }
 
-    const filtered = setupScopePlayerOptions.filter((option) =>
+    const filtered = scopePlayerOptions.filter((option) =>
       scopeAllowedPlayerIds.has(String(option.key))
     );
 
-    return filtered.length ? filtered : setupScopePlayerOptions;
-  }, [scopeAllowedPlayerIds, setupScopePlayerOptions]);
+    return filtered.length ? filtered : scopePlayerOptions;
+  }, [scopeAllowedPlayerIds, scopePlayerOptions]);
   const scopePlayerIdentities = useMemo(
-    () => scopePlayerOptions.map((option) => ({ id: String(option.key) })),
-    [scopePlayerOptions]
+    () => availableScopePlayerOptions.map((option) => ({ id: String(option.key) })),
+    [availableScopePlayerOptions]
   );
   const orderedFocusPlayerOptions = useMemo(() => {
     const optionByKey = new Map(
@@ -1040,7 +1042,7 @@ export default function ChartsIndexScreen() {
   );
   const orderedScopePlayerOptions = useMemo(() => {
     const optionByKey = new Map(
-      scopePlayerOptions.map((option) => {
+      availableScopePlayerOptions.map((option) => {
         const optionKey = String(option.key);
         return [
           optionKey,
@@ -1068,13 +1070,13 @@ export default function ChartsIndexScreen() {
     prioritizedScopePlayerDirectoryPlayers.forEach((player) =>
       pushOption(String(player.id))
     );
-    scopePlayerOptions.forEach((option) => pushOption(String(option.key)));
+    availableScopePlayerOptions.forEach((option) => pushOption(String(option.key)));
 
     return ordered;
   }, [
     authProfilePlayer?.name,
     prioritizedScopePlayerDirectoryPlayers,
-    scopePlayerOptions,
+    availableScopePlayerOptions,
     signedInScopePlayerOptionId,
   ]);
   const filteredFocusPlayerOptions = useMemo(() => {
@@ -1101,10 +1103,19 @@ export default function ChartsIndexScreen() {
     const normalizedQuery = deferredComparePlayerSearch.trim().toLowerCase();
     if (!normalizedQuery) return [];
 
-    return radarCompareOptions.filter((option) =>
-      String(option.label ?? "").toLowerCase().includes(normalizedQuery)
-    );
-  }, [deferredComparePlayerSearch, radarCompareOptions]);
+    return comparePlayerOptions.filter((option) => {
+      if (isRadarChart && String(option.key) === String(selectedPlayerId ?? "")) {
+        return false;
+      }
+
+      return String(option.label ?? "").toLowerCase().includes(normalizedQuery);
+    });
+  }, [
+    comparePlayerOptions,
+    deferredComparePlayerSearch,
+    isRadarChart,
+    selectedPlayerId,
+  ]);
   const comparePlayerSearchItems = useMemo(
     () =>
       filteredComparePlayerOptions.map((option) => ({
@@ -1422,12 +1433,16 @@ export default function ChartsIndexScreen() {
   useEffect(() => {
     setSelectedGroupIds((current) => {
       const fallbackIds = setupDefaults.scopedPlayerIds.length
-        ? sanitizeSelectedIds(scopePlayerOptions, setupDefaults.scopedPlayerIds, [])
+        ? sanitizeSelectedIds(availableScopePlayerOptions, setupDefaults.scopedPlayerIds, [])
         : collapsedScopePlayerOptions.map((option) => String(option.key));
-      const nextIds = sanitizeSelectedIds(scopePlayerOptions, current, fallbackIds);
+      const nextIds = sanitizeSelectedIds(availableScopePlayerOptions, current, fallbackIds);
       return haveSameIds(nextIds, current) ? current : nextIds;
     });
-  }, [collapsedScopePlayerOptions, scopePlayerOptions, setupDefaults.scopedPlayerIds]);
+  }, [
+    availableScopePlayerOptions,
+    collapsedScopePlayerOptions,
+    setupDefaults.scopedPlayerIds,
+  ]);
 
   useEffect(() => {
     if (isRadarChart) {
@@ -1808,10 +1823,9 @@ export default function ChartsIndexScreen() {
     };
 
     if (chart.key === "elo") {
-      params.ids =
-        supportsScopePlayerToggle && selectedGroupIds.length
-          ? selectedGroupIds.join(",")
-          : undefined;
+      if (supportsScopePlayerToggle && selectedGroupIds.length) {
+        params.ids = selectedGroupIds.join(",");
+      }
       params.eloTab = selectedEloTab || undefined;
       params.opponentId =
         selectedEloTab === "Context" && selectedOpponent?.key
@@ -1828,6 +1842,9 @@ export default function ChartsIndexScreen() {
       params.compareId = String(comparePlayer.key);
     }
 
+    // Gate on the chart being routed to, not on scopePlayerOptions: that still
+    // reflects the previously selected chart, so switching cards would attach
+    // scope ids to a chart that does not support scoping.
     if (supportsScopePlayerToggle && selectedGroupIds.length) {
       params.ids = selectedGroupIds.join(",");
     }
@@ -1937,7 +1954,7 @@ export default function ChartsIndexScreen() {
               }
               openSetup();
             }}
-            onBackToCommand={() => router.push(APP_ROUTES.home)}
+            onBackToCommand={() => router.push(buildHomeRoute())}
           />
         </View>
 
@@ -2032,70 +2049,67 @@ export default function ChartsIndexScreen() {
                               ) : null}
 
                               {comparePlayerOptions.length > 0 ? (
-                                <SetupSection
-                                  title={isRadarChart ? "Compare players" : "Compare player"}
-                                  subtitle={
-                                    isRadarChart
-                                      ? `Select up to 4 compare players. Selected players stay pinned at the top.`
-                                      : undefined
-                                  }
-                                  contentStyle={styles.setupFullWidthSectionContent}
-                                >
-                                  {isRadarChart ? (
-                                    <>
-                                      <SetupSegmentedTabs
-                                        items={radarPinnedCompareOptions}
-                                        selectedKeys={selectedRadarCompareIds}
-                                        onChange={handleRadarComparePlayerToggle}
-                                        selectionMode="multiple"
-                                        columns={2}
-                                      />
+                                isRadarChart ? (
+                                  <SetupSection
+                                    title="Compare players"
+                                    subtitle="Select up to 4 compare players. Selected players stay pinned at the top."
+                                    contentStyle={styles.setupFullWidthSectionContent}
+                                  >
+                                    <SetupSegmentedTabs
+                                      items={radarPinnedCompareOptions}
+                                      selectedKeys={selectedRadarCompareIds}
+                                      onChange={handleRadarComparePlayerToggle}
+                                      selectionMode="multiple"
+                                      columns={2}
+                                    />
 
-                                      <PlayerSearchPicker
-                                        query={comparePlayerSearch}
-                                        onQueryChange={setComparePlayerSearch}
-                                        onClearQuery={() => setComparePlayerSearch("")}
-                                        placeholder="Search compare players"
-                                        items={comparePlayerSearchItems}
-                                        selectedIds={selectedRadarCompareIds}
-                                        onSelect={handleRadarComparePlayerToggle}
-                                        inputProps={{
-                                          placeholderTextColor: CHART_COLORS.sub,
-                                          returnKeyType: "search",
-                                          style: styles.setupSearchInput,
-                                        }}
-                                        variant="rail"
-                                        selectionMode="multiple"
-                                        showResultsOnlyWhenQuery
-                                      />
-                                    </>
-                                  ) : (
-                                    <>
-                                      <SetupTabs
-                                        items={comparePlayerOptions}
-                                        value={comparePlayer ? String(comparePlayer.key) : ""}
-                                        onChange={handleComparePlayerSelect}
-                                      />
+                                    <PlayerSearchPicker
+                                      query={comparePlayerSearch}
+                                      onQueryChange={setComparePlayerSearch}
+                                      onClearQuery={() => setComparePlayerSearch("")}
+                                      placeholder="Search compare players"
+                                      items={comparePlayerSearchItems}
+                                      selectedIds={selectedRadarCompareIds}
+                                      onSelect={handleRadarComparePlayerToggle}
+                                      inputProps={{
+                                        placeholderTextColor: CHART_COLORS.sub,
+                                        returnKeyType: "search",
+                                        style: styles.setupSearchInput,
+                                      }}
+                                      variant="rail"
+                                      selectionMode="multiple"
+                                      showResultsOnlyWhenQuery
+                                    />
+                                  </SetupSection>
+                                ) : (
+                                  <SetupSection
+                                    title="Compare player"
+                                    contentStyle={styles.setupFullWidthSectionContent}
+                                  >
+                                    <SetupTabs
+                                      items={comparePlayerOptions}
+                                      value={comparePlayer ? String(comparePlayer.key) : ""}
+                                      onChange={handleComparePlayerSelect}
+                                    />
 
-                                      <PlayerSearchPicker
-                                        query={comparePlayerSearch}
-                                        onQueryChange={setComparePlayerSearch}
-                                        onClearQuery={() => setComparePlayerSearch("")}
-                                        placeholder="Search player here"
-                                        items={comparePlayerSearchItems}
-                                        selectedIds={comparePlayer ? [String(comparePlayer.key)] : []}
-                                        onSelect={handleComparePlayerSelect}
-                                        inputProps={{
-                                          placeholderTextColor: CHART_COLORS.sub,
-                                          returnKeyType: "search",
-                                          style: styles.setupSearchInput,
-                                        }}
-                                        variant="rail"
-                                        showResultsOnlyWhenQuery
-                                      />
-                                    </>
-                                  )}
-                                </SetupSection>
+                                    <PlayerSearchPicker
+                                      query={comparePlayerSearch}
+                                      onQueryChange={setComparePlayerSearch}
+                                      onClearQuery={() => setComparePlayerSearch("")}
+                                      placeholder="Search player here"
+                                      items={comparePlayerSearchItems}
+                                      selectedIds={comparePlayer ? [String(comparePlayer.key)] : []}
+                                      onSelect={handleComparePlayerSelect}
+                                      inputProps={{
+                                        placeholderTextColor: CHART_COLORS.sub,
+                                        returnKeyType: "search",
+                                        style: styles.setupSearchInput,
+                                      }}
+                                      variant="rail"
+                                      showResultsOnlyWhenQuery
+                                    />
+                                  </SetupSection>
+                                )
                               ) : null}
 
                               {hasScopePlayerToggle && scopePlayerOptions.length > 0 ? (

@@ -182,15 +182,19 @@ export default function StatsScreen() {
   const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
   const profileId = String(authSession?.user?.id ?? "").trim();
   const [activeTab, setActiveTab] = useState<StatsTab>("overview");
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  // Only an explicit pick belongs in the query key. The server's own default
+  // focus arrives inside the first payload, so folding that back in would change
+  // the key and fire a second get_stats_screen on every mount.
+  const [explicitPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [playerSearchQuery, setPlayerSearchQuery] = useState("");
   const deferredPlayerSearchQuery = useDeferredValue(playerSearchQuery);
   const analyticsQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),
-    queryKey: `stats-screen:${profileId || "anon"}`,
+    queryKey: `stats-screen:${profileId || "anon"}:${explicitPlayerId || "self"}`,
     load: () =>
       getStatsScreen({
         profileId,
+        focusPlayerId: explicitPlayerId,
       }),
   });
   const payload = toRecord(analyticsQuery.payload);
@@ -225,17 +229,13 @@ export default function StatsScreen() {
   const gamesSection = toRecord(payload?.games);
   const playerOptions = toArray(playersSection.options).map(normalizePlayerOption);
 
-  useEffect(() => {
-    const preferredPlayerId = toStringValue(playersSection.selectedPlayerId, "");
-    if (!preferredPlayerId) {
-      if (!selectedPlayerId && playerOptions[0]?.id) {
-        setSelectedPlayerId(playerOptions[0].id);
-      }
-      return;
-    }
-
-    setSelectedPlayerId((current) => current ?? preferredPlayerId);
-  }, [playerOptions, playersSection.selectedPlayerId, selectedPlayerId]);
+  // Derived rather than stored: falling back to the payload's own focus keeps the
+  // picker in sync without writing state that would re-key the analytics query.
+  const selectedPlayerId =
+    explicitPlayerId ??
+    (toStringValue(playersSection.selectedPlayerId, "") || null) ??
+    playerOptions[0]?.id ??
+    null;
 
   const normalizedQuery = deferredPlayerSearchQuery.trim().toLowerCase();
   const filteredPlayerOptions = useMemo(() => {
@@ -968,7 +968,7 @@ export default function StatsScreen() {
           <ActionButton
             title="Command"
             variant="ghost"
-            onPress={() => router.push(APP_ROUTES.home)}
+            onPress={() => router.push(buildHomeRoute())}
             style={styles.commandActionButton}
           />
         }

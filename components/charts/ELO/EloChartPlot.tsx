@@ -26,7 +26,10 @@ import {
   type RenderSeries,
 } from "@/components/charts/ELO/eloChartUtils";
 import { type EloChartMode } from "./buildEloChartState";
-import { buildEloModeInspectorCopy } from "./eloChartModeHelpers";
+import {
+  buildEloModeInspectorCopy,
+  formatModeValue,
+} from "./eloChartModeHelpers";
 
 type Props = {
   games?: Game[];
@@ -93,17 +96,6 @@ function getY(value: number, minValue: number, maxValue: number) {
   const range = max - min || 1;
   const normalized = (value - min) / range;
   return PAD_T + INNER_H - normalized * INNER_H;
-}
-
-function formatModeValue(value: number, mode: EloChartMode) {
-  switch (mode) {
-    case "elo":
-      return toNumber(value).toFixed(0);
-    case "eloDelta":
-    case "matchupGap":
-    default:
-      return `${value > 0 ? "+" : ""}${toNumber(value).toFixed(1)}`;
-  }
 }
 
 function buildSeriesGeometry(

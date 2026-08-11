@@ -50,10 +50,19 @@ assert.doesNotMatch(
   "expected the charts hub launch contract to stop relying on the retired assist_network_overview alias"
 );
 
+// Gate on the chart being routed to. scopePlayerOptions still describes the
+// previously selected chart, so using it would attach scope ids to charts whose
+// supportsChartScopePlayerToggle is false.
 assert.match(
   source,
-  /if \(scopePlayerOptions\.length > 0 && selectedGroupIds.length\) \{[\s\S]*params\.ids = selectedGroupIds\.join\(","\);/,
-  "expected the charts hub launch contract to keep serializing the selected player ids from the server-authored scope options"
+  /if \(supportsScopePlayerToggle && selectedGroupIds\.length\) \{[\s\S]*params\.ids = selectedGroupIds\.join\(","\);/,
+  "expected the charts hub launch contract to serialize selected player ids only for charts that support scoping"
+);
+
+assert.match(
+  source,
+  /const supportsScopePlayerToggle = supportsChartScopePlayerToggle\(chart\.key\);/,
+  "expected the launch contract to derive scope support from the target chart"
 );
 
 assert.doesNotMatch(

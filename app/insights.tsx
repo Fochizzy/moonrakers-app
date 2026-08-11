@@ -21,6 +21,7 @@ import { useStore } from "@/store/useStore";
 import { buildInsightSummaryStatements } from "@/utils/insightSummaries";
 import {
   APP_ROUTES,
+  buildHomeRoute,
   buildChartsRoute,
   buildCompareRoute,
   buildPlayerProfileRoute,
@@ -426,7 +427,7 @@ export default function InsightsScreen() {
           <ActionButton
             title="Command"
             variant="ghost"
-            onPress={() => router.push(APP_ROUTES.home)}
+            onPress={() => router.push(buildHomeRoute())}
             style={styles.heroActionButton}
           />
         }

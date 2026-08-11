@@ -26,6 +26,37 @@ const fallbackEnv = readSupabaseEnv(
 
 assert.equal(fallbackEnv.url, "https://fallback.supabase.co");
 assert.equal(fallbackEnv.publishableKey, "sb_publishable_fallback");
+
+// loadProcessSupabaseEnv always owns both keys, so an un-inlined build hands
+// readSupabaseEnv explicit undefined values. The expo-extra fallback must survive.
+const undefinedSourceEnv = readSupabaseEnv(
+  {
+    EXPO_PUBLIC_SUPABASE_URL: undefined,
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: undefined,
+  },
+  {
+    EXPO_PUBLIC_SUPABASE_URL: "https://fallback.supabase.co",
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_fallback",
+  },
+);
+
+assert.equal(undefinedSourceEnv.url, "https://fallback.supabase.co");
+assert.equal(undefinedSourceEnv.publishableKey, "sb_publishable_fallback");
+
+// Partial inlining resolves each key independently.
+const partialEnv = readSupabaseEnv(
+  {
+    EXPO_PUBLIC_SUPABASE_URL: "https://process.supabase.co",
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: undefined,
+  },
+  {
+    EXPO_PUBLIC_SUPABASE_URL: "https://fallback.supabase.co",
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_fallback",
+  },
+);
+
+assert.equal(partialEnv.url, "https://process.supabase.co");
+assert.equal(partialEnv.publishableKey, "sb_publishable_fallback");
 assert.match(
   formatSupabaseConfigError(new Error("Missing EXPO_PUBLIC_SUPABASE_URL")),
   /Missing local Supabase config/,
@@ -74,6 +105,22 @@ assert.equal(
 assert.equal(
   buildSupabaseRedirectUrl("moonrakers", { type: "email" }),
   "moonrakers://auth/callback?type=email",
+);
+assert.equal(
+  buildSupabaseRedirectUrl(
+    "moonrakers",
+    { type: "recovery" },
+    { currentOrigin: "https://moonrakers.example" },
+  ),
+  "https://moonrakers.example/auth/callback?type=recovery",
+);
+assert.equal(
+  buildSupabaseRedirectUrl(
+    "moonrakers",
+    { type: "email" },
+    { currentOrigin: "https://moonrakers.example/" },
+  ),
+  "https://moonrakers.example/auth/callback?type=email",
 );
 
 console.log("supabase-foundation.test.ts passed");

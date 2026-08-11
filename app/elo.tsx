@@ -24,7 +24,15 @@ import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import { APP_ROUTES, buildPlayerProfileRoute } from "@/utils/appRoutes";
+import { buildHomeRoute, buildPlayerProfileRoute } from "@/utils/appRoutes";
+import {
+  buildGameRowsByPlayer,
+  describeRecentForm,
+  replaceRecentFormSummaryInText,
+  resolveVisibleEloInsight,
+  resolveVisibleEloSection,
+  type VisibleEloMetricTab,
+} from "@/utils/analyticsElo";
 import { useAnalyticsRecovery } from "@/utils/useAnalyticsRecovery";
 import { useAnalyticsPresentation } from "@/utils/useAnalyticsPresentation";
 import { COLORS } from "@/utils/colors";
@@ -36,15 +44,6 @@ import {
   formatMetricValue,
   formatPercentFromDecimal,
 } from "@/utils/formatters";
-import {
-  describeRecentForm,
-  replaceRecentFormSummaryInText,
-} from "@/utils/eloRecentForm";
-import {
-  resolveVisibleEloInsight,
-  resolveVisibleEloSection,
-  type VisibleEloMetricTab,
-} from "@/utils/elo/visibleMetricTabs";
 import { toNumber } from "@/utils/numbers";
 import { normalizeId } from "@/utils/strings";
 import { resolvePreferredChartPlayerId } from "@/utils/charts";
@@ -162,7 +161,7 @@ export default function EloScreen() {
       .filter((row) => Boolean(row.playerId));
   }, [payload?.leaderboardRows]);
 
-  const analyticsPlayers = useMemo<StorePlayer[]>(() => {
+  const mergedPlayerOptions = useMemo<StorePlayer[]>(() => {
     const mergedPlayers = new Map<string, StorePlayer>();
 
     for (const player of rawPlayerOptions) {
@@ -193,6 +192,77 @@ export default function EloScreen() {
 
     return Array.from(mergedPlayers.values());
   }, [rawPlayerOptions, storePlayerOptions]);
+  const sortedPlayers = useMemo<StorePlayer[]>(() => {
+    const leaderboardRankByPlayerId = new Map(
+      rawLeaderboardRows.map((row, index) => [
+        normalizeId(row.playerId),
+        toNumber(row.rank) || index + 1,
+      ]),
+    );
+
+    return [...mergedPlayerOptions].sort((left, right) => {
+      const leftRank = leaderboardRankByPlayerId.get(normalizeId(left.id));
+      const rightRank = leaderboardRankByPlayerId.get(normalizeId(right.id));
+
+      if (leftRank != null || rightRank != null) {
+        if (leftRank == null) return 1;
+        if (rightRank == null) return -1;
+        if (leftRank !== rightRank) {
+          return leftRank - rightRank;
+        }
+      }
+
+      const nameDiff = String(left.name ?? "").localeCompare(
+        String(right.name ?? ""),
+      );
+      if (nameDiff !== 0) {
+        return nameDiff;
+      }
+
+      return normalizeId(left.id).localeCompare(normalizeId(right.id));
+    });
+  }, [mergedPlayerOptions, rawLeaderboardRows]);
+  const gameDrivenPlayerIds = useMemo(() => {
+    return new Set(
+      (Array.isArray(games) ? games : []).flatMap((game: any) => {
+        const participantIds = Array.isArray(game?.players)
+          ? game.players.map((player: any) =>
+              normalizeId(player?.id ?? player?.playerId),
+            )
+          : Array.isArray(game?.playerIds)
+            ? game.playerIds.map((playerId: any) => normalizeId(playerId))
+            : [];
+
+        return participantIds.filter(Boolean);
+      }),
+    );
+  }, [games]);
+  const leaderboardPlayerIds = useMemo(
+    () =>
+      new Set(
+        rawLeaderboardRows
+          .map((row) => normalizeId(row.playerId))
+          .filter(Boolean),
+      ),
+    [rawLeaderboardRows],
+  );
+  const analyticsPlayers = useMemo<StorePlayer[]>(() => {
+    // A player counts as tracked if this device has their games OR the server
+    // already ranked them. Filtering on local games alone silently drops rows
+    // the server returned whenever the store is only partially hydrated.
+    const playersWithAnalytics = sortedPlayers.filter((player) => {
+      const playerId = normalizeId(player.id);
+      return (
+        gameDrivenPlayerIds.has(playerId) || leaderboardPlayerIds.has(playerId)
+      );
+    });
+
+    return playersWithAnalytics.length ? playersWithAnalytics : sortedPlayers;
+  }, [gameDrivenPlayerIds, leaderboardPlayerIds, sortedPlayers]);
+  const gameRowsByPlayer = useMemo(
+    () => buildGameRowsByPlayer(games, analyticsPlayers),
+    [analyticsPlayers, games],
+  );
 
   const preferredPlayerId = useMemo(
     () =>
@@ -388,14 +458,48 @@ export default function EloScreen() {
   const hasData = selectedSummary.gamesPlayed > 0;
 
   const leaderboardRows = useMemo(() => {
-    return rawLeaderboardRows
-      .map((row, index) => ({
-        ...row,
-        rank: toNumber(row.rank) || index + 1,
-        isSelected: normalizeId(row.playerId) === normalizeId(selectedPlayerId),
-      }))
-      .filter((row) => Boolean(row.playerId));
-  }, [rawLeaderboardRows, selectedPlayerId]);
+    const serverLeaderboardRowByPlayerId = new Map(
+      rawLeaderboardRows.map((row, index) => [
+        normalizeId(row.playerId),
+        {
+          ...row,
+          rank: toNumber(row.rank) || index + 1,
+        },
+      ]),
+    );
+
+    return analyticsPlayers.map((player, index) => {
+      const playerId = normalizeId(player.id);
+      const serverRow = serverLeaderboardRowByPlayerId.get(playerId);
+      const playerRows = gameRowsByPlayer[playerId] ?? [];
+      const localWins = playerRows.filter((row) => row.win === 1).length;
+      // Take the record from one source or the other, never a mix: subtracting a
+      // server-wide win count from a local game count clamps a 12-4 record to 12W / 0L.
+      const hasServerRecord =
+        typeof serverRow?.wins === "number" &&
+        typeof serverRow?.losses === "number";
+      const wins = hasServerRecord ? (serverRow!.wins as number) : localWins;
+      const losses = hasServerRecord
+        ? (serverRow!.losses as number)
+        : Math.max(0, playerRows.length - localWins);
+
+      return {
+        // analyticsPlayers is already ordered by server rank, so number the rows
+        // positionally. Falling back to index + 1 only for players the server did
+        // not rank produces duplicates against the real server ranks.
+        rank: index + 1,
+        playerId,
+        name: serverRow?.name ?? player.name ?? "Unknown",
+        currentElo: serverRow?.currentElo ?? DEFAULT_ELO,
+        peakElo: serverRow?.peakElo ?? serverRow?.currentElo ?? DEFAULT_ELO,
+        confidence: serverRow?.confidence ?? 0,
+        gamesPlayed: serverRow?.gamesPlayed ?? playerRows.length,
+        wins,
+        losses,
+        isSelected: playerId === normalizeId(selectedPlayerId),
+      };
+    });
+  }, [analyticsPlayers, gameRowsByPlayer, rawLeaderboardRows, selectedPlayerId]);
 
   const featuredCard = topCards[0];
   const secondaryCards = topCards.slice(1, 3);
@@ -449,7 +553,7 @@ export default function EloScreen() {
           <ActionButton
             variant="ghost"
             title="Command"
-            onPress={() => router.push(APP_ROUTES.home)}
+            onPress={() => router.push(buildHomeRoute())}
             style={styles.backButton}
           />
         }

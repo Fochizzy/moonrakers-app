@@ -1,5 +1,6 @@
 import { resolveStoredPlayerColor } from "./playerColor";
 import { buildArtIndexFromRowAndColor, getRowFromArtIndex, type CardColor } from "./cardAssignment";
+import type { GameDraft } from "../lib/game-draft/types";
 
 export type GameSetupTurnOrderPlayer = {
   id: string;
@@ -92,6 +93,88 @@ export function buildActiveGamePlayersFromTurnOrder(
           : null,
       startOrder: index,
     }));
+}
+
+export function buildGameSetupPlayersFromDraft(args: {
+  availablePlayers: GameSetupTurnOrderPlayer[];
+  orderedPlayerIds: string[];
+  playerSnapshots?: GameSetupTurnOrderPlayer[] | null;
+}) {
+  const availablePlayerMap = new Map(
+    (Array.isArray(args.availablePlayers) ? args.availablePlayers : []).map((player) => [
+      String(player?.id ?? "").trim(),
+      player,
+    ])
+  );
+  const playerSnapshotMap = new Map(
+    (Array.isArray(args.playerSnapshots) ? args.playerSnapshots : []).map((player) => [
+      String(player?.id ?? "").trim(),
+      player,
+    ])
+  );
+
+  return (Array.isArray(args.orderedPlayerIds) ? args.orderedPlayerIds : [])
+    .map((playerId) => {
+      const normalizedPlayerId = String(playerId ?? "").trim();
+      if (!normalizedPlayerId) return null;
+
+      const availablePlayer = availablePlayerMap.get(normalizedPlayerId);
+      const playerSnapshot = playerSnapshotMap.get(normalizedPlayerId);
+      if (!availablePlayer && !playerSnapshot) return null;
+
+      const resolvedAssignedCardArtIndex =
+        typeof playerSnapshot?.assignedCardArtIndex === "number" &&
+        Number.isFinite(playerSnapshot.assignedCardArtIndex)
+          ? playerSnapshot.assignedCardArtIndex
+          : typeof availablePlayer?.assignedCardArtIndex === "number" &&
+              Number.isFinite(availablePlayer.assignedCardArtIndex)
+            ? availablePlayer.assignedCardArtIndex
+            : null;
+
+      const resolvedPlayer: GameSetupTurnOrderPlayer = {
+        ...(availablePlayer ?? {}),
+        ...(playerSnapshot ?? {}),
+        id: normalizedPlayerId,
+        assignedCardArtIndex: resolvedAssignedCardArtIndex,
+      };
+
+      return resolvedPlayer;
+    })
+    .filter((player): player is GameSetupTurnOrderPlayer => Boolean(player));
+}
+
+export function buildGameSetupDraftFromTurnOrder(args: {
+  draft: GameDraft;
+  players: GameSetupTurnOrderPlayer[];
+  now?: number;
+}) {
+  const timestamp = typeof args.now === "number" && Number.isFinite(args.now) ? args.now : Date.now();
+  const orderedPlayers = Array.isArray(args.players)
+    ? args.players.filter((player) => String(player?.id ?? "").trim().length > 0)
+    : [];
+  const orderedPlayerIds = orderedPlayers.map((player) => player.id);
+
+  return {
+    ...args.draft,
+    selectedPlayerIds: orderedPlayerIds,
+    turnOrder: orderedPlayerIds,
+    playerSnapshots: orderedPlayers.map((player, index) => ({
+      id: player.id,
+      name: resolveTurnOrderPlayerName(player, index),
+      initials:
+        String(player.initials ?? "").trim().length > 0
+          ? player.initials
+          : initialsFromName(player.name),
+      color: resolveStoredPlayerColor(player.color, index),
+      assignedCardArtIndex:
+        typeof player.assignedCardArtIndex === "number" &&
+        Number.isFinite(player.assignedCardArtIndex)
+          ? player.assignedCardArtIndex
+          : null,
+    })),
+    updatedAt: timestamp,
+    deviceUpdatedAt: timestamp,
+  } satisfies GameDraft;
 }
 
 export function applyTurnOrderPlayerColorOverride(

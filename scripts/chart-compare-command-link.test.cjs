@@ -16,7 +16,7 @@ assert.match(
 
 assert.match(
   source,
-  /<HeroCard[\s\S]*headerAction=\{[\s\S]*<ActionButton[\s\S]*title="Command"[\s\S]*onPress=\{\(\) => router\.push\(APP_ROUTES\.home\)\}[\s\S]*style=\{styles\.heroActionButton\}[\s\S]*\/>[\s\S]*\}/,
+  /<HeroCard[\s\S]*headerAction=\{[\s\S]*<ActionButton[\s\S]*title="Command"[\s\S]*onPress=\{\(\) => router\.push\(buildHomeRoute\(\)\)\}[\s\S]*style=\{styles\.heroActionButton\}[\s\S]*\/>[\s\S]*\}/,
   "expected the compare hero to route to Command and display Command in the header action"
 );
 

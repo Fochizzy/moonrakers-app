@@ -103,10 +103,12 @@ assert.match(
   "expected the All players quick chip to open the shared player directory route",
 );
 
+// buildHomeRoute() is the canonical Command navigation across every screen —
+// see scripts/home-route-canonical-navigation.test.cjs.
 assert.match(
   source,
-  /router\.push\(APP_ROUTES\.home\)/,
-  "expected the player profile header action to route Command to the shared Command page",
+  /router\.push\(buildHomeRoute\(\)\)/,
+  "expected the player profile header action to route Command to the canonical Command page",
 );
 
 assert.match(

@@ -13,7 +13,7 @@ import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
 import { buttonSystem } from "@/utils/buttonSystem";
-import { APP_ROUTES, buildDefinitionsRoute } from "@/utils/appRoutes";
+import { buildDefinitionsRoute, buildHomeRoute } from "@/utils/appRoutes";
 import {
   DEFINITION_GROUPS,
   getDefinitionItem,
@@ -207,7 +207,7 @@ export default function DefinitionsScreen() {
             ) : (
               <Pressable
                 style={styles.commandButton}
-                onPress={() => router.push(APP_ROUTES.home)}
+                onPress={() => router.push(buildHomeRoute())}
               >
                 <Text style={styles.commandButtonText}>Command</Text>
               </Pressable>

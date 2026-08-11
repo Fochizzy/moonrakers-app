@@ -40,7 +40,7 @@ import {
   getPlayerAccentColor,
   getPlayerBackgroundColor,
 } from '@/utils/turnTheme';
-import { APP_ROUTES } from '@/utils/appRoutes';
+import { APP_ROUTES, buildHomeRoute } from '@/utils/appRoutes';
 import {
   glowStyle,
   makePlayerWash,
@@ -394,8 +394,15 @@ function DirectPrestigeSection({
     <View
       style={[
         styles.sectionCard,
-        { borderColor: withAlpha(currentAccent, 0.28), backgroundColor: UI.card },
-        glowStyle(withAlpha(currentAccent, 0.95), 0.22, 10, 8),
+        {
+          borderColor: headToHeadMissionActive
+            ? withAlpha(UI.silver, 0.5)
+            : withAlpha(currentAccent, 0.36),
+          backgroundColor: headToHeadMissionActive
+            ? withAlpha(UI.silver, 0.12)
+            : mixWithBlack(currentAccent, 0.84),
+        },
+        glowStyle(withAlpha(headToHeadMissionActive ? UI.silver : currentAccent, 0.95), 0.16, 8, 6),
       ]}
     >
       <View
@@ -405,17 +412,23 @@ function DirectPrestigeSection({
           {
             backgroundColor: stayAtBaseSelected
               ? withAlpha(UI.gold, 0.05)
+              : headToHeadMissionActive
+              ? withAlpha(UI.silver, 0.12)
               : withAlpha(currentAccent, 0.09),
             borderColor: stayAtBaseSelected
               ? withAlpha(UI.gold, 0.44)
+              : headToHeadMissionActive
+              ? withAlpha(UI.silver, 0.5)
               : withAlpha(currentAccent, 0.38),
           },
           stayAtBaseSelected
             ? glowStyle(withAlpha(UI.gold, 0.92), 0.12, 6, 4)
+            : headToHeadMissionActive
+            ? glowStyle(withAlpha(UI.silver, 0.88), 0.16, 8, 5)
             : glowStyle(withAlpha(currentAccent, 0.95), 0.1, 6, 4),
         ]}
       >
-        <Text style={styles.sectionTitle}>Direct Prestige</Text>
+        {!headToHeadMissionActive ? <Text style={styles.sectionTitle}>Direct Prestige</Text> : null}
 
         {stayAtBaseSelected ? (
           <View style={styles.baseModeBoxElite}>
@@ -433,7 +446,7 @@ function DirectPrestigeSection({
             ]}
           >
             <ScaleButton onPress={onOpenHeadToHeadMission} style={styles.headToHeadActiveBody}>
-              <Text style={styles.headToHeadActiveTitle}>Head to Head Mission</Text>
+              <Text style={styles.headToHeadActiveTitle}>Head to Head</Text>
               {headToHeadMissionSummary ? (
                 <View style={styles.headToHeadActiveSummaryWrap}>
                   <HeadToHeadMissionSummaryText summary={headToHeadMissionSummary} />
@@ -1235,16 +1248,6 @@ export default function Game() {
     return index >= 0 ? index + 1 : null;
   }, [displayRounds, editingRoundId]);
 
-  if (!activeGame?.players?.length || !activeTurnPlayer || !currentPlayer) {
-    return (
-      <View style={[styles.screen, { backgroundColor: UI.black }]}>
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>No active game</Text>
-        </View>
-      </View>
-    );
-  }
-
   function commitGameplayPatch(
     patch: Partial<{
       current: Partial<CurrentTurnStats>;
@@ -1260,19 +1263,24 @@ export default function Game() {
       return;
     }
 
-    void updateGameplay(
-      {
-        turnIndex: patch.turnIndex ?? activeGame.turnIndex,
-        rounds: patch.rounds ?? rounds,
-        totals: (patch.totals ?? totals) as any,
-        current: {
-          ...current,
-          ...(patch.current ?? {}),
-        },
-        roundCount: patch.roundCount ?? activeGame.roundCount,
-        selectedWinnerId:
-          patch.selectedWinnerId ?? activeGame.selectedWinnerId ?? null,
+    const nextGameplay = {
+      turnIndex: patch.turnIndex ?? activeGame.turnIndex,
+      rounds: patch.rounds ?? rounds,
+      totals: (patch.totals ?? totals) as any,
+      current: {
+        ...current,
+        ...(patch.current ?? {}),
       },
+      roundCount: patch.roundCount ?? activeGame.roundCount,
+      selectedWinnerId:
+        patch.selectedWinnerId ?? activeGame.selectedWinnerId ?? null,
+    };
+
+    // updateGameplay reprojects activeGame from the draft synchronously, so the
+    // UI already reflects this patch on the next render. Writing activeGame
+    // directly as well would be overwritten by that projection immediately.
+    void updateGameplay(
+      nextGameplay,
       phase,
     );
   }
@@ -1461,7 +1469,21 @@ export default function Game() {
   useEffect(() => {
     if (!headToHeadMissionActive) return;
     syncHeadToHeadMissionMode();
-  }, [headToHeadMissionActive]);
+  }, [
+    headToHeadMissionActive,
+    current.headToHeadFirstPlaceId,
+    current.headToHeadSecondPlaceId,
+  ]);
+
+  if (!activeGame?.players?.length || !activeTurnPlayer || !currentPlayer) {
+    return (
+      <View style={[styles.screen, { backgroundColor: UI.black }]}>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>No active game</Text>
+        </View>
+      </View>
+    );
+  }
 
   function resetTurnEditorState() {
     setContractChoice(0);
@@ -1762,7 +1784,7 @@ export default function Game() {
 
             <Pressable
               style={styles.commandButton}
-              onPress={() => router.push(APP_ROUTES.home)}
+              onPress={() => router.push(buildHomeRoute())}
             >
               <Text style={styles.commandButtonText}>Command</Text>
             </Pressable>

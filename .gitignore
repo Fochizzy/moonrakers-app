@@ -3,6 +3,7 @@ node_modules/
 .npm-cache/
 .superpowers/
 dist/
+dist-web/
 build/
 *.log
 .env
@@ -24,6 +25,10 @@ supabase/.temp/
 tmp/
 tmp-aab-cert/
 tmp-aab-manifest/
+tmp-chrome-profile*/
+tmp-expo-web-smoke/
+tmp-social-*/
+tmp-*.html
 tmp-*.sql
 tmp-*.json
 tmp-codex-*.txt

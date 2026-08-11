@@ -17,7 +17,7 @@ import {
 import { buildSupabaseRedirectUrl, supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { useTheme } from "@/theme";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 
 type CallbackRouteParams = {
   access_token?: string | string[];
@@ -158,7 +158,7 @@ export default function AuthCallbackScreen() {
 
       await clearPendingAuthIntent();
       setPasswordRecoveryPending(false);
-      router.replace(APP_ROUTES.home);
+      router.replace(buildHomeRoute());
       return true;
     }
 

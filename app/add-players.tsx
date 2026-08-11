@@ -20,7 +20,9 @@ import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
+import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
 import { buildSavedAuthProfile } from "@/lib/auth/registerFlow";
+import { runSignOutFlow } from "@/lib/auth/signOutFlow";
 import { canResumeDraft } from "@/lib/game-draft/phase";
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
@@ -28,8 +30,12 @@ import { deleteOwnProfile } from "@/lib/cloud/deleteOwnProfile";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import { createSharedGroup, deleteSharedGroup } from "@/lib/cloud/sharedGroups";
 import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
-import { useStore } from "@/store/useStore";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import {
+  useClearAuthState,
+  useSetPasswordRecoveryPending,
+  useStore,
+} from "@/store/useStore";
+import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 import { type CardColor } from "@/utils/cardAssignment";
 import {
   filterGroupsByQuery,
@@ -187,6 +193,8 @@ export default function AddPlayersScreen() {
   const upsertRegisteredProfile = useStore(
     (state: any) => state.upsertRegisteredProfile,
   );
+  const clearAuthState = useClearAuthState();
+  const setPasswordRecoveryPending = useSetPasswordRecoveryPending();
   const setPlayers = useStore((state: any) => state.setPlayers);
   const resetStore = useStore((state: any) => state.resetStore);
   const { gameDraft } = useSyncedGameDraft();
@@ -492,6 +500,14 @@ export default function AddPlayersScreen() {
     }
   }
 
+  const handleSignOut = async () => {
+    await runSignOutFlow({
+      setPasswordRecoveryPending,
+      clearAuthState,
+      router,
+    });
+  };
+
   function handleDeleteProfile() {
     if (!signedInUserId || deletingProfile) {
       return;
@@ -632,11 +648,20 @@ export default function AddPlayersScreen() {
         size="compact"
         variant="stat"
         actions={
-          <ActionButton
-            title="Command"
-            variant="secondary"
-            onPress={() => router.push(APP_ROUTES.home)}
-          />
+          <View style={styles.heroActions}>
+            <ActionButton
+              title="Command"
+              variant="secondary"
+              onPress={() => router.push(buildHomeRoute())}
+              style={styles.heroActionButton}
+            />
+            <ActionButton
+              title="Sign out"
+              variant="ghost"
+              onPress={handleSignOut}
+              style={styles.heroActionButton}
+            />
+          </View>
         }
       >
         <View style={styles.heroMetaRow}>
@@ -1035,6 +1060,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
+  },
+  heroActions: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  heroActionButton: {
+    flexGrow: 1,
+    minWidth: 120,
   },
   metricPill: {
     minWidth: 86,

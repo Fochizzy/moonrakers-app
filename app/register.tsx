@@ -34,7 +34,7 @@ import {
 } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { useTheme } from "@/theme";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 import { type CardColor } from "@/utils/cardAssignment";
 import {
   buildProfileAppearanceSavePayload,
@@ -250,7 +250,7 @@ export default function RegisterScreen() {
         });
         setPasswordRecoveryPending(false);
         await clearPendingAuthIntent();
-        router.replace(APP_ROUTES.home as any);
+        router.replace(buildHomeRoute() as any);
         return;
       }
 

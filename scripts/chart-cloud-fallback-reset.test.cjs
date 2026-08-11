@@ -8,10 +8,19 @@ const chartDetailSource = fs.readFileSync(
   "utf8",
 );
 
+// The fallback is a whole-account snapshot loaded with loadCloudSnapshot(profileId).
+// Keying its reset on datasetQuery.queryKey pulled the route metric into the key, so
+// every metric tab tap discarded the snapshot and re-downloaded the entire account.
 assert.match(
   chartDetailSource,
-  /const cloudFallbackResetKey = \[profileId,\s*datasetQuery\.queryKey\]\.join\(":"\);/,
-  "expected chart detail to reset cloud fallback state for each dataset query, not only the signed-in profile",
+  /const cloudFallbackResetKey = profileId;/,
+  "expected chart detail to reset cloud fallback state per profile, not per dataset query",
+);
+
+assert.doesNotMatch(
+  chartDetailSource,
+  /const cloudFallbackResetKey = \[profileId,\s*datasetQuery\.queryKey\]/,
+  "expected the cloud fallback reset key to stay off datasetQuery.queryKey so metric changes do not re-download the account snapshot",
 );
 
 assert.match(

@@ -24,6 +24,7 @@ export type AnalyticsHomeParams = {
 
 export type StatsScreenParams = {
   profileId: string;
+  focusPlayerId: string | null;
 };
 
 export type InsightsScreenParams = {

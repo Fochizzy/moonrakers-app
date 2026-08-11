@@ -22,6 +22,7 @@ async function main() {
     client as any,
     {
       profileId: "stats-profile",
+      focusPlayerId: "focus-player",
     },
   );
 
@@ -30,6 +31,7 @@ async function main() {
     name: "get_stats_screen",
     args: {
       profile_id: "stats-profile",
+      focus_player_id: "focus-player",
     },
   });
   assert.equal(payload.overview.hero.takeaway, "Nova leads");

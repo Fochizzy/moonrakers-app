@@ -26,7 +26,7 @@ import {
   supabase,
 } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
-import { APP_ROUTES } from "@/utils/appRoutes";
+import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
 
 type ActiveAction = "login" | "resend" | "reset" | null;
 const APP_ICON = require("@/assets/icon.png");
@@ -176,7 +176,7 @@ export default function LoginScreen() {
       setPasswordRecoveryPending(false);
       await clearPendingAuthIntent();
       setActiveAction(null);
-      router.replace(APP_ROUTES.home);
+      router.replace(buildHomeRoute());
     } catch (error) {
       setMessage(formatAuthMessage(error));
       setActiveAction(null);

@@ -28,6 +28,7 @@ export async function getStatsScreen(
     "get_stats_screen",
     {
       profile_id: params.profileId,
+      focus_player_id: params.focusPlayerId,
     },
     params.profileId,
   );

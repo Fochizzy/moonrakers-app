@@ -52,19 +52,47 @@ function loadExpoExtraSupabaseEnv(): SupabaseEnvSource {
   }
 }
 
+export function loadProcessSupabaseEnv(): SupabaseEnvSource {
+  return {
+    EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+      process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  };
+}
+
+function readEnvValue(
+  key: keyof SupabaseEnvSource,
+  ...sources: SupabaseEnvSource[]
+) {
+  for (const source of sources) {
+    const value = String(source[key] ?? "").trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
 export function readSupabaseEnv(
-  source: SupabaseEnvSource = process.env as SupabaseEnvSource,
+  source?: SupabaseEnvSource,
   fallbackSource: SupabaseEnvSource = loadExpoExtraSupabaseEnv(),
 ): SupabaseEnv {
-  const resolvedSource = {
-    ...fallbackSource,
-    ...source,
-  };
+  // Resolve per key rather than spreading: loadProcessSupabaseEnv always owns
+  // both keys, so a spread would overwrite the expo-extra fallback with
+  // undefined whenever the value was not inlined into process.env.
+  const primarySource = source ?? loadProcessSupabaseEnv();
 
-  const url = String(resolvedSource.EXPO_PUBLIC_SUPABASE_URL ?? "").trim();
-  const publishableKey = String(
-    resolvedSource.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
-  ).trim();
+  const url = readEnvValue(
+    "EXPO_PUBLIC_SUPABASE_URL",
+    primarySource,
+    fallbackSource,
+  );
+  const publishableKey = readEnvValue(
+    "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+    primarySource,
+    fallbackSource,
+  );
 
   if (!url) {
     throw new Error("Missing EXPO_PUBLIC_SUPABASE_URL");
@@ -145,11 +173,35 @@ type RedirectUrlParams = {
   type?: "email" | "recovery";
 };
 
+type RedirectUrlRuntime = {
+  currentOrigin?: string | null;
+};
+
+function resolveBrowserOrigin() {
+  if (typeof window === "undefined" || typeof window.location?.origin !== "string") {
+    return null;
+  }
+
+  const origin = window.location.origin.trim().replace(/\/+$/, "");
+  if (!origin || !/^https?:\/\//i.test(origin)) {
+    return null;
+  }
+
+  return origin;
+}
+
 export function buildSupabaseRedirectUrl(
   scheme = "moonrakers",
   params: RedirectUrlParams = {},
+  runtime: RedirectUrlRuntime = {},
 ) {
-  const baseUrl = `${scheme}://auth/callback`;
+  const explicitOrigin = typeof runtime.currentOrigin === "string"
+    ? runtime.currentOrigin.trim().replace(/\/+$/, "")
+    : "";
+  const browserOrigin = explicitOrigin || resolveBrowserOrigin();
+  const baseUrl = browserOrigin
+    ? `${browserOrigin}/auth/callback`
+    : `${scheme}://auth/callback`;
   const queryParams = new URLSearchParams();
 
   if (params.type) {
@@ -180,7 +232,7 @@ let supabaseClient: SupabaseClient | null = null;
 let isNativeAutoRefreshBound = false;
 
 export function createSupabaseClient(
-  source: SupabaseEnvSource = process.env as SupabaseEnvSource,
+  source?: SupabaseEnvSource,
 ) {
   const env = readSupabaseEnv(source);
   const nativeBindings = loadNativeBindings();
@@ -217,14 +269,14 @@ export function createSupabaseClient(
 }
 
 export function getSupabaseClient(
-  source: SupabaseEnvSource = process.env as SupabaseEnvSource,
+  source?: SupabaseEnvSource,
 ) {
-  if (source !== (process.env as SupabaseEnvSource)) {
+  if (source) {
     return createSupabaseClient(source);
   }
 
   if (!supabaseClient) {
-    supabaseClient = createSupabaseClient(source);
+    supabaseClient = createSupabaseClient();
   }
 
   return supabaseClient;
