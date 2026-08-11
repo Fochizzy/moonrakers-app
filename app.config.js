@@ -37,8 +37,10 @@ module.exports = {
         'expo-build-properties',
         {
           android: {
-            compileSdkVersion: 35,
-            targetSdkVersion: 35,
+            // API 36 is required for Play submissions from 2026-08-31. Expo SDK 54
+            // supplies the AGP/toolchain for 36, so this only needs the level bump.
+            compileSdkVersion: 36,
+            targetSdkVersion: 36,
             minSdkVersion: 24
           }
         }
