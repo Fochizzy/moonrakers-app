@@ -5,7 +5,6 @@ import {
   useState,
 } from "react";
 
-import { reconcileStaleRollupOnce } from "./reconcileStaleRollup";
 import { useAnalyticsRefreshTick } from "./useAnalyticsRefreshTick";
 import {
   beginLiveAnalyticsRequest,
@@ -56,16 +55,6 @@ export function useLiveAnalyticsQuery<TPayload>({
 
     void (async () => {
       try {
-        // Repair a rollup the finish-game flow failed to refresh before reading it,
-        // so the first analytics load of the session shows current numbers rather
-        // than healing only in time for the next one. No-ops once per session, and
-        // costs a single count query when the rollup is already current.
-        await reconcileStaleRollupOnce();
-
-        if (cancelled) {
-          return;
-        }
-
         const nextPayload = await loadRef.current();
 
         if (cancelled) {
