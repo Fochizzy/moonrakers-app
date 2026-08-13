@@ -21,6 +21,7 @@ export type GameReplayRow = {
   assistPrestigeSent: number;
   assistsGiven: number;
   color: string | null;
+  playerId: string;
   contracts: number;
   failures: number;
   key: string;
@@ -106,6 +107,7 @@ export function buildGameReplayRows(game: ArchiveGame): GameReplayRow[] {
       failures: round.failures,
       key: round.id || `turn-${index}`,
       objectivePrestige: round.objectivePrestige,
+      playerId: round.playerId,
       playerName: player?.name ?? "Unknown",
       prestige: round.prestige,
       step: index + 1,

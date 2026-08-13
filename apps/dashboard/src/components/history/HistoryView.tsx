@@ -8,7 +8,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime } from "@/lib/formatDateTime";
-import { playerAccent } from "@/lib/playerColor";
+import { assignDistinctAccents } from "@/lib/playerColor";
 import {
   filterHistoryRows,
   listHistoryGroupNames,
@@ -186,8 +186,9 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
 
       <div className="row-list">
         {visibleRows.map((row) => {
-          const winnerColor =
-            row.players.find((player) => player.isWinner)?.color ?? null;
+          const accents = assignDistinctAccents(row.players);
+          const winnerId =
+            row.players.find((player) => player.isWinner)?.id ?? null;
 
           return (
             <article
@@ -195,7 +196,7 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
               key={row.id}
               style={
                 {
-                  "--row-accent": playerAccent(winnerColor, "var(--border-strong)"),
+                  "--row-accent": (winnerId && accents[winnerId]) || "var(--border-strong)",
                 } as React.CSSProperties
               }
             >
@@ -241,7 +242,7 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
                     <span
                       aria-hidden="true"
                       className="chip__dot"
-                      style={{ background: playerAccent(player.color, "var(--blue)") }}
+                      style={{ background: accents[player.id] }}
                     />
                     {player.name}
                     <span className="chip__num">{player.totalPrestige}</span>

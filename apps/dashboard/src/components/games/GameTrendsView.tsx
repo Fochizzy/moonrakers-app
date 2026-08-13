@@ -8,7 +8,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime } from "@/lib/formatDateTime";
 import type { GameTrends } from "@/lib/games/gameTrends";
-import { playerAccent } from "@/lib/playerColor";
+import { assignDistinctAccents } from "@/lib/playerColor";
 
 type GameTrendsViewProps = {
   createdAt: number;
@@ -22,7 +22,7 @@ function percent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
-function Meter({ color, ratio }: { color: string | null; ratio: number }) {
+function Meter({ accent, ratio }: { accent: string; ratio: number }) {
   return (
     <span className="meter">
       <span
@@ -30,7 +30,7 @@ function Meter({ color, ratio }: { color: string | null; ratio: number }) {
         style={
           {
             width: `${Math.max(0, Math.min(1, ratio)) * 100}%`,
-            "--meter-color": playerAccent(color),
+            "--meter-color": accent,
           } as React.CSSProperties
         }
       />
@@ -45,6 +45,7 @@ export function GameTrendsView({
   trends,
   winnerName,
 }: GameTrendsViewProps) {
+  const accents = assignDistinctAccents(trends.seatRows);
   const maxSeatPrestige = Math.max(
     1,
     ...trends.seatRows.map((row) => row.totalPrestige),
@@ -133,7 +134,7 @@ export function GameTrendsView({
                   </span>
                 </div>
                 <Meter
-                  color={row.color}
+                  accent={accents[row.id]!}
                   ratio={row.totalPrestige / maxSeatPrestige}
                 />
               </div>
@@ -168,7 +169,7 @@ export function GameTrendsView({
                     {row.attempts > 0 ? percent(row.successRate) : "no attempts"}
                   </span>
                 </div>
-                <Meter color={row.color} ratio={row.successRate} />
+                <Meter accent={accents[row.id]!} ratio={row.successRate} />
               </div>
             ))}
           </div>

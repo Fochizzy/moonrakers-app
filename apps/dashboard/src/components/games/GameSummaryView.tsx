@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { formatDateTime } from "@/lib/formatDateTime";
 import type { GameSummary } from "@/lib/games/gameSummary";
-import { playerAccent } from "@/lib/playerColor";
+import { assignDistinctAccents } from "@/lib/playerColor";
 
 type GameSummaryViewProps = {
   gameId: string;
@@ -28,6 +28,7 @@ const REPLAY_COLUMNS = [
 ];
 
 export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
+  const accents = assignDistinctAccents(summary.standings);
   const title =
     summary.groupName ?? (summary.createdAt ? "Saved game" : "Completed match");
 
@@ -101,7 +102,7 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
               key={row.id}
               style={
                 {
-                  "--row-accent": playerAccent(row.color),
+                  "--row-accent": accents[row.id],
                 } as React.CSSProperties
               }
             >
@@ -211,7 +212,7 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
                         style={{
                           display: "inline-block",
                           marginRight: "0.45rem",
-                          background: playerAccent(row.color, "var(--blue)"),
+                          background: accents[row.playerId] ?? "var(--blue)",
                         }}
                       />
                       {row.playerName}
