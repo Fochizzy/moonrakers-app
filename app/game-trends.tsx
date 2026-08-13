@@ -11,7 +11,7 @@ import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
-import { useStore } from "@/store/useStore";
+import { useResolvedGame } from "@/lib/cloud/useResolvedGame";
 import {
   buildHomeRoute,
   buildHistoryRoute,
@@ -150,14 +150,8 @@ export default function GameTrendsScreen() {
   const params = useLocalSearchParams<{ gameId?: string | string[] }>();
   const gameId = Array.isArray(params.gameId) ? params.gameId[0] : params.gameId;
 
-  const games = useStore((state: any) =>
-    Array.isArray(state?.games) ? state.games : [],
-  ) as Game[];
-
-  const game = useMemo(() => {
-    if (!gameId) return undefined;
-    return games.find((entry) => entry.id === gameId);
-  }, [gameId, games]);
+  const resolvedGame = useResolvedGame<Game>(gameId);
+  const game = resolvedGame.game;
 
   const scrollRef = useRef<ScrollView | null>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
@@ -308,8 +302,14 @@ export default function GameTrendsScreen() {
       <PageShell preset="analytics" density="compact">
         <HeroCard
           eyebrow="Postgame"
-          title="Game not found"
-          subtitle="The saved game for this trends page could not be found."
+          title={
+            resolvedGame.status === "loading" ? "Loading game" : "Game not found"
+          }
+          subtitle={
+            resolvedGame.status === "loading"
+              ? "Fetching this game from your cloud history."
+              : "The saved game for this trends page could not be found."
+          }
           size="compact"
           variant="stat"
           actions={

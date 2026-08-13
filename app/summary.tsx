@@ -10,7 +10,8 @@ import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import Text from "@/components/ui/Text";
-import { useGames, usePlayers } from "@/store/useStore";
+import { usePlayers } from "@/store/useStore";
+import { useResolvedGame } from "@/lib/cloud/useResolvedGame";
 import { COLORS } from "@/utils/colors";
 import { formatDate } from "@/utils/formatters";
 import { buildGameTrendsRoute } from "@/utils/appRoutes";
@@ -211,21 +212,17 @@ export default function SummaryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ gameId?: string }>();
   const rawPlayers = usePlayers();
-  const rawGames = useGames();
 
   const players = useMemo<Player[]>(
     () => (Array.isArray(rawPlayers) ? rawPlayers : []),
     [rawPlayers],
   );
-  const games = useMemo<StoredGame[]>(
-    () => (Array.isArray(rawGames) ? rawGames : []),
-    [rawGames],
-  );
 
-  const game = useMemo(() => {
-    if (!params?.gameId) return undefined;
-    return games.find((entry) => entry?.id === params.gameId);
-  }, [games, params?.gameId]);
+  const routeGameId = Array.isArray(params?.gameId)
+    ? params.gameId[0]
+    : params?.gameId;
+  const resolvedGame = useResolvedGame<StoredGame>(routeGameId);
+  const game = resolvedGame.game;
 
   const winnerId = useMemo(() => getWinnerId(game), [game]);
   const winnerName = useMemo(
@@ -284,7 +281,7 @@ export default function SummaryScreen() {
     [...rankedPlayers].sort((left, right) => right.assists - left.assists)[0] ??
     null;
 
-  if (!params?.gameId) {
+  if (!routeGameId) {
     return (
       <PageShell preset="analytics" density="compact">
         <HeroCard
@@ -305,12 +302,18 @@ export default function SummaryScreen() {
   }
 
   if (!game) {
+    const isLoading = resolvedGame.status === "loading";
+
     return (
       <PageShell preset="analytics" density="compact">
         <HeroCard
           eyebrow="Game Summary"
-          title="Game Not Found"
-          subtitle="That saved game could not be found in the current store."
+          title={isLoading ? "Loading Game" : "Game Not Found"}
+          subtitle={
+            isLoading
+              ? "Fetching this game from your cloud history."
+              : "That saved game is not in this device's history or your cloud history."
+          }
           size="compact"
           actions={
             <ActionButton
@@ -586,7 +589,7 @@ export default function SummaryScreen() {
 
           <Pressable
             style={[styles.actionButton, styles.primaryAction]}
-            onPress={() => router.push(buildGameTrendsRoute(params.gameId!) as any)}
+            onPress={() => router.push(buildGameTrendsRoute(routeGameId) as any)}
           >
             <Text style={styles.actionButtonText}>Game Trends</Text>
           </Pressable>
