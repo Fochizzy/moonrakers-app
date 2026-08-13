@@ -29,6 +29,7 @@ import Text from '@/components/ui/Text';
 import { sortHistoryGames } from '@/lib/history/historyGameOrdering';
 import { useHistoryDataManager } from '@/lib/history/useHistoryDataManager';
 import { loadHydratedCloudState } from '@/lib/cloud/loadHydratedCloudState';
+import { useResolvedGame } from '@/lib/cloud/useResolvedGame';
 import { deleteCompletedGame } from '@/lib/game-save/deleteCompletedGame';
 import { APP_ROUTES, buildHomeRoute, buildSummaryRoute } from '@/utils/appRoutes';
 
@@ -280,6 +281,8 @@ export default function HistoryScreen() {
     Array.isArray(params.gameId) ? params.gameId[0] : params.gameId ?? ''
   );
 
+  const focusedGame = useResolvedGame<StoredGame>(focusedGameId).game;
+
   const availableHistoryGroups = useMemo(() => {
     const names = games
       .map((game) => String(game.groupName ?? '').trim())
@@ -320,8 +323,31 @@ export default function HistoryScreen() {
       );
     });
 
-    return sortHistoryGames(filtered, { sort: historySort, players });
-  }, [games, historyFilter, historySort, searchQuery, players, selectedGroupName, signedInPlayerId]);
+    const sorted = sortHistoryGames(filtered, { sort: historySort, players });
+
+    // A deep link names one specific game, so it wins over the active filter
+    // and search. This also carries a game the device has never synced, which
+    // the resolver fetched from the cloud.
+    if (
+      focusedGameId &&
+      focusedGame &&
+      !sorted.some((game) => normalizeHistoryId(game?.id) === focusedGameId)
+    ) {
+      return [focusedGame, ...sorted];
+    }
+
+    return sorted;
+  }, [
+    focusedGame,
+    focusedGameId,
+    games,
+    historyFilter,
+    historySort,
+    searchQuery,
+    players,
+    selectedGroupName,
+    signedInPlayerId,
+  ]);
 
   useEffect(() => {
     if (historyFilter !== 'group') {

@@ -109,4 +109,16 @@ assert.match(
   "expected the History screen to measure the focused row against the live ScrollView before scrolling the archive to it",
 );
 
+assert.match(
+  historySource,
+  /const focusedGame = useResolvedGame<StoredGame>\(focusedGameId\)\.game;/,
+  "expected the History screen to resolve a focused game that the local store may not hold",
+);
+
+assert.match(
+  historySource,
+  /if \(\s*focusedGameId &&\s*focusedGame &&\s*!sorted\.some\(\(game\) => normalizeHistoryId\(game\?\.id\) === focusedGameId\)\s*\) \{\s*return \[focusedGame, \.\.\.sorted\];/s,
+  "expected a deep-linked game to appear even when the active filter, search, or an unsynced store would hide it",
+);
+
 console.log("player-profile-recent-games-history-link.test.cjs passed");
