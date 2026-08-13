@@ -5,6 +5,20 @@ export const DEFAULT_K = 32;
 export const ELO_RESULT_WEIGHT = 0.6;
 export const ELO_PERFORMANCE_WEIGHT = 0.4;
 
+/**
+ * A game's rating swing scales with how decisively it was won. A photo finish
+ * proves little and moves ratings by {@link ELO_MIN_SWING_MULTIPLIER}; a rout
+ * moves them by {@link ELO_MAX_SWING_MULTIPLIER}.
+ */
+export const ELO_MIN_SWING_MULTIPLIER = 0.75;
+export const ELO_MAX_SWING_MULTIPLIER = 1.25;
+
+/**
+ * The winner's prestige margin over the runner-up, as a fraction of the table
+ * average, at which a game counts as fully decisive.
+ */
+export const ELO_DECISIVE_MARGIN_RATIO = 0.5;
+
 export type EloMap = Record<string, number>;
 
 export type EloHistoryPoint = {
@@ -110,36 +124,28 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
- * Replay a game turn by turn and record the highest running score each player
- * ever reached. A player who leads for most of the game and then gives ground
- * to late failures peaked higher than their final score suggests.
+ * Replay a game turn by turn and record every player's running score after each
+ * turn. Players who did not act on a turn carry their previous total forward, so
+ * the result is a full grid: one standing for every player at every turn.
  *
  * Only the fields the server also persists on game_rounds are replayed, so this
- * stays byte-for-byte in step with private.refresh_all_elo_snapshots. Anything
- * the rounds table cannot see (head-to-head mission bonuses, turn meta types) is
- * still captured, because the peak is floored at the authoritative end score.
+ * stays in step with private.refresh_all_elo_snapshots. Anything the rounds
+ * table cannot see (head-to-head mission bonuses, turn meta types) is absent
+ * from both sides.
  */
-export function buildPeakScores(
+export function buildRunningScores(
   game: EloGameLike,
   playerIds: string[]
-): Record<string, number> {
-  const endScores = Object.fromEntries(
-    playerIds.map((playerId) => [playerId, getEndScore(game, playerId)])
-  );
-
+): Record<string, number[]> {
   const rounds = Array.isArray(game?.rounds) ? game.rounds : [];
-  if (!rounds.length) {
-    return endScores;
-  }
-
   const prestigeTotals: Record<string, number> = {};
   const bonusTotals: Record<string, number> = {};
-  const peaks: Record<string, number> = {};
+  const trails: Record<string, number[]> = {};
 
   for (const playerId of playerIds) {
     prestigeTotals[playerId] = 0;
     bonusTotals[playerId] = 0;
-    peaks[playerId] = Number.NEGATIVE_INFINITY;
+    trails[playerId] = [];
   }
 
   for (const rawRound of rounds) {
@@ -167,39 +173,36 @@ export function buildPeakScores(
     }
 
     for (const playerId of playerIds) {
-      const running =
-        Math.max(0, prestigeTotals[playerId]) + bonusTotals[playerId];
-
-      if (running > peaks[playerId]) {
-        peaks[playerId] = running;
-      }
+      trails[playerId].push(
+        Math.max(0, prestigeTotals[playerId]) + bonusTotals[playerId]
+      );
     }
   }
 
-  return Object.fromEntries(
-    playerIds.map((playerId) => [
-      playerId,
-      Math.max(
-        Number.isFinite(peaks[playerId]) ? peaks[playerId] : endScores[playerId],
-        endScores[playerId]
-      ),
-    ])
-  );
+  return trails;
 }
 
 /**
- * Score one value against the field it was played against, as a share of that
- * game's mean: matching the table average scores 0.5, doubling it scores 1, and
- * scoring nothing scores 0. Unlike min/max normalisation this keeps margins
- * meaningful - a two-point win and a forty-point rout do not read the same.
+ * Score one value as a differential against the rest of the field rather than
+ * against the field as a whole: 0.5 means level with the average opponent, above
+ * 0.5 means ahead of them, and the gap scales with how far ahead. Margins stay
+ * meaningful, so a two-point lead and a forty-point lead do not read the same.
  */
-export function eloFieldShare(value: number, fieldMean: number): number {
-  if (!Number.isFinite(fieldMean) || fieldMean <= 0) {
+export function eloFieldStanding(
+  value: number,
+  fieldMean: number,
+  fieldSize: number
+): number {
+  if (fieldSize < 2 || !Number.isFinite(fieldMean) || fieldMean <= 0) {
     return 0.5;
   }
 
-  const share = (0.5 * (Number.isFinite(value) ? value : 0)) / fieldMean;
-  return Math.min(1, Math.max(0, share));
+  const safeValue = Number.isFinite(value) ? value : 0;
+  // value - meanOfOpponents, expressed relative to the table average.
+  const opponentGap =
+    (fieldSize / (fieldSize - 1)) * (safeValue / fieldMean - 1);
+
+  return Math.min(1, Math.max(0, 0.5 + 0.5 * opponentGap));
 }
 
 function mean(values: number[]): number {
@@ -210,7 +213,106 @@ function mean(values: number[]): number {
 }
 
 /**
- * Blend a game's three performance signals - peak score, total prestige, and
+ * How the game actually flowed: each player's standing against the field is
+ * measured after every turn, then averaged with later turns weighted more
+ * heavily than early ones. Leading wire to wire beats stealing it on the last
+ * turn, but an early lead that evaporates still counts for something.
+ *
+ * Games saved without round rows (legacy imports) have no trajectory to read,
+ * so they fall back to the standing implied by the final scores.
+ */
+export function buildFlowScores(
+  game: EloGameLike,
+  playerIds: string[]
+): Record<string, number> {
+  const fieldSize = playerIds.length;
+  const trails = buildRunningScores(game, playerIds);
+  const turnCount = playerIds.length ? (trails[playerIds[0]]?.length ?? 0) : 0;
+
+  if (!turnCount) {
+    const endScores = playerIds.map((playerId) => getEndScore(game, playerId));
+    const endMean = mean(endScores);
+
+    return Object.fromEntries(
+      playerIds.map((playerId, index) => [
+        playerId,
+        eloFieldStanding(endScores[index], endMean, fieldSize),
+      ])
+    );
+  }
+
+  const weightedTotals: Record<string, number> = Object.fromEntries(
+    playerIds.map((playerId) => [playerId, 0])
+  );
+  let weightTotal = 0;
+
+  for (let turn = 0; turn < turnCount; turn += 1) {
+    // Turn 1 carries weight 1, turn 2 carries weight 2, and so on, so the
+    // endgame counts for more than the opening.
+    const weight = turn + 1;
+    weightTotal += weight;
+
+    const turnScores = playerIds.map(
+      (playerId) => trails[playerId][turn] ?? 0
+    );
+    const turnMean = mean(turnScores);
+
+    playerIds.forEach((playerId, index) => {
+      weightedTotals[playerId] +=
+        weight * eloFieldStanding(turnScores[index], turnMean, fieldSize);
+    });
+  }
+
+  return Object.fromEntries(
+    playerIds.map((playerId) => [
+      playerId,
+      weightTotal > 0 ? weightedTotals[playerId] / weightTotal : 0.5,
+    ])
+  );
+}
+
+/**
+ * How decisive the game was, as a 0..1 reading of the winner's prestige margin
+ * over the runner-up relative to the table average. Drives the rating swing:
+ * a game decided by a single point barely moves ratings, a rout moves them hard.
+ */
+export function buildGameDecisiveness(
+  game: EloGameLike,
+  playerIds: string[]
+): number {
+  if (playerIds.length < 2) {
+    return 0;
+  }
+
+  const prestiges = playerIds
+    .map((playerId) => getTotalPrestige(game, playerId))
+    .sort((a, b) => b - a);
+
+  const prestigeMean = mean(prestiges);
+  if (!(prestigeMean > 0)) {
+    return 0;
+  }
+
+  const margin = (prestiges[0] - prestiges[1]) / prestigeMean;
+  return Math.min(1, Math.max(0, margin / ELO_DECISIVE_MARGIN_RATIO));
+}
+
+/**
+ * The K multiplier a game earns from how decisively it was won.
+ */
+export function buildSwingMultiplier(
+  game: EloGameLike,
+  playerIds: string[]
+): number {
+  return (
+    ELO_MIN_SWING_MULTIPLIER +
+    (ELO_MAX_SWING_MULTIPLIER - ELO_MIN_SWING_MULTIPLIER) *
+      buildGameDecisiveness(game, playerIds)
+  );
+}
+
+/**
+ * Blend a game's three performance signals - how it flowed, total prestige, and
  * end score - into a single 0..1 reading of how the player played.
  */
 export function buildPerformanceSignals(
@@ -221,26 +323,22 @@ export function buildPerformanceSignals(
     return {};
   }
 
-  const peakScores = buildPeakScores(game, playerIds);
-  const totalPrestiges = Object.fromEntries(
-    playerIds.map((playerId) => [playerId, getTotalPrestige(game, playerId)])
+  const fieldSize = playerIds.length;
+  const flowScores = buildFlowScores(game, playerIds);
+  const totalPrestiges = playerIds.map((playerId) =>
+    getTotalPrestige(game, playerId)
   );
-  const endScores = Object.fromEntries(
-    playerIds.map((playerId) => [playerId, getEndScore(game, playerId)])
-  );
+  const endScores = playerIds.map((playerId) => getEndScore(game, playerId));
 
-  const peakMean = mean(playerIds.map((playerId) => peakScores[playerId]));
-  const prestigeMean = mean(
-    playerIds.map((playerId) => totalPrestiges[playerId])
-  );
-  const endMean = mean(playerIds.map((playerId) => endScores[playerId]));
+  const prestigeMean = mean(totalPrestiges);
+  const endMean = mean(endScores);
 
   return Object.fromEntries(
-    playerIds.map((playerId) => [
+    playerIds.map((playerId, index) => [
       playerId,
-      (eloFieldShare(peakScores[playerId], peakMean) +
-        eloFieldShare(totalPrestiges[playerId], prestigeMean) +
-        eloFieldShare(endScores[playerId], endMean)) /
+      (flowScores[playerId] +
+        eloFieldStanding(totalPrestiges[index], prestigeMean, fieldSize) +
+        eloFieldStanding(endScores[index], endMean, fieldSize)) /
         3,
     ])
   );
@@ -344,6 +442,7 @@ function applyGameToRatings(
 ) {
   const nextRatings: EloMap = { ...ratings };
   const actualScores = buildActualScores(game, playerIds);
+  const effectiveK = k * buildSwingMultiplier(game, playerIds);
 
   for (const playerId of playerIds) {
     const opponentRatings = playerIds
@@ -354,7 +453,7 @@ function applyGameToRatings(
       ratings[playerId],
       opponentRatings,
       actualScores[playerId] ?? 0.5,
-      k
+      effectiveK
     );
   }
 
