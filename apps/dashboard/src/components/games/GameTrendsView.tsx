@@ -8,6 +8,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime } from "@/lib/formatDateTime";
 import type { GameTrends } from "@/lib/games/gameTrends";
+import { playerAccent } from "@/lib/playerColor";
 
 type GameTrendsViewProps = {
   createdAt: number;
@@ -29,7 +30,7 @@ function Meter({ color, ratio }: { color: string | null; ratio: number }) {
         style={
           {
             width: `${Math.max(0, Math.min(1, ratio)) * 100}%`,
-            "--meter-color": color?.trim() || "var(--accent)",
+            "--meter-color": playerAccent(color),
           } as React.CSSProperties
         }
       />

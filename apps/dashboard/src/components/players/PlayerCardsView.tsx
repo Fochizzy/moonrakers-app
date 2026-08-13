@@ -8,6 +8,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { RosterPlayer } from "@/lib/data/loadPlayerRoster";
+import { playerAccent } from "@/lib/playerColor";
 
 type PlayerCardsViewProps = {
   focusPlayerId: string | null;
@@ -117,7 +118,7 @@ export function PlayerCardsView({
 
         <div className="stat-grid">
           <MetricCard
-            accent={focusedPlayer.color?.trim() || "var(--accent)"}
+            accent={playerAccent(focusedPlayer.color)}
             label="Current ELO"
             value={focusedPlayer.currentElo}
           />
@@ -166,7 +167,7 @@ export function PlayerCardsView({
                   href={`/player-cards?playerId=${encodeURIComponent(player.id)}`}
                   key={player.id}
                   style={{
-                    borderTop: `3px solid ${player.color?.trim() || "var(--accent)"}`,
+                    borderTop: `3px solid ${playerAccent(player.color)}`,
                   }}
                 >
                   <span

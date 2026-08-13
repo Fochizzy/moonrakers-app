@@ -8,6 +8,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { playerAccent } from "@/lib/playerColor";
 import {
   filterHistoryRows,
   listHistoryGroupNames,
@@ -194,7 +195,7 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
               key={row.id}
               style={
                 {
-                  "--row-accent": winnerColor?.trim() || "var(--border-strong)",
+                  "--row-accent": playerAccent(winnerColor, "var(--border-strong)"),
                 } as React.CSSProperties
               }
             >
@@ -240,7 +241,7 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
                     <span
                       aria-hidden="true"
                       className="chip__dot"
-                      style={{ background: player.color?.trim() || "var(--blue)" }}
+                      style={{ background: playerAccent(player.color, "var(--blue)") }}
                     />
                     {player.name}
                     <span className="chip__num">{player.totalPrestige}</span>

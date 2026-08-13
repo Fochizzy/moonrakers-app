@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { formatDateTime } from "@/lib/formatDateTime";
 import type { GameSummary } from "@/lib/games/gameSummary";
+import { playerAccent } from "@/lib/playerColor";
 
 type GameSummaryViewProps = {
   gameId: string;
@@ -100,7 +101,7 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
               key={row.id}
               style={
                 {
-                  "--row-accent": row.color?.trim() || "var(--accent)",
+                  "--row-accent": playerAccent(row.color),
                 } as React.CSSProperties
               }
             >
@@ -210,7 +211,7 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
                         style={{
                           display: "inline-block",
                           marginRight: "0.45rem",
-                          background: row.color?.trim() || "var(--blue)",
+                          background: playerAccent(row.color, "var(--blue)"),
                         }}
                       />
                       {row.playerName}

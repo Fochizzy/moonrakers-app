@@ -8,6 +8,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { RosterGroup, RosterPlayer } from "@/lib/data/loadPlayerRoster";
+import { playerAccent } from "@/lib/playerColor";
 
 type PlayerDirectoryViewProps = {
   groups: RosterGroup[];
@@ -113,7 +114,7 @@ export function PlayerDirectoryView({
                   key={player.id}
                   style={
                     {
-                      borderLeft: `3px solid ${player.color?.trim() || "var(--accent)"}`,
+                      borderLeft: `3px solid ${playerAccent(player.color)}`,
                     } as React.CSSProperties
                   }
                 >
