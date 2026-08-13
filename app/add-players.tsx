@@ -20,7 +20,6 @@ import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
-import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
 import { buildSavedAuthProfile } from "@/lib/auth/registerFlow";
 import { runSignOutFlow } from "@/lib/auth/signOutFlow";
 import { canResumeDraft } from "@/lib/game-draft/phase";

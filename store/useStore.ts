@@ -583,6 +583,11 @@ type Store = {
     snapshot: CloudSnapshotInput;
     statsSnapshot?: StatsSnapshot | null;
   }) => void;
+  hydrateCachedSnapshot: (input: {
+    players?: unknown;
+    groups?: unknown;
+    games?: unknown;
+  }) => void;
   clearAuthState: () => void;
 
   setPlayers: (players: Player[]) => void;
@@ -702,6 +707,20 @@ export const useStore = create<Store>((set, get) => ({
       statsSnapshot,
       authBootstrapStatus: 'ready',
       authError: null,
+      };
+    }),
+
+  // Seeds the shared collections from the on-device cache during a cold start,
+  // before the cloud snapshot lands. Auth state is left untouched: this says
+  // nothing about who is signed in, only what the last session saw.
+  hydrateCachedSnapshot: ({ players, groups, games }) =>
+    set(() => {
+      const sanitized = sanitizeSnapshotState({ players, groups, games });
+
+      return {
+        players: sanitized.players,
+        groups: sanitized.groups,
+        games: sanitized.games,
       };
     }),
 

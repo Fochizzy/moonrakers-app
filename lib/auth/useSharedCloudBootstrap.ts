@@ -8,6 +8,11 @@ import {
   loadHydratedSharedSnapshot,
   normalizeAuthSession,
 } from "@/lib/auth/bootstrapSharedCloudState";
+import {
+  clearCachedSnapshot,
+  loadCachedSnapshot,
+  startSnapshotCachePersistence,
+} from "@/lib/cloud/snapshotCache";
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
@@ -46,6 +51,7 @@ export function useSharedCloudBootstrap() {
   const setStatsSnapshot = useStore((state) => state.setStatsSnapshot);
   const hydrateAuthBootstrap = useStore((state) => state.hydrateAuthBootstrap);
   const hydrateCloudSnapshot = useStore((state) => state.hydrateCloudSnapshot);
+  const hydrateCachedSnapshot = useStore((state) => state.hydrateCachedSnapshot);
   const clearAuthState = useStore((state) => state.clearAuthState);
   const setPlayers = useStore((state) => state.setPlayers);
   const setGroups = useStore((state) => state.setGroups);
@@ -53,6 +59,8 @@ export function useSharedCloudBootstrap() {
 
   const bootstrapIdRef = useRef(0);
   const sharedRefreshIdRef = useRef(0);
+  // Once the cloud snapshot has landed, a later cache read must not clobber it.
+  const cloudHydratedRef = useRef(false);
   const sharedCloudChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const sharedCloudChannelUserIdRef = useRef<string | null>(null);
 
@@ -61,6 +69,8 @@ export function useSharedCloudBootstrap() {
     !isPublicAuthRoute &&
     (authBootstrapStatus === "loading" || authBootstrapStatus === "error");
   const sharedCloudUserId = authSession?.user?.id ?? null;
+
+  useEffect(() => startSnapshotCachePersistence(useStore), []);
 
   useEffect(() => {
     let active = true;
@@ -84,6 +94,7 @@ export function useSharedCloudBootstrap() {
         if (!session?.user?.id) {
           clearGameDraft();
           await remove("gameDraft");
+          await clearCachedSnapshot();
           clearAuthState();
           setPlayers([] as any);
           setGroups([] as any);
@@ -92,6 +103,18 @@ export function useSharedCloudBootstrap() {
           setPasswordRecoveryPending(pendingIntent === "recovery-ready");
           setAuthBootstrapStatus("ready");
           return;
+        }
+
+        // Seed from the on-device cache first: reading the session is local and
+        // fast, so the shared collections can be usable well before the cloud
+        // snapshot arrives. The cloud load below overwrites this.
+        const cachedSnapshot = await loadCachedSnapshot(session.user.id);
+        if (!active || requestId !== bootstrapIdRef.current) {
+          return;
+        }
+
+        if (cachedSnapshot && !cloudHydratedRef.current) {
+          hydrateCachedSnapshot(cachedSnapshot);
         }
 
         const profile = await loadAuthProfile(session.user.id);
@@ -115,6 +138,7 @@ export function useSharedCloudBootstrap() {
         }
 
         hydrateCloudSnapshot(hydratedSnapshot);
+        cloudHydratedRef.current = true;
         await restoreDraftForSession(session.user.id);
         setPasswordRecoveryPending(pendingIntent === "recovery-ready");
       } catch (error) {
@@ -143,6 +167,7 @@ export function useSharedCloudBootstrap() {
     clearAuthState,
     clearGameDraft,
     hydrateAuthBootstrap,
+    hydrateCachedSnapshot,
     hydrateCloudSnapshot,
     setAuthBootstrapStatus,
     setAuthError,
@@ -324,7 +349,9 @@ export function useSharedCloudBootstrap() {
     } finally {
       clearGameDraft();
       await remove("gameDraft");
+      await clearCachedSnapshot();
       await clearPendingAuthIntent();
+      cloudHydratedRef.current = false;
       setPasswordRecoveryPending(false);
       setAuthSession(null);
       setAuthProfile(null);

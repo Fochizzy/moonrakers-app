@@ -106,6 +106,13 @@ export type StoredGame = {
 
 export type StoredSettings = {
   lastOpenedAt?: number;
+  /**
+   * Owner of the cached players/groups/games snapshot. The cache is only
+   * applied when it belongs to the signed-in profile, so switching accounts
+   * never shows the previous account's history.
+   */
+  snapshotProfileId?: string;
+  snapshotSavedAt?: number;
 };
 
 export type StoredGameDraftPhase =

@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useEffect, useMemo, useState } from "react";
+import React, { useDeferredValue, useMemo, useState } from "react";
 import {
   StyleSheet,
   View,
