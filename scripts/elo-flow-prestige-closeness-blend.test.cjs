@@ -46,9 +46,27 @@ const migrationPath = path.join(
   projectRoot,
   "supabase",
   "migrations",
-  "20260813210000_moonrakers_elo_flow_and_closeness.sql",
+  "20260813220000_moonrakers_elo_zero_sum_rank_base.sql",
 );
 const migrationSource = fs.readFileSync(migrationPath, "utf8");
+
+assert.match(
+  migrationSource,
+  /select array_agg\(\(n - tied\.position\) \/ \(n - 1\)::numeric order by tied\.ord\)/,
+  "expected the result base to come from finishing position, not a binary win",
+);
+
+assert.match(
+  migrationSource,
+  /avg\(ranked\.pos\) over \(\s*partition by ranked\.is_winner, ranked\.prestige, ranked\.end_score\s*\)/,
+  "expected players level on prestige and end score to share an averaged position",
+);
+
+assert.match(
+  migrationSource,
+  /base_actual := coalesce\(result_bases\[i\], 0\.5\);/,
+  "expected the per-player result base to drive the actual score",
+);
 
 assert.match(
   migrationSource,
@@ -126,10 +144,131 @@ const {
   buildPerformanceSignals,
   buildRatingHistory,
   buildRunningScores,
+  buildResultScores,
   buildSwingMultiplier,
   calculateElo,
   eloFieldStanding,
 } = require(path.join(projectRoot, "utils", "elo.ts"));
+
+// --- the result base is finishing position, and it is zero-sum --------------
+
+function sumOf(record) {
+  return Number(
+    Object.values(record)
+      .reduce((total, value) => total + value, 0)
+      .toFixed(8),
+  );
+}
+
+const twoPlayer = {
+  winnerId: "a",
+  totals: { a: { totalPrestige: 20, score: 25 }, b: { totalPrestige: 10, score: 12 } },
+};
+const fourPlayer = {
+  winnerId: "a",
+  totals: {
+    a: { totalPrestige: 30, score: 35 },
+    b: { totalPrestige: 20, score: 24 },
+    c: { totalPrestige: 18, score: 22 },
+    d: { totalPrestige: 12, score: 15 },
+  },
+};
+
+assert.deepEqual(
+  buildResultScores(twoPlayer, ["a", "b"]),
+  { a: 1, b: 0 },
+  "expected a two-player game to keep the familiar 1 and 0",
+);
+
+assert.deepEqual(
+  buildResultScores(fourPlayer, ["a", "b", "c", "d"]),
+  { a: 1, b: 2 / 3, c: 1 / 3, d: 0 },
+  "expected four places to share the gap evenly",
+);
+
+// Players level on prestige and end score must not be separated by sort order.
+assert.deepEqual(
+  buildResultScores(
+    {
+      winnerId: "a",
+      totals: {
+        a: { totalPrestige: 30, score: 35 },
+        b: { totalPrestige: 20, score: 24 },
+        c: { totalPrestige: 20, score: 24 },
+        d: { totalPrestige: 12, score: 15 },
+      },
+    },
+    ["a", "b", "c", "d"],
+  ),
+  { a: 1, b: 0.5, c: 0.5, d: 0 },
+  "expected a tie for second to share the average of second and third",
+);
+
+// The recorded winner takes first even when tied, so a manual pick still counts.
+assert.deepEqual(
+  buildResultScores(
+    {
+      winnerId: "b",
+      totals: {
+        a: { totalPrestige: 20, score: 25 },
+        b: { totalPrestige: 20, score: 25 },
+        c: { totalPrestige: 10, score: 12 },
+      },
+    },
+    ["a", "b", "c"],
+  ),
+  { a: 0.5, b: 1, c: 0 },
+  "expected a manually resolved prestige tie to award the win outright",
+);
+
+// This is the property that stops rating leaking: bases and actual scores must
+// both sum to n/2, which is exactly what the expected scores sum to.
+for (const [game, ids] of [
+  [twoPlayer, ["a", "b"]],
+  [fourPlayer, ["a", "b", "c", "d"]],
+  [
+    {
+      winnerId: null,
+      totals: {
+        a: { totalPrestige: 20, score: 25 },
+        b: { totalPrestige: 20, score: 25 },
+        c: { totalPrestige: 10, score: 12 },
+      },
+    },
+    ["a", "b", "c"],
+  ],
+]) {
+  assert.equal(
+    sumOf(buildResultScores(game, ids)),
+    ids.length / 2,
+    "expected the result bases to sum to n/2",
+  );
+  assert.equal(
+    sumOf(buildActualScores(game, ids)),
+    ids.length / 2,
+    "expected the actual scores to sum to n/2, leaving the game zero-sum",
+  );
+}
+
+// End to end: a multiplayer game must neither create nor destroy rating.
+for (const size of [2, 3, 4, 5]) {
+  const ids = ["a", "b", "c", "d", "e"].slice(0, size);
+  const totals = Object.fromEntries(
+    ids.map((id, index) => [
+      id,
+      { totalPrestige: 20 - index * 3, score: 30 - index * 5 },
+    ]),
+  );
+  const ratings = calculateElo([
+    { id: `zero-sum-${size}`, createdAt: 1, winnerId: "a", totals },
+  ]);
+
+  assert.equal(
+    Object.values(ratings).reduce((total, value) => total + value, 0),
+    size * BASE_ELO,
+    `expected a ${size}-player game to conserve total rating`,
+  );
+}
 
 assert.equal(ELO_RESULT_WEIGHT, 0.6, "expected the result weight to be 0.6");
 assert.equal(ELO_PERFORMANCE_WEIGHT, 0.4, "expected the performance weight to be 0.4");
@@ -480,8 +619,16 @@ assert.deepEqual(
 
 assert.deepEqual(
   calculateElo([wireToWire, assistGame]),
-  { a: 998, b: 973, c: 1017 },
-  "expected the two-game replay to land on 998/973/1017",
+  { a: 1010, b: 973, c: 1017 },
+  "expected the two-game replay to land on 1010/973/1017",
+);
+
+assert.equal(
+  calculateElo([wireToWire, assistGame]).a +
+    calculateElo([wireToWire, assistGame]).b +
+    calculateElo([wireToWire, assistGame]).c,
+  3 * BASE_ELO,
+  "expected the replayed series to conserve total rating end to end",
 );
 
 console.log("elo-flow-prestige-closeness-blend.test.cjs passed");

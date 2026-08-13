@@ -353,33 +353,97 @@ function clampActualScore(value: number) {
 }
 
 /**
- * Resolve the Elo "actual score" for every player in one game: the win/loss
- * result carries {@link ELO_RESULT_WEIGHT}, performance carries the rest.
+ * The result half of the actual score, as finishing position rather than a
+ * binary win: first place scores 1, last scores 0, and the places between share
+ * the gap evenly. Players level on prestige and end score share the average of
+ * the positions they span.
+ *
+ * Position rather than win/loss is what keeps the system zero-sum. These bases
+ * sum to n/2 across the field, which is exactly what the expected scores sum
+ * to; a binary 1-and-the-rest-zero only sums to 1, so every multiplayer game
+ * used to destroy rating that no one ever won back.
+ *
+ * The recorded winner always takes first place, so a manually resolved prestige
+ * tie still awards the win outright.
+ */
+export function buildResultScores(
+  game: EloGameLike,
+  playerIds: string[],
+  winnerId?: string | null
+): Record<string, number> {
+  const fieldSize = playerIds.length;
+  if (fieldSize < 2) {
+    return Object.fromEntries(playerIds.map((playerId) => [playerId, 0.5]));
+  }
+
+  const resolvedWinnerId = winnerId ?? getRecordedWinnerId(game);
+
+  const ranked = playerIds
+    .map((playerId) => ({
+      playerId,
+      isWinner: Boolean(resolvedWinnerId) && playerId === resolvedWinnerId,
+      prestige: getTotalPrestige(game, playerId),
+      score: getEndScore(game, playerId),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.isWinner) - Number(a.isWinner) ||
+        b.prestige - a.prestige ||
+        b.score - a.score ||
+        a.playerId.localeCompare(b.playerId)
+    );
+
+  const positions: Record<string, number> = {};
+
+  let index = 0;
+  while (index < ranked.length) {
+    let last = index;
+    while (
+      last + 1 < ranked.length &&
+      ranked[last + 1].isWinner === ranked[index].isWinner &&
+      ranked[last + 1].prestige === ranked[index].prestige &&
+      ranked[last + 1].score === ranked[index].score
+    ) {
+      last += 1;
+    }
+
+    // Positions are 1-indexed; a tied block shares the average of its span.
+    const sharedPosition = (index + 1 + (last + 1)) / 2;
+    for (let tied = index; tied <= last; tied += 1) {
+      positions[ranked[tied].playerId] = sharedPosition;
+    }
+
+    index = last + 1;
+  }
+
+  return Object.fromEntries(
+    playerIds.map((playerId) => [
+      playerId,
+      (fieldSize - positions[playerId]) / (fieldSize - 1),
+    ])
+  );
+}
+
+/**
+ * Resolve the Elo "actual score" for every player in one game: finishing
+ * position carries {@link ELO_RESULT_WEIGHT}, performance carries the rest.
  */
 export function buildActualScores(
   game: EloGameLike,
   playerIds: string[],
   winnerId?: string | null
 ): Record<string, number> {
-  const resolvedWinnerId = winnerId ?? getRecordedWinnerId(game);
+  const resultScores = buildResultScores(game, playerIds, winnerId);
   const performanceSignals = buildPerformanceSignals(game, playerIds);
 
   return Object.fromEntries(
-    playerIds.map((playerId) => {
-      const baseActualScore = resolvedWinnerId
-        ? resolvedWinnerId === playerId
-          ? 1
-          : 0
-        : 0.5;
-
-      return [
-        playerId,
-        clampActualScore(
-          baseActualScore * ELO_RESULT_WEIGHT +
-            (performanceSignals[playerId] ?? 0.5) * ELO_PERFORMANCE_WEIGHT
-        ),
-      ];
-    })
+    playerIds.map((playerId) => [
+      playerId,
+      clampActualScore(
+        (resultScores[playerId] ?? 0.5) * ELO_RESULT_WEIGHT +
+          (performanceSignals[playerId] ?? 0.5) * ELO_PERFORMANCE_WEIGHT
+      ),
+    ])
   );
 }
 
