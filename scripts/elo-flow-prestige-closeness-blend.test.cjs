@@ -191,6 +191,7 @@ const {
   ELO_MIN_SWING_MULTIPLIER,
   ELO_MAX_SWING_MULTIPLIER,
   buildActualScores,
+  buildEloSnapshots,
   buildFieldSpreadDecisiveness,
   buildFlowScores,
   buildGameDecisiveness,
@@ -868,6 +869,99 @@ assert.equal(
   ),
   0,
   "expected turns where the top is shared to contribute no lead change",
+);
+
+// ---------------------------------------------------------------------------
+// Every ELO surface in the app runs the same calculation.
+//
+// The ELO screen and Home leaderboard read the server rollup, and player cards
+// go through buildPlayerCardEloMap into this module. The ELO chart used to be
+// the odd one out: nothing upstream publishes an eloSnapshot, so it always fell
+// back to deriving ratings from a plain win/loss formula of its own and showed
+// different numbers from everything else.
+// ---------------------------------------------------------------------------
+
+const surfaceGames = [
+  {
+    id: "g1",
+    createdAt: 1,
+    winnerId: "a",
+    totals: {
+      a: { totalPrestige: 20, score: 40 },
+      b: { totalPrestige: 10, score: 15 },
+      c: { totalPrestige: 8, score: 12 },
+    },
+  },
+  {
+    id: "g2",
+    createdAt: 2,
+    winnerId: "b",
+    totals: {
+      a: { totalPrestige: 9, score: 20 },
+      b: { totalPrestige: 18, score: 38 },
+      c: { totalPrestige: 12, score: 25 },
+    },
+  },
+];
+
+const snapshots = buildEloSnapshots(surfaceGames);
+
+assert.deepEqual(
+  snapshots.g2,
+  calculateElo(surfaceGames),
+  "expected the final per-game snapshot to agree with calculateElo exactly",
+);
+
+assert.deepEqual(
+  Object.keys(snapshots).sort(),
+  ["g1", "g2"],
+  "expected one standings snapshot per game, keyed by game id",
+);
+
+// Players who sat a game out must carry their rating forward rather than reset.
+const carriedForward = buildEloSnapshots([
+  surfaceGames[0],
+  {
+    id: "g3",
+    createdAt: 3,
+    winnerId: "a",
+    totals: {
+      a: { totalPrestige: 20, score: 30 },
+      b: { totalPrestige: 10, score: 14 },
+    },
+  },
+]);
+
+assert.equal(
+  carriedForward.g3.c,
+  carriedForward.g1.c,
+  "expected a player who missed a game to carry their rating forward",
+);
+
+// A degenerate single-player row must not move a rating; the server skips it.
+assert.deepEqual(
+  calculateElo([
+    { id: "solo", createdAt: 1, winnerId: "a", totals: { a: { totalPrestige: 9, score: 9 } } },
+  ]),
+  { a: BASE_ELO },
+  "expected a one-player game to leave the rating untouched, as the server does",
+);
+
+const chartSource = fs.readFileSync(
+  path.join(projectRoot, "components", "charts", "ELO", "EloChart.tsx"),
+  "utf8",
+);
+
+assert.match(
+  chartSource,
+  /import \{ buildEloSnapshots \} from "@\/utils\/elo";/,
+  "expected the ELO chart to take its ratings from the shared blend",
+);
+
+assert.match(
+  chartSource,
+  /buildEloChartState\(\{ games: gamesWithRatings/,
+  "expected the ELO chart to render the snapshot-enriched games, not the raw ones",
 );
 
 console.log("elo-flow-prestige-closeness-blend.test.cjs passed");

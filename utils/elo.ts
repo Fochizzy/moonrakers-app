@@ -660,6 +660,12 @@ function applyGameToRatings(
   ratings: EloMap,
   k: number
 ) {
+  // The server skips games with fewer than two scored players; match it so a
+  // degenerate single-player row cannot move a rating on the client only.
+  if (playerIds.length < 2) {
+    return;
+  }
+
   const nextRatings: EloMap = { ...ratings };
   const actualScores = buildActualScores(game, playerIds);
   const effectiveK = k * buildSwingMultiplier(game, playerIds);
@@ -750,6 +756,43 @@ export function buildRatingHistory(
   }
 
   return history;
+}
+
+/**
+ * Ratings for every player as they stood after each game, keyed by game id.
+ *
+ * Charts need a full standings snapshot per game rather than one series per
+ * player: players who sat a game out carry their previous rating forward. Using
+ * this keeps the ELO chart on the same blend as everything else instead of
+ * re-deriving ratings from a formula of its own.
+ */
+export function buildEloSnapshots(
+  games: StoredGame[] = [],
+  k = DEFAULT_K
+): Record<string, EloMap> {
+  const ratings: EloMap = {};
+  const snapshots: Record<string, EloMap> = {};
+
+  const orderedGames = [...games].sort(
+    (a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)
+  );
+
+  for (const game of orderedGames) {
+    const playerIds = getOrderedPlayerIds(game);
+
+    for (const playerId of playerIds) {
+      if (ratings[playerId] === undefined) {
+        ratings[playerId] = BASE_ELO;
+      }
+    }
+
+    applyGameToRatings(game, playerIds, ratings, k);
+
+    const gameId = game.id ?? `${game.createdAt ?? 0}`;
+    snapshots[gameId] = { ...ratings };
+  }
+
+  return snapshots;
 }
 
 /**
