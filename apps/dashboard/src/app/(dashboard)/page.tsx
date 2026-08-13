@@ -20,15 +20,13 @@ export default async function DashboardHomePage({
     <div className="view-stack">
       <HomeView focusName={focusProfileName} payload={payload} />
 
-      <DashboardPanel padding="spacious">
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <SectionHeading
-            copy="The same hub destinations the app puts on its command screen."
-            eyebrow="Go to"
-            title="Companion surfaces"
-          />
-          <HubTileGrid tiles={BRIDGE_HUB_TILES} />
-        </div>
+      <DashboardPanel padding="normal">
+        <SectionHeading
+          copy="The same hub destinations the app puts on its command screen."
+          eyebrow="Go to"
+          title="Companion surfaces"
+        />
+        <HubTileGrid tiles={BRIDGE_HUB_TILES} />
       </DashboardPanel>
     </div>
   );

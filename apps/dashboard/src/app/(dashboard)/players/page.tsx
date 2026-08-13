@@ -1,6 +1,7 @@
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { HubTileGrid } from "@/components/ui/HubTileGrid";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { loadPlayerRoster } from "@/lib/data/loadPlayerRoster";
 import { PLAYERS_HUB_TILES } from "@/lib/hubs";
@@ -11,15 +12,13 @@ export default async function PlayersHubPage() {
 
   return (
     <section className="view-stack">
-      <DashboardPanel padding="spacious" tone="accent">
-        <SectionHeading
-          copy="People surfaces for this account: who is on the roster, how they are rated, and where their full profiles live."
-          eyebrow="Players"
-          title="Roster"
-        />
-      </DashboardPanel>
+      <PageHeader
+        copy="People surfaces for this account: who is on the roster, how they are rated, and where their full profiles live."
+        eyebrow="Players"
+        title="Roster"
+      />
 
-      <div className="metric-grid">
+      <div className="stat-grid">
         <MetricCard
           accent="var(--blue)"
           label="Players"
@@ -34,21 +33,13 @@ export default async function PlayersHubPage() {
         />
       </div>
 
-      <DashboardPanel padding="spacious">
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <SectionHeading eyebrow="Surfaces" title="Player surfaces" />
-          <HubTileGrid tiles={PLAYERS_HUB_TILES} />
-        </div>
-      </DashboardPanel>
-
-      <DashboardPanel padding="spacious">
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <SectionHeading
-            copy="Roster and group membership are managed in the Moonrakers app. This dashboard reads them."
-            eyebrow="Note"
-            title="Managing the roster"
-          />
-        </div>
+      <DashboardPanel padding="normal">
+        <SectionHeading
+          copy="Roster and group membership are managed in the Moonrakers app; this dashboard reads them."
+          eyebrow="Surfaces"
+          title="Player surfaces"
+        />
+        <HubTileGrid tiles={PLAYERS_HUB_TILES} />
       </DashboardPanel>
     </section>
   );

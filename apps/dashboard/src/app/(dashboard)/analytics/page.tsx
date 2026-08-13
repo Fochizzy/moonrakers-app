@@ -1,6 +1,7 @@
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { HubTileGrid } from "@/components/ui/HubTileGrid";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { loadDashboardHome } from "@/lib/data/loadDashboardHome";
 import { ANALYTICS_HUB_TILES, BRIDGE_HUB_TILES } from "@/lib/hubs";
@@ -18,15 +19,13 @@ export default async function AnalyticsHubPage({
 
   return (
     <section className="view-stack">
-      <DashboardPanel padding="spacious" tone="accent">
-        <SectionHeading
-          copy={`Every analytics surface in one place for ${focusProfileName}. Each lane reads from the same server-authored contract the app uses.`}
-          eyebrow="Data"
-          title="Analytics hub"
-        />
-      </DashboardPanel>
+      <PageHeader
+        copy={`Every analytics surface in one place for ${focusProfileName}. Each lane reads from the same server-authored contract the app uses.`}
+        eyebrow="Data"
+        title="Analytics hub"
+      />
 
-      <div className="metric-grid">
+      <div className="stat-grid">
         <MetricCard
           accent="var(--blue)"
           detail="Published commanders in this analytics profile."
@@ -48,10 +47,10 @@ export default async function AnalyticsHubPage({
       </div>
 
       {payload.cards.length > 0 ? (
-        <DashboardPanel padding="spacious">
-          <div style={{ display: "grid", gap: "1rem" }}>
+        <DashboardPanel padding="normal">
+          <div>
             <SectionHeading eyebrow="Headline" title="Current signals" />
-            <div className="metric-grid">
+            <div className="stat-grid">
               {payload.cards.map((card) => (
                 <MetricCard key={card.key} label={card.label} value={card.value} />
               ))}
@@ -60,8 +59,8 @@ export default async function AnalyticsHubPage({
         </DashboardPanel>
       ) : null}
 
-      <DashboardPanel padding="spacious">
-        <div style={{ display: "grid", gap: "1rem" }}>
+      <DashboardPanel padding="normal">
+        <div>
           <SectionHeading
             copy="Pick the lane that answers your question."
             eyebrow="Surfaces"
@@ -71,8 +70,8 @@ export default async function AnalyticsHubPage({
         </div>
       </DashboardPanel>
 
-      <DashboardPanel padding="spacious">
-        <div style={{ display: "grid", gap: "1rem" }}>
+      <DashboardPanel padding="normal">
+        <div>
           <SectionHeading
             copy="The rest of the companion surfaces."
             eyebrow="Elsewhere"

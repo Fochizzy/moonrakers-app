@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DefinitionRichText } from "@/components/definitions/DefinitionRichText";
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { DefinitionSection } from "@/lib/definitions/definitionsScreen";
 import {
   filterDefinitionSections,
@@ -19,39 +19,6 @@ type DefinitionsViewProps = {
   sections: DefinitionSection[];
   sourceLabel: string | null;
 };
-
-function CategoryTab({
-  active,
-  label,
-  onSelect,
-}: {
-  active: boolean;
-  label: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      aria-pressed={active}
-      onClick={onSelect}
-      style={{
-        padding: "0.55rem 0.95rem",
-        borderRadius: "999px",
-        border: `1px solid ${active ? "rgba(168, 85, 247, 0.45)" : "var(--border)"}`,
-        background: active
-          ? "linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(59, 130, 246, 0.14) 100%)"
-          : "rgba(255, 255, 255, 0.04)",
-        color: active ? "var(--text-strong)" : "var(--sub)",
-        cursor: "pointer",
-        fontSize: "0.85rem",
-        fontWeight: active ? 700 : 600,
-        whiteSpace: "nowrap",
-      }}
-      type="button"
-    >
-      {label}
-    </button>
-  );
-}
 
 export function DefinitionsView({
   category,
@@ -91,86 +58,52 @@ export function DefinitionsView({
 
   return (
     <section className="view-stack">
-      <DashboardPanel padding="spacious" tone="accent">
-        <div style={{ display: "grid", gap: "1.25rem" }}>
-          <SectionHeading
-            copy="Every metric this dashboard and the app publish, with the exact way each one is calculated."
-            eyebrow="Reference"
-            title="Definitions"
-          />
+      <PageHeader
+        actions={sourceLabel ? <span className="chip">From {sourceLabel}</span> : null}
+        copy="Every metric this dashboard and the app publish, with the exact way each one is calculated."
+        eyebrow="Reference"
+        title="Definitions"
+      />
 
-          {sourceLabel ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.6rem",
-                flexWrap: "wrap",
-              }}
-            >
-              <span
-                style={{
-                  color: "var(--muted)",
-                  fontSize: "0.8rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Opened from
-              </span>
-              <span className="dashboard-chip">{sourceLabel}</span>
-            </div>
-          ) : null}
-
-          <label style={{ display: "grid", gap: "0.45rem" }}>
-            <span
-              style={{
-                color: "var(--sub)",
-                fontSize: "0.8rem",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-              }}
-            >
-              Search
-            </span>
-            <input
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search metrics or jump to a category"
-              style={{
-                width: "100%",
-                padding: "0.85rem 1rem",
-                borderRadius: "0.9rem",
-                border: "1px solid var(--border-strong)",
-                background: "rgba(255, 255, 255, 0.04)",
-                color: "var(--text-strong)",
-                fontSize: "1rem",
-              }}
-              type="search"
-              value={query}
-            />
-          </label>
-
-          <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
-            <CategoryTab
-              active={activeCategory === "all"}
-              label="All"
-              onSelect={() => setActiveCategory("all")}
-            />
-            {sections.map((section) => (
-              <CategoryTab
-                active={activeCategory === section.key}
-                key={section.key}
-                label={section.title}
-                onSelect={() => setActiveCategory(section.key)}
+      <DashboardPanel padding="normal">
+        <div className="stack-md">
+          <div className="toolbar">
+            <label className="field toolbar__grow">
+              <span className="field__label">Search</span>
+              <input
+                className="input"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search metrics or jump to a category"
+                type="search"
+                value={query}
               />
-            ))}
+            </label>
+            <p className="panel-count" style={{ margin: 0, paddingBottom: "0.5rem" }}>
+              Showing {visibleTerms} of {totalTerms} tracked metrics.
+            </p>
           </div>
 
-          <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
-            Showing {visibleTerms} of {totalTerms} tracked metrics.
-          </p>
+          <div className="segmented" style={{ flexWrap: "wrap" }}>
+            <button
+              aria-pressed={activeCategory === "all"}
+              className="segmented__item"
+              onClick={() => setActiveCategory("all")}
+              type="button"
+            >
+              All
+            </button>
+            {sections.map((section) => (
+              <button
+                aria-pressed={activeCategory === section.key}
+                className="segmented__item"
+                key={section.key}
+                onClick={() => setActiveCategory(section.key)}
+                type="button"
+              >
+                {section.title}
+              </button>
+            ))}
+          </div>
         </div>
       </DashboardPanel>
 
@@ -183,97 +116,50 @@ export function DefinitionsView({
       ) : null}
 
       {visibleSections.map((section) => (
-        <DashboardPanel key={section.key} padding="spacious">
-          <div style={{ display: "grid", gap: "1.1rem" }}>
-            <SectionHeading
-              copy={section.subtitle}
-              eyebrow="Category"
-              title={section.title}
-            />
-
-            <div style={{ display: "grid", gap: "0.85rem" }}>
-              {section.items.map((item) => {
-                const highlighted = item.key === metric;
-
-                return (
-                  <article
-                    id={`definition-${item.key}`}
-                    key={item.key}
-                    style={{
-                      display: "grid",
-                      gap: "0.6rem",
-                      padding: "1rem 1.1rem",
-                      borderRadius: "1.1rem",
-                      border: `1px solid ${
-                        highlighted ? "rgba(45, 212, 191, 0.5)" : "var(--border)"
-                      }`,
-                      background: highlighted
-                        ? "rgba(45, 212, 191, 0.08)"
-                        : "rgba(255, 255, 255, 0.03)",
-                      scrollMarginTop: "1.5rem",
-                    }}
-                  >
-                    <h3
-                      style={{
-                        margin: 0,
-                        color: "var(--text-strong)",
-                        fontSize: "1.1rem",
-                        letterSpacing: "-0.02em",
-                      }}
-                    >
-                      {item.title}
-                    </h3>
-
-                    <DefinitionRichText
-                      activeMetric={item.key}
-                      lines={item.bodyLines}
-                    />
-
-                    {item.related.length > 0 ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.5rem",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            color: "var(--muted)",
-                            fontSize: "0.74rem",
-                            fontWeight: 700,
-                            letterSpacing: "0.14em",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          Related
-                        </span>
-                        {item.related.map((related) => (
-                          <Link
-                            href={`/definitions?metric=${encodeURIComponent(
-                              related.key,
-                            )}&category=${encodeURIComponent(related.category)}`}
-                            key={`${item.key}-${related.key}`}
-                            style={{
-                              padding: "0.35rem 0.7rem",
-                              borderRadius: "999px",
-                              border: "1px solid var(--border)",
-                              background: "rgba(255, 255, 255, 0.05)",
-                              color: "var(--text)",
-                              fontSize: "0.82rem",
-                              fontWeight: 600,
-                            }}
-                          >
-                            {related.title}
-                          </Link>
-                        ))}
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })}
+        <DashboardPanel key={section.key} padding="normal">
+          <div className="panel-head">
+            <div className="panel-head__text">
+              <p className="eyebrow" style={{ margin: 0 }}>
+                Category
+              </p>
+              <h2 className="panel-title">{section.title}</h2>
+              <p className="panel-copy">{section.subtitle}</p>
             </div>
+            <span className="panel-count">{section.items.length} metrics</span>
+          </div>
+
+          <div className="def-list">
+            {section.items.map((item) => (
+              <article
+                className={item.key === metric ? "def def--target" : "def"}
+                id={`definition-${item.key}`}
+                key={item.key}
+              >
+                <h3 className="def__title">{item.title}</h3>
+
+                <DefinitionRichText
+                  activeMetric={item.key}
+                  lines={item.bodyLines}
+                />
+
+                {item.related.length > 0 ? (
+                  <div className="def__related">
+                    <span className="statline__label">Related</span>
+                    {item.related.map((related) => (
+                      <Link
+                        className="chip"
+                        href={`/definitions?metric=${encodeURIComponent(
+                          related.key,
+                        )}&category=${encodeURIComponent(related.category)}`}
+                        key={`${item.key}-${related.key}`}
+                      >
+                        {related.title}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
           </div>
         </DashboardPanel>
       ))}

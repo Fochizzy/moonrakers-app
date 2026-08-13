@@ -78,7 +78,7 @@ describe("DefinitionsView", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByText("Stats")).toBeInTheDocument();
+    expect(screen.getByText("From Stats")).toBeInTheDocument();
     expect(screen.queryByText("Win Rate")).not.toBeInTheDocument();
   });
 

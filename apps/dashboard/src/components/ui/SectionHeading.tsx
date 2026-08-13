@@ -5,6 +5,10 @@ type SectionHeadingProps = {
   title: string;
 };
 
+/**
+ * Heading for a panel's contents. Sits a level below PageHeader so a panel
+ * inside a route never competes with the route title.
+ */
 export function SectionHeading({
   action,
   copy,
@@ -12,46 +16,16 @@ export function SectionHeading({
   title,
 }: SectionHeadingProps) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "space-between",
-        gap: "1rem",
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ display: "grid", gap: "0.45rem", minWidth: 0 }}>
-        <p className="section-eyebrow" style={{ margin: 0 }}>
+    <div className="panel-head">
+      <div className="panel-head__text">
+        <p className="eyebrow" style={{ margin: 0 }}>
           {eyebrow}
         </p>
-        <h2
-          style={{
-            margin: 0,
-            color: "var(--text-strong)",
-            fontSize: "clamp(1.6rem, 2.8vw, 2.4rem)",
-            letterSpacing: "-0.04em",
-            lineHeight: 1.05,
-          }}
-        >
-          {title}
-        </h2>
-        {copy ? (
-          <p
-            style={{
-              margin: 0,
-              color: "var(--sub)",
-              fontSize: "1rem",
-              lineHeight: 1.7,
-              maxWidth: "44rem",
-            }}
-          >
-            {copy}
-          </p>
-        ) : null}
+        <h2 className="panel-title">{title}</h2>
+        {copy ? <p className="panel-copy">{copy}</p> : null}
       </div>
 
-      {action ? <div>{action}</div> : null}
+      {action ? <div className="page-header__actions">{action}</div> : null}
     </div>
   );
 }

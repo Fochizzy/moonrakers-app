@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { SectionHeading } from "@/components/ui/SectionHeading";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime } from "@/lib/formatDateTime";
 import {
   filterHistoryRows,
@@ -34,81 +34,6 @@ const SORT_OPTIONS: Array<{ key: HistorySort; label: string }> = [
   { key: "winner", label: "Winner name" },
   { key: "rounds", label: "Most rounds" },
 ];
-
-function PillButton({
-  active,
-  label,
-  onSelect,
-}: {
-  active: boolean;
-  label: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      aria-pressed={active}
-      onClick={onSelect}
-      style={{
-        padding: "0.55rem 0.95rem",
-        borderRadius: "999px",
-        border: `1px solid ${active ? "rgba(168, 85, 247, 0.45)" : "var(--border)"}`,
-        background: active
-          ? "linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(59, 130, 246, 0.14) 100%)"
-          : "rgba(255, 255, 255, 0.04)",
-        color: active ? "var(--text-strong)" : "var(--sub)",
-        cursor: "pointer",
-        fontSize: "0.85rem",
-        fontWeight: active ? 700 : 600,
-        whiteSpace: "nowrap",
-      }}
-      type="button"
-    >
-      {label}
-    </button>
-  );
-}
-
-function PlayerChip({
-  color,
-  isWinner,
-  name,
-  totalPrestige,
-}: {
-  color: string | null;
-  isWinner: boolean;
-  name: string;
-  totalPrestige: number;
-}) {
-  const accent = color?.trim() || "var(--blue)";
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.45rem",
-        padding: "0.35rem 0.7rem",
-        borderRadius: "999px",
-        border: `1px solid ${isWinner ? "rgba(45, 212, 191, 0.5)" : "var(--border)"}`,
-        background: isWinner ? "rgba(45, 212, 191, 0.1)" : "rgba(255, 255, 255, 0.04)",
-        color: "var(--text)",
-        fontSize: "0.85rem",
-      }}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          width: "0.55rem",
-          height: "0.55rem",
-          borderRadius: "999px",
-          background: accent,
-        }}
-      />
-      <span style={{ fontWeight: isWinner ? 700 : 600 }}>{name}</span>
-      <span style={{ color: "var(--muted)" }}>{totalPrestige}</span>
-    </span>
-  );
-}
 
 export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
   const [filter, setFilter] = useState<HistoryFilter>("all");
@@ -139,6 +64,11 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
   if (rows.length === 0) {
     return (
       <section className="view-stack">
+        <PageHeader
+          copy="Every finished game saved to the cloud, with winners, round counts, and links into the full game read."
+          eyebrow="History"
+          title="Mission Archive"
+        />
         <EmptyStatePanel
           copy="No finished games are saved to the cloud for this account yet. Play and save a game in the Moonrakers app and it will appear here."
           eyebrow="Archive"
@@ -150,123 +80,98 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
 
   return (
     <section className="view-stack">
-      <DashboardPanel padding="spacious" tone="accent">
-        <SectionHeading
-          copy="Every finished game saved to the cloud, with winners, round counts, and links into the full game read."
-          eyebrow="History"
-          title="Mission Archive"
-        />
-      </DashboardPanel>
+      <PageHeader
+        copy="Every finished game saved to the cloud, with winners, round counts, and links into the full game read."
+        eyebrow="History"
+        title="Mission Archive"
+      />
 
-      <div className="metric-grid">
+      <div className="stat-grid">
         <MetricCard label="Games" value={rows.length} />
         <MetricCard accent="var(--gold)" label="Games with you" value={myGames} />
         <MetricCard label="Rounds logged" value={totalRounds} />
         <MetricCard label="Groups" value={groupNames.length} />
       </div>
 
-      <DashboardPanel padding="spacious">
-        <div style={{ display: "grid", gap: "1.1rem" }}>
-          <SectionHeading
-            copy={`${visibleRows.length} of ${rows.length} games visible.`}
-            eyebrow="Controls"
-            title="Archive controls"
-          />
-
-          <label style={{ display: "grid", gap: "0.45rem" }}>
-            <span
-              style={{
-                color: "var(--sub)",
-                fontSize: "0.8rem",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-              }}
-            >
-              Search
-            </span>
-            <input
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by winner, player, group, or date"
-              style={{
-                width: "100%",
-                padding: "0.85rem 1rem",
-                borderRadius: "0.9rem",
-                border: "1px solid var(--border-strong)",
-                background: "rgba(255, 255, 255, 0.04)",
-                color: "var(--text-strong)",
-                fontSize: "1rem",
-              }}
-              type="search"
-              value={query}
-            />
-          </label>
-
-          <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
-            {FILTER_TABS.map((tab) => (
-              <PillButton
-                active={filter === tab.key}
-                key={tab.key}
-                label={tab.label}
-                onSelect={() => {
-                  setFilter(tab.key);
-                  if (tab.key !== "group") {
-                    setGroupName("all");
-                  }
-                }}
+      <DashboardPanel padding="normal">
+        <div className="stack-md">
+          <div className="toolbar">
+            <label className="field toolbar__grow">
+              <span className="field__label">Search</span>
+              <input
+                className="input"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by winner, player, group, or date"
+                type="search"
+                value={query}
               />
-            ))}
+            </label>
+
+            <div className="field">
+              <span className="field__label">Filter</span>
+              <div className="segmented">
+                {FILTER_TABS.map((tab) => (
+                  <button
+                    aria-pressed={filter === tab.key}
+                    className="segmented__item"
+                    key={tab.key}
+                    onClick={() => {
+                      setFilter(tab.key);
+                      if (tab.key !== "group") {
+                        setGroupName("all");
+                      }
+                    }}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label className="field">
+              <span className="field__label">Sort</span>
+              <select
+                className="select"
+                onChange={(event) => setSort(event.target.value as HistorySort)}
+                value={sort}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {filter === "group" && groupNames.length > 0 ? (
-            <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
-              <PillButton
-                active={groupName === "all"}
-                label="All groups"
-                onSelect={() => setGroupName("all")}
-              />
+            <div className="segmented" style={{ alignSelf: "start" }}>
+              <button
+                aria-pressed={groupName === "all"}
+                className="segmented__item"
+                onClick={() => setGroupName("all")}
+                type="button"
+              >
+                All groups
+              </button>
               {groupNames.map((name) => (
-                <PillButton
-                  active={groupName === name}
+                <button
+                  aria-pressed={groupName === name}
+                  className="segmented__item"
                   key={name}
-                  label={name}
-                  onSelect={() => setGroupName(name)}
-                />
+                  onClick={() => setGroupName(name)}
+                  type="button"
+                >
+                  {name}
+                </button>
               ))}
             </div>
           ) : null}
 
-          <label style={{ display: "grid", gap: "0.45rem", maxWidth: "18rem" }}>
-            <span
-              style={{
-                color: "var(--sub)",
-                fontSize: "0.8rem",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-              }}
-            >
-              Sort
-            </span>
-            <select
-              onChange={(event) => setSort(event.target.value as HistorySort)}
-              style={{
-                padding: "0.7rem 0.9rem",
-                borderRadius: "0.9rem",
-                border: "1px solid var(--border-strong)",
-                background: "rgba(255, 255, 255, 0.04)",
-                color: "var(--text-strong)",
-                fontSize: "0.95rem",
-              }}
-              value={sort}
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p className="panel-count" style={{ margin: 0 }}>
+            {visibleRows.length} of {rows.length} games visible.
+          </p>
         </div>
       </DashboardPanel>
 
@@ -278,98 +183,74 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
         />
       ) : null}
 
-      {visibleRows.map((row) => {
-        const focused = row.id === focusGameId;
+      <div className="row-list">
+        {visibleRows.map((row) => {
+          const winnerColor =
+            row.players.find((player) => player.isWinner)?.color ?? null;
 
-        return (
-          <DashboardPanel
-            key={row.id}
-            padding="spacious"
-            tone={focused ? "success" : "default"}
-          >
-            <div style={{ display: "grid", gap: "0.9rem" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
-                  gap: "1rem",
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ display: "grid", gap: "0.35rem", minWidth: 0 }}>
-                  <p className="section-eyebrow" style={{ margin: 0 }}>
+          return (
+            <article
+              className={row.id === focusGameId ? "row row--focus" : "row"}
+              key={row.id}
+              style={
+                {
+                  "--row-accent": winnerColor?.trim() || "var(--border-strong)",
+                } as React.CSSProperties
+              }
+            >
+              <div className="row__head">
+                <div className="stack-sm" style={{ minWidth: 0 }}>
+                  <span className="eyebrow">
                     Game {row.ordinal}
                     {row.groupName ? ` · ${row.groupName}` : ""}
-                  </p>
-                  <h3
-                    style={{
-                      margin: 0,
-                      color: "var(--text-strong)",
-                      fontSize: "1.35rem",
-                      letterSpacing: "-0.03em",
-                    }}
-                  >
+                  </span>
+                  <h2 className="row__title">
                     {row.winnerName
                       ? `${row.winnerName} won with ${row.winnerPrestige}`
                       : "No winner recorded"}
-                  </h3>
-                  <p
-                    style={{ margin: 0, color: "var(--sub)", fontSize: "0.92rem" }}
-                    suppressHydrationWarning
-                  >
+                  </h2>
+                  <p className="row__meta" suppressHydrationWarning>
                     {formatDateTime(row.createdAt)} · {row.roundCount} rounds ·{" "}
                     {row.players.length} players
                   </p>
                 </div>
 
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <div className="page-header__actions">
                   <Link
+                    className="btn btn--primary"
                     href={`/summary/${encodeURIComponent(row.id)}`}
-                    style={{
-                      padding: "0.6rem 1rem",
-                      borderRadius: "0.9rem",
-                      border: "1px solid rgba(168, 85, 247, 0.4)",
-                      background: "rgba(168, 85, 247, 0.14)",
-                      color: "var(--text-strong)",
-                      fontSize: "0.88rem",
-                      fontWeight: 700,
-                    }}
                   >
                     Summary
                   </Link>
                   <Link
+                    className="btn"
                     href={`/game-trends/${encodeURIComponent(row.id)}`}
-                    style={{
-                      padding: "0.6rem 1rem",
-                      borderRadius: "0.9rem",
-                      border: "1px solid var(--border-strong)",
-                      background: "rgba(255, 255, 255, 0.05)",
-                      color: "var(--text)",
-                      fontSize: "0.88rem",
-                      fontWeight: 700,
-                    }}
                   >
                     Trends
                   </Link>
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <div className="pill-row">
                 {row.players.map((player) => (
-                  <PlayerChip
-                    color={player.color}
-                    isWinner={player.isWinner}
+                  <span
+                    className={player.isWinner ? "chip chip--win" : "chip"}
                     key={`${row.id}-${player.id}`}
-                    name={player.name}
-                    totalPrestige={player.totalPrestige}
-                  />
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="chip__dot"
+                      style={{ background: player.color?.trim() || "var(--blue)" }}
+                    />
+                    {player.name}
+                    <span className="chip__num">{player.totalPrestige}</span>
+                  </span>
                 ))}
               </div>
-            </div>
-          </DashboardPanel>
-        );
-      })}
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }

@@ -24,7 +24,7 @@ function SegmentText({
   const metric = String(segment.metric ?? "").trim();
 
   if (!metric || metric === activeMetric) {
-    return <span style={{ color: "var(--text-strong)" }}>{segment.text}</span>;
+    return <span className="term-current">{segment.text}</span>;
   }
 
   const params = new URLSearchParams({ metric });
@@ -34,13 +34,7 @@ function SegmentText({
   }
 
   return (
-    <Link
-      href={`/definitions?${params.toString()}`}
-      style={{
-        color: "var(--gold)",
-        borderBottom: "1px dashed rgba(45, 212, 191, 0.5)",
-      }}
-    >
+    <Link className="term-link" href={`/definitions?${params.toString()}`}>
       {segment.text}
     </Link>
   );
@@ -73,16 +67,9 @@ export function DefinitionRichText({
   const bulletLines = lines.filter((line) => line.bullet);
 
   return (
-    <div style={{ display: "grid", gap: "0.5rem" }}>
+    <div className="def__body">
       {proseLines.length > 0 ? (
-        <p
-          style={{
-            margin: 0,
-            color: "var(--sub)",
-            fontSize: "0.98rem",
-            lineHeight: 1.7,
-          }}
-        >
+        <p style={{ margin: 0 }}>
           {proseLines.flatMap((line, index) =>
             renderLine(line, activeMetric, `line-${index}`),
           )}
@@ -90,17 +77,7 @@ export function DefinitionRichText({
       ) : null}
 
       {bulletLines.length > 0 ? (
-        <ul
-          style={{
-            margin: 0,
-            paddingLeft: "1.1rem",
-            display: "grid",
-            gap: "0.35rem",
-            color: "var(--sub)",
-            fontSize: "0.95rem",
-            lineHeight: 1.65,
-          }}
-        >
+        <ul>
           {bulletLines.map((line, index) => (
             <li key={`bullet-${index}`}>
               {renderLine(line, activeMetric, `bullet-${index}`)}
