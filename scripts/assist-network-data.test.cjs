@@ -1,7 +1,24 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const Module = require("node:module");
 const ts = require("typescript");
+
+const projectRoot = path.resolve(__dirname, "..");
+const originalResolveFilename = Module._resolveFilename;
+
+Module._resolveFilename = function patchedResolveFilename(
+  request,
+  parent,
+  isMain,
+  options
+) {
+  if (request.startsWith("@/")) {
+    request = path.join(projectRoot, request.slice(2));
+  }
+
+  return originalResolveFilename.call(this, request, parent, isMain, options);
+};
 
 for (const extension of [".ts", ".tsx"]) {
   require.extensions[extension] = function compileTypeScript(mod, filename) {

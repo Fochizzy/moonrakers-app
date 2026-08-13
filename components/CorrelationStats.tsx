@@ -39,6 +39,7 @@ function normalizeServerCorrelationRows(value: unknown) {
       const fallbackDelta = Number(item.delta);
 
       return {
+        key: String(item.key ?? item.metricKey ?? '').trim(),
         label: String(item.label ?? item.title ?? 'Correlation').trim() || 'Correlation',
         value: Number.isFinite(numericValue)
           ? numericValue
@@ -56,6 +57,18 @@ function normalizeServerCorrelationRows(value: unknown) {
 function formatCorrelation(value: number) {
   if (!Number.isFinite(value)) return '0.00';
   return value.toFixed(2);
+}
+
+/**
+ * Not every card on these panels is a correlation coefficient. The seat metric is a
+ * win-rate gap between two seats, so labelling it "r" would be wrong notation.
+ */
+const SPREAD_METRIC_KEYS = new Set(['turnOrderWinCorrelation']);
+
+function getValueNotation(key?: string) {
+  return SPREAD_METRIC_KEYS.has(String(key ?? '').trim())
+    ? { notation: 'spread', valueLabel: 'Best − worst' }
+    : { notation: 'r', valueLabel: 'Coefficient' };
 }
 
 function correlation(x: number[], y: number[]) {
@@ -171,18 +184,22 @@ function computeGlobalMetaCorrelations(games: any[]) {
 
   return [
     {
+      key: 'contractFailureRatio',
       label: 'Contracts / Failures Ratio vs Win Rate',
       value: correlation(contractsFailureRatio, wins),
     },
     {
+      key: 'assistsGiven',
       label: 'Assists Given vs Win Rate',
       value: correlation(assistsGiven, wins),
     },
     {
+      key: 'assistPrestigeReceived',
       label: 'Assists Received vs Win Rate',
       value: correlation(assistsReceived, wins),
     },
     {
+      key: 'earlyLeadRate',
       label: 'Early Lead vs Final Win',
       value: correlation(earlyLead, wins),
     },
@@ -291,12 +308,16 @@ function CorrelationCard({
   label,
   value,
   strength,
+  notation = 'r',
+  valueLabel = 'Coefficient',
   compact = false,
   stackedHeader = false,
 }: {
   label: string;
   value: number;
   strength?: string;
+  notation?: string;
+  valueLabel?: string;
   compact?: boolean;
   stackedHeader?: boolean;
 }) {
@@ -355,9 +376,9 @@ function CorrelationCard({
 
       <View style={[styles.metricNumbers, compact && styles.metricNumbersCompact]}>
         <View style={styles.metricPrimaryBlock}>
-          <Text style={styles.metricPrimaryLabel}>Coefficient</Text>
+          <Text style={styles.metricPrimaryLabel}>{valueLabel}</Text>
           <Text style={[styles.metricValue, compact && styles.metricValueCompact]}>
-            r = {formatCorrelation(value)}
+            {notation} = {formatCorrelation(value)}
           </Text>
         </View>
 
@@ -492,6 +513,7 @@ export default function CorrelationStats({
     return macro
       .filter((item: any) => item && typeof item === 'object')
       .map((item: any) => ({
+        key: String(item.key ?? item.metricKey ?? '').trim(),
         label: String(item.label ?? item.title ?? "Macro").trim() || "Macro",
         value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
         strength:
@@ -632,6 +654,7 @@ export default function CorrelationStats({
                     label={item.label}
                     value={item.value}
                     strength={item.strength}
+                    {...getValueNotation(item.key)}
                     compact={isTwoColumn}
                     stackedHeader={shouldStackCompactHeader}
                   />
@@ -668,6 +691,7 @@ export default function CorrelationStats({
                   <CorrelationCard
                     label={item.label}
                     value={item.value}
+                    {...getValueNotation(item.key)}
                     compact={isTwoColumn}
                     stackedHeader={shouldStackCompactHeader}
                   />

@@ -357,8 +357,8 @@ const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
       },
       {
         key: "turnOrderWinCorrelation",
-        title: "Seat to Win Correlation",
-        body: "How strongly starting seat appears to influence winning outcomes. Some screens shorten this to Seat vs Win Correlation or Turn Order Win Correlation.",
+        title: "Seat Advantage Spread",
+        body: "The gap between the best and worst performing starting seat: the best seat's win rate minus the worst seat's. A negative value means earlier seats win more often, positive means later seats do, and 0 means every seat performs the same or too few seats have enough games yet. Seats need at least 3 appearances to count. This replaced an older Seat to Win Correlation, which could only detect a steady trend across seat numbers and read as 0 whenever one middle seat underperformed the rest.",
       },
     ],
   },

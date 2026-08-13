@@ -1,4 +1,5 @@
 import buildOverallPlayerRow from '@/utils/buildOverallPlayerRow';
+import { computeSeatAdvantageSpreadFromArrays } from '@/utils/seatAdvantage';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -586,7 +587,10 @@ export function buildGroupRows(
           ? totalSynergy / (matchedGames * memberIds.length)
           : 0;
       const avgStartOrder = seatCount > 0 ? seatSum / seatCount : 0;
-      const turnOrderWinCorrelation = correlation(seatSamples, winSamples);
+      const turnOrderWinCorrelation = computeSeatAdvantageSpreadFromArrays(
+        seatSamples,
+        winSamples
+      );
       const assistWinCorrelation = correlation(assistSamples, winSamples);
       const netAssistBenefit = assistIn - assistOut;
       const objectiveShareOfPrestige = prestige > 0 ? objectivePrestige / prestige : 0;

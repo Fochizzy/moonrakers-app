@@ -1,3 +1,5 @@
+import { computeSeatAdvantageSpread } from "@/utils/seatAdvantage";
+
 export type SimpleMetricKey =
   | "score"
   | "totalPrestige"
@@ -247,28 +249,6 @@ function averageNumbers(values: number[]): number {
   return values.length
     ? values.reduce((sum, value) => sum + value, 0) / values.length
     : 0;
-}
-
-function getPearsonCorrelation(points: Array<{ x: number; y: number }>): number {
-  if (points.length < 2) return 0;
-
-  const meanX = averageNumbers(points.map((point) => point.x));
-  const meanY = averageNumbers(points.map((point) => point.y));
-
-  let numerator = 0;
-  let sumX = 0;
-  let sumY = 0;
-
-  for (const point of points) {
-    const dx = point.x - meanX;
-    const dy = point.y - meanY;
-    numerator += dx * dy;
-    sumX += dx * dx;
-    sumY += dy * dy;
-  }
-
-  if (sumX === 0 || sumY === 0) return 0;
-  return numerator / Math.sqrt(sumX * sumY);
 }
 
 function normalizePercentValue(value: unknown): number {
@@ -571,7 +551,9 @@ function buildDerivedSnapshotMetricHistory(
       derivedForGame[playerId] = {
         avgStartSeat: averageNumbers(history.seatSamples),
         currentSeat,
-        turnOrderWinCorrelation: getPearsonCorrelation(history.seatWinPoints),
+        turnOrderWinCorrelation: computeSeatAdvantageSpread(
+          history.seatWinPoints.map((point) => ({ seat: point.x, won: point.y }))
+        ),
         recentFormDelta: recentAverage - overallAverage,
         leadConversion: normalizePercentValue(
           history.earlyLeadGames > 0

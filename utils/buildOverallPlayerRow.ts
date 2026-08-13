@@ -1,4 +1,5 @@
 import { StoredGame } from '@/utils/compareTypes';
+import { computeSeatAdvantageSpreadFromArrays } from '@/utils/seatAdvantage';
 
 type PlayerLike = {
   id: string;
@@ -161,24 +162,6 @@ function stdDev(values: number[]): number {
   if (!values.length) return 0;
   const mean = avg(values);
   return Math.sqrt(values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length);
-}
-
-function correlation(xs: number[], ys: number[]): number {
-  if (xs.length !== ys.length || xs.length < 2) return 0;
-  const xMean = avg(xs);
-  const yMean = avg(ys);
-  let numerator = 0;
-  let xDen = 0;
-  let yDen = 0;
-  for (let i = 0; i < xs.length; i += 1) {
-    const dx = xs[i] - xMean;
-    const dy = ys[i] - yMean;
-    numerator += dx * dy;
-    xDen += dx * dx;
-    yDen += dy * dy;
-  }
-  if (xDen <= 0 || yDen <= 0) return 0;
-  return numerator / Math.sqrt(xDen * yDen);
 }
 
 function normalizeName(value?: string): string {
@@ -515,7 +498,7 @@ export default function buildOverallPlayerRow(
   const prestigeStdDev = stdDev(prestigeHistory);
   const bestPrestige = prestigeHistory.length ? Math.max(...prestigeHistory) : 0;
   const worstPrestige = prestigeHistory.length ? Math.min(...prestigeHistory) : 0;
-  const seatCorr = correlation(seatSamples, seatWinSamples);
+  const seatCorr = computeSeatAdvantageSpreadFromArrays(seatSamples, seatWinSamples);
   const avgSeat = avg(seatSamples);
 
   const synergyIndex = round(

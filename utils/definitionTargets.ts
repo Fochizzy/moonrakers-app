@@ -271,6 +271,8 @@ const DEFINITION_LABEL_ALIASES: Record<string, string> = {
   "assists at 6 plus prestige vs victory": "assistsAtSixPlus",
   "assists over 5 behind leader vs victory": "assistsOverFiveBehindLeader",
   "assist prestige gained vs victory": "assistPrestigeGained",
+  "seat advantage spread": "turnOrderWinCorrelation",
+  "seat adv. spread": "turnOrderWinCorrelation",
   "seat vs win correlation": "turnOrderWinCorrelation",
   "seat win rate": "seatWinRate",
   "seat to win correlation": "turnOrderWinCorrelation",

@@ -419,7 +419,12 @@ export default function CompareInsightBar({
       const seatKeys = ['avgStartOrder'];
       const correlationKeys = ['turnOrderWinCorrelation'];
       const bestSeat = pickLowest(rows, seatKeys);
-      const bestCorrelation = pickHighest(rows, correlationKeys);
+      // Widest spread means the biggest seat effect in either direction, so rank by
+      // magnitude — the signed maximum would just surface the most late-seat-favouring row.
+      const widestSpread =
+        [...rows].sort(
+          (a, b) => Math.abs(getMetric(b, correlationKeys)) - Math.abs(getMetric(a, correlationKeys))
+        )[0] ?? null;
       const mostNeutral =
         [...rows].sort(
           (a, b) => Math.abs(getMetric(a, correlationKeys)) - Math.abs(getMetric(b, correlationKeys))
@@ -429,8 +434,8 @@ export default function CompareInsightBar({
         bestSeat && hasMetricData(rows, seatKeys)
           ? `${bestSeat.label} tends to start earliest at seat ${formatFixed(getMetric(bestSeat, seatKeys), 1)}.`
           : null,
-        bestCorrelation && hasMetricData(rows, correlationKeys)
-          ? `${bestCorrelation.label} gets the strongest Seat to Win Correlation at ${formatFixed(getMetric(bestCorrelation, correlationKeys), 2)}.`
+        widestSpread && hasMetricData(rows, correlationKeys)
+          ? `${widestSpread.label} shows the widest Seat Advantage Spread at ${formatFixed(getMetric(widestSpread, correlationKeys), 2)}.`
           : null,
         mostNeutral && hasMetricData(rows, correlationKeys)
           ? `${mostNeutral.label} is least sensitive to seat position at ${formatFixed(Math.abs(getMetric(mostNeutral, correlationKeys)), 2)}.`

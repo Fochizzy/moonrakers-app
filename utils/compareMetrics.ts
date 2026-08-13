@@ -343,8 +343,8 @@ export const METRICS: MetricDescriptor[] = [
   },
   {
     key: 'turnOrderWinCorrelation',
-    label: 'Seat ↔ Win Corr',
-    description: 'Correlation between seat order and winning in the selected sample. Negative means earlier seats correlate with winning.',
+    label: 'Seat Adv. Spread',
+    description: 'Win-rate gap between the best and worst starting seat in the selected sample. Negative means earlier seats win more often.',
     group: 'positioning',
     kind: 'correlation',
     direction: 'lower',

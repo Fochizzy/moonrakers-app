@@ -1,41 +1,48 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const vm = require("node:vm");
+const Module = require("node:module");
 const ts = require("typescript");
 
-const chartsPath = path.join(__dirname, "..", "utils", "charts.ts");
-const chartsSource = fs.readFileSync(chartsPath, "utf8");
-const transpiled = ts.transpileModule(chartsSource, {
-  compilerOptions: {
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-  fileName: chartsPath,
-}).outputText;
+const projectRoot = path.resolve(__dirname, "..");
+const originalResolveFilename = Module._resolveFilename;
 
-const moduleRef = { exports: {} };
-const sandbox = {
-  module: moduleRef,
-  exports: moduleRef.exports,
-  require,
-  console,
-  process,
-  __dirname: path.dirname(chartsPath),
-  __filename: chartsPath,
-  setTimeout,
-  clearTimeout,
-  setInterval,
-  clearInterval,
+Module._resolveFilename = function patchedResolveFilename(
+  request,
+  parent,
+  isMain,
+  options
+) {
+  if (request.startsWith("@/")) {
+    request = path.join(projectRoot, request.slice(2));
+  }
+
+  return originalResolveFilename.call(this, request, parent, isMain, options);
 };
 
-vm.runInNewContext(transpiled, sandbox, { filename: chartsPath });
+for (const extension of [".ts", ".tsx"]) {
+  require.extensions[extension] = function compileTypeScript(mod, filename) {
+    const source = fs.readFileSync(filename, "utf8");
+    const { outputText } = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2020,
+        jsx: ts.JsxEmit.ReactJSX,
+        esModuleInterop: true,
+        allowJs: true,
+      },
+      fileName: filename,
+    });
+
+    mod._compile(outputText, filename);
+  };
+}
 
 const {
   getSupportedMetricKeysForChart,
   normalizeMetricForChart,
   buildReplaySnapshotsFromGame,
-} = moduleRef.exports;
+} = require("../utils/charts.ts");
 
 assert.equal(
   typeof getSupportedMetricKeysForChart,
