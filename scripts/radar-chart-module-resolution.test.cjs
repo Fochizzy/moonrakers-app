@@ -10,7 +10,6 @@ function read(relPath) {
 
 const radarIndexSource = read(path.join("components", "charts", "RadarChart", "index.ts"));
 const chartScreenSource = read(path.join("app", "charts", "[chartKey].tsx"));
-const chartHelpersSource = read(path.join("utils", "chartHelpers.tsx"));
 
 assert.match(
   radarIndexSource,
@@ -28,12 +27,6 @@ assert.match(
   chartScreenSource,
   /import RadarChart from "@\/components\/charts\/RadarChart\/RadarChart";/,
   "expected the chart detail screen to import the concrete RadarChart module directly",
-);
-
-assert.match(
-  chartHelpersSource,
-  /import RadarChart from '@\/components\/charts\/RadarChart\/RadarChart';/,
-  "expected chart helpers to import the concrete RadarChart module directly",
 );
 
 console.log("radar-chart-module-resolution.test.cjs passed");

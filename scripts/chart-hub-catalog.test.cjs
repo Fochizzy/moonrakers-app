@@ -72,11 +72,4 @@ assert.doesNotMatch(
   "expected the charts hub launch contract to stop wiring retired graphVariant params"
 );
 
-const chartHelpersSource = read(path.join("utils", "chartHelpers.tsx"));
-assert.doesNotMatch(
-  chartHelpersSource,
-  /case 'assist-network-overview':/,
-  "expected legacy chart helpers to stop treating assist-network-overview as a separate chart case"
-);
-
 console.log("chart-hub-catalog.test.cjs passed");

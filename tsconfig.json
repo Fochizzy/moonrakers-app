@@ -78,7 +78,6 @@
 
     "utils/autoBackupCSV.googleDrive.patch.ts",
     "utils/buildChartData.ts",
-    "utils/chartHelpers.tsx",
     "utils/chartTooltips.ts",
     "utils/compareHelpers.ts",
     "utils/getMetricOption.ts",
