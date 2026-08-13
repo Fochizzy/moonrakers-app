@@ -46,7 +46,7 @@ const migrationPath = path.join(
   projectRoot,
   "supabase",
   "migrations",
-  "20260813230000_moonrakers_elo_field_spread_closeness.sql",
+  "20260813240000_moonrakers_elo_trajectory_closeness.sql",
 );
 const migrationSource = fs.readFileSync(migrationPath, "utf8");
 
@@ -54,6 +54,46 @@ assert.match(
   migrationSource,
   /select avg\(abs\(value - prestige_mean\)\) into prestige_spread/,
   "expected closeness to read the whole field's spread, not the top-two gap",
+);
+
+// --- the reliability gate ---------------------------------------------------
+
+assert.match(
+  migrationSource,
+  /game_trust as \([\s\S]*?coalesce\(gp\.total_prestige, 0\)::numeric\s*- coalesce\(pp\.replayed_prestige, 0\)\s*\)\) < 0\.5 as trustworthy/,
+  "expected a game's rounds to be trusted only when they reproduce its stored prestige",
+);
+
+assert.match(
+  migrationSource,
+  /join game_trust as gt\s*on gt\.game_id = gp\.game_id\s*and gt\.trustworthy/,
+  "expected the turn grid to exclude games whose rounds cannot be trusted",
+);
+
+// --- trajectory closeness ---------------------------------------------------
+
+assert.match(
+  migrationSource,
+  /when count\(\*\) filter \(where running_prestige = leading_prestige\) = 1/,
+  "expected only strict leads to count, so shared opening turns invent no lead changes",
+);
+
+assert.match(
+  migrationSource,
+  /max\(case\s*when leader is not null and leader <> final_leader\s*then turn_no::numeric \/ turns_total/,
+  "expected settled_at to be how far through the game the lead last changed",
+);
+
+assert.match(
+  migrationSource,
+  /when game_rec\.settled_at is null then spread_decisive/,
+  "expected games without a trustworthy trajectory to fall back to spread alone",
+);
+
+assert.match(
+  migrationSource,
+  /\(spread_decisive \+ \(1::numeric - game_rec\.settled_at\)\) \/ 2/,
+  "expected decisiveness to blend the final spread with how early the game settled",
 );
 
 assert.doesNotMatch(
@@ -151,8 +191,12 @@ const {
   ELO_MIN_SWING_MULTIPLIER,
   ELO_MAX_SWING_MULTIPLIER,
   buildActualScores,
+  buildFieldSpreadDecisiveness,
   buildFlowScores,
   buildGameDecisiveness,
+  buildRunningPrestige,
+  buildSettledAt,
+  roundsReconcile,
   buildPerformanceSignals,
   buildRatingHistory,
   buildRunningScores,
@@ -665,14 +709,14 @@ assert.equal(
 
 assert.deepEqual(
   calculateElo([wireToWire]),
-  { a: 1009, b: 991 },
-  "expected the wire-to-wire replay to land on 1009/991",
+  { a: 1012, b: 988 },
+  "expected the wire-to-wire replay to land on 1012/988",
 );
 
 assert.deepEqual(
   calculateElo([wireToWire, assistGame]),
-  { a: 1009, b: 974, c: 1016 },
-  "expected the two-game replay to land on 1009/974/1016",
+  { a: 1012, b: 973, c: 1014 },
+  "expected the two-game replay to land on 1012/973/1014",
 );
 
 const seriesRatings = calculateElo([wireToWire, assistGame]);
@@ -684,6 +728,146 @@ const seriesDrift = Math.abs(
 assert.ok(
   seriesDrift <= 2,
   `expected a two-game series to conserve total rating, drifted ${seriesDrift}`,
+);
+
+// ---------------------------------------------------------------------------
+// The reliability gate.
+//
+// Every game recorded on 2026-04-01 and 2026-04-03 kept its turn rows but
+// carries prestige 0 on all of them, so replaying those produces a trajectory
+// that is wrong rather than merely imprecise. The information was never
+// captured and cannot be recovered from the totals, so the gate detects those
+// games instead of pretending to reconstruct them.
+// ---------------------------------------------------------------------------
+
+const reconcilingGame = {
+  winnerId: "a",
+  totals: { a: { totalPrestige: 20, score: 20 }, b: { totalPrestige: 12, score: 12 } },
+  rounds: [
+    { playerId: "a", prestige: 10 },
+    { playerId: "b", prestige: 4 },
+    { playerId: "a", prestige: 10 },
+    { playerId: "b", prestige: 8 },
+  ],
+};
+
+// The legacy signature: turn rows present, prestige stripped off them.
+const legacyGame = {
+  winnerId: "a",
+  totals: { a: { totalPrestige: 20, score: 20 }, b: { totalPrestige: 12, score: 12 } },
+  rounds: [
+    { playerId: "a", prestige: 0, contracts: 1 },
+    { playerId: "b", prestige: 0, contracts: 1 },
+    { playerId: "a", prestige: 0 },
+    { playerId: "b", prestige: 0 },
+  ],
+};
+
+assert.equal(
+  roundsReconcile(reconcilingGame, ["a", "b"]),
+  true,
+  "expected rounds that reproduce the stored prestige to be trusted",
+);
+assert.equal(
+  roundsReconcile(legacyGame, ["a", "b"]),
+  false,
+  "expected rounds that lost their prestige to be rejected",
+);
+assert.equal(
+  roundsReconcile(noRounds, ["a", "b"]),
+  false,
+  "expected a game with no rounds at all to have nothing to trust",
+);
+
+assert.deepEqual(
+  buildRunningPrestige(reconcilingGame, ["a", "b"]),
+  { a: [10, 10, 20, 20], b: [0, 4, 4, 12] },
+  "expected the prestige trail to track the win condition, not the score",
+);
+
+// An untrustworthy trajectory must not reach the rating. Flow falls back to the
+// end-score standing, exactly as a game with no rounds would.
+assert.deepEqual(
+  buildFlowScores(legacyGame, ["a", "b"]),
+  buildFlowScores({ totals: legacyGame.totals }, ["a", "b"]),
+  "expected a gated game to score flow exactly as if it had no rounds",
+);
+
+assert.equal(
+  buildSettledAt(legacyGame, ["a", "b"]),
+  null,
+  "expected a gated game to yield no trajectory closeness",
+);
+assert.equal(
+  buildGameDecisiveness(legacyGame, ["a", "b"]),
+  buildFieldSpreadDecisiveness(legacyGame, ["a", "b"]),
+  "expected a gated game to fall back to the field spread alone",
+);
+
+// ---------------------------------------------------------------------------
+// Trajectory closeness.
+// ---------------------------------------------------------------------------
+
+// `a` leads from the first turn and is never headed.
+assert.equal(
+  buildSettledAt(reconcilingGame, ["a", "b"]),
+  0,
+  "expected a wire-to-wire game to settle at the start",
+);
+
+// Same field, same finishing spread, but `b` leads until the closing turn.
+const contested = {
+  winnerId: "a",
+  totals: { a: { totalPrestige: 20, score: 20 }, b: { totalPrestige: 12, score: 12 } },
+  rounds: [
+    { playerId: "a", prestige: 2 },
+    { playerId: "b", prestige: 10 },
+    { playerId: "a", prestige: 18 },
+    { playerId: "b", prestige: 2 },
+  ],
+};
+
+assert.equal(
+  buildFieldSpreadDecisiveness(contested, ["a", "b"]),
+  buildFieldSpreadDecisiveness(reconcilingGame, ["a", "b"]),
+  "expected both games to finish equally strung out",
+);
+assert.ok(
+  buildSettledAt(contested, ["a", "b"]) > 0,
+  "expected a game whose lead changed hands to settle later than the start",
+);
+assert.ok(
+  buildGameDecisiveness(contested, ["a", "b"]) <
+    buildGameDecisiveness(reconcilingGame, ["a", "b"]),
+  "expected the contested game to read as closer despite an identical final spread",
+);
+assert.ok(
+  buildSwingMultiplier(contested, ["a", "b"]) <
+    buildSwingMultiplier(reconcilingGame, ["a", "b"]),
+  "expected a game decided late to move ratings less than one never in doubt",
+);
+
+// Shared leads must not manufacture lead changes: nobody has scored on turn 1,
+// so the opening is a tie rather than a lead for whoever plays first.
+assert.equal(
+  buildSettledAt(
+    {
+      winnerId: "a",
+      totals: {
+        a: { totalPrestige: 10, score: 10 },
+        b: { totalPrestige: 4, score: 4 },
+      },
+      rounds: [
+        { playerId: "a", prestige: 0 },
+        { playerId: "b", prestige: 0 },
+        { playerId: "a", prestige: 10 },
+        { playerId: "b", prestige: 4 },
+      ],
+    },
+    ["a", "b"],
+  ),
+  0,
+  "expected turns where the top is shared to contribute no lead change",
 );
 
 console.log("elo-flow-prestige-closeness-blend.test.cjs passed");

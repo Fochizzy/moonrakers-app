@@ -133,19 +133,21 @@ function asRecord(value: unknown): Record<string, unknown> {
  * table cannot see (head-to-head mission bonuses, turn meta types) is absent
  * from both sides.
  */
-export function buildRunningScores(
+function replayRounds(
   game: EloGameLike,
   playerIds: string[]
-): Record<string, number[]> {
+): { prestige: Record<string, number[]>; score: Record<string, number[]> } {
   const rounds = Array.isArray(game?.rounds) ? game.rounds : [];
   const prestigeTotals: Record<string, number> = {};
   const bonusTotals: Record<string, number> = {};
-  const trails: Record<string, number[]> = {};
+  const prestige: Record<string, number[]> = {};
+  const score: Record<string, number[]> = {};
 
   for (const playerId of playerIds) {
     prestigeTotals[playerId] = 0;
     bonusTotals[playerId] = 0;
-    trails[playerId] = [];
+    prestige[playerId] = [];
+    score[playerId] = [];
   }
 
   for (const rawRound of rounds) {
@@ -173,13 +175,65 @@ export function buildRunningScores(
     }
 
     for (const playerId of playerIds) {
-      trails[playerId].push(
-        Math.max(0, prestigeTotals[playerId]) + bonusTotals[playerId]
-      );
+      const runningPrestige = Math.max(0, prestigeTotals[playerId]);
+      prestige[playerId].push(runningPrestige);
+      score[playerId].push(runningPrestige + bonusTotals[playerId]);
     }
   }
 
-  return trails;
+  return { prestige, score };
+}
+
+export function buildRunningScores(
+  game: EloGameLike,
+  playerIds: string[]
+): Record<string, number[]> {
+  return replayRounds(game, playerIds).score;
+}
+
+/**
+ * The running prestige trail - the win condition rather than the broader score,
+ * so it answers "who was actually ahead" at each turn.
+ */
+export function buildRunningPrestige(
+  game: EloGameLike,
+  playerIds: string[]
+): Record<string, number[]> {
+  return replayRounds(game, playerIds).prestige;
+}
+
+/**
+ * Whether a game's round rows actually reconstruct its stored totals.
+ *
+ * Games recorded before 2026-04-09 kept their turn rows but lost the prestige on
+ * them, so replaying those produces a trajectory that is not merely imprecise
+ * but wrong - in several the apparent leader is never the recorded winner. The
+ * information was never captured and cannot be recovered from the totals, so the
+ * only honest response is to detect those games and decline to read a trajectory
+ * from them.
+ *
+ * Prestige is the right thing to reconcile against: it is fully reconstructible
+ * in principle, whereas the score legitimately carries head-to-head mission
+ * bonuses that the rounds table has no column for.
+ */
+export function roundsReconcile(
+  game: EloGameLike,
+  playerIds: string[]
+): boolean {
+  const rounds = Array.isArray(game?.rounds) ? game.rounds : [];
+  if (!rounds.length || !playerIds.length) {
+    return false;
+  }
+
+  const trails = replayRounds(game, playerIds).prestige;
+
+  const drift = playerIds.reduce((total, playerId) => {
+    const trail = trails[playerId] ?? [];
+    const replayed = trail.length ? trail[trail.length - 1] : 0;
+    return total + Math.abs(replayed - getTotalPrestige(game, playerId));
+  }, 0);
+
+  return drift < 0.5;
 }
 
 /**
@@ -218,8 +272,9 @@ function mean(values: number[]): number {
  * heavily than early ones. Leading wire to wire beats stealing it on the last
  * turn, but an early lead that evaporates still counts for something.
  *
- * Games saved without round rows (legacy imports) have no trajectory to read,
- * so they fall back to the standing implied by the final scores.
+ * Games with no round rows, or whose rounds fail {@link roundsReconcile}, have
+ * no trustworthy trajectory to read, so they fall back to the standing implied
+ * by the final scores.
  */
 export function buildFlowScores(
   game: EloGameLike,
@@ -229,7 +284,7 @@ export function buildFlowScores(
   const trails = buildRunningScores(game, playerIds);
   const turnCount = playerIds.length ? (trails[playerIds[0]]?.length ?? 0) : 0;
 
-  if (!turnCount) {
+  if (!turnCount || !roundsReconcile(game, playerIds)) {
     const endScores = playerIds.map((playerId) => getEndScore(game, playerId));
     const endMean = mean(endScores);
 
@@ -272,18 +327,11 @@ export function buildFlowScores(
 }
 
 /**
- * How decisive the game was, as a 0..1 reading of how far the whole field spread
- * out: the mean absolute deviation of final prestige, relative to the table
- * average. Drives the rating swing, so a bunched table barely moves ratings and
- * a strung-out one moves them hard.
- *
- * This reads every finisher rather than just the top two. The swing multiplier
- * has to be a single number per game - giving players different multipliers
- * would stop their deltas cancelling and reintroduce the rating leak that
- * {@link buildResultScores} exists to prevent - so the statistic driving it
- * should describe the whole field, not one pair at the top.
+ * How far the field spread out by the end: the mean absolute deviation of final
+ * prestige, relative to the table average. Reads every finisher rather than the
+ * top two.
  */
-export function buildGameDecisiveness(
+export function buildFieldSpreadDecisiveness(
   game: EloGameLike,
   playerIds: string[]
 ): number {
@@ -307,6 +355,101 @@ export function buildGameDecisiveness(
   return Math.min(
     1,
     Math.max(0, spread / prestigeMean / ELO_DECISIVE_SPREAD_RATIO)
+  );
+}
+
+/**
+ * How far through the game the lead changed hands for the last time, as a 0..1
+ * fraction. Zero means the eventual leader was never headed; near one means it
+ * was still being decided on the closing turns.
+ *
+ * Only strict leads count - turns where the top is shared are skipped, so the
+ * opening turns where nobody has scored cannot manufacture lead changes.
+ * Leadership is read from running prestige, the actual win condition, rather
+ * than the broader score.
+ *
+ * Returns null when there is no trustworthy trajectory to read.
+ */
+export function buildSettledAt(
+  game: EloGameLike,
+  playerIds: string[]
+): number | null {
+  if (playerIds.length < 2 || !roundsReconcile(game, playerIds)) {
+    return null;
+  }
+
+  const trails = buildRunningPrestige(game, playerIds);
+  const turnCount = trails[playerIds[0]]?.length ?? 0;
+  if (!turnCount) {
+    return null;
+  }
+
+  const strictLeaderAt = (turn: number): string | null => {
+    let best = Number.NEGATIVE_INFINITY;
+    let leader: string | null = null;
+    let shared = false;
+
+    for (const playerId of playerIds) {
+      const value = trails[playerId][turn] ?? 0;
+      if (value > best) {
+        best = value;
+        leader = playerId;
+        shared = false;
+      } else if (value === best) {
+        shared = true;
+      }
+    }
+
+    return shared ? null : leader;
+  };
+
+  let finalLeader: string | null = null;
+  for (let turn = turnCount - 1; turn >= 0 && !finalLeader; turn -= 1) {
+    finalLeader = strictLeaderAt(turn);
+  }
+  if (!finalLeader) {
+    return null;
+  }
+
+  let settledAt = 0;
+  for (let turn = 0; turn < turnCount; turn += 1) {
+    const leader = strictLeaderAt(turn);
+    if (leader && leader !== finalLeader) {
+      settledAt = (turn + 1) / turnCount;
+    }
+  }
+
+  return settledAt;
+}
+
+/**
+ * How decisive the game was, blending where the field finished with how long the
+ * result was in doubt. A game is decisive when it both strung out and settled
+ * early; it is close when the table bunched up, or when the lead was still
+ * changing hands at the end.
+ *
+ * The swing multiplier has to be a single number per game - giving players
+ * different multipliers would stop their deltas cancelling and reintroduce the
+ * rating leak that {@link buildResultScores} exists to prevent - so the
+ * statistic driving it describes the whole field rather than one pair.
+ *
+ * Games without a trustworthy trajectory fall back to the spread alone.
+ */
+export function buildGameDecisiveness(
+  game: EloGameLike,
+  playerIds: string[]
+): number {
+  const spreadDecisiveness = buildFieldSpreadDecisiveness(game, playerIds);
+  const settledAt = buildSettledAt(game, playerIds);
+
+  if (settledAt === null) {
+    return spreadDecisiveness;
+  }
+
+  const timingDecisiveness = 1 - settledAt;
+  return Math.min(
+    1,
+    Math.max(0, (spreadDecisiveness + timingDecisiveness) / 2)
   );
 }
 
