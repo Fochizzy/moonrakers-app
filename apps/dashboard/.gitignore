@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# wrangler local state, caches, and logs
+.wrangler/
+.wrangler-home/
+
+# local verification output
+tmp-*
