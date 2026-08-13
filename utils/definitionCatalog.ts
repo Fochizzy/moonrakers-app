@@ -196,8 +196,8 @@ const RAW_DEFINITION_GROUPS: DefinitionGroup[] = [
       },
       {
         key: "assistsOverFiveBehindLeader",
-        title: "Assists Over 5 Behind Leader",
-        body: "Share and count of your tracked assists that happened while you were more than 5 prestige behind the current leader.",
+        title: "Assists 3+ Behind Leader",
+        body: "Share and count of your tracked assists that happened while you were 3 or more prestige behind the current leader. This used to require a gap of more than 5, which no recorded game ever reached, so the stat always read 0.",
       },
       {
         key: "assistPrestigeGained",

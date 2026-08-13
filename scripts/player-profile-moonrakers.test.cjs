@@ -772,7 +772,7 @@ const games = [
   assert.match(componentSource, /Assist Gap to Target/);
   assert.match(componentSource, /Assist Gap to Leader/);
   assert.match(componentSource, /Assists at 6\+ Prestige/);
-  assert.match(componentSource, /Assists Over 5 Behind Leader/);
+  assert.match(componentSource, /Assists 3\+ Behind Leader/);
   assert.match(componentSource, /Assist Prestige Gained/);
   assert.match(componentSource, /Import Health/);
   assert.match(componentSource, /buildDefinitionsRoute/);

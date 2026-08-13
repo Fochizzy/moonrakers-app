@@ -506,7 +506,7 @@ export default function MoonrakersIntelSection({
         )}
         {profile.assistContext.assistsOverFiveBehindLeaderLabel ? (
           <MetricCard
-            label="Assists Over 5 Behind Leader"
+            label="Assists 3+ Behind Leader"
             value={profile.assistContext.assistsOverFiveBehindLeaderLabel}
             sub={`Share of timed assists | ${profile.assistContext.timedAssistEventsLabel}`}
             tone="red"
@@ -515,7 +515,7 @@ export default function MoonrakersIntelSection({
           />
         ) : (
           <EmptyMetric
-            label="Assists Over 5 Behind Leader"
+            label="Assists 3+ Behind Leader"
             sub="Need tracked assist-direction games for this player."
             onPress={() => openDefinition("assistsOverFiveBehindLeader")}
             ctaLabel="Definition"

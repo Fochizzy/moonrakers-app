@@ -41,11 +41,15 @@ function normalizeServerCorrelationRows(value: unknown) {
       return {
         key: String(item.key ?? item.metricKey ?? '').trim(),
         label: String(item.label ?? item.title ?? 'Correlation').trim() || 'Correlation',
-        value: Number.isFinite(numericValue)
-          ? numericValue
-          : Number.isFinite(fallbackDelta)
-            ? fallbackDelta
-            : 0,
+        // A null value means the server could not compute the statistic. Keep it null
+        // rather than folding it to 0, which would read as a real "no relationship".
+        value: item.value === null
+          ? null
+          : Number.isFinite(numericValue)
+            ? numericValue
+            : Number.isFinite(fallbackDelta)
+              ? fallbackDelta
+              : 0,
         strength:
           typeof item.strength === 'string' && item.strength.trim()
             ? item.strength.trim()
@@ -244,6 +248,15 @@ function getStrengthMeta(value: number) {
   };
 }
 
+const NO_DATA_META = {
+  label: 'No data',
+  color: '#94a3b8',
+  glow: 'rgba(148,163,184,0.10)',
+  track: 'rgba(148,163,184,0.45)',
+};
+
+const NO_DATA_DIRECTION = { label: 'Not enough data', color: '#94a3b8' };
+
 function getDirectionMeta(value: number) {
   if (value > 0.08) {
     return { label: 'Positive', color: '#67e8f9' };
@@ -314,15 +327,19 @@ function CorrelationCard({
   stackedHeader = false,
 }: {
   label: string;
-  value: number;
+  value: number | null;
   strength?: string;
   notation?: string;
   valueLabel?: string;
   compact?: boolean;
   stackedHeader?: boolean;
 }) {
-  const strengthMeta = getStrengthMeta(value);
-  const directionMeta = getDirectionMeta(value);
+  // Undefined statistic: no variance in the predictor, or too few samples. Showing a
+  // number here at all would invent a finding the data does not support.
+  const hasValue = typeof value === 'number' && Number.isFinite(value);
+  const safeValue = hasValue ? (value as number) : 0;
+  const strengthMeta = hasValue ? getStrengthMeta(safeValue) : NO_DATA_META;
+  const directionMeta = hasValue ? getDirectionMeta(safeValue) : NO_DATA_DIRECTION;
 
   return (
     <View
@@ -378,7 +395,7 @@ function CorrelationCard({
         <View style={styles.metricPrimaryBlock}>
           <Text style={styles.metricPrimaryLabel}>{valueLabel}</Text>
           <Text style={[styles.metricValue, compact && styles.metricValueCompact]}>
-            {notation} = {formatCorrelation(value)}
+            {hasValue ? `${notation} = ${formatCorrelation(safeValue)}` : '—'}
           </Text>
         </View>
 
@@ -397,9 +414,11 @@ function CorrelationCard({
 
       <View style={styles.barTrack}>
         <View style={styles.barCenterLine} />
-        <View
-          style={[styles.barFill, getBarFillStyle(value, strengthMeta.track)]}
-        />
+        {hasValue ? (
+          <View
+            style={[styles.barFill, getBarFillStyle(safeValue, strengthMeta.track)]}
+          />
+        ) : null}
       </View>
 
       <View style={styles.metricFooter}>
@@ -515,7 +534,11 @@ export default function CorrelationStats({
       .map((item: any) => ({
         key: String(item.key ?? item.metricKey ?? '').trim(),
         label: String(item.label ?? item.title ?? "Macro").trim() || "Macro",
-        value: Number.isFinite(Number(item.value)) ? Number(item.value) : 0,
+        value: item.value === null
+          ? null
+          : Number.isFinite(Number(item.value))
+            ? Number(item.value)
+            : 0,
         strength:
           typeof item.strength === 'string' && item.strength.trim()
             ? item.strength.trim()

@@ -17,7 +17,9 @@ for (const snippet of [
   'key: "assistsAtSixPlus"',
   'title: "Assists at 6+ Prestige"',
   'key: "assistsOverFiveBehindLeader"',
-  'title: "Assists Over 5 Behind Leader"',
+  // Threshold moved from >5 (unreachable) to >2 in 20260813170000/20260813180000.
+  // The key keeps its historical name; the title states the real rule.
+  'title: "Assists 3+ Behind Leader"',
   'key: "assistPrestigeGained"',
   'title: "Assist Prestige Gained"',
   'Legacy imports infer this from saved assist source totals',
