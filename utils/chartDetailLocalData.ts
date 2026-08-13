@@ -400,7 +400,7 @@ function collectRelationshipScopeIds(
     }
   }
 
-  return [...scopedIds];
+  return scopedIds.size > 1 ? [...scopedIds] : [];
 }
 
 function filterRelationshipsToScope(
@@ -616,7 +616,9 @@ export function buildLocalChartDetailState(
   const hasRadarData =
     chartKey === "radar" &&
     Boolean(selectedPlayer) &&
-    scopedGames.some((game) => Boolean(game?.totals?.[selectedPlayer.id]));
+    scopedGames.some((game) =>
+      selectedPlayer ? Boolean(game?.totals?.[selectedPlayer.id]) : false,
+    );
   const sparklineValues = selectedPlayer
     ? buildSparkSeries(
         snapshots,

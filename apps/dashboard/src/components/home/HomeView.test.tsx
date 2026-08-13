@@ -7,7 +7,7 @@ describe("HomeView", () => {
   it("renders the analytics hero cards from the server payload", () => {
     render(
       <HomeView
-        profileName="Nova"
+        focusName="Nova"
         payload={{
           generatedAt: "2026-07-04T03:00:00.000Z",
           hero: { players: 4, games: 18, views: 5 },

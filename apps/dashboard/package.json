@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "build": "next build",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "preview": "opennextjs-cloudflare build && node ./scripts/repair-opennext-worker.mjs && opennextjs-cloudflare preview",
+    "build": "node ./scripts/prepare-dashboard-build.mjs && next build --webpack && node ./scripts/repair-opennext-standalone.mjs",
+    "deploy": "opennextjs-cloudflare build && node ./scripts/repair-opennext-worker.mjs && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -22,6 +22,7 @@
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-is": "^19.2.5",
     "recharts": "^3.9.2",
     "wrangler": "^4.107.0",
     "zod": "^4.4.3"

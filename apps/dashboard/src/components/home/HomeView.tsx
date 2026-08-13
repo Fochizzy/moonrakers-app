@@ -19,10 +19,10 @@ function formatGeneratedAt(value: string) {
 }
 
 export function HomeView({
-  profileName,
+  focusName,
   payload,
 }: {
-  profileName: string;
+  focusName: string;
   payload: AnalyticsHomePayload;
 }) {
   const heroCards = [
@@ -53,9 +53,9 @@ export function HomeView({
     <section className="view-stack">
       <section className="view-stack">
         <SectionHeading
-          eyebrow="Signed in as"
-          title={profileName}
-          copy="Track momentum swings, rival tendencies, and table-wide storylines from the same Moonrakers analytics contract that powers the app."
+          eyebrow="Focus player"
+          title={focusName}
+          copy="Track momentum swings, rival tendencies, and table-wide storylines for the currently selected Moonrakers pilot from the same analytics contract that powers the app."
           action={
             <div className="dashboard-chip">
               Published {formatGeneratedAt(payload.generatedAt)}
@@ -79,7 +79,7 @@ export function HomeView({
         <SectionHeading
           eyebrow="Fleet Snapshot"
           title="Analytics hero cards"
-          copy="These cards mirror the signed-in analytics home payload, giving the web dashboard the same strategic summary language as the Moonrakers app."
+          copy="These cards mirror the published analytics home payload for the focused player, giving the web dashboard the same strategic summary language as the Moonrakers app."
         />
 
         {payload.cards.length > 0 ? (

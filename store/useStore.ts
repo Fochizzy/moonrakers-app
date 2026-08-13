@@ -312,7 +312,9 @@ function sanitizeStoredGroups(groups: any, validPlayerIds: Set<string>): Group[]
         new Set(
           (Array.isArray(rawGroup?.playerIds) ? rawGroup.playerIds : [])
             .map((playerId: any) => normalizeId(playerId))
-            .filter((playerId) => Boolean(playerId) && validPlayerIds.has(playerId))
+            .filter(
+              (playerId: string) => Boolean(playerId) && validPlayerIds.has(playerId),
+            )
         )
       );
 
@@ -403,11 +405,11 @@ function normalizeImportedGame(raw: any): Game {
 
   const rounds = rawRounds
     .map(normalizeRound)
-    .filter((round): round is StoredRound => Boolean(round));
+    .filter((round: StoredRound | null): round is StoredRound => Boolean(round));
 
   const timeline = rawTimeline
     .map(normalizeRound)
-    .filter((round): round is StoredRound => Boolean(round));
+    .filter((round: StoredRound | null): round is StoredRound => Boolean(round));
 
   const totals: GameTotals = {};
   const rawTotals =

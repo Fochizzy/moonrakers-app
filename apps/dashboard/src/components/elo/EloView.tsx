@@ -18,6 +18,21 @@ const sortOptions = [
 export function EloView({ payload }: { payload: EloScreenPayload }) {
   const selectedPlayerId = payload.selectedPlayerId ?? "";
   const selectedOpponentId = payload.selectedOpponentId ?? "";
+  const currentEloByPlayerId = new Map(
+    payload.leaderboardRows.map((row) => [row.playerId, row.currentElo] as const),
+  );
+
+  if (
+    payload.summary?.playerId &&
+    typeof payload.summary.currentElo === "number"
+  ) {
+    currentEloByPlayerId.set(payload.summary.playerId, payload.summary.currentElo);
+  }
+
+  const playerOptions = payload.playerOptions.map((option) => ({
+    ...option,
+    currentElo: currentEloByPlayerId.get(option.id) ?? option.currentElo,
+  }));
 
   return (
     <section className="view-stack">
@@ -28,8 +43,19 @@ export function EloView({ payload }: { payload: EloScreenPayload }) {
       />
 
       <DashboardPanel tone="blue">
-        <form style={{ display: "grid", gap: "1rem" }}>
-          <div className="metric-grid">
+        <form
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "1rem",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+          }}
+        >
+          <div
+            className="metric-grid"
+            style={{ flex: "1 1 auto", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 280px))" }}
+          >
             <label style={{ display: "grid", gap: "0.45rem" }}>
               <span className="section-eyebrow" style={{ margin: 0 }}>
                 Focus Player
@@ -48,7 +74,7 @@ export function EloView({ payload }: { payload: EloScreenPayload }) {
                 }}
               >
                 <option value="">All pilots</option>
-                {payload.playerOptions.map((option) => (
+                {playerOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
                     {typeof option.currentElo === "number"
@@ -77,7 +103,7 @@ export function EloView({ payload }: { payload: EloScreenPayload }) {
                 }}
               >
                 <option value="">Any rival</option>
-                {payload.playerOptions
+                {playerOptions
                   .filter((option) => option.id !== selectedPlayerId)
                   .map((option) => (
                     <option key={option.id} value={option.id}>
@@ -116,22 +142,21 @@ export function EloView({ payload }: { payload: EloScreenPayload }) {
             </label>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button
-              type="submit"
-              style={{
-                padding: "0.9rem 1.1rem",
-                borderRadius: "1rem",
-                border: "1px solid rgba(168, 85, 247, 0.38)",
-                background:
-                  "linear-gradient(135deg, rgba(168, 85, 247, 0.24) 0%, rgba(59, 130, 246, 0.22) 100%)",
-                color: "var(--text-strong)",
-                fontWeight: 700,
-              }}
-            >
-              Update Board
-            </button>
-          </div>
+          <button
+            type="submit"
+            style={{
+              padding: "0.9rem 1.1rem",
+              borderRadius: "1rem",
+              border: "1px solid rgba(168, 85, 247, 0.38)",
+              background:
+                "linear-gradient(135deg, rgba(168, 85, 247, 0.24) 0%, rgba(59, 130, 246, 0.22) 100%)",
+              color: "var(--text-strong)",
+              fontWeight: 700,
+              flex: "0 0 auto",
+            }}
+          >
+            Update Board
+          </button>
         </form>
       </DashboardPanel>
 

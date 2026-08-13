@@ -43,18 +43,24 @@ function extractCorrelationNotes(value: unknown) {
 }
 
 export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
+  const meta = asRecord(payload.meta);
+  const cards = asArray((payload as Record<string, unknown>).cards);
+  const topSignals = asArray((payload as Record<string, unknown>).topSignals);
   const relationships = asRecord(payload.relationships);
+  const correlations = asRecord(payload.correlations);
   const relationshipSummary =
     toText(relationships.summary) ||
+    toText(correlations.summary) ||
     "Server-authored relationship summaries will appear here.";
   const correlationNotes = extractCorrelationNotes(payload.correlations);
+  const games = Number(meta.games ?? 0) || 0;
 
   return (
     <section className="view-stack">
       <SectionHeading
         eyebrow="Insights"
         title="Signals and relationships"
-        copy={`Published over ${payload.meta.games} tracked games with correlation language kept alongside the main takeaways.`}
+        copy={`Published over ${games} tracked games with correlation language kept alongside the main takeaways.`}
       />
 
       <DashboardPanel tone="accent">
@@ -65,33 +71,43 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
         />
       </DashboardPanel>
 
-      {payload.topSignals.length > 0 ? (
+      {topSignals.length > 0 ? (
         <div className="metric-grid">
-          {payload.topSignals.map((signal) => (
-            <DashboardPanel
-              key={signal.key}
-              as="article"
-              tone="accent"
-              style={{ display: "grid", gap: "0.6rem" }}
-            >
-              <p className="section-eyebrow" style={{ margin: 0 }}>
-                {signal.label}
-              </p>
-              <p
-                style={{
-                  margin: 0,
-                  color: "var(--text-strong)",
-                  fontSize: "1.1rem",
-                  fontWeight: 700,
-                }}
+          {topSignals.map((signal, index) => {
+            const row = asRecord(signal);
+            const key = toText(row.key, `signal-${index}`);
+            const label = toText(row.label, `Signal ${index + 1}`);
+            const value = toText(row.value, "0");
+            const meaning = toText(row.meaning, "Signal insight");
+
+            return (
+              <DashboardPanel
+                key={key}
+                as="article"
+                tone="accent"
+                style={{ display: "grid", gap: "0.6rem" }}
               >
-                {signal.value}
-              </p>
-              <p style={{ margin: 0, color: "var(--sub)", lineHeight: 1.65 }}>
-                {signal.meaning}
-              </p>
-            </DashboardPanel>
-          ))}
+                <p className="section-eyebrow" style={{ margin: 0 }}>
+                  {label}
+                </p>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "var(--text-strong)",
+                    fontSize: "1.1rem",
+                    fontWeight: 700,
+                  }}
+                >
+                  {value}
+                </p>
+                <p
+                  style={{ margin: 0, color: "var(--sub)", lineHeight: 1.65 }}
+                >
+                  {meaning}
+                </p>
+              </DashboardPanel>
+            );
+          })}
         </div>
       ) : (
         <EmptyStatePanel
@@ -101,16 +117,22 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
         />
       )}
 
-      {payload.cards.length > 0 ? (
+      {cards.length > 0 ? (
         <div className="metric-grid">
-          {payload.cards.map((card) => (
-            <MetricCard
-              key={card.key}
-              accent={card.accent}
-              label={card.label}
-              value={card.value}
-            />
-          ))}
+          {cards.map((card, index) => {
+            const row = asRecord(card);
+            const key = toText(row.key, `card-${index}`);
+            const label = toText(row.label, `Metric ${index + 1}`);
+
+            return (
+              <MetricCard
+                key={key}
+                accent={toText(row.accent) || undefined}
+                label={label}
+                value={toText(row.value, "0")}
+              />
+            );
+          })}
         </div>
       ) : null}
 

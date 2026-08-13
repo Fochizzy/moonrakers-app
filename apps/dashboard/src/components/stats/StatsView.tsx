@@ -64,6 +64,38 @@ function extractCorrelationEntries(value: unknown) {
   });
 }
 
+function extractGameEntries(value: unknown) {
+  const section = asRecord(value);
+  const itemEntries = asArray(section.items).map((entry, index) => {
+    const row = asRecord(entry);
+    return {
+      key: toText(row.key ?? row.id ?? row.label, `game-${index}`),
+      label: toText(row.label ?? row.title ?? row.metricLabel, `Game ${index + 1}`),
+      value: toText(
+        row.value ?? row.summary ?? row.description ?? row.body,
+        "Tracked game",
+      ),
+    };
+  });
+
+  if (itemEntries.length > 0) {
+    return itemEntries;
+  }
+
+  const summary = toText(section.summary);
+  if (summary) {
+    return [
+      {
+        key: "summary",
+        label: "Summary",
+        value: summary,
+      },
+    ];
+  }
+
+  return extractScalarEntries(value);
+}
+
 export function StatsView({ payload }: { payload: StatsScreenPayload }) {
   const overviewCards = payload.overview.cards;
   const topSignals = payload.overview.topSignals;
@@ -71,7 +103,7 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
   const playerDetailEntries = extractScalarEntries(payload.players.detail);
   const playstyleEntries = extractScalarEntries(payload.playstyle);
   const correlationEntries = extractCorrelationEntries(payload.correlations);
-  const gameEntries = extractScalarEntries(payload.games);
+  const gameEntries = extractGameEntries(payload.games);
 
   return (
     <section className="view-stack">
@@ -81,8 +113,7 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
         copy={payload.overview.hero.takeaway}
       />
 
-      <div
-        role="tablist"
+      <nav
         aria-label="Stats sections"
         style={{
           display: "flex",
@@ -94,9 +125,7 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
           return (
             <a
               key={tab.key}
-              aria-selected={tab.key === "correlations"}
               href={`#stats-${tab.key}`}
-              role="tab"
               style={{
                 padding: "0.8rem 1rem",
                 borderRadius: "999px",
@@ -120,9 +149,9 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
             </a>
           );
         })}
-      </div>
+      </nav>
 
-      <div className="view-stack" id="stats-correlations" role="tabpanel">
+      <div className="view-stack" id="stats-correlations">
         <DashboardPanel tone="blue">
           <SectionHeading
             eyebrow="Correlations"
@@ -167,7 +196,7 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
         )}
       </div>
 
-      <div className="view-stack" id="stats-overview" role="tabpanel">
+      <div className="view-stack" id="stats-overview">
         <DashboardPanel tone="success">
           <SectionHeading
             eyebrow="Home"
@@ -224,7 +253,7 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
         ) : null}
       </div>
 
-      <div className="view-stack" id="stats-players" role="tabpanel">
+      <div className="view-stack" id="stats-players">
         <DashboardPanel tone="blue">
           <SectionHeading
             eyebrow="Players"
@@ -247,7 +276,7 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
         )}
       </div>
 
-      <div className="view-stack" id="stats-playstyle" role="tabpanel">
+      <div className="view-stack" id="stats-playstyle">
         <DashboardPanel tone="accent">
           <SectionHeading
             eyebrow="Playstyle"
@@ -270,7 +299,7 @@ export function StatsView({ payload }: { payload: StatsScreenPayload }) {
         )}
       </div>
 
-      <div className="view-stack" id="stats-games" role="tabpanel">
+      <div className="view-stack" id="stats-games">
         <DashboardPanel tone="default">
           <SectionHeading
             eyebrow="Games"

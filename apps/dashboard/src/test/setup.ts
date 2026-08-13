@@ -8,10 +8,12 @@ vi.mock("next/navigation", () => ({
   redirect: (href: string) => {
     throw new Error(`NEXT_REDIRECT:${href}`);
   },
+  usePathname: () => "/",
   useRouter: () => ({
     prefetch: vi.fn(),
     push: vi.fn(),
     refresh: vi.fn(),
     replace: vi.fn(),
   }),
+  useSearchParams: () => new URLSearchParams(),
 }));

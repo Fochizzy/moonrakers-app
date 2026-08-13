@@ -70,7 +70,6 @@ export function DashboardPanel({
       className={clsx("dashboard-panel", className)}
       style={{
         position: "relative",
-        overflow: "hidden",
         padding: paddingMap[padding],
         borderRadius: "1.5rem",
         border: `1px solid ${resolvedTone.borderColor}`,
@@ -85,25 +84,32 @@ export function DashboardPanel({
         aria-hidden="true"
         style={{
           position: "absolute",
-          inset: "0 auto auto 0",
-          width: "14rem",
-          height: "14rem",
-          borderRadius: "999px",
-          background: `radial-gradient(circle, ${resolvedTone.glow} 0%, transparent 72%)`,
-          transform: "translate(-24%, -30%)",
+          inset: 0,
+          overflow: "hidden",
+          borderRadius: "inherit",
           pointerEvents: "none",
         }}
-      />
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset: "0 0 auto 0",
-          height: "1px",
-          background: resolvedTone.ring,
-          pointerEvents: "none",
-        }}
-      />
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: "0 auto auto 0",
+            width: "14rem",
+            height: "14rem",
+            borderRadius: "999px",
+            background: `radial-gradient(circle, ${resolvedTone.glow} 0%, transparent 72%)`,
+            transform: "translate(-24%, -30%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: "0 0 auto 0",
+            height: "1px",
+            background: resolvedTone.ring,
+          }}
+        />
+      </div>
       <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
     </Component>
   );

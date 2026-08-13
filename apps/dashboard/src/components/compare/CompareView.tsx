@@ -1,29 +1,27 @@
+import type {
+  ChartDatasetPayload,
+  ChartSetupPayload,
+} from "@moonrakers/analytics-contract";
+
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-
-type CompareOption = {
-  key: string;
-  label: string;
-};
+import {
+  buildChartControls,
+  buildRenderableChartDataset,
+} from "@/lib/charts/chartFallback";
+import {
+  resolveChartPresentationSubtitle,
+  resolveChartPresentationTitle,
+} from "@/lib/charts/presentation";
 
 type CompareViewProps = {
-  dataset: {
-    data: Record<string, unknown>;
-    emptyState?: {
-      subtitle?: string;
-      title: string;
-    } | null;
-    subtitle?: string;
-    title?: string;
-  };
+  controls?: Partial<ChartSetupPayload["defaults"]>;
+  dataset: ChartDatasetPayload;
   setup: {
-    comparePlayerOptions: CompareOption[];
-    defaults?: {
-      comparePlayerId?: string | null;
-      focusPlayerId?: string | null;
-    };
-    focusPlayerOptions: CompareOption[];
+    comparePlayerOptions: ChartSetupPayload["comparePlayerOptions"];
+    defaults?: Partial<ChartSetupPayload["defaults"]>;
+    focusPlayerOptions: ChartSetupPayload["focusPlayerOptions"];
   };
 };
 
@@ -59,27 +57,37 @@ function extractCompareRows(data: Record<string, unknown>) {
   });
 }
 
-export function CompareView({ dataset, setup }: CompareViewProps) {
-  const rows = extractCompareRows(dataset.data);
+export function CompareView({ controls, dataset, setup }: CompareViewProps) {
+  const activeControls = buildChartControls({
+    dataset,
+    setup,
+    controls,
+  });
+  const renderableDataset = buildRenderableChartDataset({
+    chartKey: "compare",
+    dataset,
+    controls: activeControls,
+  });
+  const rows = extractCompareRows(renderableDataset.data);
   const selectedFocusPlayerId =
-    setup.defaults?.focusPlayerId ?? setup.focusPlayerOptions[0]?.key ?? "";
+    activeControls.focusPlayerId ?? setup.focusPlayerOptions[0]?.key ?? "";
   const availableCompareOptions = setup.comparePlayerOptions.filter(
     (option) => option.key !== selectedFocusPlayerId,
   );
   const selectedComparePlayerId =
-    setup.defaults?.comparePlayerId && setup.defaults.comparePlayerId !== selectedFocusPlayerId
-      ? setup.defaults.comparePlayerId
+    activeControls.comparePlayerId && activeControls.comparePlayerId !== selectedFocusPlayerId
+      ? activeControls.comparePlayerId
       : availableCompareOptions[0]?.key ?? "";
 
   return (
     <section className="view-stack">
       <SectionHeading
         eyebrow="Compare"
-        title={dataset.title ?? "Compare players"}
-        copy={
-          dataset.subtitle ??
-          "Pick a focus player and rival, then read the current side-by-side dataset through the same Moonrakers analytics contract used on mobile."
-        }
+        title={resolveChartPresentationTitle(renderableDataset.title, "Compare players")}
+        copy={resolveChartPresentationSubtitle(
+          renderableDataset.subtitle,
+          "Pick a focus player and rival, then read the current side-by-side dataset through the same Moonrakers analytics contract used on mobile.",
+        )}
       />
 
       <DashboardPanel tone="blue">
@@ -89,7 +97,10 @@ export function CompareView({ dataset, setup }: CompareViewProps) {
             gap: "1rem",
           }}
         >
-          <div className="metric-grid">
+          <div
+            className="metric-grid"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 280px))" }}
+          >
             <label style={{ display: "grid", gap: "0.45rem" }}>
               <span className="section-eyebrow" style={{ margin: 0 }}>
                 Focus Player
@@ -236,9 +247,9 @@ export function CompareView({ dataset, setup }: CompareViewProps) {
       ) : (
         <EmptyStatePanel
           eyebrow="Compare ready"
-          title={dataset.emptyState?.title ?? "No compare rows returned yet"}
+          title={renderableDataset.emptyState?.title ?? "No compare rows returned yet"}
           copy={
-            dataset.emptyState?.subtitle ??
+            renderableDataset.emptyState?.subtitle ??
             "The selectors are wired up and waiting for a richer compare dataset from the analytics contract."
           }
         />

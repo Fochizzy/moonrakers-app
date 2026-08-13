@@ -74,8 +74,8 @@ export function ProfileView({ payload }: { payload: PlayerProfileScreenPayload }
       {payload.profileInsight ? (
         <DashboardPanel tone="accent">
           <SectionHeading
-            eyebrow={payload.profileInsight.title}
-            title="Profile insight"
+            eyebrow="Profile Insight"
+            title={payload.profileInsight.title}
             copy={payload.profileInsight.body}
           />
         </DashboardPanel>

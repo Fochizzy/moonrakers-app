@@ -1,9 +1,6 @@
 import { EloView } from "@/components/elo/EloView";
 import { loadEloScreen } from "@/lib/data/loadEloScreen";
-
-function readSearchParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
+import { readSearchParam } from "@/lib/readSearchParam";
 
 export default async function EloPage({
   searchParams,

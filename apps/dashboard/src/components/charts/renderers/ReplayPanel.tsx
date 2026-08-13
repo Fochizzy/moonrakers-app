@@ -1,5 +1,6 @@
 import {
   CartesianGrid,
+  Label,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -13,6 +14,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import { asArray, asRecord, toNumber, toText } from "../chartUtils";
+import { ChartLabelStrip } from "./ChartLabels";
 
 function buildReplayRows(data: Record<string, unknown>) {
   return asArray(data.replay).map((entry, index) => {
@@ -51,12 +53,36 @@ export function ReplayPanel({
 
       {rows.length > 0 ? (
         <DashboardPanel tone="blue">
-          <div style={{ width: "100%", height: 360 }}>
+          <div style={{ display: "grid", gap: "0.9rem" }}>
+            <ChartLabelStrip
+              series={[{ color: "var(--blue)", label: "Replay Value" }]}
+              xLabel="Replay Step"
+              yLabel="Value"
+            />
+          <div style={{ width: "100%", height: 390 }}>
             <ResponsiveContainer>
-              <LineChart data={rows}>
+              <LineChart data={rows} margin={{ bottom: 34, left: 10, right: 18, top: 16 }}>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="label" stroke="var(--sub)" />
-                <YAxis stroke="var(--sub)" />
+                <XAxis dataKey="label" height={54} stroke="var(--sub)">
+                  <Label
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    offset={-8}
+                    position="insideBottom"
+                    value="Replay Step"
+                  />
+                </XAxis>
+                <YAxis stroke="var(--sub)" width={62}>
+                  <Label
+                    angle={-90}
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    position="insideLeft"
+                    value="Value"
+                  />
+                </YAxis>
                 <Tooltip
                   contentStyle={{
                     borderRadius: "1rem",
@@ -67,6 +93,7 @@ export function ReplayPanel({
                 />
                 <Line
                   dataKey="value"
+                  name="Replay Value"
                   stroke="var(--blue)"
                   strokeWidth={3}
                   dot={{ r: 4, fill: "var(--gold)" }}
@@ -74,6 +101,7 @@ export function ReplayPanel({
                 />
               </LineChart>
             </ResponsiveContainer>
+          </div>
           </div>
         </DashboardPanel>
       ) : (

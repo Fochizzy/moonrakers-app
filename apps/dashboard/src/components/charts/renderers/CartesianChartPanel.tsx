@@ -2,6 +2,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Label,
+  LabelList,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -23,6 +25,7 @@ import {
   toNumber,
   toText,
 } from "../chartUtils";
+import { ChartLabelStrip, formatChartValue, formatMetricLabel } from "./ChartLabels";
 
 function buildRows(data: Record<string, unknown>) {
   return asArray(data.data).map((entry, index) => {
@@ -37,6 +40,26 @@ function buildRows(data: Record<string, unknown>) {
   });
 }
 
+function resolveScatterMetricKeys(chartKey: string, numericKeys: string[]) {
+  if (chartKey === "efficiency_failure_scatter") {
+    const xMetric =
+      numericKeys.find((key) => key === "failures") ??
+      numericKeys[1] ??
+      numericKeys[0];
+    const yMetric =
+      numericKeys.find((key) => key === "efficiency") ??
+      numericKeys.find((key) => key !== xMetric) ??
+      numericKeys[0];
+
+    return { xMetric, yMetric };
+  }
+
+  return {
+    xMetric: numericKeys[0],
+    yMetric: numericKeys[1] ?? numericKeys[0],
+  };
+}
+
 export function CartesianChartPanel({
   chartKey,
   payload,
@@ -49,11 +72,17 @@ export function CartesianChartPanel({
   };
 }) {
   const rows = buildRows(payload.data);
-  const numericKeys = extractNumericKeys(rows).filter((key) => key !== "round");
+  const numericKeys = extractNumericKeys(rows).filter(
+    (key) => key !== "label" && key !== "round",
+  );
   const primaryMetric = numericKeys[0];
   const secondaryMetric = numericKeys[1];
+  const isScatter = chartKey.includes("scatter");
+  const scatterMetrics = isScatter
+    ? resolveScatterMetricKeys(chartKey, numericKeys)
+    : null;
 
-  if (!rows.length || !primaryMetric) {
+  if (!rows.length || numericKeys.length === 0 || !primaryMetric) {
     return (
       <EmptyStatePanel
         eyebrow="Chart Family"
@@ -63,22 +92,35 @@ export function CartesianChartPanel({
     );
   }
 
-  const normalizedRows: Array<Record<string, string | number>> = rows.map((row) => ({
-    ...row,
-    [primaryMetric]: toNumber((row as Record<string, unknown>)[primaryMetric]) ?? 0,
-    ...(secondaryMetric
-      ? {
-          [secondaryMetric]:
-            toNumber((row as Record<string, unknown>)[secondaryMetric]) ?? 0,
-        }
-      : {}),
-  })) as Array<Record<string, string | number>>;
+  const normalizedRows: Array<Record<string, string | number>> = rows.map((row) => {
+    const normalizedRow = {
+      ...row,
+    } as Record<string, string | number>;
 
-  const isScatter = chartKey.includes("scatter");
+    numericKeys.forEach((metricKey) => {
+      normalizedRow[metricKey] =
+        toNumber((row as Record<string, unknown>)[metricKey]) ?? 0;
+    });
+
+    return normalizedRow;
+  });
+
   const isLine =
     chartKey.includes("line") ||
     chartKey.includes("bump") ||
     chartKey.includes("prestige");
+  const primaryMetricLabel = formatMetricLabel(primaryMetric);
+  const secondaryMetricLabel = secondaryMetric
+    ? formatMetricLabel(secondaryMetric)
+    : "Value";
+  const scatterXAxisLabel = scatterMetrics
+    ? formatMetricLabel(scatterMetrics.xMetric)
+    : primaryMetricLabel;
+  const scatterYAxisLabel = scatterMetrics
+    ? formatMetricLabel(scatterMetrics.yMetric)
+    : secondaryMetricLabel;
+  const xLabel = isScatter ? scatterXAxisLabel : "Game or Row";
+  const yLabel = isScatter ? scatterYAxisLabel : primaryMetricLabel;
 
   return (
     <div className="view-stack">
@@ -94,13 +136,53 @@ export function CartesianChartPanel({
       </DashboardPanel>
 
       <DashboardPanel tone="success">
-        <div style={{ width: "100%", height: 360 }}>
+        <div style={{ display: "grid", gap: "0.9rem" }}>
+          <ChartLabelStrip
+            series={[{ color: isScatter ? "var(--accent)" : "var(--blue)", label: yLabel }]}
+            xLabel={xLabel}
+            yLabel={yLabel}
+          />
+        <div style={{ width: "100%", height: 390 }}>
           <ResponsiveContainer>
             {isScatter && secondaryMetric ? (
-              <ScatterChart>
+              <ScatterChart margin={{ bottom: 34, left: 10, right: 18, top: 16 }}>
                 <CartesianGrid stroke="var(--grid)" />
-                <XAxis dataKey={primaryMetric} name={primaryMetric} stroke="var(--sub)" />
-                <YAxis dataKey={secondaryMetric} name={secondaryMetric} stroke="var(--sub)" />
+                <XAxis
+                  dataKey={scatterMetrics?.xMetric}
+                  domain={["auto", "auto"]}
+                  height={54}
+                  name={scatterXAxisLabel}
+                  stroke="var(--sub)"
+                  tickFormatter={formatChartValue}
+                  type="number"
+                >
+                  <Label
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    offset={-8}
+                    position="insideBottom"
+                    value={scatterXAxisLabel}
+                  />
+                </XAxis>
+                <YAxis
+                  dataKey={scatterMetrics?.yMetric}
+                  domain={["auto", "auto"]}
+                  name={scatterYAxisLabel}
+                  stroke="var(--sub)"
+                  tickFormatter={formatChartValue}
+                  type="number"
+                  width={72}
+                >
+                  <Label
+                    angle={-90}
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    position="insideLeft"
+                    value={scatterYAxisLabel}
+                  />
+                </YAxis>
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
                   contentStyle={{
@@ -110,13 +192,35 @@ export function CartesianChartPanel({
                     color: "#fff",
                   }}
                 />
-                <Scatter data={normalizedRows} fill="var(--accent)" />
+                <Scatter
+                  data={normalizedRows}
+                  fill="var(--accent)"
+                  name={scatterYAxisLabel}
+                />
               </ScatterChart>
             ) : isLine ? (
-              <LineChart data={normalizedRows}>
+              <LineChart data={normalizedRows} margin={{ bottom: 34, left: 10, right: 18, top: 16 }}>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="label" stroke="var(--sub)" />
-                <YAxis stroke="var(--sub)" />
+                <XAxis dataKey="label" height={54} stroke="var(--sub)">
+                  <Label
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    offset={-8}
+                    position="insideBottom"
+                    value="Game or Row"
+                  />
+                </XAxis>
+                <YAxis stroke="var(--sub)" width={72}>
+                  <Label
+                    angle={-90}
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    position="insideLeft"
+                    value={primaryMetricLabel}
+                  />
+                </YAxis>
                 <Tooltip
                   contentStyle={{
                     borderRadius: "1rem",
@@ -127,6 +231,7 @@ export function CartesianChartPanel({
                 />
                 <Line
                   dataKey={primaryMetric}
+                  name={primaryMetricLabel}
                   stroke="var(--blue)"
                   strokeWidth={3}
                   dot={{ r: 3, fill: "var(--gold)" }}
@@ -134,10 +239,28 @@ export function CartesianChartPanel({
                 />
               </LineChart>
             ) : (
-              <BarChart data={normalizedRows}>
+              <BarChart data={normalizedRows} margin={{ bottom: 34, left: 10, right: 18, top: 28 }}>
                 <CartesianGrid stroke="var(--grid)" vertical={false} />
-                <XAxis dataKey="label" stroke="var(--sub)" />
-                <YAxis stroke="var(--sub)" />
+                <XAxis dataKey="label" height={54} stroke="var(--sub)">
+                  <Label
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    offset={-8}
+                    position="insideBottom"
+                    value="Game or Row"
+                  />
+                </XAxis>
+                <YAxis stroke="var(--sub)" width={72}>
+                  <Label
+                    angle={-90}
+                    fill="var(--sub)"
+                    fontSize={12}
+                    fontWeight={800}
+                    position="insideLeft"
+                    value={primaryMetricLabel}
+                  />
+                </YAxis>
                 <Tooltip
                   contentStyle={{
                     borderRadius: "1rem",
@@ -146,10 +269,20 @@ export function CartesianChartPanel({
                     color: "#fff",
                   }}
                 />
-                <Bar dataKey={primaryMetric} fill="var(--blue)" radius={[10, 10, 0, 0]} />
+                <Bar dataKey={primaryMetric} fill="var(--blue)" name={primaryMetricLabel} radius={[10, 10, 0, 0]}>
+                  <LabelList
+                    dataKey={primaryMetric}
+                    fill="rgba(248,250,252,0.92)"
+                    fontSize={12}
+                    fontWeight={800}
+                    formatter={formatChartValue}
+                    position="top"
+                  />
+                </Bar>
               </BarChart>
             )}
           </ResponsiveContainer>
+        </div>
         </div>
       </DashboardPanel>
     </div>

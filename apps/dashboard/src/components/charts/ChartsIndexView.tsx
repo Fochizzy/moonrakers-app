@@ -8,7 +8,13 @@ import {
   getDashboardChartsForSection,
 } from "./chartCatalog";
 
-export function ChartsIndexView() {
+export function ChartsIndexView({
+  focusPlayerId,
+}: {
+  focusPlayerId?: string;
+}) {
+  const normalizedFocusPlayerId = focusPlayerId?.trim() || "";
+
   return (
     <section className="view-stack">
       <SectionHeading
@@ -23,52 +29,65 @@ export function ChartsIndexView() {
         return (
           <div key={section.key} className="view-stack">
             <SectionHeading
-              eyebrow={section.title}
+              eyebrow="Chart Family"
               title={section.title}
               copy={section.subtitle}
             />
             <div className="metric-grid">
-              {charts.map((chart) => (
-                <DashboardPanel
-                  key={chart.key}
-                  as="article"
-                  tone={section.key === "matchup" ? "accent" : "blue"}
-                  style={{ display: "grid", gap: "0.7rem" }}
-                >
-                  <p className="section-eyebrow" style={{ margin: 0 }}>
-                    {chart.key.replace(/_/g, " ")}
-                  </p>
-                  <h3
-                    style={{
-                      margin: 0,
-                      color: "var(--text-strong)",
-                      fontSize: "1.2rem",
-                      letterSpacing: "-0.03em",
-                    }}
+              {charts.map((chart) => {
+                const routeParams = new URLSearchParams();
+
+                if (normalizedFocusPlayerId) {
+                  routeParams.set("focusPlayerId", normalizedFocusPlayerId);
+                }
+
+                const routeHref =
+                  routeParams.size > 0
+                    ? `/charts/${encodeURIComponent(chart.key)}?${routeParams.toString()}`
+                    : `/charts/${encodeURIComponent(chart.key)}`;
+
+                return (
+                  <DashboardPanel
+                    key={chart.key}
+                    as="article"
+                    tone={section.key === "matchup" ? "accent" : "blue"}
+                    style={{ display: "grid", gap: "0.7rem" }}
                   >
-                    {chart.title}
-                  </h3>
-                  <p style={{ margin: 0, color: "var(--sub)", lineHeight: 1.65 }}>
-                    {chart.hook}
-                  </p>
-                  <Link
-                    href={`/charts/${encodeURIComponent(chart.key)}`}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "0.85rem 1rem",
-                      borderRadius: "1rem",
-                      border: "1px solid rgba(255, 255, 255, 0.12)",
-                      background: "rgba(255, 255, 255, 0.04)",
-                      color: "var(--text-strong)",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Open {chart.title}
-                  </Link>
-                </DashboardPanel>
-              ))}
+                    <p className="section-eyebrow" style={{ margin: 0 }}>
+                      {chart.key.replace(/_/g, " ")}
+                    </p>
+                    <h3
+                      style={{
+                        margin: 0,
+                        color: "var(--text-strong)",
+                        fontSize: "1.2rem",
+                        letterSpacing: "-0.03em",
+                      }}
+                    >
+                      {chart.title}
+                    </h3>
+                    <p style={{ margin: 0, color: "var(--sub)", lineHeight: 1.65 }}>
+                      {chart.hook}
+                    </p>
+                    <Link
+                      href={routeHref}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "0.85rem 1rem",
+                        borderRadius: "1rem",
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        background: "rgba(255, 255, 255, 0.04)",
+                        color: "var(--text-strong)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Open {chart.title}
+                    </Link>
+                  </DashboardPanel>
+                );
+              })}
             </div>
           </div>
         );

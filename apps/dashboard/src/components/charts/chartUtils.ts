@@ -22,11 +22,42 @@ export function toNumber(value: unknown) {
   }
 
   if (typeof value === "string") {
-    const normalized = Number(value.replace(/[^0-9.-]+/g, ""));
+    const cleaned = value.replace(/[^0-9.-]+/g, "");
+    if (!/[0-9]/.test(cleaned)) {
+      return null;
+    }
+
+    const normalized = Number(cleaned);
     return Number.isFinite(normalized) ? normalized : null;
   }
 
   return null;
+}
+
+export const PLAYER_FALLBACK_COLORS = [
+  "#3B82F6",
+  "#14B8A6",
+  "#A855F7",
+  "#F59E0B",
+  "#22C55E",
+  "#EF4444",
+];
+
+export function resolvePlayerFallbackColor(value: unknown, index: number) {
+  const normalized = toText(value).trim();
+  if (
+    normalized.startsWith("#") ||
+    normalized.startsWith("rgb") ||
+    normalized.startsWith("hsl") ||
+    normalized.startsWith("var(")
+  ) {
+    return normalized;
+  }
+
+  return (
+    PLAYER_FALLBACK_COLORS[index % PLAYER_FALLBACK_COLORS.length] ??
+    PLAYER_FALLBACK_COLORS[0]
+  );
 }
 
 export function extractNumericKeys(rows: Array<Record<string, unknown>>) {

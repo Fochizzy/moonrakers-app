@@ -183,6 +183,7 @@ export const REPLAY_METRICS: ReplayMetricKey[] = [
 
 const REPLAY_CHART_KEYS = new Set(["replay_chart", "replay"]);
 const FULL_METRIC_CHART_KEYS = new Set([
+  "compare",
   "bar_chart",
   "bar",
   "bump_chart",
@@ -1261,6 +1262,7 @@ function getAssistSourceMap(entry?: Record<string, any>): Record<string, number>
     entry.assistPrestigeFromPlayers,
     entry.assistSources,
     entry.assistPrestigeBySource,
+    entry.assistCountBySource,
   ];
 
   for (const candidate of candidates) {
@@ -1411,7 +1413,7 @@ export function buildReplaySnapshotsFromGame(
       };
     }
 
-    const player = (game.players ?? []).find(
+    const player = (game?.players ?? []).find(
       (candidate) => String(candidate?.id ?? "").trim() === playerId
     );
     const existing = running[playerId] ?? {

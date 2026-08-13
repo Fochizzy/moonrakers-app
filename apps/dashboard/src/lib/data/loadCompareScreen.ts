@@ -1,37 +1,12 @@
-import {
-  getChartDataset,
-  getChartSetup,
-} from "@moonrakers/analytics-contract";
-
-import { requireDashboardAccess } from "../auth/serverAccess";
-import { createAnalyticsRpcClient } from "./rpcClient";
+import { loadChartScreen } from "./loadChartScreen";
 
 export async function loadCompareScreen(searchParams: {
   comparePlayerId?: string;
   focusPlayerId?: string;
 }) {
-  const { supabase, userId } = await requireDashboardAccess();
-  const client = createAnalyticsRpcClient(supabase);
-  const setup = await getChartSetup(client, {
+  return loadChartScreen({
     chartKey: "compare",
-    profileId: userId,
+    focusPlayerId: searchParams.focusPlayerId ?? null,
+    comparePlayerId: searchParams.comparePlayerId ?? null,
   });
-  const focusPlayerId =
-    searchParams.focusPlayerId ?? setup.defaults.focusPlayerId ?? null;
-  const comparePlayerId =
-    searchParams.comparePlayerId ?? setup.defaults.comparePlayerId ?? null;
-  const dataset = await getChartDataset(client, {
-    chartKey: "compare",
-    profileId: userId,
-    focusPlayerId,
-    comparePlayerId,
-    scopedPlayerIds: null,
-    selectedGameId: null,
-    metricKey: null,
-    lineMode: null,
-    graphMode: null,
-    opponentId: null,
-  });
-
-  return { setup, dataset };
 }

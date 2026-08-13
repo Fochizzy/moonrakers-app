@@ -1,10 +1,7 @@
 import { ChartDetailView } from "@/components/charts/ChartDetailView";
 import { normalizeDashboardChartKey } from "@/components/charts/chartCatalog";
 import { loadChartScreen } from "@/lib/data/loadChartScreen";
-
-function readSearchParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
+import { readSearchParam } from "@/lib/readSearchParam";
 
 export default async function ChartDetailPage({
   params,
@@ -16,14 +13,26 @@ export default async function ChartDetailPage({
   const resolvedParams = await params;
   const resolvedSearchParams = (await searchParams) ?? {};
   const chartKey = normalizeDashboardChartKey(resolvedParams.chartKey);
-  const { dataset, setup } = await loadChartScreen({
+  const focusPlayerId = readSearchParam(resolvedSearchParams.focusPlayerId);
+  const comparePlayerId = readSearchParam(resolvedSearchParams.comparePlayerId);
+  const metricKey = readSearchParam(resolvedSearchParams.metricKey);
+  const lineMode = readSearchParam(resolvedSearchParams.lineMode);
+  const opponentId = readSearchParam(resolvedSearchParams.opponentId);
+  const { dataset, setup, controls } = await loadChartScreen({
     chartKey,
-    focusPlayerId: readSearchParam(resolvedSearchParams.focusPlayerId),
-    comparePlayerId: readSearchParam(resolvedSearchParams.comparePlayerId),
-    metricKey: readSearchParam(resolvedSearchParams.metricKey),
-    lineMode: readSearchParam(resolvedSearchParams.lineMode),
-    opponentId: readSearchParam(resolvedSearchParams.opponentId),
+    focusPlayerId,
+    comparePlayerId,
+    metricKey,
+    lineMode,
+    opponentId,
   });
 
-  return <ChartDetailView chartKey={chartKey} dataset={dataset} setup={setup} />;
+  return (
+    <ChartDetailView
+      chartKey={chartKey}
+      controls={controls}
+      dataset={dataset}
+      setup={setup}
+    />
+  );
 }

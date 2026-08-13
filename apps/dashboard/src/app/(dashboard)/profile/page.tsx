@@ -1,9 +1,6 @@
 import { ProfileView } from "@/components/profile/ProfileView";
 import { loadProfileScreen } from "@/lib/data/loadProfileScreen";
-
-function readSearchParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
+import { readSearchParam } from "@/lib/readSearchParam";
 
 export default async function ProfilePage({
   searchParams,

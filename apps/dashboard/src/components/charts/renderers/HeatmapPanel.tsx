@@ -3,6 +3,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import { asArray, asRecord, toNumber, toText } from "../chartUtils";
+import { ChartLabelStrip } from "./ChartLabels";
 
 function buildCells(data: Record<string, unknown>) {
   return asArray(data.data).map((entry, index) => {
@@ -44,13 +45,19 @@ export function HeatmapPanel({
 
       {cells.length > 0 ? (
         <DashboardPanel tone="warning">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-              gap: "0.75rem",
-            }}
-          >
+          <div style={{ display: "grid", gap: "0.9rem" }}>
+            <ChartLabelStrip
+              series={[{ color: "var(--accent)", label: "Higher Intensity" }]}
+              xLabel="Player / Round"
+              yLabel="Metric Value"
+            />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                gap: "0.75rem",
+              }}
+            >
             {cells.slice(0, 24).map((cell) => {
               const intensity = Math.max(0.12, (cell.value ?? 0) / maxValue);
               return (
@@ -83,6 +90,7 @@ export function HeatmapPanel({
                 </div>
               );
             })}
+            </div>
           </div>
         </DashboardPanel>
       ) : (
