@@ -137,6 +137,14 @@ describe("buildGameTrends", () => {
     expect(bo).toMatchObject({ attempts: 1, successRate: 0 });
   });
 
+  it("lists contract rows by name while seat rows keep turn order", () => {
+    const trends = buildGameTrends(GAME);
+
+    // Bo is seated first, so seat order and name order disagree here.
+    expect(trends.seatRows.map((row) => row.name)).toEqual(["Bo", "Alix"]);
+    expect(trends.contractRows.map((row) => row.name)).toEqual(["Alix", "Bo"]);
+  });
+
   it("tracks the running leader after every round", () => {
     const trends = buildGameTrends(GAME);
 

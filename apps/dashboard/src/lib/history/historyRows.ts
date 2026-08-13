@@ -54,13 +54,17 @@ export function buildHistoryRows(
   });
 
   return oldestFirst.map((game, index) => {
-    const players = game.players.map((player) => ({
-      color: player.color,
-      id: player.id,
-      isWinner: Boolean(game.winnerId && player.id === game.winnerId),
-      name: player.name,
-      totalPrestige: game.totals[player.id]?.totalPrestige ?? 0,
-    }));
+    // Snapshot order is seat order, but nothing on the row says so, which just
+    // reads as arbitrary. Name order is the one a reader can follow.
+    const players = game.players
+      .map((player) => ({
+        color: player.color,
+        id: player.id,
+        isWinner: Boolean(game.winnerId && player.id === game.winnerId),
+        name: player.name,
+        totalPrestige: game.totals[player.id]?.totalPrestige ?? 0,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
 
     const winner = players.find((player) => player.isWinner) ?? null;
 

@@ -81,22 +81,26 @@ export function buildGameTrends(game: ArchiveGame): GameTrends {
     };
   });
 
-  const contractRows: TrendContractRow[] = orderedPlayers.map((player) => {
-    const totals = game.totals[player.id];
-    const contracts = totals?.contracts ?? 0;
-    const failures = totals?.failures ?? 0;
-    const attempts = contracts + failures;
+  // Seat rows carry a "Seat N" label so they stay in turn order. These rows show
+  // bare names, so they read as arbitrary unless sorted by name.
+  const contractRows: TrendContractRow[] = orderedPlayers
+    .map((player) => {
+      const totals = game.totals[player.id];
+      const contracts = totals?.contracts ?? 0;
+      const failures = totals?.failures ?? 0;
+      const attempts = contracts + failures;
 
-    return {
-      attempts,
-      color: player.color,
-      contracts,
-      failures,
-      id: player.id,
-      name: player.name,
-      successRate: safeDivide(contracts, attempts),
-    };
-  });
+      return {
+        attempts,
+        color: player.color,
+        contracts,
+        failures,
+        id: player.id,
+        name: player.name,
+        successRate: safeDivide(contracts, attempts),
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
 
   const running: Record<string, number> = Object.fromEntries(
     game.players.map((player) => [player.id, 0]),

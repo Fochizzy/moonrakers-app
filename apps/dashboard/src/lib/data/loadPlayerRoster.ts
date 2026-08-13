@@ -134,9 +134,9 @@ export async function loadPlayerRoster(): Promise<PlayerRoster> {
   return {
     groups: archive.groups.map((group) => ({
       ...group,
-      memberNames: group.playerIds.map(
-        (playerId) => playerNamesById.get(playerId) ?? "Player",
-      ),
+      memberNames: group.playerIds
+        .map((playerId) => playerNamesById.get(playerId) ?? "Player")
+        .sort((left, right) => left.localeCompare(right)),
     })),
     players,
     signedInPlayerId: userId,

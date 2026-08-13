@@ -75,6 +75,29 @@ describe("buildHistoryRows", () => {
     ]);
   });
 
+  it("lists each game's players by name, not by seat order", () => {
+    const [oldest] = buildHistoryRows(GAMES, "p1");
+
+    // The fixture seats Alix first; Bo still sorts ahead of her by name.
+    expect(oldest?.players.map((player) => player.name)).toEqual(["Alix", "Bo"]);
+
+    const [, newest] = buildHistoryRows(
+      [
+        GAMES[0]!,
+        {
+          ...GAMES[1]!,
+          players: [
+            { id: "p3", name: "Zed", color: null, assignedCardArtIndex: null, startOrder: 0 },
+            { id: "p2", name: "Ana", color: null, assignedCardArtIndex: null, startOrder: 1 },
+          ],
+        },
+      ],
+      "p1",
+    );
+
+    expect(newest?.players.map((player) => player.name)).toEqual(["Ana", "Zed"]);
+  });
+
   it("marks the winner and reads their prestige from game totals", () => {
     const [oldest] = buildHistoryRows(GAMES, "p1");
 
