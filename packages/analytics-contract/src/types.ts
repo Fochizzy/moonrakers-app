@@ -56,10 +56,12 @@ export type AnalyticsMetricCard = {
 export type AnalyticsTopSignal = {
   key: string;
   label: string;
-  value: number;
-  strength: string;
-  tone: string;
-  meaning: string;
+  /** The server formats this for display, e.g. "6% win rate" or "1.8/game". */
+  value: string | number;
+  strength?: string;
+  tone?: string;
+  /** Only some signal families carry explanatory copy. */
+  meaning?: string;
 };
 
 export type AnalyticsPlayerOption = {
@@ -110,9 +112,13 @@ export type InsightsScreenPayload = {
   meta: {
     games: number;
   };
-  cards: AnalyticsMetricCard[];
+  cards?: AnalyticsMetricCard[];
   topSignals: AnalyticsTopSignal[];
-  relationships: Record<string, unknown>;
+  /** Head-to-head record against each opponent seen in the sample. */
+  rivalries?: Array<Record<string, unknown>>;
+  /** Assist graph: `nodes` per player plus directed `edges` between them. */
+  assistNetwork?: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
   correlations: Record<string, unknown>;
 };
 
