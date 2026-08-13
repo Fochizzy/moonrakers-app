@@ -2,6 +2,7 @@ import React, { useMemo, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import GameReplay from "@/components/GameReplay";
 import ActionButton from "@/components/ui/ActionButton";
 import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import DefinitionTermText from "@/components/ui/DefinitionTermText";
@@ -17,6 +18,7 @@ import {
   buildPlayerProfileRoute,
   buildSummaryRoute,
 } from "@/utils/appRoutes";
+import { buildReplayTimeline } from "@/utils/buildReplayTimeline";
 import { formatDate } from "@/utils/formatters";
 import { toNumber } from "@/utils/numbers";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
@@ -198,6 +200,11 @@ export default function GameTrendsScreen() {
     });
   }, [players, rounds]);
 
+  const replayTimeline = useMemo(
+    () => buildReplayTimeline(rounds, players),
+    [rounds, players],
+  );
+
   const turnOrderEffectRows = useMemo(() => {
     return orderedPlayers.map((player, index) => {
       const stat = totals[player.id];
@@ -378,6 +385,7 @@ export default function GameTrendsScreen() {
         >
           <View style={styles.navGrid}>
             <NavButton label="Prestige Trends" onPress={() => scrollToSection("prestige")} />
+            <NavButton label="Round Replay" onPress={() => scrollToSection("replay")} />
             <NavButton label="Turn Order Effect" onPress={() => scrollToSection("turnOrder")} />
             <NavButton
               label="Contracts & Failures"
@@ -437,6 +445,14 @@ export default function GameTrendsScreen() {
               ))
             )}
           </SectionCard>
+        </View>
+
+        <View
+          onLayout={(event) => {
+            sectionOffsets.current.replay = event.nativeEvent.layout.y;
+          }}
+        >
+          <GameReplay timeline={replayTimeline} players={orderedPlayers} />
         </View>
 
         <View

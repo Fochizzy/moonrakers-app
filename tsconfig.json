@@ -62,7 +62,6 @@
 
     "components/CompareSelectionCard.tsx",
     "components/CorrelationStats.tsx",
-    "components/GameReplay.tsx",
     "components/InsightList.tsx",
     "components/MomentumGlow.tsx",
     "components/OvertakeRow.tsx",
@@ -74,7 +73,6 @@
     "components/StatAdjuster.tsx",
     "components/TopPlayerCard.tsx",
     "components/TurnOrderList.tsx",
-    "components/ui/AnimatedCard.tsx",
     "components/ui/Button.tsx",
     "components/ui/StarryNight.tsx",
 

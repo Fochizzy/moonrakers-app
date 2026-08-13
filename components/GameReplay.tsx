@@ -3,7 +3,11 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import Text from '@/components/ui/Text';
 import AnimatedCard from '@/components/ui/AnimatedCard';
-import ChartShell from './ChartShell';
+import {
+  buildReplayAssistLedger,
+  groupReplayAssistLedgerByHelper,
+} from '@/utils/replayAssists';
+import ChartShell from './charts/ChartShell';
 
 type ReplayPlayer = {
   id: string;
@@ -16,6 +20,8 @@ type SnapshotEntry = {
   totalPrestige?: number;
   directPrestige?: number;
   assistPrestigeReceived?: number;
+  assistPrestigeBySource?: Record<string, number>;
+  assistCountBySource?: Record<string, number>;
   score?: number;
 };
 
@@ -115,6 +121,10 @@ function formatDelta(value: number) {
   return `${value}`;
 }
 
+function formatAssistCount(assists: number) {
+  return `${assists} ${assists === 1 ? 'assist' : 'assists'}`;
+}
+
 function MiniMetric({
   label,
   value,
@@ -173,6 +183,27 @@ export default function GameReplay({
   const canGoNext = hasTimeline && safeStep < timeline.length - 1;
   const progress = timeline.length > 1 ? safeStep / (timeline.length - 1) : 1;
 
+  const nameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const player of players) map[player.id] = player.name;
+    return map;
+  }, [players]);
+
+  const assistLedger = useMemo(
+    () =>
+      buildReplayAssistLedger({
+        playerIds: players.map((player) => player.id),
+        snapshot: current?.snapshot,
+        previousSnapshot: previous?.snapshot,
+      }),
+    [players, current, previous],
+  );
+
+  const assistsByHelper = useMemo(
+    () => groupReplayAssistLedgerByHelper(assistLedger),
+    [assistLedger],
+  );
+
   const rankedPlayers = useMemo(() => {
     return [...players]
       .map((player) => {
@@ -203,11 +234,29 @@ export default function GameReplay({
 
   const leader = rankedPlayers[0];
 
+  const assistPrestigeThisRound = assistLedger.reduce(
+    (sum, entry) => sum + entry.prestige,
+    0,
+  );
+
+  const takeaway = current
+    ? `${leader?.name ?? 'Nobody'} leads round ${current.round} with ${
+        leader?.totalPrestige ?? 0
+      } prestige. ${
+        assistLedger.length === 0
+          ? 'No assists were paid out this round.'
+          : `${formatAssistCount(assistLedger.length)} paid out ${formatDelta(
+              assistPrestigeThisRound,
+            )} prestige to the players who helped.`
+      }`
+    : 'No replay data available yet.';
+
   if (!hasTimeline) {
     return (
       <ChartShell
         title="Game Replay"
         subtitle="Step through saved round snapshots across the match."
+        takeaway="Save round snapshots during gameplay to unlock a round-by-round replay timeline."
       >
         <AnimatedCard style={styles.emptyCard}>
           <View style={styles.nebulaA} />
@@ -226,6 +275,16 @@ export default function GameReplay({
     <ChartShell
       title="Game Replay"
       subtitle="Track leaderboard shifts, prestige gains, and score momentum over time."
+      takeaway={takeaway}
+      proofCards={[
+        { label: 'Round', value: String(current.round) },
+        { label: 'Leader', value: leader?.name ?? '—' },
+        { label: 'Assists', value: String(assistLedger.length) },
+        {
+          label: 'Assist Prestige',
+          value: formatDelta(assistPrestigeThisRound),
+        },
+      ]}
     >
       <AnimatedCard style={styles.heroCard}>
         <View style={styles.nebulaA} />
@@ -311,10 +370,72 @@ export default function GameReplay({
         />
       </View>
 
+      <AnimatedCard style={styles.assistCard}>
+        <View style={styles.assistCardHeader}>
+          <Text style={styles.assistCardTitle}>Assists This Round</Text>
+          <View style={styles.assistCountChip}>
+            <Text style={styles.assistCountChipText}>
+              {assistLedger.length}
+            </Text>
+          </View>
+        </View>
+
+        {assistLedger.length === 0 ? (
+          <Text style={styles.assistEmptyText}>
+            No player assisted a crew this round.
+          </Text>
+        ) : (
+          <View style={styles.assistLedgerList}>
+            {assistLedger.map((entry) => {
+              const theme = getPlayerTheme(
+                players.find((player) => player.id === entry.helperId)?.color,
+              );
+
+              return (
+                <View
+                  key={`${entry.helperId}-${entry.actorId}`}
+                  style={styles.assistLedgerRow}
+                >
+                  <View
+                    style={[
+                      styles.assistLedgerDot,
+                      { backgroundColor: theme.accent },
+                    ]}
+                  />
+
+                  <View style={styles.assistLedgerCopy}>
+                    <Text style={styles.assistLedgerName}>
+                      {nameById[entry.helperId] ?? 'Unknown'}
+                    </Text>
+                    <Text style={styles.assistLedgerMeta}>
+                      assisted {nameById[entry.actorId] ?? 'Unknown'}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.assistLedgerChip,
+                      { borderColor: theme.border, backgroundColor: theme.tint },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.assistLedgerValue, { color: theme.accent }]}
+                    >
+                      {formatDelta(entry.prestige)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </AnimatedCard>
+
       <View style={styles.playerList}>
         {rankedPlayers.map((player, index) => {
           const theme = getPlayerTheme(player.color);
           const isLeader = index === 0;
+          const assistTotals = assistsByHelper[player.id];
 
           return (
             <AnimatedCard
@@ -403,6 +524,36 @@ export default function GameReplay({
                   </Text>
                 </View>
               </View>
+
+              {assistTotals ? (
+                <View style={styles.playerAssistSection}>
+                  <View style={styles.playerAssistHeader}>
+                    <Text style={styles.playerAssistLabel}>Assisted This Round</Text>
+                    <Text style={[styles.playerAssistTotal, { color: theme.accent }]}>
+                      {formatDelta(assistTotals.prestige)} ·{' '}
+                      {formatAssistCount(assistTotals.assists)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.playerAssistPartners}>
+                    {assistTotals.partners.map((partner) => (
+                      <View key={partner.actorId} style={styles.playerAssistPill}>
+                        <Text style={styles.playerAssistPillName} numberOfLines={1}>
+                          {nameById[partner.actorId] ?? 'Unknown'}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.playerAssistPillValue,
+                            { color: theme.accent },
+                          ]}
+                        >
+                          {formatDelta(partner.prestige)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
 
               <View style={styles.signalSection}>
                 <Text style={styles.signalLabel}>Replay Signal</Text>
@@ -714,6 +865,146 @@ const styles = StyleSheet.create({
   },
   deltaValue: {
     fontSize: 16,
+    fontWeight: '900',
+  },
+
+  assistCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 20,
+    borderColor: ui.borderStrong,
+    backgroundColor: ui.panelAlt,
+  },
+  assistCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  assistCardTitle: {
+    color: ui.text,
+    fontSize: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  assistCountChip: {
+    minWidth: 30,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: ui.border,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+  },
+  assistCountChipText: {
+    color: ui.soft,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  assistEmptyText: {
+    color: ui.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  assistLedgerList: {
+    gap: 8,
+  },
+  assistLedgerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: ui.border,
+    backgroundColor: 'rgba(2, 6, 23, 0.6)',
+  },
+  assistLedgerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  assistLedgerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  assistLedgerName: {
+    color: ui.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  assistLedgerMeta: {
+    color: ui.muted,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  assistLedgerChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  assistLedgerValue: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+
+  playerAssistSection: {
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: ui.border,
+  },
+  playerAssistHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  playerAssistLabel: {
+    color: ui.soft,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  playerAssistTotal: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  playerAssistPartners: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  playerAssistPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: ui.border,
+    backgroundColor: 'rgba(15, 23, 42, 0.82)',
+  },
+  playerAssistPillName: {
+    flexShrink: 1,
+    color: ui.soft,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  playerAssistPillValue: {
+    fontSize: 12,
     fontWeight: '900',
   },
 

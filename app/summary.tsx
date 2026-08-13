@@ -19,6 +19,7 @@ import {
   getWinnerIdFromGame,
 } from "@/utils/gameTotals";
 import { toNumber } from "@/utils/numbers";
+import { buildReplayAssistSummary } from "@/utils/replayAssists";
 
 type Player = {
   id: string;
@@ -150,19 +151,24 @@ function buildReplayRows(game?: StoredGame) {
         ? game.rounds
         : [];
 
-  return source.map((item, index) => ({
-    key: item?.id ?? `turn-${index}`,
-    step: index + 1,
-    playerId: item?.playerId,
-    directPrestige: toNumber(item?.directPrestige ?? item?.prestige ?? item?.score),
-    assistPrestige: toNumber(item?.assistPrestigeReceived),
-    objectivePrestige: toNumber(item?.objectivePrestige),
-    contracts: toNumber(item?.contracts),
-    assists: toNumber(item?.assists),
-    failures: toNumber(item?.failures),
-    turnOrder: toNumber(item?.turnOrder),
-    roundNumber: toNumber(item?.roundNumber),
-  }));
+  return source.map((item, index) => {
+    const assistSummary = buildReplayAssistSummary(item);
+
+    return {
+      key: item?.id ?? `turn-${index}`,
+      step: index + 1,
+      playerId: item?.playerId,
+      directPrestige: toNumber(item?.directPrestige ?? item?.prestige ?? item?.score),
+      assistPrestige: assistSummary.assistPrestige,
+      assistShares: assistSummary.shares,
+      objectivePrestige: toNumber(item?.objectivePrestige),
+      contracts: toNumber(item?.contracts),
+      assists: assistSummary.assistCount,
+      failures: toNumber(item?.failures),
+      turnOrder: toNumber(item?.turnOrder),
+      roundNumber: toNumber(item?.roundNumber),
+    };
+  });
 }
 
 function MetricPill({
@@ -508,12 +514,60 @@ export default function SummaryScreen() {
 
                   <View style={styles.replayMetrics}>
                     <ReplayMetric label="Direct" value={row.directPrestige} />
-                    <ReplayMetric label="Assist" value={row.assistPrestige} />
+                    <ReplayMetric
+                      label="Assist Prestige Out"
+                      value={row.assistPrestige}
+                    />
                     <ReplayMetric label="Objective" value={row.objectivePrestige} />
                     <ReplayMetric label="Contracts" value={row.contracts} />
                     <ReplayMetric label="Assists" value={row.assists} />
                     <ReplayMetric label="Failures" value={row.failures} />
                   </View>
+
+                  {row.assistShares.length > 0 ? (
+                    <View style={styles.assistBlock}>
+                      <Text style={styles.assistBlockLabel}>
+                        Assisted By ({row.assistShares.length})
+                      </Text>
+
+                      <View style={styles.assistChipRow}>
+                        {row.assistShares.map((share) => {
+                          const assistName = getPlayerName(
+                            share.playerId,
+                            game.players,
+                            players,
+                          );
+                          const assistColor = getPlayerColor(
+                            share.playerId,
+                            game.players,
+                            players,
+                          );
+
+                          return (
+                            <View key={share.playerId} style={styles.assistChip}>
+                              <View
+                                style={[
+                                  styles.assistChipDot,
+                                  {
+                                    backgroundColor: assistColor || COLORS.accent,
+                                  },
+                                ]}
+                              />
+                              <Text
+                                style={styles.assistChipName}
+                                numberOfLines={1}
+                              >
+                                {assistName}
+                              </Text>
+                              <Text style={styles.assistChipValue}>
+                                +{share.prestige}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
@@ -924,6 +978,52 @@ const styles = StyleSheet.create({
   replayMetricValue: {
     color: "#F8FAFC",
     fontSize: 15,
+    fontWeight: "900",
+  },
+  assistBlock: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(148, 163, 184, 0.12)",
+    paddingTop: 10,
+    gap: 8,
+  },
+  assistBlockLabel: {
+    color: "#8EA3C7",
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  assistChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  assistChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    maxWidth: "100%",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: "rgba(9, 15, 31, 0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.16)",
+  },
+  assistChipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  assistChipName: {
+    flexShrink: 1,
+    color: "#E2E8F0",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  assistChipValue: {
+    color: "#86EFAC",
+    fontSize: 12,
     fontWeight: "900",
   },
   emptyInlineText: {

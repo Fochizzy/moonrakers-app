@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useMemo } from 'react';
 import {
   Pressable,
+  PressableStateCallbackType,
   StyleProp,
   StyleSheet,
   View,
@@ -134,8 +135,9 @@ function AnimatedCard({
       hitSlop={hitSlop}
       style={getPressableStyle}
     >
-      {({ pressed, hovered }) => {
-        const active = interactive && (pressed || hovered);
+      {/* `hovered` is a react-native-web addition that RN's types omit. */}
+      {({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => {
+        const active = interactive && (pressed || Boolean(hovered));
 
         return (
           <View style={styles.shell}>
