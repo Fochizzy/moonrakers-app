@@ -46,9 +46,21 @@ const migrationPath = path.join(
   projectRoot,
   "supabase",
   "migrations",
-  "20260813220000_moonrakers_elo_zero_sum_rank_base.sql",
+  "20260813230000_moonrakers_elo_field_spread_closeness.sql",
 );
 const migrationSource = fs.readFileSync(migrationPath, "utf8");
+
+assert.match(
+  migrationSource,
+  /select avg\(abs\(value - prestige_mean\)\) into prestige_spread/,
+  "expected closeness to read the whole field's spread, not the top-two gap",
+);
+
+assert.doesNotMatch(
+  migrationSource,
+  /top_prestige|runner_up_prestige/,
+  "expected the top-two margin measure to be gone entirely",
+);
 
 assert.match(
   migrationSource,
@@ -106,8 +118,8 @@ assert.match(
 
 assert.match(
   migrationSource,
-  /\(\(top_prestige - runner_up_prestige\) \/ prestige_mean\) \/ elo_decisive_margin_ratio/,
-  "expected decisiveness to come from the winner's prestige margin over the runner-up",
+  /\(coalesce\(prestige_spread, 0\) \/ prestige_mean\) \/ elo_decisive_spread_ratio/,
+  "expected decisiveness to come from the field spread relative to the table average",
 );
 
 assert.match(
@@ -251,6 +263,12 @@ for (const [game, ids] of [
 }
 
 // End to end: a multiplayer game must neither create nor destroy rating.
+//
+// The exact invariant lives on the unrounded scores asserted above - those sum
+// to n/2 on both sides, so the deltas cancel perfectly. Published ratings round
+// each delta to a whole number, which can leave a residue of well under a point
+// per player. The tolerance below is tight enough to catch the old systematic
+// drain (about 19 points per four-player game) while allowing that rounding.
 for (const size of [2, 3, 4, 5]) {
   const ids = ["a", "b", "c", "d", "e"].slice(0, size);
   const totals = Object.fromEntries(
@@ -262,11 +280,14 @@ for (const size of [2, 3, 4, 5]) {
   const ratings = calculateElo([
     { id: `zero-sum-${size}`, createdAt: 1, winnerId: "a", totals },
   ]);
+  const drift = Math.abs(
+    Object.values(ratings).reduce((total, value) => total + value, 0) -
+      size * BASE_ELO,
+  );
 
-  assert.equal(
-    Object.values(ratings).reduce((total, value) => total + value, 0),
-    size * BASE_ELO,
-    `expected a ${size}-player game to conserve total rating`,
+  assert.ok(
+    drift <= size / 2,
+    `expected a ${size}-player game to conserve total rating, drifted ${drift}`,
   );
 }
 
@@ -470,6 +491,37 @@ assert.equal(
   0,
   "expected a dead-level prestige finish to read as maximally close",
 );
+
+// Closeness must read every finisher, not just the top two. These two games
+// share an identical 1-prestige gap at the top but differ completely below it.
+const tightAtTop = {
+  winnerId: "a",
+  totals: {
+    a: { totalPrestige: 21, score: 21 },
+    b: { totalPrestige: 20, score: 20 },
+    c: { totalPrestige: 20, score: 20 },
+    d: { totalPrestige: 19, score: 19 },
+  },
+};
+const tightAtTopStrungOutBelow = {
+  winnerId: "a",
+  totals: {
+    a: { totalPrestige: 21, score: 21 },
+    b: { totalPrestige: 20, score: 20 },
+    c: { totalPrestige: 6, score: 6 },
+    d: { totalPrestige: 1, score: 1 },
+  },
+};
+
+assert.ok(
+  buildGameDecisiveness(tightAtTopStrungOutBelow, ["a", "b", "c", "d"]) >
+    buildGameDecisiveness(tightAtTop, ["a", "b", "c", "d"]),
+  "expected a strung-out field to out-read a bunched one despite the same top-two gap",
+);
+assert.ok(
+  buildGameDecisiveness(tightAtTop, ["a", "b", "c", "d"]) < 0.2,
+  "expected a table finishing within two prestige of each other to read as close",
+);
 assert.equal(
   buildSwingMultiplier(photoFinish, ["a", "b"]),
   ELO_MIN_SWING_MULTIPLIER,
@@ -613,22 +665,25 @@ assert.equal(
 
 assert.deepEqual(
   calculateElo([wireToWire]),
-  { a: 1010, b: 990 },
-  "expected the wire-to-wire replay to land on 1010/990",
+  { a: 1009, b: 991 },
+  "expected the wire-to-wire replay to land on 1009/991",
 );
 
 assert.deepEqual(
   calculateElo([wireToWire, assistGame]),
-  { a: 1010, b: 973, c: 1017 },
-  "expected the two-game replay to land on 1010/973/1017",
+  { a: 1009, b: 974, c: 1016 },
+  "expected the two-game replay to land on 1009/974/1016",
 );
 
-assert.equal(
-  calculateElo([wireToWire, assistGame]).a +
-    calculateElo([wireToWire, assistGame]).b +
-    calculateElo([wireToWire, assistGame]).c,
-  3 * BASE_ELO,
-  "expected the replayed series to conserve total rating end to end",
+const seriesRatings = calculateElo([wireToWire, assistGame]);
+const seriesDrift = Math.abs(
+  Object.values(seriesRatings).reduce((total, value) => total + value, 0) -
+    3 * BASE_ELO,
+);
+
+assert.ok(
+  seriesDrift <= 2,
+  `expected a two-game series to conserve total rating, drifted ${seriesDrift}`,
 );
 
 console.log("elo-flow-prestige-closeness-blend.test.cjs passed");

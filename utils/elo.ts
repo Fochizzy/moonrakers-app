@@ -14,10 +14,10 @@ export const ELO_MIN_SWING_MULTIPLIER = 0.75;
 export const ELO_MAX_SWING_MULTIPLIER = 1.25;
 
 /**
- * The winner's prestige margin over the runner-up, as a fraction of the table
- * average, at which a game counts as fully decisive.
+ * The prestige spread, as a fraction of the table average, at which a game
+ * counts as fully decisive.
  */
-export const ELO_DECISIVE_MARGIN_RATIO = 0.5;
+export const ELO_DECISIVE_SPREAD_RATIO = 0.5;
 
 export type EloMap = Record<string, number>;
 
@@ -272,9 +272,16 @@ export function buildFlowScores(
 }
 
 /**
- * How decisive the game was, as a 0..1 reading of the winner's prestige margin
- * over the runner-up relative to the table average. Drives the rating swing:
- * a game decided by a single point barely moves ratings, a rout moves them hard.
+ * How decisive the game was, as a 0..1 reading of how far the whole field spread
+ * out: the mean absolute deviation of final prestige, relative to the table
+ * average. Drives the rating swing, so a bunched table barely moves ratings and
+ * a strung-out one moves them hard.
+ *
+ * This reads every finisher rather than just the top two. The swing multiplier
+ * has to be a single number per game - giving players different multipliers
+ * would stop their deltas cancelling and reintroduce the rating leak that
+ * {@link buildResultScores} exists to prevent - so the statistic driving it
+ * should describe the whole field, not one pair at the top.
  */
 export function buildGameDecisiveness(
   game: EloGameLike,
@@ -284,17 +291,23 @@ export function buildGameDecisiveness(
     return 0;
   }
 
-  const prestiges = playerIds
-    .map((playerId) => getTotalPrestige(game, playerId))
-    .sort((a, b) => b - a);
+  const prestiges = playerIds.map((playerId) =>
+    getTotalPrestige(game, playerId)
+  );
 
   const prestigeMean = mean(prestiges);
   if (!(prestigeMean > 0)) {
     return 0;
   }
 
-  const margin = (prestiges[0] - prestiges[1]) / prestigeMean;
-  return Math.min(1, Math.max(0, margin / ELO_DECISIVE_MARGIN_RATIO));
+  const spread = mean(
+    prestiges.map((prestige) => Math.abs(prestige - prestigeMean))
+  );
+
+  return Math.min(
+    1,
+    Math.max(0, spread / prestigeMean / ELO_DECISIVE_SPREAD_RATIO)
+  );
 }
 
 /**
