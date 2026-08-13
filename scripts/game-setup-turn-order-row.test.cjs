@@ -27,13 +27,13 @@ assert.match(
 
 assert.match(
   source,
-  /rowCard:\s*\{[\s\S]*?minHeight:\s*116,/,
+  /rowCard:\s*\{[\s\S]*?minHeight:\s*92,/,
   "expected the turn-order player card shell to stay more compact vertically",
 );
 
 assert.match(
   source,
-  /rowAvatarWrap:\s*\{[\s\S]*?width:\s*76,[\s\S]*?height:\s*96,/,
+  /rowAvatarWrap:\s*\{[\s\S]*?width:\s*58,[\s\S]*?height:\s*74,/,
   "expected the player art frame to use a shorter portrait size so each turn-order row is less tall",
 );
 

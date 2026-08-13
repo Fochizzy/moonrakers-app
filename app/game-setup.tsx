@@ -75,6 +75,29 @@ function resolveDisplayName(player: PlayerLike, index: number) {
   return name.length ? name : `Player ${index + 1}`;
 }
 
+function withResolvedColors(players: PlayerLike[]): PlayerLike[] {
+  return players.map((player, index) => ({
+    ...player,
+    color: resolveStoredPlayerColor(player.color, index),
+  }));
+}
+
+function buildTurnOrderSignature(players: PlayerLike[]) {
+  return players.map((player) => `${player.id}:${player.color ?? ""}`).join("|");
+}
+
+// The draggable list has to mount with its rows already present: a list that is
+// first committed with empty data never re-measures its scroll content, which
+// leaves the turn order unscrollable until something forces the cells to
+// re-render. Remounting on roster membership keeps that guarantee when the
+// draft or store hydrates after this screen is already on top.
+function buildRosterMountKey(players: PlayerLike[]) {
+  return players
+    .map((player) => player.id)
+    .sort()
+    .join("|");
+}
+
 function getAccentColor(color?: string, index = 0) {
   return getPlayerAccentColor(resolveStoredPlayerColor(color, index));
 }
@@ -340,8 +363,8 @@ function TurnOrderRow({
             <View style={[styles.rowAvatarWrap, { borderColor: `${accent}55` }]}>
               <PlayerCardIcon
                 player={item as any}
-                size={64}
-                borderRadius={12}
+                size={48}
+                borderRadius={10}
                 showInitial={false}
               />
             </View>
@@ -489,7 +512,9 @@ export default function GameSetup() {
       .filter(Boolean) as PlayerLike[];
   }, [allPlayers, gameDraft, mode, selectedGroup, selectedPlayers, storedPlayers]);
 
-  const [turnOrder, setTurnOrder] = useState<PlayerLike[]>([]);
+  const [turnOrder, setTurnOrder] = useState<PlayerLike[]>(() =>
+    withResolvedColors(resolvedPlayers)
+  );
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -500,12 +525,15 @@ export default function GameSetup() {
   const contentOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const nextTurnOrder = resolvedPlayers.map((player, index) => ({
-        ...player,
-        color: resolveStoredPlayerColor(player.color, index),
-      }));
+    const nextTurnOrder = withResolvedColors(resolvedPlayers);
 
-    setTurnOrder(nextTurnOrder);
+    // Draft saves echo the same roster straight back through the store, so only
+    // replace local state when the players or their game colors actually moved.
+    setTurnOrder((current) =>
+      buildTurnOrderSignature(current) === buildTurnOrderSignature(nextTurnOrder)
+        ? current
+        : nextTurnOrder
+    );
     setSelectedPlayerId((current) =>
       current && nextTurnOrder.some((player) => player.id === current) ? current : null
     );
@@ -528,6 +556,10 @@ export default function GameSetup() {
   const selectedPlayer =
     selectedPlayerIndex >= 0 ? turnOrder[selectedPlayerIndex] ?? null : null;
   const turnOrderListBottomInset = Math.max(insets.bottom, 14) + 8;
+  const turnOrderListMountKey = useMemo(
+    () => buildRosterMountKey(turnOrder),
+    [turnOrder]
+  );
 
   const playStartAnimation = useCallback(async () => {
     setIsStarting(true);
@@ -712,6 +744,7 @@ export default function GameSetup() {
           </View>
 
           <DraggableFlatList
+            key={turnOrderListMountKey}
             data={turnOrder}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
@@ -998,20 +1031,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowPressable: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   rowPressed: {
     opacity: 0.98,
   },
   rowCard: {
-    minHeight: 116,
-    borderRadius: 22,
+    minHeight: 92,
+    borderRadius: 18,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     alignItems: "stretch",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     shadowOpacity: 0.16,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -1026,8 +1059,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rowOrderPill: {
-    width: 26,
-    height: 26,
+    width: 22,
+    height: 22,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -1040,13 +1073,13 @@ const styles = StyleSheet.create({
   },
   rowOrderPillText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "900",
   },
   rowAvatarWrap: {
-    width: 76,
-    height: 96,
-    borderRadius: 16,
+    width: 58,
+    height: 74,
+    borderRadius: 13,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -1056,29 +1089,29 @@ const styles = StyleSheet.create({
   rowBody: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   rowCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 6,
+    gap: 4,
     justifyContent: "center",
   },
   rowName: {
     color: "#FFFFFF",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
     textAlign: "left",
   },
   rowMeta: {
     color: "#CBD5E1",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
-    lineHeight: 15,
+    lineHeight: 14,
     textAlign: "left",
   },
   firstChip: {
-    minWidth: 84,
+    minWidth: 76,
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 7,
@@ -1144,7 +1177,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   tapSelectChip: {
-    minWidth: 84,
+    minWidth: 76,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.08)",
     paddingHorizontal: 7,
