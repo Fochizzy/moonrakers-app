@@ -45,6 +45,10 @@ export function buildUndoLastTurnCandidate(
   }
 
   const removedRound = playableRounds[playableRounds.length - 1];
+  if (!removedRound) {
+    return null;
+  }
+
   const removedLinkedRounds = input.existingRounds.filter(
     (round) => round.linkedTurnId === removedRound.id,
   );

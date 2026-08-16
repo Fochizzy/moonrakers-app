@@ -68,7 +68,7 @@ function n(value: unknown): number {
 
 function getColor(color?: string | null, index = 0) {
   if (typeof color === "string" && color.trim()) return color.trim();
-  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  return FALLBACK_COLORS[index % FALLBACK_COLORS.length]!;
 }
 
 function playerName(player?: HeadToHeadPlayer | null) {
@@ -250,6 +250,7 @@ export function buildHeadToHeadVisualModel({
 
   for (let index = timeline.length - 1; index >= 0; index -= 1) {
     const point = timeline[index];
+    if (!point) continue;
     if (point.winner === "tie") {
       if (currentRunLength === 0) continue;
       break;

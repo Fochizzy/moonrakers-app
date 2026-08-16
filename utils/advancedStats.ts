@@ -85,12 +85,14 @@ export function buildAssistSynergyPairs(
       for (let j = i + 1; j < playerIds.length; j += 1) {
         const a = playerIds[i];
         const b = playerIds[j];
+        if (a === undefined || b === undefined) continue;
+
         const key = sortedPairKey(a, b);
 
         if (!pairMap.has(key)) {
           pairMap.set(key, {
-            a: [a, b].sort()[0],
-            b: [a, b].sort()[1],
+            a: [a, b].sort()[0]!,
+            b: [a, b].sort()[1]!,
             gamesTogether: 0,
             assistPrestigeAB: 0,
             assistPrestigeBA: 0,
@@ -126,8 +128,8 @@ export function buildAssistSynergyPairs(
         const key = sortedPairKey(sourceId, targetId);
         if (!pairMap.has(key)) {
           pairMap.set(key, {
-            a: [sourceId, targetId].sort()[0],
-            b: [sourceId, targetId].sort()[1],
+            a: [sourceId, targetId].sort()[0]!,
+            b: [sourceId, targetId].sort()[1]!,
             gamesTogether: 0,
             assistPrestigeAB: 0,
             assistPrestigeBA: 0,
@@ -327,8 +329,11 @@ function correlation(x: number[], y: number[]): number {
   let denomY = 0;
 
   for (let index = 0; index < n; index += 1) {
-    const deltaX = x[index] - meanX;
-    const deltaY = y[index] - meanY;
+    const xValue = x[index];
+    const yValue = y[index];
+    if (xValue === undefined || yValue === undefined) continue;
+    const deltaX = xValue - meanX;
+    const deltaY = yValue - meanY;
     numerator += deltaX * deltaY;
     denomX += deltaX * deltaX;
     denomY += deltaY * deltaY;
@@ -507,6 +512,7 @@ export function getTopSynergyPairs(
 
       if (!existing) {
         const [a, b] = key.split('::');
+        if (a === undefined || b === undefined) continue;
         scores.set(key, { a, b, score: numericValue });
         continue;
       }

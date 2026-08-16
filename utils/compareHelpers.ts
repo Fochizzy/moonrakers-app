@@ -71,8 +71,12 @@ function correlation(xs: number[], ys: number[]): number {
   let yDen = 0;
 
   for (let i = 0; i < xs.length; i += 1) {
-    const dx = xs[i] - xMean;
-    const dy = ys[i] - yMean;
+    const x = xs[i];
+    const y = ys[i];
+    if (x === undefined || y === undefined) continue;
+
+    const dx = x - xMean;
+    const dy = y - yMean;
     numerator += dx * dy;
     xDen += dx * dx;
     yDen += dy * dy;

@@ -144,7 +144,7 @@ function normalizeColor(color?: string, index = 0): string {
   if (typeof color === "string" && color.trim()) {
     return normalizeChartColor(color);
   }
-  return FALLBACK_PLAYER_COLORS[index % FALLBACK_PLAYER_COLORS.length];
+  return FALLBACK_PLAYER_COLORS[index % FALLBACK_PLAYER_COLORS.length] ?? "#A855F7";
 }
 
 function clampChannel(value: number) {
@@ -296,7 +296,7 @@ export function resolveDistinctGraphPlayers(players: Player[] = []) {
   const counts = new Map<string, number>();
 
   return players.map((player, index) => {
-    const baseColor = baseColors[index];
+    const baseColor = baseColors[index] ?? normalizeColor(player.color, index);
     const duplicateIndex = counts.get(baseColor) ?? 0;
     counts.set(baseColor, duplicateIndex + 1);
 

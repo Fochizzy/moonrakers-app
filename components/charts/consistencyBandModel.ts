@@ -39,7 +39,7 @@ function playerColor(player?: SimplePlayer | null, index = 0) {
   if (color) {
     return getPlayerAccentColor(resolveStoredPlayerColor(color, index));
   }
-  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  return FALLBACK_COLORS[index % FALLBACK_COLORS.length]!;
 }
 
 function round(value: number, digits = 2) {
@@ -52,10 +52,13 @@ function median(values: number[]) {
   if (!values.length) return 0;
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    return (sorted[middle - 1] + sorted[middle]) / 2;
+  const middleValue = sorted[middle];
+  if (middleValue === undefined) return 0;
+  const lowerValue = sorted[middle - 1];
+  if (sorted.length % 2 === 0 && lowerValue !== undefined) {
+    return (lowerValue + middleValue) / 2;
   }
-  return sorted[middle];
+  return middleValue;
 }
 
 function deviation(values: number[]) {

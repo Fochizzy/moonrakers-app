@@ -247,15 +247,15 @@ export function buildLeaderboard(players: Player[], games: Game[]): PlayerStats[
       }
 
       if (seat !== null) {
-        seatsByPlayer[playerId].push(seat);
-        seatWinPointsByPlayer[playerId].push({ x: seat, y: won ? 1 : 0 });
+        seatsByPlayer[playerId]?.push(seat);
+        seatWinPointsByPlayer[playerId]?.push({ x: seat, y: won ? 1 : 0 });
       }
 
       if (isCloseGame) {
         player.closeGames += 1;
       }
 
-      prestigeMarginsByPlayer[playerId].push(totalPrestige - runnerUpPrestige);
+      prestigeMarginsByPlayer[playerId]?.push(totalPrestige - runnerUpPrestige);
     });
 
     Object.entries(gameTotals).forEach(([_receiverId, receiverStats]) => {
@@ -269,7 +269,7 @@ export function buildLeaderboard(players: Player[], games: Game[]): PlayerStats[
 
   Object.values(totals).forEach((player) => {
     const attempts = player.contracts + player.failures;
-    const prestigeMargins = prestigeMarginsByPlayer[player.id];
+    const prestigeMargins = prestigeMarginsByPlayer[player.id] ?? [];
 
     player.avgPrestigePerGame = safeDivide(player.totalPrestige, player.games);
     player.avgScorePerGame = safeDivide(player.score, player.games);
@@ -296,9 +296,9 @@ export function buildLeaderboard(players: Player[], games: Game[]): PlayerStats[
     player.avgPrestigeMarginPerGame = prestigeMargins.length
       ? prestigeMargins.reduce((sum, value) => sum + value, 0) / prestigeMargins.length
       : 0;
-    player.avgStartSeat = average(seatsByPlayer[player.id]);
+    player.avgStartSeat = average(seatsByPlayer[player.id] ?? []);
     player.turnOrderWinCorrelation = getPearsonCorrelation(
-      seatWinPointsByPlayer[player.id]
+      seatWinPointsByPlayer[player.id] ?? []
     );
   });
 

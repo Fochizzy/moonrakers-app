@@ -189,7 +189,8 @@ function Sparkline({
 
   const initialMetricKey = useMemo(() => {
     if (defaultMetricKey && metricKeys.includes(defaultMetricKey)) return defaultMetricKey;
-    if (metricKeys.length > 0) return metricKeys[0];
+    const firstMetricKey = metricKeys[0];
+    if (firstMetricKey !== undefined) return firstMetricKey;
     return defaultMetricKey ?? "default";
   }, [defaultMetricKey, metricKeys]);
 

@@ -13,7 +13,7 @@ function getBestRow(rows: PlaystyleCorrelationRow[]) {
     return rows[0] ?? null;
   }
 
-  return [...rankedRows].sort((left, right) => Math.abs(right.value) - Math.abs(left.value))[0];
+  return [...rankedRows].sort((left, right) => Math.abs(right.value) - Math.abs(left.value))[0] ?? null;
 }
 
 function getInsufficientRow(rows: PlaystyleCorrelationRow[]) {

@@ -36,7 +36,7 @@ function playerColor(player?: SimplePlayer | null, index = 0) {
   if (color) {
     return getPlayerAccentColor(resolveStoredPlayerColor(color, index));
   }
-  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  return FALLBACK_COLORS[index % FALLBACK_COLORS.length]!;
 }
 
 function buildRanks(

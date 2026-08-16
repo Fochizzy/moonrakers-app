@@ -116,8 +116,9 @@ function getHigherRatedRows(rows: EloGameRecord[]): EloGameRecord[] {
 function getRecoveryWindows(rows: EloGameRecord[]): EloGameRecord[] {
   const windows: EloGameRecord[] = [];
   for (let i = 1; i < rows.length; i += 1) {
-    if ((rows[i - 1]?.win ?? 0) === 0) {
-      windows.push(rows[i]);
+    const row = rows[i];
+    if (row !== undefined && (rows[i - 1]?.win ?? 0) === 0) {
+      windows.push(row);
     }
   }
   return windows;

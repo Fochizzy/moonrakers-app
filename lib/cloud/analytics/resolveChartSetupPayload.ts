@@ -122,6 +122,10 @@ export function resolveEffectiveChartSetupPayload({
   const entry = resolveChartCatalogEntry(
     chartKey ?? publishedPayload.chartKey ?? fallbackPayload.chartKey,
   );
+  if (!entry) {
+    return publishedPayload;
+  }
+
   const focusPlayerOptions = mergeOptionLists(
     publishedPayload.focusPlayerOptions,
     fallbackPayload.focusPlayerOptions,

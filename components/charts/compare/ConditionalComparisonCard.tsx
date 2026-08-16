@@ -125,7 +125,7 @@ function listEntityNames(entities: Entity[], ids: string[]): string[] {
 
 function formatEntityList(names: string[]): string | null {
   if (!names.length) return null;
-  if (names.length === 1) return names[0];
+  if (names.length === 1) return names[0] ?? null;
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
@@ -162,6 +162,8 @@ function buildSummaryLines(rows: ConditionalEntityDelta[], subjectMode: Conditio
   const winLeader = [...rows].sort((a, b) => toNumber(b.winRateDelta) - toNumber(a.winRateDelta))[0];
   const prestigeLeader = [...rows].sort((a, b) => toNumber(b.prestigeDelta) - toNumber(a.prestigeDelta))[0];
   const synergyLeader = [...rows].sort((a, b) => toNumber(b.synergyDelta) - toNumber(a.synergyDelta))[0];
+
+  if (!winLeader || !prestigeLeader || !synergyLeader) return ['No results yet.'];
 
   return [
     `${winLeader.name} has the biggest ${noun} Win Rate swing at ${formatSigned(winLeader.winRateDelta, 1)}.`,

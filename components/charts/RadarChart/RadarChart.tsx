@@ -311,7 +311,7 @@ function buildComparisonOverviewLines(args: {
 
   if (swingTrait) {
     lines.push(
-      `${swingTrait.label[0].toUpperCase()}${swingTrait.label.slice(
+      `${swingTrait.label.charAt(0).toUpperCase()}${swingTrait.label.slice(
         1,
       )} shifts the most across the selected comparisons, which makes it the clearest read on whether this profile is matchup-sensitive or stable.`,
     );
@@ -329,11 +329,12 @@ function buildSummaryLines(args: {
   const { comparisonSeriesModels, model, primaryAverage, primaryLabel } = args;
 
   if (comparisonSeriesModels.length > 0) {
-    if (comparisonSeriesModels.length === 1) {
+    const [singleSeries] = comparisonSeriesModels;
+    if (comparisonSeriesModels.length === 1 && singleSeries) {
       return buildSingleComparisonSummaryLines({
         primaryAverage,
         primaryLabel,
-        series: comparisonSeriesModels[0],
+        series: singleSeries,
       });
     }
 
@@ -418,9 +419,12 @@ function getReportSectionIdentity(title: string): ReportSectionIdentity | null {
   const match = title.match(/^(P\d+)\.\s+(.+)$/);
   if (!match) return null;
 
+  const [, badge, label] = match;
+  if (badge === undefined || label === undefined) return null;
+
   return {
-    badge: match[1],
-    label: match[2],
+    badge,
+    label,
   };
 }
 

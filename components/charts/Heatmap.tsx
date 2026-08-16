@@ -345,7 +345,7 @@ function buildMatrixRow(
       )
     );
 
-    const previousRaw = index > 0 ? rawValues[index - 1] : rawValue;
+    const previousRaw = rawValues[index - 1] ?? rawValue;
     const rank =
       1 +
       Object.entries(points[index]?.snapshot ?? {})
@@ -391,7 +391,7 @@ function buildMatrixRow(
     };
   });
 
-  const latest = rawValues.length ? rawValues[rawValues.length - 1] : 0;
+  const latest = rawValues[rawValues.length - 1] ?? 0;
   const peak = rawValues.length ? Math.max(...rawValues) : 0;
   const avg = average(rawValues);
   const consistency = stdDev(rawValues);
@@ -456,14 +456,14 @@ export default function Heatmap({
   }, [allowedModes]);
 
   const [selectedMode, setSelectedMode] = useState<HeatmapMode>(
-    resolvedAllowedModes.includes(initialMode) ? initialMode : resolvedAllowedModes[0]
+    resolvedAllowedModes.includes(initialMode) ? initialMode : resolvedAllowedModes[0] ?? "raw"
   );
   const [sortMode, setSortMode] = useState<SortMode>("default");
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
 
   useEffect(() => {
     if (!resolvedAllowedModes.includes(selectedMode)) {
-      setSelectedMode(resolvedAllowedModes[0]);
+      setSelectedMode(resolvedAllowedModes[0] ?? "raw");
     }
   }, [resolvedAllowedModes, selectedMode]);
 

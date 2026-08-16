@@ -62,8 +62,12 @@ function buildWeightedRelationships(
 
   for (const link of links) {
     if (!Number.isFinite(link.value) || link.value <= 0) continue;
-    if (!next[link.source]) next[link.source] = {};
-    next[link.source][link.target] = link.value;
+    let bucket = next[link.source];
+    if (!bucket) {
+      bucket = {};
+      next[link.source] = bucket;
+    }
+    bucket[link.target] = link.value;
   }
 
   return next;

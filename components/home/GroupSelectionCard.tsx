@@ -19,7 +19,7 @@ export function GroupSelectionCard({
 }) {
   const visiblePlayers = group.playerIds
     .map((id) => playersById[id])
-    .filter(Boolean)
+    .filter((player): player is PlayerLike => Boolean(player))
     .slice(0, 5);
 
   return (

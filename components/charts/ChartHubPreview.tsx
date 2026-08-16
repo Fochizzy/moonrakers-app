@@ -241,7 +241,7 @@ function PreviewRadar({
 }) {
   const cx = width / 2;
   const cy = height / 2;
-  const polygon = [
+  const polygon: [number, number][] = [
     [cx, 12],
     [width - 16, height * 0.36],
     [width * 0.72, height - 14],
@@ -332,7 +332,7 @@ function PreviewHeatmap({
         const col = index % cols;
         const x = 10 + col * (cellWidth + gap);
         const y = 8 + row * (cellHeight + gap);
-        const alpha = intensities[index];
+        const alpha = intensities[index] ?? 0;
 
         return (
           <Rect
@@ -365,12 +365,15 @@ function PreviewNetwork({
     { x: width * 0.52, y: height * 0.28, r: 7 },
     { x: width * 0.78, y: height * 0.62, r: 5 },
   ];
+  const [nodeA, nodeB, nodeC] = nodes;
+
+  if (!nodeA || !nodeB || !nodeC) return null;
 
   return (
     <>
-      <Line x1={nodes[0].x} y1={nodes[0].y} x2={nodes[1].x} y2={nodes[1].y} stroke={withChartAlpha(stroke, 0.65)} strokeWidth={2} />
-      <Line x1={nodes[1].x} y1={nodes[1].y} x2={nodes[2].x} y2={nodes[2].y} stroke={withChartAlpha(stroke, 0.55)} strokeWidth={2} />
-      <Line x1={nodes[0].x} y1={nodes[0].y} x2={nodes[2].x} y2={nodes[2].y} stroke={CHART_COLORS.grid} strokeWidth={1.5} />
+      <Line x1={nodeA.x} y1={nodeA.y} x2={nodeB.x} y2={nodeB.y} stroke={withChartAlpha(stroke, 0.65)} strokeWidth={2} />
+      <Line x1={nodeB.x} y1={nodeB.y} x2={nodeC.x} y2={nodeC.y} stroke={withChartAlpha(stroke, 0.55)} strokeWidth={2} />
+      <Line x1={nodeA.x} y1={nodeA.y} x2={nodeC.x} y2={nodeC.y} stroke={CHART_COLORS.grid} strokeWidth={1.5} />
       {nodes.map((node, index) => (
         <Circle
           key={`node-${index}`}

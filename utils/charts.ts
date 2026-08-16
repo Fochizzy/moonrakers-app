@@ -133,6 +133,9 @@ export type SnapshotPoint = {
   round: number;
   gameIndex: number;
   label: string;
+  /** Set for per-game snapshots so a chart row can link back to the game. */
+  gameId?: string;
+  createdAt?: number;
   snapshot: Record<string, Record<string, number | string>>;
 };
 
@@ -1747,6 +1750,8 @@ export function buildUnifiedSnapshots(
       round: index + 1,
       gameIndex: index + 1,
       label: `Game ${index + 1}`,
+      gameId: String(game?.id ?? "").trim() || undefined,
+      createdAt: maybeNumber((game as { createdAt?: unknown })?.createdAt) ?? undefined,
       snapshot,
     };
   });
@@ -1991,7 +1996,8 @@ export function normalizeMetricForChart(
   metricKey?: string | null
 ): SimpleMetricKey | null {
   const supported = getSupportedMetricKeysForChart(chartKey);
-  if (!supported.length) return null;
+  const fallbackMetric = supported[0];
+  if (fallbackMetric === undefined) return null;
 
   const rawMetric = String(metricKey ?? "").trim();
   if (!rawMetric) return null;
@@ -2001,7 +2007,7 @@ export function normalizeMetricForChart(
   }
 
   if (rawMetric === "prestige") {
-    return supported.includes("totalPrestige") ? "totalPrestige" : supported[0];
+    return supported.includes("totalPrestige") ? "totalPrestige" : fallbackMetric;
   }
 
   if (REPLAY_CHART_KEYS.has(normalizeChartKey(chartKey))) {
@@ -2009,7 +2015,7 @@ export function normalizeMetricForChart(
     return replayMetric === "score" ? "totalPrestige" : replayMetric;
   }
 
-  return supported[0];
+  return fallbackMetric;
 }
 
 export function buildStackedMetricOptions(): MetricOption[] {

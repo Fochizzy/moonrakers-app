@@ -64,7 +64,7 @@ export function normalizeStoredPlayerColor(
 }
 
 export function getFallbackPlayerColor(index = 0): PlayerColorName {
-  return PLAYER_COLOR_NAMES[index % PLAYER_COLOR_NAMES.length];
+  return PLAYER_COLOR_NAMES[index % PLAYER_COLOR_NAMES.length] ?? "blue";
 }
 
 export function resolveStoredPlayerColor(

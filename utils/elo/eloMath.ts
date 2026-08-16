@@ -17,8 +17,8 @@ export function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
+    ? ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2
+    : sorted[mid] ?? 0;
 }
 
 export function variance(values: number[]): number {
@@ -53,8 +53,11 @@ export function slope(xs: number[], ys: number[]): number {
   let den = 0;
 
   for (let i = 0; i < xs.length; i++) {
-    num += (xs[i] - xMean) * (ys[i] - yMean);
-    den += (xs[i] - xMean) ** 2;
+    const x = xs[i];
+    const y = ys[i];
+    if (x === undefined || y === undefined) continue;
+    num += (x - xMean) * (y - yMean);
+    den += (x - xMean) ** 2;
   }
 
   return den === 0 ? 0 : num / den;

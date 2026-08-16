@@ -82,6 +82,8 @@ function buildTwoPlayerPlaystyleRead(rows: CompareRow[]): string[] {
   if (rows.length !== 2) return [];
 
   const [firstRow, secondRow] = rows;
+  if (!firstRow || !secondRow) return [];
+
   const paceLeader = pickHighest(rows, ['avgPrestigePerGame', 'avgScorePerGame', 'prestige']);
   const supportLeader = pickHighest(rows, ['netAssistBenefit', 'avgAssists', 'assistsPerGame', 'assists']);
   const synergyLeader = pickHighest(rows, ['synergyIndex']);
@@ -484,11 +486,12 @@ export default function CompareInsightBar({
 
   if (!rows.length) return null;
 
+  const [firstRow] = rows;
   const comparedLabel =
     selectionLabel && selectionLabel.trim().length
       ? selectionLabel
-      : rows.length === 1
-        ? rows[0].label
+      : rows.length === 1 && firstRow
+        ? firstRow.label
         : `${rows.length} ${modeLabel}`;
 
   return (

@@ -69,7 +69,7 @@ assert.match(
 
 assert.match(
   source,
-  /if \(!activeId \|\| !hasActivePlayer\) \{\s*setSelectedPlayerId\(preferredPlayerId \?\? normalizeId\(analyticsPlayers\[0\]\.id\)\);\s*\}/s,
+  /if \(!activeId \|\| !hasActivePlayer\) \{\s*setSelectedPlayerId\(preferredPlayerId \?\? normalizeId\(analyticsPlayers\[0\]\?\.id\)\);\s*\}/s,
   "expected the Elo screen to default the selected player to the preferred signed-in player before falling back",
 );
 

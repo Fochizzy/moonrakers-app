@@ -471,7 +471,7 @@ export default function IndexScreen() {
   ]);
 
   const sortMetric = useMemo(
-    () => METRICS.find((metric) => String(metric.key) === sortMetricKey) ?? METRICS[0],
+    () => METRICS.find((metric) => String(metric.key) === sortMetricKey) ?? METRICS[0]!,
     [sortMetricKey]
   );
 

@@ -441,7 +441,7 @@ function buildRadarModel(args: ChartPageModelArgs) {
 
   return {
     takeaway: `${selected} profiles strongest in ${String(
-      labelMap[strongest?.[0] ?? strongest?.[0]]
+      labelMap[strongest?.[0] ?? ""]
     ).toLowerCase()} across ${pluralize(args.gamesCount, "tracked game")}.`,
     proofCards: [
       { label: "Focus", value: selected, tone: "accent" as const },

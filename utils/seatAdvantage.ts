@@ -70,8 +70,11 @@ export function computeSeatAdvantageSpread(
   if (buckets.length < 2) return 0;
 
   // Buckets are seat-ascending, so a strict comparison keeps the lowest seat on ties.
-  let best = buckets[0];
-  let worst = buckets[0];
+  const firstBucket = buckets[0];
+  if (!firstBucket) return 0;
+
+  let best = firstBucket;
+  let worst = firstBucket;
   let bestRate = best.wins / best.appearances;
   let worstRate = bestRate;
 
@@ -105,7 +108,10 @@ export function computeSeatAdvantageSpreadFromArrays(
   const samples: SeatWinSample[] = [];
 
   for (let index = 0; index < length; index += 1) {
-    samples.push({ seat: seats[index], won: wins[index] });
+    const seat = seats[index];
+    const won = wins[index];
+    if (seat === undefined || won === undefined) continue;
+    samples.push({ seat, won });
   }
 
   return computeSeatAdvantageSpread(samples, minAppearances);

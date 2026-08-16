@@ -159,10 +159,12 @@ function replayRounds(
         asRecord(round.assistRecipients)
       ).filter((value) => num(value) > 0).length;
 
-      prestigeTotals[actorId] +=
+      prestigeTotals[actorId] =
+        (prestigeTotals[actorId] ?? 0) +
         num(round.prestige) +
         num(round.objectivePrestige ?? round.objectiveCount);
-      bonusTotals[actorId] +=
+      bonusTotals[actorId] =
+        (bonusTotals[actorId] ?? 0) +
         num(round.contracts) * 5 - num(round.failures) * 4 + assistsGiven * 3;
     }
 
@@ -170,14 +172,18 @@ function replayRounds(
       asRecord(round.assistPrestigeRecipients)
     )) {
       if (recipientId in prestigeTotals) {
-        prestigeTotals[recipientId] += num(amount);
+        prestigeTotals[recipientId] = (prestigeTotals[recipientId] ?? 0) + num(amount);
       }
     }
 
     for (const playerId of playerIds) {
-      const runningPrestige = Math.max(0, prestigeTotals[playerId]);
-      prestige[playerId].push(runningPrestige);
-      score[playerId].push(runningPrestige + bonusTotals[playerId]);
+      const prestigeTrail = prestige[playerId];
+      const scoreTrail = score[playerId];
+      if (!prestigeTrail || !scoreTrail) continue;
+
+      const runningPrestige = Math.max(0, prestigeTotals[playerId] ?? 0);
+      prestigeTrail.push(runningPrestige);
+      scoreTrail.push(runningPrestige + (bonusTotals[playerId] ?? 0));
     }
   }
 
@@ -229,7 +235,7 @@ export function roundsReconcile(
 
   const drift = playerIds.reduce((total, playerId) => {
     const trail = trails[playerId] ?? [];
-    const replayed = trail.length ? trail[trail.length - 1] : 0;
+    const replayed = trail[trail.length - 1] ?? 0;
     return total + Math.abs(replayed - getTotalPrestige(game, playerId));
   }, 0);
 
@@ -282,7 +288,9 @@ export function buildFlowScores(
 ): Record<string, number> {
   const fieldSize = playerIds.length;
   const trails = buildRunningScores(game, playerIds);
-  const turnCount = playerIds.length ? (trails[playerIds[0]]?.length ?? 0) : 0;
+  const firstPlayerId = playerIds[0];
+  const turnCount =
+    firstPlayerId === undefined ? 0 : (trails[firstPlayerId]?.length ?? 0);
 
   if (!turnCount || !roundsReconcile(game, playerIds)) {
     const endScores = playerIds.map((playerId) => getEndScore(game, playerId));
@@ -291,7 +299,7 @@ export function buildFlowScores(
     return Object.fromEntries(
       playerIds.map((playerId, index) => [
         playerId,
-        eloFieldStanding(endScores[index], endMean, fieldSize),
+        eloFieldStanding(endScores[index] ?? 0, endMean, fieldSize),
       ])
     );
   }
@@ -308,20 +316,21 @@ export function buildFlowScores(
     weightTotal += weight;
 
     const turnScores = playerIds.map(
-      (playerId) => trails[playerId][turn] ?? 0
+      (playerId) => trails[playerId]?.[turn] ?? 0
     );
     const turnMean = mean(turnScores);
 
     playerIds.forEach((playerId, index) => {
-      weightedTotals[playerId] +=
-        weight * eloFieldStanding(turnScores[index], turnMean, fieldSize);
+      weightedTotals[playerId] =
+        (weightedTotals[playerId] ?? 0) +
+        weight * eloFieldStanding(turnScores[index] ?? 0, turnMean, fieldSize);
     });
   }
 
   return Object.fromEntries(
     playerIds.map((playerId) => [
       playerId,
-      weightTotal > 0 ? weightedTotals[playerId] / weightTotal : 0.5,
+      weightTotal > 0 ? (weightedTotals[playerId] ?? 0) / weightTotal : 0.5,
     ])
   );
 }
@@ -379,7 +388,9 @@ export function buildSettledAt(
   }
 
   const trails = buildRunningPrestige(game, playerIds);
-  const turnCount = trails[playerIds[0]]?.length ?? 0;
+  const firstPlayerId = playerIds[0];
+  const turnCount =
+    firstPlayerId === undefined ? 0 : (trails[firstPlayerId]?.length ?? 0);
   if (!turnCount) {
     return null;
   }
@@ -390,7 +401,7 @@ export function buildSettledAt(
     let shared = false;
 
     for (const playerId of playerIds) {
-      const value = trails[playerId][turn] ?? 0;
+      const value = trails[playerId]?.[turn] ?? 0;
       if (value > best) {
         best = value;
         leader = playerId;
@@ -492,9 +503,9 @@ export function buildPerformanceSignals(
   return Object.fromEntries(
     playerIds.map((playerId, index) => [
       playerId,
-      (flowScores[playerId] +
-        eloFieldStanding(totalPrestiges[index], prestigeMean, fieldSize) +
-        eloFieldStanding(endScores[index], endMean, fieldSize)) /
+      ((flowScores[playerId] ?? 0.5) +
+        eloFieldStanding(totalPrestiges[index] ?? 0, prestigeMean, fieldSize) +
+        eloFieldStanding(endScores[index] ?? 0, endMean, fieldSize)) /
         3,
     ])
   );
@@ -553,30 +564,40 @@ export function buildResultScores(
 
   let index = 0;
   while (index < ranked.length) {
+    const anchor = ranked[index];
+    if (anchor === undefined) break;
+
     let last = index;
+    let next = ranked[last + 1];
     while (
-      last + 1 < ranked.length &&
-      ranked[last + 1].isWinner === ranked[index].isWinner &&
-      ranked[last + 1].prestige === ranked[index].prestige &&
-      ranked[last + 1].score === ranked[index].score
+      next !== undefined &&
+      next.isWinner === anchor.isWinner &&
+      next.prestige === anchor.prestige &&
+      next.score === anchor.score
     ) {
       last += 1;
+      next = ranked[last + 1];
     }
 
     // Positions are 1-indexed; a tied block shares the average of its span.
     const sharedPosition = (index + 1 + (last + 1)) / 2;
     for (let tied = index; tied <= last; tied += 1) {
-      positions[ranked[tied].playerId] = sharedPosition;
+      const entry = ranked[tied];
+      if (entry === undefined) continue;
+      positions[entry.playerId] = sharedPosition;
     }
 
     index = last + 1;
   }
 
   return Object.fromEntries(
-    playerIds.map((playerId) => [
-      playerId,
-      (fieldSize - positions[playerId]) / (fieldSize - 1),
-    ])
+    playerIds.map((playerId) => {
+      const position = positions[playerId];
+      return [
+        playerId,
+        position === undefined ? 0.5 : (fieldSize - position) / (fieldSize - 1),
+      ];
+    })
   );
 }
 
@@ -673,10 +694,11 @@ function applyGameToRatings(
   for (const playerId of playerIds) {
     const opponentRatings = playerIds
       .filter((id) => id !== playerId)
-      .map((id) => ratings[id]);
+      .map((id) => ratings[id])
+      .filter((rating): rating is number => rating !== undefined);
 
     nextRatings[playerId] = updateElo(
-      ratings[playerId],
+      ratings[playerId] ?? BASE_ELO,
       opponentRatings,
       actualScores[playerId] ?? 0.5,
       effectiveK
@@ -747,9 +769,13 @@ export function buildRatingHistory(
     applyGameToRatings(game, playerIds, ratings, k);
 
     for (const playerId of playerIds) {
-      history[playerId].push({
+      const playerHistory = history[playerId];
+      const rating = ratings[playerId];
+      if (!playerHistory || rating === undefined) continue;
+
+      playerHistory.push({
         gameId: game.id ?? `${game.createdAt ?? 0}-${playerId}`,
-        rating: ratings[playerId],
+        rating,
         createdAt: game.createdAt,
       });
     }

@@ -315,6 +315,7 @@ export function dedupeGames(games: AnyGame[]): AnyGame[] {
 
   for (let i = 0; i < games.length; i += 1) {
     const game = games[i];
+    if (game === undefined) continue;
     const id = getGameId(game, i);
     const ts = getGameTimestamp(game);
     const count = getGameParticipants(game).length;

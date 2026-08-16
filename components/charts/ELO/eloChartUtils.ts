@@ -129,7 +129,7 @@ function fallbackChartColorFromId(id: string): string {
     hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
   }
 
-  return palette[hash % palette.length];
+  return palette[hash % palette.length] ?? '#8B5CF6';
 }
 
 export function getPlayerColor(
@@ -291,7 +291,7 @@ export function buildAnalytics(
     );
 
     const eloDeltas = eloValues.map((elo, index) =>
-      index === 0 ? 0 : elo - eloValues[index - 1]
+      index === 0 ? 0 : elo - (eloValues[index - 1] ?? 0)
     );
 
     const expectedResults = games.map((game) =>
@@ -303,11 +303,11 @@ export function buildAnalytics(
     );
 
     const expectedVsActual = actualResults.map(
-      (actual, index) => actual - expectedResults[index]
+      (actual, index) => actual - (expectedResults[index] ?? 0)
     );
 
     const performanceVsGap = games.map((game, index) =>
-      getPerformanceVsGap(game, player.id, players, expectedVsActual[index])
+      getPerformanceVsGap(game, player.id, players, expectedVsActual[index] ?? 0)
     );
 
     let currentWinStreak = 0;
@@ -371,14 +371,16 @@ export function buildAnalytics(
 }
 
 export function createSmoothPath(points: ChartPoint[]): string {
-  if (!points.length) return '';
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  const first = points[0];
+  if (first === undefined) return '';
+  if (points.length === 1) return `M ${first.x} ${first.y}`;
 
-  let path = `M ${points[0].x} ${points[0].y}`;
+  let path = `M ${first.x} ${first.y}`;
 
   for (let i = 0; i < points.length - 1; i += 1) {
     const current = points[i];
     const next = points[i + 1];
+    if (current === undefined || next === undefined) continue;
     const controlX = (current.x + next.x) / 2;
 
     path += ` C ${controlX} ${current.y}, ${controlX} ${next.y}, ${next.x} ${next.y}`;

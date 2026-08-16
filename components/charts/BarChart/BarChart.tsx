@@ -127,7 +127,7 @@ function normalizeColor(color?: string, index = 0): string {
     "#F97316",
   ];
 
-  return fallback[index % fallback.length];
+  return fallback[index % fallback.length] ?? "#A855F7";
 }
 
 function uniquePlayers(players: Player[]) {

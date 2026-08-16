@@ -87,8 +87,11 @@ function correlation(x: number[], y: number[]) {
   let denomY = 0;
 
   for (let i = 0; i < n; i++) {
-    const dx = x[i] - meanX;
-    const dy = y[i] - meanY;
+    const xi = x[i];
+    const yi = y[i];
+    if (xi === undefined || yi === undefined) continue;
+    const dx = xi - meanX;
+    const dy = yi - meanY;
     numerator += dx * dy;
     denomX += dx * dx;
     denomY += dy * dy;

@@ -258,7 +258,7 @@ function getStyleRead(summary: {
     return "Balanced";
   }
 
-  return sorted[0].key;
+  return sorted[0]?.key ?? "Balanced";
 }
 
 function getSupportStyle(samples: PlaystyleSample[]): "Giver" | "Receiver" | "Balanced" {

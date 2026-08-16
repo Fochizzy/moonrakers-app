@@ -37,8 +37,10 @@ export default function DefinitionRichText({
   const sourceLabel = resolveDefinitionSourceLabel(pathname);
   const segments = useMemo(() => findDefinitionTextSegments(text), [text]);
 
-  if (segments.length === 1) {
-    const [segment] = segments;
+  const [soleSegment] = segments;
+
+  if (segments.length === 1 && soleSegment !== undefined) {
+    const segment = soleSegment;
 
     if (segment.type === "term") {
       return (

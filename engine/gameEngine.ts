@@ -184,11 +184,12 @@ export function buildTotals(
   }
 
   for (const round of rounds) {
-    if (!totals[round.playerId]) {
-      totals[round.playerId] = emptyTotals();
+    let actorTotals = totals[round.playerId];
+    if (!actorTotals) {
+      actorTotals = emptyTotals();
+      totals[round.playerId] = actorTotals;
     }
 
-    const actorTotals = totals[round.playerId];
     const roundObjectiveCount = objectiveCount(
       round.objectiveCount ?? round.objectivePrestige
     );
@@ -237,6 +238,7 @@ export function buildTotals(
 
   for (const playerId of Object.keys(totals)) {
     const totalsForPlayer = totals[playerId];
+    if (!totalsForPlayer) continue;
 
     totalsForPlayer.totalPrestige = getTotalPrestigeFromTotals(totalsForPlayer);
 
@@ -317,8 +319,9 @@ export function getLeadingPlayerIds(
   players: PlayerLike[]
 ): string[] {
   const ranking = getLeaderboard(totals, players);
-  if (!ranking.length) return [];
-  const best = ranking[0].totalPrestige;
+  const leader = ranking[0];
+  if (!leader) return [];
+  const best = leader.totalPrestige;
   return ranking
     .filter((entry) => entry.totalPrestige === best)
     .map((entry) => entry.id);

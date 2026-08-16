@@ -52,9 +52,9 @@ function clamp(value: number, min: number, max: number): number {
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const cleaned = hex.replace('#', '').trim();
   if (/^[0-9a-fA-F]{3}$/.test(cleaned)) {
-    const r = parseInt(cleaned[0] + cleaned[0], 16);
-    const g = parseInt(cleaned[1] + cleaned[1], 16);
-    const b = parseInt(cleaned[2] + cleaned[2], 16);
+    const r = parseInt(cleaned.charAt(0) + cleaned.charAt(0), 16);
+    const g = parseInt(cleaned.charAt(1) + cleaned.charAt(1), 16);
+    const b = parseInt(cleaned.charAt(2) + cleaned.charAt(2), 16);
     return { r, g, b };
   }
   if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {

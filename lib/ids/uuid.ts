@@ -7,8 +7,8 @@ const UUID_PATTERN =
 
 function formatUuidFromBytes(bytes: number[], version: number) {
   const normalized = bytes.slice(0, 16);
-  normalized[6] = (normalized[6] & 0x0f) | (version << 4);
-  normalized[8] = (normalized[8] & 0x3f) | 0x80;
+  normalized[6] = ((normalized[6] ?? 0) & 0x0f) | (version << 4);
+  normalized[8] = ((normalized[8] ?? 0) & 0x3f) | 0x80;
 
   const hex = normalized
     .map((value) => value.toString(16).padStart(2, "0"))

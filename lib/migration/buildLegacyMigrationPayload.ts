@@ -227,7 +227,7 @@ export function buildLegacyMigrationPayload(input: Input) {
         const normalizedName = normalizeName(localPlayer?.name ?? player.name);
         const profile = resolveProfile(normalizedName);
         const playerId = String(player.id ?? "").trim();
-        const totals = normalizedTotals[playerId] ?? {};
+        const totals = normalizedTotals[playerId];
 
         return {
           legacy_player_id: playerId || `legacy-player-${index}`,
@@ -247,14 +247,14 @@ export function buildLegacyMigrationPayload(input: Input) {
             typeof player.startOrder === "number" && Number.isFinite(player.startOrder)
               ? player.startOrder
               : index,
-          total_prestige: toNumber(totals.totalPrestige ?? totals.prestige),
-          direct_prestige: toNumber(totals.directPrestige),
-          assist_prestige_received: toNumber(totals.assistPrestigeReceived),
-          objective_prestige: toNumber(totals.objectivePrestige),
-          score: toNumber(totals.score),
-          assists: toNumber(totals.assists),
-          failures: toNumber(totals.failures),
-          contracts: toNumber(totals.contracts),
+          total_prestige: toNumber(totals?.totalPrestige ?? totals?.prestige),
+          direct_prestige: toNumber(totals?.directPrestige),
+          assist_prestige_received: toNumber(totals?.assistPrestigeReceived),
+          objective_prestige: toNumber(totals?.objectivePrestige),
+          score: toNumber(totals?.score),
+          assists: toNumber(totals?.assists),
+          failures: toNumber(totals?.failures),
+          contracts: toNumber(totals?.contracts),
           is_winner: Boolean(playerId && playerId === winnerLocalId),
         };
       }),

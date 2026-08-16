@@ -79,8 +79,14 @@ function pearson(xValues: number[], yValues: number[]) {
   let sumY = 0;
 
   for (let index = 0; index < xValues.length; index += 1) {
-    const dx = xValues[index] - meanX;
-    const dy = yValues[index] - meanY;
+    const x = xValues[index];
+    const y = yValues[index];
+    if (x === undefined || y === undefined) {
+      continue;
+    }
+
+    const dx = x - meanX;
+    const dy = y - meanY;
     numerator += dx * dy;
     sumX += dx * dx;
     sumY += dy * dy;

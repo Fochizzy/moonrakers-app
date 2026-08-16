@@ -59,7 +59,7 @@ function getInitials(name?: string) {
     .filter(Boolean);
 
   if (parts.length === 0) return "MR";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
 }
 
@@ -205,9 +205,9 @@ export function buildPlayerIdentity(input: PlayerIdentityInput): PlayerIdentity 
   ];
 
   const sorted = [...axes].sort((a, b) => b.value - a.value);
-  const topAxis = sorted[0];
-  const secondaryAxis = sorted[1];
-  const lowAxis = [...axes].sort((a, b) => a.value - b.value)[0];
+  const topAxis = sorted[0]!;
+  const secondaryAxis = sorted[1]!;
+  const lowAxis = [...axes].sort((a, b) => a.value - b.value)[0]!;
   const archetype = buildArchetype(topAxis);
   const subtitle = buildSubtitle(input, displayName);
   const summaryText = `${displayName} reads as a ${archetype.toLowerCase()} with strongest signals in ${topAxis.label.toLowerCase()} and ${secondaryAxis.label.toLowerCase()}. The clearest next growth area is ${lowAxis.label.toLowerCase()}, which is the lightest part of the current profile.`;

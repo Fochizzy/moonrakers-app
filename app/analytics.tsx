@@ -191,6 +191,7 @@ export default function AnalyticsScreen() {
   });
   const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
+  const insightsTone = ANALYTICS_CARD_TONES.insights;
   const recoveryState = useMemo(
     () =>
       resolveAnalyticsRecoveryState({
@@ -279,6 +280,7 @@ export default function AnalyticsScreen() {
         <View style={styles.grid}>
           {standardCards.map((card) => {
             const tone = ANALYTICS_CARD_TONES[card.key] ?? ANALYTICS_CARD_TONES.charts;
+            if (!tone) return null;
 
             return (
               <AnalyticsCard
@@ -291,13 +293,13 @@ export default function AnalyticsScreen() {
             );
           })}
 
-          {insightsCard ? (
+          {insightsCard && insightsTone ? (
             <AnalyticsCard
-              accent={ANALYTICS_CARD_TONES.insights.accent}
+              accent={insightsTone.accent}
               card={insightsCard}
               fullWidth
               onPress={() => router.push(insightsCard.route as any)}
-              tone={ANALYTICS_CARD_TONES.insights}
+              tone={insightsTone}
             />
           ) : null}
         </View>

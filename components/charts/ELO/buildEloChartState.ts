@@ -102,7 +102,7 @@ function getEloValue(value: EloSnapshotValue): number {
 function getColorValue(color: unknown, index: number): string {
   const safe = String(color ?? "").trim();
   if (safe) return safe;
-  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  return FALLBACK_COLORS[index % FALLBACK_COLORS.length] ?? "#A855F7";
 }
 
 function average(values: number[]) {

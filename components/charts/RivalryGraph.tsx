@@ -158,7 +158,7 @@ function getPlayerColor(color?: string, index = 0): string {
     "#F97316",
   ];
 
-  return fallback[index % fallback.length];
+  return fallback[index % fallback.length] ?? COLORS.accent;
 }
 
 function formatSigned(value: number, digits = 2): string {

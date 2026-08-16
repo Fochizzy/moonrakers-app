@@ -101,7 +101,7 @@ export const CHART_COLOR_ORDER: PlayerColorName[] = [
 ];
 
 export function getChartColor(index: number): string {
-  const key = CHART_COLOR_ORDER[index % CHART_COLOR_ORDER.length];
+  const key = CHART_COLOR_ORDER[index % CHART_COLOR_ORDER.length] ?? 'blue';
   return PLAYER_COLOR_MAP[key]?.base ?? PLAYER_COLOR_MAP.blue.base;
 }
 

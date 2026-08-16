@@ -38,9 +38,12 @@ export function median(values: readonly number[]): number {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
+  const middleValue = sorted[middle];
+  if (middleValue === undefined) return 0;
+  const lowerValue = sorted[middle - 1];
+  return sorted.length % 2 === 0 && lowerValue !== undefined
+    ? (lowerValue + middleValue) / 2
+    : middleValue;
 }
 
 export function standardDeviation(values: readonly number[]): number {
@@ -56,8 +59,13 @@ export function getDomain(values: readonly number[]): { min: number; max: number
     return { min: -1, max: 1 };
   }
 
-  let min = values[0];
-  let max = values[0];
+  const firstValue = values[0];
+  if (firstValue === undefined) {
+    return { min: -1, max: 1 };
+  }
+
+  let min = firstValue;
+  let max = firstValue;
 
   for (const value of values) {
     if (value < min) min = value;
@@ -189,8 +197,12 @@ export function computeMetrics(
 ): SparklineMetrics | null {
   if (!values.length) return null;
 
-  let min = values[0];
-  let max = values[0];
+  const first = values[0];
+  const current = values[values.length - 1];
+  if (first === undefined || current === undefined) return null;
+
+  let min = first;
+  let max = first;
   let minIndex = 0;
   let maxIndex = 0;
   let risingSteps = 0;
@@ -200,6 +212,7 @@ export function computeMetrics(
 
   for (let index = 0; index < values.length; index += 1) {
     const value = values[index];
+    if (value === undefined) continue;
 
     if (value < min) {
       min = value;
@@ -212,7 +225,9 @@ export function computeMetrics(
     }
 
     if (index > 0) {
-      const delta = value - values[index - 1];
+      const previousValue = values[index - 1];
+      if (previousValue === undefined) continue;
+      const delta = value - previousValue;
       const stepDirection = delta > 0 ? 1 : delta < 0 ? -1 : 0;
 
       if (delta > 0) risingSteps += 1;
@@ -232,9 +247,7 @@ export function computeMetrics(
     }
   }
 
-  const current = values[values.length - 1];
-  const previous = values.length > 1 ? values[values.length - 2] : null;
-  const first = values[0];
+  const previous = values.length > 1 ? values[values.length - 2] ?? null : null;
   const avg = average(values);
   const med = median(values);
   const sum = values.reduce((acc, value) => acc + value, 0);
@@ -262,7 +275,10 @@ export function computeMetrics(
   const safeRecentWindow = Math.max(2, Math.min(recentWindow, values.length));
   const recentValues = values.slice(-safeRecentWindow);
   const recentAverage = average(recentValues);
-  const recentChange = recentValues[recentValues.length - 1] - recentValues[0];
+  const recentFirst = recentValues[0];
+  const recentLast = recentValues[recentValues.length - 1];
+  const recentChange =
+    recentFirst !== undefined && recentLast !== undefined ? recentLast - recentFirst : 0;
   const recentTrendDirection = getTrendDirection(
     recentChange,
     range || Math.abs(current) || 1

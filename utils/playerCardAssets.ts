@@ -55,6 +55,6 @@ export function getPlayerCardSourceByArtIndex(
     ? artIndex
     : 0;
   const fileName =
-    PLAYER_CARD_FILES[normalizedIndex] ?? PLAYER_CARD_FILES[0];
+    PLAYER_CARD_FILES[normalizedIndex] ?? PLAYER_CARD_FILES[0] ?? "card-00.png";
   return PLAYER_CARD_IMAGE_BY_FILE[fileName];
 }

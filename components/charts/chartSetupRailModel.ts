@@ -74,7 +74,7 @@ export function resolveNextChartSetupStage(
   const currentIndex = CHART_SETUP_STAGE_ORDER.indexOf(currentStageKey);
   for (let index = currentIndex + 1; index < CHART_SETUP_STAGE_ORDER.length; index += 1) {
     const stageKey = CHART_SETUP_STAGE_ORDER[index];
-    if (!completedStages[stageKey]) {
+    if (stageKey !== undefined && !completedStages[stageKey]) {
       return stageKey;
     }
   }
@@ -89,7 +89,9 @@ export function invalidateStagesAfter(
   const startIndex = CHART_SETUP_STAGE_ORDER.indexOf(stageKey) + 1;
 
   for (let index = startIndex; index < CHART_SETUP_STAGE_ORDER.length; index += 1) {
-    next[CHART_SETUP_STAGE_ORDER[index]] = false;
+    const stageKey = CHART_SETUP_STAGE_ORDER[index];
+    if (stageKey === undefined) continue;
+    next[stageKey] = false;
   }
 
   return next;

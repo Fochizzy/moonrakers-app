@@ -47,7 +47,8 @@ function formatPercent(value: number): string {
 
 function buildHeadline(rows: CompareRow[]): string {
   if (!rows.length) return 'No comparison data yet.';
-  if (rows.length === 1) return `${rows[0].label} is the only selected row.`;
+  const [onlyRow] = rows;
+  if (rows.length === 1 && onlyRow) return `${onlyRow.label} is the only selected row.`;
 
   const winLeader = pickHighest(rows, ['winRate']);
   const winTrailer = pickLowest(rows, ['winRate']);
@@ -71,6 +72,7 @@ function buildInsights(rows: CompareRow[]): string[] {
   if (!rows.length) return [];
   if (rows.length === 1) {
     const row = rows[0];
+    if (!row) return [];
     return [
       `${row.label} is selected for comparison.`,
       `Add more players or groups to generate comparative insights.`,

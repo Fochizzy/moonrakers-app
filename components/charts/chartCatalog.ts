@@ -285,7 +285,7 @@ export function resolveChartCatalogEntry(chartKey?: string | null) {
       (entry) =>
         entry.key === normalized ||
         (entry.aliases ?? []).some((alias) => alias === normalized)
-    ) ?? CHART_CATALOG[0]
+    ) ?? CHART_CATALOG[0]!
   );
 }
 

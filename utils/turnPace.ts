@@ -40,9 +40,12 @@ function median(values: number[]): number {
   if (!values.length) return 0;
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? Math.round((sorted[middle - 1] + sorted[middle]) / 2)
-    : sorted[middle];
+  const upper = sorted[middle];
+  const lower = sorted[middle - 1];
+  if (upper === undefined) return 0;
+  return sorted.length % 2 === 0 && lower !== undefined
+    ? Math.round((lower + upper) / 2)
+    : upper;
 }
 
 /**
@@ -86,7 +89,9 @@ export function buildGamePace(
 
   for (let index = 1; index < timedTurns.length; index += 1) {
     const turn = timedTurns[index];
-    const elapsed = turn.createdAt - timedTurns[index - 1].createdAt;
+    const previousTurn = timedTurns[index - 1];
+    if (!turn || !previousTurn) continue;
+    const elapsed = turn.createdAt - previousTurn.createdAt;
     if (elapsed <= 0) continue;
 
     allDurations.push(elapsed);
@@ -120,9 +125,14 @@ export function buildGamePace(
     })
     .sort((left, right) => right.medianTurnMs - left.medianTurnMs);
 
+  const firstTurn = timedTurns[0];
+  const lastTurn = timedTurns[timedTurns.length - 1];
+  if (!firstTurn || !lastTurn) {
+    return null;
+  }
+
   return {
-    gameDurationMs:
-      timedTurns[timedTurns.length - 1].createdAt - timedTurns[0].createdAt,
+    gameDurationMs: lastTurn.createdAt - firstTurn.createdAt,
     measuredTurns: allDurations.length,
     medianTurnMs: median(allDurations),
     longestTurnMs: Math.max(...allDurations),

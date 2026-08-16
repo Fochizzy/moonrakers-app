@@ -173,6 +173,10 @@ export function buildLocalChartSetupPayload(
   args: BuildLocalChartSetupPayloadArgs,
 ): ChartSetupPayload | null {
   const entry = resolveChartCatalogEntry(args.chartKey);
+  if (!entry) {
+    return null;
+  }
+
   const playerOptions = buildPlayerOptions(args.players);
   if (!playerOptions.length) {
     return null;

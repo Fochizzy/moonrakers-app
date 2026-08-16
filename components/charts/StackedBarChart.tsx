@@ -289,8 +289,7 @@ function StackedBarChart({
 
   const initialMetricKey = useMemo(() => {
     if (defaultMetricKey && metricKeys.includes(defaultMetricKey)) return defaultMetricKey;
-    if (metricKeys.length > 0) return metricKeys[0];
-    return defaultMetricKey ?? "";
+    return metricKeys[0] ?? defaultMetricKey ?? "";
   }, [defaultMetricKey, metricKeys]);
 
   const [uncontrolledMetricKey, setUncontrolledMetricKey] = useState(initialMetricKey);

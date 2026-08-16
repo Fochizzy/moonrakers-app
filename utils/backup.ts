@@ -124,7 +124,7 @@ function normalizeInitials(value: unknown, fallbackName?: string): string | unde
   if (typeof fallbackName === 'string' && fallbackName.trim()) {
     const parts = fallbackName.trim().split(/\s+/).filter(Boolean);
     if (parts.length === 1) {
-      const single = parts[0].slice(0, 2).toUpperCase();
+      const single = parts[0]!.slice(0, 2).toUpperCase();
       return single || undefined;
     }
     const combined = parts

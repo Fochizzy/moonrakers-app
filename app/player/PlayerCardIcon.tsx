@@ -78,7 +78,9 @@ function pickSessionRandomArtIndex(player?: PlayerLike | null) {
 
   let nextIndex: number;
   if (colorIndices.length > 0) {
-    nextIndex = colorIndices[Math.floor(Math.random() * colorIndices.length)];
+    nextIndex =
+      colorIndices[Math.floor(Math.random() * colorIndices.length)] ??
+      Math.floor(Math.random() * PLAYER_CARD_FILES.length);
   } else {
     nextIndex = Math.floor(Math.random() * PLAYER_CARD_FILES.length);
   }
@@ -96,6 +98,7 @@ function resolveRenderableCardArtIndex(player?: PlayerLike | null) {
 function resolveCardSource(player?: PlayerLike | null) {
   const artIndex = resolveRenderableCardArtIndex(player);
   const fileName = PLAYER_CARD_FILES[artIndex] ?? PLAYER_CARD_FILES[0];
+  if (fileName === undefined) return undefined;
   return PLAYER_CARD_IMAGE_BY_FILE[fileName];
 }
 

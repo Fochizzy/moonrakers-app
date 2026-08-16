@@ -305,7 +305,7 @@ export default function EloScreen() {
     );
 
     if (!activeId || !hasActivePlayer) {
-      setSelectedPlayerId(preferredPlayerId ?? normalizeId(analyticsPlayers[0].id));
+      setSelectedPlayerId(preferredPlayerId ?? normalizeId(analyticsPlayers[0]?.id));
     }
   }, [analyticsPlayers, preferredPlayerId, selectedPlayerId]);
 

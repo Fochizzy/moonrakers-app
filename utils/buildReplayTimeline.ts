@@ -87,8 +87,9 @@ export function buildReplayTimeline(
     consumed.push(toEngineRound(round, index));
     const snapshot = buildTotals([...consumed], safePlayers);
 
-    if (isLinkedTurnMetaType(round.metaType) && steps.length > 0) {
-      steps[steps.length - 1].snapshot = snapshot;
+    const previousStep = steps[steps.length - 1];
+    if (isLinkedTurnMetaType(round.metaType) && previousStep) {
+      previousStep.snapshot = snapshot;
       continue;
     }
 

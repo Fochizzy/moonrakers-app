@@ -89,7 +89,7 @@ const PROFILE_TABS: EloMetricTab[] = getVisibleEloMetricTabs();
 
 function getInitials(name?: string) {
   if (!name?.trim()) return "?";
-  return name.trim()[0].toUpperCase();
+  return name.trim().charAt(0).toUpperCase();
 }
 
 function toRecord(value: unknown): PayloadRecord {

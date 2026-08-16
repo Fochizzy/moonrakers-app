@@ -72,7 +72,7 @@ function fallbackIndexFromStableKey(player?: PlayerCardLike | null) {
   }
 
   if (colorIndices.length > 0) {
-    return colorIndices[hash % colorIndices.length];
+    return colorIndices[hash % colorIndices.length] ?? hash % PLAYER_CARD_FILES.length;
   }
 
   return hash % PLAYER_CARD_FILES.length;
@@ -98,6 +98,7 @@ function resolveRenderableCardArtIndex(player?: PlayerCardLike | null) {
 function resolveCardSource(player?: PlayerCardLike | null) {
   const artIndex = resolveRenderableCardArtIndex(player);
   const fileName = PLAYER_CARD_FILES[artIndex] ?? PLAYER_CARD_FILES[0];
+  if (fileName === undefined) return undefined;
   return PLAYER_CARD_IMAGE_BY_FILE[fileName];
 }
 

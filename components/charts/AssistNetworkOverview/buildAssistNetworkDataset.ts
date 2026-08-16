@@ -132,6 +132,8 @@ function inferTwoPlayerLegacyAssistEdges(
   if (uniqueRelevantPlayerIds.length !== 2) return false;
 
   const [firstId, secondId] = uniqueRelevantPlayerIds;
+  if (!firstId || !secondId) return false;
+
   const firstTotals = (game.totals?.[firstId] ?? {}) as Record<string, unknown>;
   const secondTotals = (game.totals?.[secondId] ?? {}) as Record<string, unknown>;
 
