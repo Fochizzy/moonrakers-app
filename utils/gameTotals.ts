@@ -1,6 +1,22 @@
 // utils/gameTotals.ts
+//
+// Normalization boundary for game totals. Inputs arrive from storage, cloud
+// payloads, and imports, so they are typed `unknown` and validated here;
+// everything downstream gets the concrete NormalizedPlayerTotals shape.
 
-export function toNumber(v: any) {
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+export function toNumber(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
@@ -14,43 +30,66 @@ function normalizeAssistMap(value: unknown): Record<string, number> {
   }
 
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
+    Object.entries(value as UnknownRecord)
       .map(([key, raw]) => [String(key).trim(), toNumber(raw)])
       .filter(([key]) => Boolean(key))
   );
 }
 
-export function getObjectiveCountFromTotals(t: any) {
-  if (hasFiniteNumber(t?.objectiveCount)) {
-    return Math.max(0, Math.floor(t.objectiveCount));
+export function getObjectiveCountFromTotals(t: unknown): number {
+  const source = asRecord(t);
+
+  if (hasFiniteNumber(source.objectiveCount)) {
+    return Math.max(0, Math.floor(source.objectiveCount));
   }
 
-  if (hasFiniteNumber(t?.objectivePrestige)) {
-    return Math.max(0, Math.floor(t.objectivePrestige));
+  if (hasFiniteNumber(source.objectivePrestige)) {
+    return Math.max(0, Math.floor(source.objectivePrestige));
   }
 
   return 0;
 }
 
+export type NormalizedPlayerTotals = UnknownRecord & {
+  directPrestige: number;
+  assistPrestigeReceived: number;
+  assistPrestigeSent: number;
+  objectiveCount: number;
+  objectivePrestige: number;
+  prestige: number;
+  totalPrestige: number;
+  score: number;
+  assists: number;
+  failures: number;
+  contracts: number;
+  performance: number;
+  efficiency: number;
+  assistedEfficiency: number;
+  directEfficiency: number;
+  assistCountBySource: Record<string, number>;
+  assistPrestigeBySource: Record<string, number>;
+};
+
 /**
  * Normalize totals object for a single player.
  * Objective data is optional and safely defaults to 0.
  */
-export function normalizeTotals(t: any) {
-  const objectiveCount = getObjectiveCountFromTotals(t);
+export function normalizeTotals(t: unknown): NormalizedPlayerTotals {
+  const source = asRecord(t);
+  const objectiveCount = getObjectiveCountFromTotals(source);
 
-  const direct = toNumber(t?.directPrestige);
-  const assist = toNumber(t?.assistPrestigeReceived);
+  const direct = toNumber(source.directPrestige);
+  const assist = toNumber(source.assistPrestigeReceived);
 
   const totalPrestige =
-    toNumber(t?.totalPrestige ?? t?.prestige) ||
+    toNumber(source.totalPrestige ?? source.prestige) ||
     direct + assist + objectiveCount;
 
   return {
-    ...t,
+    ...source,
     directPrestige: direct,
     assistPrestigeReceived: assist,
-    assistPrestigeSent: toNumber(t?.assistPrestigeSent),
+    assistPrestigeSent: toNumber(source.assistPrestigeSent),
 
     objectiveCount,
     objectivePrestige: objectiveCount,
@@ -58,31 +97,31 @@ export function normalizeTotals(t: any) {
     prestige: totalPrestige,
     totalPrestige,
 
-    score: toNumber(t?.score),
-    assists: toNumber(t?.assists),
-    failures: toNumber(t?.failures),
-    contracts: toNumber(t?.contracts),
+    score: toNumber(source.score),
+    assists: toNumber(source.assists),
+    failures: toNumber(source.failures),
+    contracts: toNumber(source.contracts),
 
-    performance: toNumber(t?.performance),
-    efficiency: toNumber(t?.efficiency),
-    assistedEfficiency: toNumber(t?.assistedEfficiency),
-    directEfficiency: toNumber(t?.directEfficiency),
+    performance: toNumber(source.performance),
+    efficiency: toNumber(source.efficiency),
+    assistedEfficiency: toNumber(source.assistedEfficiency),
+    directEfficiency: toNumber(source.directEfficiency),
 
-    assistCountBySource: normalizeAssistMap(t?.assistCountBySource),
-    assistPrestigeBySource: normalizeAssistMap(t?.assistPrestigeBySource),
+    assistCountBySource: normalizeAssistMap(source.assistCountBySource),
+    assistPrestigeBySource: normalizeAssistMap(source.assistPrestigeBySource),
   };
 }
 
-function computeWinnerIdFromTotals(totals: Record<string, any>) {
+function computeWinnerIdFromTotals(totals: Record<string, unknown>) {
   let bestId: string | undefined;
   let bestPrestige = -Infinity;
 
   for (const [playerId, rawTotals] of Object.entries(totals ?? {})) {
-    const t = rawTotals as any;
+    const t = asRecord(rawTotals);
     const prestige =
-      toNumber(t?.totalPrestige ?? t?.prestige) ||
-      toNumber(t?.directPrestige) +
-        toNumber(t?.assistPrestigeReceived) +
+      toNumber(t.totalPrestige ?? t.prestige) ||
+      toNumber(t.directPrestige) +
+        toNumber(t.assistPrestigeReceived) +
         getObjectiveCountFromTotals(t);
 
     if (prestige > bestPrestige) {
@@ -94,167 +133,149 @@ function computeWinnerIdFromTotals(totals: Record<string, any>) {
   return bestId;
 }
 
+type TotalsAccumulator = {
+  directPrestige: number;
+  assistPrestigeReceived: number;
+  assistPrestigeSent: number;
+  objectiveCount: number;
+  objectivePrestige: number;
+  assists: number;
+  failures: number;
+  contracts: number;
+  score: number;
+  assistCountBySource: Record<string, number>;
+  assistPrestigeBySource: Record<string, number>;
+};
+
+function createEmptyAccumulator(): TotalsAccumulator {
+  return {
+    directPrestige: 0,
+    assistPrestigeReceived: 0,
+    assistPrestigeSent: 0,
+    objectiveCount: 0,
+    objectivePrestige: 0,
+    assists: 0,
+    failures: 0,
+    contracts: 0,
+    score: 0,
+    assistCountBySource: {},
+    assistPrestigeBySource: {},
+  };
+}
+
 /**
  * Compute totals from rounds if totals are missing or incomplete.
  * Objective data is optional and defaults to 0.
  */
-export function computeTotalsFromRounds(game: any) {
-  const totals: Record<string, any> = {};
+export function computeTotalsFromRounds(
+  game: unknown
+): Record<string, TotalsAccumulator> {
+  const totals: Record<string, TotalsAccumulator> = {};
 
-  const rounds = Array.isArray(game?.rounds) ? game.rounds : [];
+  const ensure = (playerId: string) =>
+    (totals[playerId] ??= createEmptyAccumulator());
 
-  for (const r of rounds) {
-    if (!r?.playerId) continue;
+  for (const rawRound of asArray(asRecord(game).rounds)) {
+    const round = asRecord(rawRound);
+    const playerId = String(round.playerId ?? '').trim();
+    if (!playerId) continue;
 
-    if (!totals[r.playerId]) {
-      totals[r.playerId] = {
-        directPrestige: 0,
-        assistPrestigeReceived: 0,
-        assistPrestigeSent: 0,
-        objectiveCount: 0,
-        objectivePrestige: 0,
-        assists: 0,
-        failures: 0,
-        contracts: 0,
-        score: 0,
-        assistCountBySource: {},
-        assistPrestigeBySource: {},
-      };
-    }
+    const t = ensure(playerId);
 
-    const t = totals[r.playerId];
-
-    t.directPrestige += toNumber(r.prestige);
-    t.contracts += toNumber(r.contracts);
-    t.failures += toNumber(r.failures);
+    t.directPrestige += toNumber(round.prestige);
+    t.contracts += toNumber(round.contracts);
+    t.failures += toNumber(round.failures);
 
     const objective = Math.max(
       0,
-      Math.floor(toNumber(r?.objectiveCount ?? r?.objectivePrestige))
+      Math.floor(toNumber(round.objectiveCount ?? round.objectivePrestige))
     );
 
     t.objectiveCount += objective;
     t.objectivePrestige += objective;
 
-    const assistRecipients =
-      r?.assistRecipients &&
-      typeof r.assistRecipients === 'object' &&
-      !Array.isArray(r.assistRecipients)
-        ? r.assistRecipients
-        : {};
-
-    for (const [target, value] of Object.entries(assistRecipients)) {
+    for (const [target, value] of Object.entries(asRecord(round.assistRecipients))) {
       const v = toNumber(value);
 
       t.assists += v;
 
-      if (!totals[target]) {
-        totals[target] = {
-          directPrestige: 0,
-          assistPrestigeReceived: 0,
-          assistPrestigeSent: 0,
-          objectiveCount: 0,
-          objectivePrestige: 0,
-          assists: 0,
-          failures: 0,
-          contracts: 0,
-          score: 0,
-          assistCountBySource: {},
-          assistPrestigeBySource: {},
-        };
-      }
-
-      totals[target].assistCountBySource = {
-        ...(totals[target].assistCountBySource ?? {}),
-        [r.playerId]:
-          toNumber(totals[target].assistCountBySource?.[r.playerId]) + v,
+      const targetTotals = ensure(target);
+      targetTotals.assistCountBySource = {
+        ...targetTotals.assistCountBySource,
+        [playerId]: toNumber(targetTotals.assistCountBySource[playerId]) + v,
       };
     }
 
-    if (
-      r?.assistPrestigeRecipients &&
-      typeof r.assistPrestigeRecipients === 'object' &&
-      !Array.isArray(r.assistPrestigeRecipients)
-    ) {
-      for (const [target, value] of Object.entries(r.assistPrestigeRecipients)) {
-        const v = toNumber(value);
+    for (const [target, value] of Object.entries(
+      asRecord(round.assistPrestigeRecipients)
+    )) {
+      const v = toNumber(value);
 
-        t.assistPrestigeSent += v;
+      t.assistPrestigeSent += v;
 
-        if (!totals[target]) {
-          totals[target] = {
-            directPrestige: 0,
-            assistPrestigeReceived: 0,
-            assistPrestigeSent: 0,
-            objectiveCount: 0,
-            objectivePrestige: 0,
-            assists: 0,
-            failures: 0,
-            contracts: 0,
-            score: 0,
-            assistCountBySource: {},
-            assistPrestigeBySource: {},
-          };
-        }
-
-        totals[target].assistPrestigeReceived += v;
-        totals[target].assistPrestigeBySource = {
-          ...(totals[target].assistPrestigeBySource ?? {}),
-          [r.playerId]:
-            toNumber(totals[target].assistPrestigeBySource?.[r.playerId]) + v,
-        };
-      }
+      const targetTotals = ensure(target);
+      targetTotals.assistPrestigeReceived += v;
+      targetTotals.assistPrestigeBySource = {
+        ...targetTotals.assistPrestigeBySource,
+        [playerId]: toNumber(targetTotals.assistPrestigeBySource[playerId]) + v,
+      };
     }
   }
 
   return totals;
 }
 
-function hasOwnNumber(obj: any, key: string) {
-  return Object.prototype.hasOwnProperty.call(obj ?? {}, key) && hasFiniteNumber(obj?.[key]);
+function hasOwnNumber(obj: unknown, key: string) {
+  const source = asRecord(obj);
+  return (
+    Object.prototype.hasOwnProperty.call(source, key) &&
+    hasFiniteNumber(source[key])
+  );
 }
 
-function chooseNumber(existing: any, computed: any, key: string) {
-  if (hasOwnNumber(existing, key)) return toNumber(existing[key]);
-  if (hasOwnNumber(computed, key)) return toNumber(computed[key]);
+function chooseNumber(existing: unknown, computed: unknown, key: string) {
+  if (hasOwnNumber(existing, key)) return toNumber(asRecord(existing)[key]);
+  if (hasOwnNumber(computed, key)) return toNumber(asRecord(computed)[key]);
   return 0;
 }
 
-function chooseObjectiveCount(existing: any, computed: any) {
-  if (
-    Object.prototype.hasOwnProperty.call(existing ?? {}, 'objectiveCount') ||
-    Object.prototype.hasOwnProperty.call(existing ?? {}, 'objectivePrestige')
-  ) {
+function hasObjectiveField(value: unknown) {
+  const source = asRecord(value);
+  return (
+    Object.prototype.hasOwnProperty.call(source, 'objectiveCount') ||
+    Object.prototype.hasOwnProperty.call(source, 'objectivePrestige')
+  );
+}
+
+function chooseObjectiveCount(existing: unknown, computed: unknown) {
+  if (hasObjectiveField(existing)) {
     return getObjectiveCountFromTotals(existing);
   }
 
-  if (
-    Object.prototype.hasOwnProperty.call(computed ?? {}, 'objectiveCount') ||
-    Object.prototype.hasOwnProperty.call(computed ?? {}, 'objectivePrestige')
-  ) {
+  if (hasObjectiveField(computed)) {
     return getObjectiveCountFromTotals(computed);
   }
 
   return 0;
 }
 
-function chooseAssistMap(existing: any, computed: any) {
-  const existingMap = normalizeAssistMap(existing?.assistPrestigeBySource);
+function chooseAssistMap(existing: unknown, computed: unknown) {
+  const existingMap = normalizeAssistMap(asRecord(existing).assistPrestigeBySource);
   if (Object.keys(existingMap).length > 0) {
     return existingMap;
   }
-  return normalizeAssistMap(computed?.assistPrestigeBySource);
+  return normalizeAssistMap(asRecord(computed).assistPrestigeBySource);
 }
 
-function chooseAssistCountMap(existing: any, computed: any) {
-  const existingMap = normalizeAssistMap(existing?.assistCountBySource);
+function chooseAssistCountMap(existing: unknown, computed: unknown) {
+  const existingMap = normalizeAssistMap(asRecord(existing).assistCountBySource);
   if (Object.keys(existingMap).length > 0) {
     return existingMap;
   }
-  return normalizeAssistMap(computed?.assistCountBySource);
+  return normalizeAssistMap(asRecord(computed).assistCountBySource);
 }
 
-function mergeExistingAndComputedTotals(existing: any, computed: any) {
+function mergeExistingAndComputedTotals(existing: unknown, computed: unknown) {
   const objectiveCount = chooseObjectiveCount(existing, computed);
   const directPrestige = chooseNumber(existing, computed, 'directPrestige');
   const assistPrestigeReceived = chooseNumber(existing, computed, 'assistPrestigeReceived');
@@ -269,18 +290,18 @@ function mergeExistingAndComputedTotals(existing: any, computed: any) {
   const directEfficiency = chooseNumber(existing, computed, 'directEfficiency');
 
   const explicitTotalPrestige = hasOwnNumber(existing, 'totalPrestige')
-    ? toNumber(existing.totalPrestige)
+    ? toNumber(asRecord(existing).totalPrestige)
     : hasOwnNumber(existing, 'prestige')
-      ? toNumber(existing.prestige)
+      ? toNumber(asRecord(existing).prestige)
       : hasOwnNumber(computed, 'totalPrestige')
-        ? toNumber(computed.totalPrestige)
+        ? toNumber(asRecord(computed).totalPrestige)
         : hasOwnNumber(computed, 'prestige')
-          ? toNumber(computed.prestige)
+          ? toNumber(asRecord(computed).prestige)
           : directPrestige + assistPrestigeReceived + objectiveCount;
 
   return {
-    ...(computed ?? {}),
-    ...(existing ?? {}),
+    ...asRecord(computed),
+    ...asRecord(existing),
     directPrestige,
     assistPrestigeReceived,
     assistPrestigeSent,
@@ -307,119 +328,125 @@ function mergeExistingAndComputedTotals(existing: any, computed: any) {
  * If totals already exist, preserve explicit imported fields like score
  * and only backfill missing values from round-derived totals.
  */
-export function normalizeGameWithComputedTotals(game: any) {
-  const hasRounds = Array.isArray(game?.rounds) && game.rounds.length > 0;
-  const explicitTotals =
-    game?.totals && typeof game.totals === 'object' && !Array.isArray(game.totals)
-      ? game.totals
-      : {};
-  const computedTotals = hasRounds ? computeTotalsFromRounds(game) : {};
+export type NormalizedGameTotals = UnknownRecord & {
+  winnerId: string | undefined;
+  players: Array<UnknownRecord & NormalizedPlayerTotals>;
+  totals: Record<string, NormalizedPlayerTotals>;
+  rounds: unknown[];
+  timeline: unknown[];
+  roundCount: number;
+};
+
+export function normalizeGameWithComputedTotals(
+  game: unknown
+): NormalizedGameTotals {
+  const source = asRecord(game);
+  const rounds = asArray(source.rounds);
+  const explicitTotals = asRecord(source.totals);
+  const computedTotals = rounds.length > 0 ? computeTotalsFromRounds(source) : {};
 
   const allPlayerIds = new Set<string>([
-    ...Object.keys(explicitTotals ?? {}),
-    ...Object.keys(computedTotals ?? {}),
-    ...(Array.isArray(game?.players)
-      ? game.players
-          .map((player: any) => String(player?.id ?? '').trim())
-          .filter(Boolean)
-      : []),
+    ...Object.keys(explicitTotals),
+    ...Object.keys(computedTotals),
+    ...asArray(source.players)
+      .map((player) => String(asRecord(player).id ?? '').trim())
+      .filter(Boolean),
   ]);
 
-  const normalizedTotals: Record<string, any> = {};
+  const normalizedTotals: Record<string, NormalizedPlayerTotals> = {};
 
   for (const playerId of allPlayerIds) {
     normalizedTotals[playerId] = normalizeTotals(
       mergeExistingAndComputedTotals(
-        explicitTotals?.[playerId] ?? {},
-        computedTotals?.[playerId] ?? {}
+        explicitTotals[playerId] ?? {},
+        computedTotals[playerId] ?? {}
       )
     );
   }
 
-  const normalizedPlayers = Array.isArray(game?.players)
-    ? game.players.map((player: any) => {
-        const totals = normalizedTotals[player?.id] ?? {};
-        const normalized = normalizeTotals(totals);
+  const normalizedPlayers = asArray(source.players).map((rawPlayer) => {
+    const player = asRecord(rawPlayer);
+    const totals = normalizedTotals[String(player.id ?? '')] ?? {};
+    const normalized = normalizeTotals(totals);
 
-        return {
-          ...player,
-          prestige: normalized.totalPrestige,
-          totalPrestige: normalized.totalPrestige,
-          directPrestige: normalized.directPrestige,
-          assistPrestigeReceived: normalized.assistPrestigeReceived,
-          assistPrestigeSent: normalized.assistPrestigeSent,
-          assistCountBySource: normalized.assistCountBySource,
-          assistPrestigeBySource: normalized.assistPrestigeBySource,
-          objectiveCount: normalized.objectiveCount,
-          objectivePrestige: normalized.objectivePrestige,
-          score: normalized.score,
-          assists: normalized.assists,
-          failures: normalized.failures,
-          contracts: normalized.contracts,
-          performance: normalized.performance,
-          efficiency: normalized.efficiency,
-          assistedEfficiency: normalized.assistedEfficiency,
-          directEfficiency: normalized.directEfficiency,
-        };
-      })
-    : [];
+    return {
+      ...player,
+      prestige: normalized.totalPrestige,
+      totalPrestige: normalized.totalPrestige,
+      directPrestige: normalized.directPrestige,
+      assistPrestigeReceived: normalized.assistPrestigeReceived,
+      assistPrestigeSent: normalized.assistPrestigeSent,
+      assistCountBySource: normalized.assistCountBySource,
+      assistPrestigeBySource: normalized.assistPrestigeBySource,
+      objectiveCount: normalized.objectiveCount,
+      objectivePrestige: normalized.objectivePrestige,
+      score: normalized.score,
+      assists: normalized.assists,
+      failures: normalized.failures,
+      contracts: normalized.contracts,
+      performance: normalized.performance,
+      efficiency: normalized.efficiency,
+      assistedEfficiency: normalized.assistedEfficiency,
+      directEfficiency: normalized.directEfficiency,
+    };
+  });
 
   const resolvedWinnerId =
-    (typeof game?.winnerId === 'string' && game.winnerId.trim()
-      ? game.winnerId
+    (typeof source.winnerId === 'string' && source.winnerId.trim()
+      ? source.winnerId
       : undefined) ?? computeWinnerIdFromTotals(normalizedTotals);
 
   return {
-    ...game,
+    ...source,
     winnerId: resolvedWinnerId,
     players: normalizedPlayers,
     totals: normalizedTotals,
-    rounds: Array.isArray(game?.rounds) ? game.rounds : [],
-    timeline: [
-      ...(Array.isArray(game?.rounds) ? game.rounds : []),
-      ...(Array.isArray(game?.timeline) ? game.timeline : []),
-    ].sort((a: any, b: any) => toNumber(a?.createdAt) - toNumber(b?.createdAt)),
-    roundCount:
-      typeof game?.roundCount === 'number' && Number.isFinite(game.roundCount)
-        ? game.roundCount
-        : Array.isArray(game?.rounds)
-          ? game.rounds.length
-          : Array.isArray(game?.timeline)
-            ? game.timeline.length
-            : 0,
+    rounds,
+    timeline: [...rounds, ...asArray(source.timeline)].sort(
+      (a, b) => toNumber(asRecord(a).createdAt) - toNumber(asRecord(b).createdAt)
+    ),
+    roundCount: hasFiniteNumber(source.roundCount)
+      ? source.roundCount
+      : Array.isArray(source.rounds)
+        ? rounds.length
+        : asArray(source.timeline).length,
   };
 }
 
 /**
  * Convenience accessor.
  */
-export function getTotalPrestigeFromTotals(t: any) {
+export function getTotalPrestigeFromTotals(t: unknown): number {
   return normalizeTotals(t).totalPrestige;
 }
 
 /**
  * Resolve winner from any supported winner field.
  */
-export function getWinnerIdFromGame(game: any): string | undefined {
+export function getWinnerIdFromGame(game: unknown): string | undefined {
   if (!game || typeof game !== 'object') return undefined;
 
+  const source = asRecord(game);
   const winnerId =
-    game.winnerId ?? game.selectedWinnerId ?? game.manualWinnerId ?? undefined;
+    source.winnerId ?? source.selectedWinnerId ?? source.manualWinnerId ?? undefined;
 
   return typeof winnerId === 'string' && winnerId.trim()
     ? winnerId
-    : computeWinnerIdFromTotals(game?.totals ?? {});
+    : computeWinnerIdFromTotals(asRecord(source.totals));
 }
 
 /**
  * Safely get normalized totals for one player from a game.
  * Falls back to deriving totals from rounds if needed.
  */
-export function getResolvedTotalsForPlayer(game: any, playerId: string) {
+export function getResolvedTotalsForPlayer(
+  game: unknown,
+  playerId: string
+): NormalizedPlayerTotals {
   if (!playerId) {
     return normalizeTotals({});
   }
 
   const normalizedGame = normalizeGameWithComputedTotals(game);
-  return normalizeTotals(normalizedGame?.totals?.[playerId] ?? {});
+  return normalizeTotals(normalizedGame.totals[playerId] ?? {});
 }

@@ -205,7 +205,7 @@ export function buildLegacyMigrationPayload(input: Input) {
       normalizedGame.totals && typeof normalizedGame.totals === "object"
         ? normalizedGame.totals
         : {};
-    const winnerLocalId = resolveWinnerId(normalizedGame as LocalGame);
+    const winnerLocalId = resolveWinnerId(normalizedGame as unknown as LocalGame);
 
     return {
       id: game.id,

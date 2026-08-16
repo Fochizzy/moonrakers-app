@@ -149,29 +149,38 @@ export type ActiveGame = {
   roundCount: number;
 };
 
-function safeNumber(v: any): number {
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function safeNumber(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
-function normalizeId(v: any): string {
+function normalizeId(v: unknown): string {
   return String(v ?? '').trim();
 }
 
-function normalizeName(v: any): string {
+function normalizeName(v: unknown): string {
   return String(v ?? '').trim();
 }
 
-function normalizeStringOrUndefined(v: any): string | undefined {
+function normalizeStringOrUndefined(v: unknown): string | undefined {
   const normalized = normalizeName(v);
   return normalized || undefined;
 }
 
-function isRecoveredPlayerName(v: any): boolean {
+function isRecoveredPlayerName(v: unknown): boolean {
   return normalizeName(v).toLowerCase() === 'recovered player';
 }
 
-function isRecoveredPlayerRecord(v: any): boolean {
-  return isRecoveredPlayerName(v?.name ?? v?.playerName ?? v?.displayName);
+function isRecoveredPlayerRecord(v: unknown): boolean {
+  const record = asRecord(v);
+  return isRecoveredPlayerName(record.name ?? record.playerName ?? record.displayName);
 }
 
 function getInitialsFromName(name: string): string {
@@ -191,7 +200,7 @@ function getInitialsFromName(name: string): string {
   return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
 }
 
-function normalizeAssistMap(input: any): Record<string, number> {
+function normalizeAssistMap(input: unknown): Record<string, number> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
 
   return Object.fromEntries(
@@ -201,8 +210,8 @@ function normalizeAssistMap(input: any): Record<string, number> {
   );
 }
 
-function normalizeAssistSourceMap(...inputs: any[]): Record<string, number> {
-  return inputs.reduce((merged, input) => {
+function normalizeAssistSourceMap(...inputs: unknown[]): Record<string, number> {
+  return inputs.reduce<Record<string, number>>((merged, input) => {
     const normalized = normalizeAssistMap(input);
     for (const [playerId, value] of Object.entries(normalized)) {
       merged[playerId] = safeNumber(merged[playerId]) + safeNumber(value);
@@ -211,41 +220,43 @@ function normalizeAssistSourceMap(...inputs: any[]): Record<string, number> {
   }, {} as Record<string, number>);
 }
 
-function normalizeRound(raw: any): StoredRound | null {
-  const playerId = normalizeId(raw?.playerId);
+function normalizeRound(raw: unknown): StoredRound | null {
+  const round = asRecord(raw);
+  const playerId = normalizeId(round.playerId);
   if (!playerId) return null;
 
   const objectiveCount = Math.max(
     0,
-    Math.floor(safeNumber(raw?.objectiveCount ?? raw?.objectivePrestige))
+    Math.floor(safeNumber(round.objectiveCount ?? round.objectivePrestige))
   );
 
   return {
-    id: normalizeId(raw?.id) || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: normalizeId(round.id) || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     playerId,
-    prestige: safeNumber(raw?.prestige),
-    contracts: safeNumber(raw?.contracts),
-    failures: safeNumber(raw?.failures),
-    assistRecipients: normalizeAssistMap(raw?.assistRecipients),
-    assistPrestigeRecipients: normalizeAssistMap(raw?.assistPrestigeRecipients),
+    prestige: safeNumber(round.prestige),
+    contracts: safeNumber(round.contracts),
+    failures: safeNumber(round.failures),
+    assistRecipients: normalizeAssistMap(round.assistRecipients),
+    assistPrestigeRecipients: normalizeAssistMap(round.assistPrestigeRecipients),
     objectiveCount,
     objectivePrestige: objectiveCount,
-    createdAt: safeNumber(raw?.createdAt) || Date.now(),
+    createdAt: safeNumber(round.createdAt) || Date.now(),
     metaType:
-      raw?.metaType === 'main' ||
-      raw?.metaType === 'bonusObjective' ||
-      raw?.metaType === 'headToHeadFirstPlace' ||
-      raw?.metaType === 'headToHeadSecondPlace'
-        ? raw.metaType
+      round.metaType === 'main' ||
+      round.metaType === 'bonusObjective' ||
+      round.metaType === 'headToHeadFirstPlace' ||
+      round.metaType === 'headToHeadSecondPlace'
+        ? round.metaType
         : undefined,
-    linkedTurnId: normalizeId(raw?.linkedTurnId) || undefined,
-    headToHeadScoreBonus: safeNumber(raw?.headToHeadScoreBonus),
+    linkedTurnId: normalizeId(round.linkedTurnId) || undefined,
+    headToHeadScoreBonus: safeNumber(round.headToHeadScoreBonus),
   };
 }
 
-function getResolvedWinner(game: any): string | undefined {
+function getResolvedWinner(game: unknown): string | undefined {
+  const source = asRecord(game);
   const winnerId = normalizeId(
-    game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId ?? ''
+    source.winnerId ?? source.selectedWinnerId ?? source.manualWinnerId ?? ''
   );
   return winnerId || undefined;
 }
@@ -263,13 +274,14 @@ function createEmptyCurrent(): ActiveGameCurrent {
   };
 }
 
-function sanitizeStoredPlayers(players: any): Player[] {
+function sanitizeStoredPlayers(players: unknown): Player[] {
   const seen = new Set<string>();
 
   return (Array.isArray(players) ? players : [])
-    .map((rawPlayer: any) => {
-      const id = normalizeId(rawPlayer?.id);
-      const name = normalizeName(rawPlayer?.name);
+    .map((raw: unknown): Player | null => {
+      const rawPlayer = asRecord(raw);
+      const id = normalizeId(rawPlayer.id);
+      const name = normalizeName(rawPlayer.name);
 
       if (!id || !name || isRecoveredPlayerName(name) || seen.has(id)) {
         return null;
@@ -282,15 +294,15 @@ function sanitizeStoredPlayers(players: any): Player[] {
         id,
         name,
         initials:
-          normalizeStringOrUndefined(rawPlayer?.initials) || getInitialsFromName(name),
-        color: normalizeStringOrUndefined(rawPlayer?.color),
-        displayName: normalizeStringOrUndefined(rawPlayer?.displayName),
+          normalizeStringOrUndefined(rawPlayer.initials) || getInitialsFromName(name),
+        color: normalizeStringOrUndefined(rawPlayer.color),
+        displayName: normalizeStringOrUndefined(rawPlayer.displayName),
         hasSavedGames:
-          typeof rawPlayer?.hasSavedGames === 'boolean'
+          typeof rawPlayer.hasSavedGames === 'boolean'
             ? rawPlayer.hasSavedGames
             : undefined,
         assignedCardArtIndex:
-          typeof rawPlayer?.assignedCardArtIndex === 'number' &&
+          typeof rawPlayer.assignedCardArtIndex === 'number' &&
           Number.isFinite(rawPlayer.assignedCardArtIndex)
             ? rawPlayer.assignedCardArtIndex
             : null,
@@ -299,11 +311,12 @@ function sanitizeStoredPlayers(players: any): Player[] {
     .filter((player): player is Player => Boolean(player));
 }
 
-function sanitizeStoredGroups(groups: any, validPlayerIds: Set<string>): Group[] {
+function sanitizeStoredGroups(groups: unknown, validPlayerIds: Set<string>): Group[] {
   return (Array.isArray(groups) ? groups : [])
-    .map((rawGroup: any) => {
-      const id = normalizeId(rawGroup?.id);
-      const name = normalizeName(rawGroup?.name);
+    .map((raw: unknown): Group | null => {
+      const rawGroup = asRecord(raw);
+      const id = normalizeId(rawGroup.id);
+      const name = normalizeName(rawGroup.name);
 
       if (!id || !name) {
         return null;
@@ -311,8 +324,8 @@ function sanitizeStoredGroups(groups: any, validPlayerIds: Set<string>): Group[]
 
       const playerIds = Array.from(
         new Set(
-          (Array.isArray(rawGroup?.playerIds) ? rawGroup.playerIds : [])
-            .map((playerId: any) => normalizeId(playerId))
+          (Array.isArray(rawGroup.playerIds) ? rawGroup.playerIds : [])
+            .map((playerId: unknown) => normalizeId(playerId))
             .filter((playerId: string) => Boolean(playerId) && validPlayerIds.has(playerId))
         )
       );
@@ -327,11 +340,11 @@ function sanitizeStoredGroups(groups: any, validPlayerIds: Set<string>): Group[]
         name,
         playerIds,
         createdAt:
-          typeof rawGroup?.createdAt === 'number' && Number.isFinite(rawGroup.createdAt)
+          typeof rawGroup.createdAt === 'number' && Number.isFinite(rawGroup.createdAt)
             ? rawGroup.createdAt
             : undefined,
         objectiveStatsEligible:
-          typeof rawGroup?.objectiveStatsEligible === 'boolean'
+          typeof rawGroup.objectiveStatsEligible === 'boolean'
             ? rawGroup.objectiveStatsEligible
             : undefined,
       } satisfies Group;
@@ -339,16 +352,16 @@ function sanitizeStoredGroups(groups: any, validPlayerIds: Set<string>): Group[]
     .filter((group): group is Group => Boolean(group));
 }
 
-function sanitizeStoredGames(games: any): Game[] {
+function sanitizeStoredGames(games: unknown): Game[] {
   return (Array.isArray(games) ? games : [])
-    .map((game: any) => normalizeImportedGame(game))
+    .map((game: unknown) => normalizeImportedGame(game))
     .filter((game) => Array.isArray(game?.players) && game.players.length > 0);
 }
 
 function sanitizeSnapshotState(input: {
-  players?: any;
-  groups?: any;
-  games?: any;
+  players?: unknown;
+  groups?: unknown;
+  games?: unknown;
 }) {
   const players = sanitizeStoredPlayers(input.players);
   const validPlayerIds = new Set(players.map((player) => player.id));
@@ -360,47 +373,49 @@ function sanitizeSnapshotState(input: {
   };
 }
 
-function normalizeImportedGame(raw: any): Game {
+function normalizeImportedGame(rawInput: unknown): Game {
+  const raw = asRecord(rawInput);
   const playerMap = new Map<string, GamePlayer>();
 
-  if (Array.isArray(raw?.players)) {
-    raw.players.forEach((p: any, index: number) => {
+  if (Array.isArray(raw.players)) {
+    raw.players.forEach((rawParticipant: unknown, index: number) => {
+      const p = asRecord(rawParticipant);
       if (isRecoveredPlayerRecord(p)) return;
 
-      const id = normalizeId(p?.id ?? p?.playerId);
+      const id = normalizeId(p.id ?? p.playerId);
       if (!id) return;
 
       const current = playerMap.get(id);
       playerMap.set(id, {
         ...current,
         id,
-        name: normalizeName(current?.name) || normalizeName(p?.name) || 'Player',
+        name: normalizeName(current?.name) || normalizeName(p.name) || 'Player',
         initials:
           normalizeStringOrUndefined(current?.initials) ||
-          normalizeStringOrUndefined(p?.initials),
+          normalizeStringOrUndefined(p.initials),
         color:
           normalizeStringOrUndefined(current?.color) ||
-          normalizeStringOrUndefined(p?.color),
+          normalizeStringOrUndefined(p.color),
         assignedCardArtIndex:
           typeof current?.assignedCardArtIndex === 'number' &&
           Number.isFinite(current.assignedCardArtIndex)
             ? current.assignedCardArtIndex
-            : typeof p?.assignedCardArtIndex === 'number' &&
+            : typeof p.assignedCardArtIndex === 'number' &&
                 Number.isFinite(p.assignedCardArtIndex)
               ? p.assignedCardArtIndex
               : null,
         startOrder:
           typeof current?.startOrder === 'number'
             ? current.startOrder
-            : typeof p?.startOrder === 'number' && Number.isFinite(p.startOrder)
+            : typeof p.startOrder === 'number' && Number.isFinite(p.startOrder)
               ? p.startOrder
               : index,
       });
     });
   }
 
-  const rawRounds = Array.isArray(raw?.rounds) ? raw.rounds : [];
-  const rawTimeline = Array.isArray(raw?.timeline) ? raw.timeline : rawRounds;
+  const rawRounds = Array.isArray(raw.rounds) ? raw.rounds : [];
+  const rawTimeline = Array.isArray(raw.timeline) ? raw.timeline : rawRounds;
 
   const rounds = rawRounds
     .map(normalizeRound)
@@ -411,27 +426,25 @@ function normalizeImportedGame(raw: any): Game {
     .filter((round: StoredRound | null): round is StoredRound => Boolean(round));
 
   const totals: GameTotals = {};
-  const rawTotals =
-    raw?.totals && typeof raw.totals === 'object' && !Array.isArray(raw.totals)
-      ? raw.totals
-      : {};
+  const rawTotals = asRecord(raw.totals);
 
-  Object.entries(rawTotals).forEach(([rawPlayerId, t]: any) => {
+  Object.entries(rawTotals).forEach(([rawPlayerId, rawEntry]) => {
     const id = normalizeId(rawPlayerId);
     if (!id) return;
     if (!playerMap.has(id)) return;
 
-    const direct = safeNumber(t?.directPrestige);
-    const assist = safeNumber(t?.assistPrestigeReceived);
+    const t = asRecord(rawEntry);
+    const direct = safeNumber(t.directPrestige);
+    const assist = safeNumber(t.assistPrestigeReceived);
     const objective = Math.max(
       0,
-      Math.floor(safeNumber(t?.objectivePrestige ?? t?.objectiveCount))
+      Math.floor(safeNumber(t.objectivePrestige ?? t.objectiveCount))
     );
     const computedTotal = Math.max(0, direct + assist + objective);
     const total =
-      typeof t?.totalPrestige === 'number' && Number.isFinite(t.totalPrestige)
+      typeof t.totalPrestige === 'number' && Number.isFinite(t.totalPrestige)
         ? Math.max(0, t.totalPrestige)
-        : typeof t?.prestige === 'number' && Number.isFinite(t.prestige)
+        : typeof t.prestige === 'number' && Number.isFinite(t.prestige)
           ? Math.max(0, t.prestige)
           : computedTotal;
 
@@ -440,23 +453,23 @@ function normalizeImportedGame(raw: any): Game {
       totalPrestige: total,
       directPrestige: direct,
       assistPrestigeReceived: assist,
-      assistPrestigeSent: safeNumber(t?.assistPrestigeSent),
+      assistPrestigeSent: safeNumber(t.assistPrestigeSent),
       assistPrestigeBySource: normalizeAssistSourceMap(
-        t?.assistPrestigeBySource,
-        t?.assistPrestigeByPlayer,
-        t?.assistPrestigeFromPlayers,
-        t?.assistSources
+        t.assistPrestigeBySource,
+        t.assistPrestigeByPlayer,
+        t.assistPrestigeFromPlayers,
+        t.assistSources
       ),
-      assistCountBySource: normalizeAssistMap(t?.assistCountBySource),
+      assistCountBySource: normalizeAssistMap(t.assistCountBySource),
       objectivePrestige: objective,
-      score: safeNumber(t?.score),
-      assists: safeNumber(t?.assists),
-      failures: safeNumber(t?.failures),
-      contracts: safeNumber(t?.contracts),
-      headToHeadScoreBonus: safeNumber(t?.headToHeadScoreBonus),
-      performance: safeNumber(t?.performance),
-      efficiency: safeNumber(t?.efficiency),
-      assistedEfficiency: safeNumber(t?.assistedEfficiency),
+      score: safeNumber(t.score),
+      assists: safeNumber(t.assists),
+      failures: safeNumber(t.failures),
+      contracts: safeNumber(t.contracts),
+      headToHeadScoreBonus: safeNumber(t.headToHeadScoreBonus),
+      performance: safeNumber(t.performance),
+      efficiency: safeNumber(t.efficiency),
+      assistedEfficiency: safeNumber(t.assistedEfficiency),
     };
   });
 
@@ -468,33 +481,33 @@ function normalizeImportedGame(raw: any): Game {
   const sanitizedRounds = sanitizeRoundList(rounds);
   const sanitizedTimeline = sanitizeRoundList(timeline.length ? timeline : rounds);
 
-  const sanitizeWinner = (value: any): string | undefined => {
+  const sanitizeWinner = (value: unknown): string | undefined => {
     const id = normalizeId(value);
     return id && validIds.has(id) ? id : undefined;
   };
 
   return {
-    id: normalizeId(raw?.id) || `${Date.now()}-${Math.random()}`,
-    hostProfileId: normalizeStringOrUndefined(raw?.hostProfileId),
+    id: normalizeId(raw.id) || `${Date.now()}-${Math.random()}`,
+    hostProfileId: normalizeStringOrUndefined(raw.hostProfileId),
     players: Array.from(playerMap.values()),
     totals,
     winnerId: sanitizeWinner(getResolvedWinner(raw)),
-    selectedWinnerId: sanitizeWinner(raw?.selectedWinnerId),
-    manualWinnerId: sanitizeWinner(raw?.manualWinnerId),
+    selectedWinnerId: sanitizeWinner(raw.selectedWinnerId),
+    manualWinnerId: sanitizeWinner(raw.manualWinnerId),
     createdAt:
-      typeof raw?.createdAt === 'number' && Number.isFinite(raw.createdAt)
+      typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt)
         ? raw.createdAt
         : Date.now(),
     rounds: sanitizedRounds,
     timeline: sanitizedTimeline,
     roundCount:
-      typeof raw?.roundCount === 'number' && Number.isFinite(raw.roundCount)
+      typeof raw.roundCount === 'number' && Number.isFinite(raw.roundCount)
         ? raw.roundCount
         : sanitizedRounds.length || sanitizedTimeline.length,
-    groupId: normalizeStringOrUndefined(raw?.groupId),
-    groupName: normalizeStringOrUndefined(raw?.groupName),
+    groupId: normalizeStringOrUndefined(raw.groupId),
+    groupName: normalizeStringOrUndefined(raw.groupName),
     objectiveStatsEligible:
-      typeof raw?.objectiveStatsEligible === 'boolean'
+      typeof raw.objectiveStatsEligible === 'boolean'
         ? raw.objectiveStatsEligible
         : false,
   };
@@ -606,7 +619,7 @@ type Store = {
   setGames: (games: Game[]) => void;
   addGame: (game: Game) => void;
   removeGame: (gameId: string) => void;
-  mergeImportedGames: (games: any[]) => void;
+  mergeImportedGames: (games: unknown[]) => void;
 
   setSelectedPlayerId: (playerId: string | null) => void;
   setSelectedGameId: (gameId: string | null) => void;
@@ -832,26 +845,31 @@ export const useStore = create<Store>((set, get) => ({
 
       const nextGroups = state.groups.filter((group) => !removedGroupIds.has(group.id));
 
-      const sanitizeTotals = (totals: any) => {
+      const sanitizeTotals = (totals: unknown): GameTotals => {
         if (!totals || typeof totals !== 'object' || Array.isArray(totals)) {
-          return totals ?? {};
+          return (totals ?? {}) as GameTotals;
         }
         return Object.fromEntries(
           Object.entries(totals).filter(([id]) => normalizeId(id) !== normalized)
         ) as GameTotals;
       };
 
-      const sanitizeRounds = (rounds: any) =>
+      const sanitizeRounds = <TRound,>(rounds: TRound[] | undefined) =>
         Array.isArray(rounds)
-          ? rounds.filter((round: any) => normalizeId(round?.playerId) !== normalized)
+          ? rounds.filter(
+              (round) => normalizeId(asRecord(round).playerId) !== normalized,
+            )
           : [];
 
-      const sanitizePlayers = (playersToClean: any) =>
+      const sanitizePlayers = <TPlayer,>(playersToClean: TPlayer[] | undefined) =>
         Array.isArray(playersToClean)
-          ? playersToClean.filter((p: any) => normalizeId(p?.id ?? p?.playerId) !== normalized)
+          ? playersToClean.filter((p) => {
+              const record = asRecord(p);
+              return normalizeId(record.id ?? record.playerId) !== normalized;
+            })
           : [];
 
-      const sanitizeWinner = (winnerId: any) =>
+      const sanitizeWinner = (winnerId: string | undefined) =>
         normalizeId(winnerId) === normalized ? undefined : winnerId;
 
       const nextGames = state.games
@@ -994,56 +1012,57 @@ export const useStore = create<Store>((set, get) => ({
 
     const byId = new Map<string, Game>();
 
-    const mergeTotals = (a: any, b: any) => {
-      const result: any = { ...a };
+    const mergeTotals = (a: GameTotals, b: GameTotals): GameTotals => {
+      const result: GameTotals = { ...a };
 
-      for (const [playerId, t] of Object.entries(b || {}) as [string, any][]) {
-        const existingTotals = result[playerId] || {};
+      for (const [playerId, rawEntry] of Object.entries(b || {})) {
+        const t = asRecord(rawEntry);
+        const existingTotals = asRecord(result[playerId]);
 
         result[playerId] = {
           ...existingTotals,
           ...t,
-          score: Number((t as any).score) || Number(existingTotals.score) || 0,
+          score: Number(t.score) || Number(existingTotals.score) || 0,
           totalPrestige:
-            Number((t as any).totalPrestige ?? (t as any).prestige) ||
+            Number(t.totalPrestige ?? t.prestige) ||
             Number(existingTotals.totalPrestige ?? existingTotals.prestige) ||
             0,
           prestige:
-            Number((t as any).prestige ?? (t as any).totalPrestige) ||
+            Number(t.prestige ?? t.totalPrestige) ||
             Number(existingTotals.prestige ?? existingTotals.totalPrestige) ||
             0,
           directPrestige:
-            Number((t as any).directPrestige) || Number(existingTotals.directPrestige) || 0,
+            Number(t.directPrestige) || Number(existingTotals.directPrestige) || 0,
           assistPrestigeReceived:
-            Number((t as any).assistPrestigeReceived) ||
+            Number(t.assistPrestigeReceived) ||
             Number(existingTotals.assistPrestigeReceived) ||
             0,
           assistPrestigeSent:
-            Number((t as any).assistPrestigeSent) ||
+            Number(t.assistPrestigeSent) ||
             Number(existingTotals.assistPrestigeSent) ||
             0,
           objectivePrestige:
-            Number((t as any).objectivePrestige) ||
+            Number(t.objectivePrestige) ||
             Number(existingTotals.objectivePrestige) ||
             0,
-          assists: Number((t as any).assists) || Number(existingTotals.assists) || 0,
-          contracts: Number((t as any).contracts) || Number(existingTotals.contracts) || 0,
-          failures: Number((t as any).failures) || Number(existingTotals.failures) || 0,
+          assists: Number(t.assists) || Number(existingTotals.assists) || 0,
+          contracts: Number(t.contracts) || Number(existingTotals.contracts) || 0,
+          failures: Number(t.failures) || Number(existingTotals.failures) || 0,
           performance:
-            Number((t as any).performance) || Number(existingTotals.performance) || 0,
+            Number(t.performance) || Number(existingTotals.performance) || 0,
           efficiency:
-            Number((t as any).efficiency) || Number(existingTotals.efficiency) || 0,
+            Number(t.efficiency) || Number(existingTotals.efficiency) || 0,
           assistedEfficiency:
-            Number((t as any).assistedEfficiency) ||
+            Number(t.assistedEfficiency) ||
             Number(existingTotals.assistedEfficiency) ||
             0,
           assistCountBySource: {
             ...(existingTotals.assistCountBySource || {}),
-            ...(((t as any).assistCountBySource || {}) as Record<string, number>),
+            ...((t.assistCountBySource || {}) as Record<string, number>),
           },
           assistPrestigeBySource: {
             ...(existingTotals.assistPrestigeBySource || {}),
-            ...(((t as any).assistPrestigeBySource || {}) as Record<string, number>),
+            ...((t.assistPrestigeBySource || {}) as Record<string, number>),
           },
         };
       }

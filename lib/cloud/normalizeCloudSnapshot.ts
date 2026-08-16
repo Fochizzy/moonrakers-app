@@ -311,7 +311,7 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
       ...normalizedGame,
       selectedWinnerId: normalizedGame.winnerId,
       manualWinnerId: normalizedGame.winnerId,
-    } satisfies Game;
+    } as unknown as Game;
   });
 
   const profile = input.profile
