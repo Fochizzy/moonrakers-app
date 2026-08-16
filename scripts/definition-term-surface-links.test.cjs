@@ -119,22 +119,33 @@ assert.match(
   "expected CompareMatrixCard to open the shared Definitions route from tappable metric terms",
 );
 
+// The metric picker is a segmented tab control rather than individually
+// tappable terms, so chart setup reaches Definitions through a section-level
+// jump link pointed at the currently selected metric.
 assert.match(
   chartsSource,
-  /definitionMetricKey\?: string \| null/,
-  "expected chart setup metric buttons to accept a definition target key",
+  /definitionMetricKey\?: string \| null;/,
+  "expected the chart setup metric section to accept a definition target key",
 );
 
 assert.match(
   chartsSource,
-  /resolveDefinitionTarget\(\{\s*metric:\s*definitionMetricKey,\s*label\s*\}\)/,
-  "expected chart setup metric buttons to resolve term taps through the shared definition-target helper",
+  /<DefinitionsJumpLink[\s\S]{0,120}metric=\{definitionMetricKey\}/,
+  "expected chart setup to open the shared Definitions route for the selected metric",
 );
 
 assert.match(
+  chartsSource,
+  /definitionMetricKey=\{activeMetric\}/,
+  "expected the chart setup metric section to target the metric the user has selected",
+);
+
+// One jump link per section, resolved from the selection, replaces the old
+// per-button definition targets the metric grid used to carry.
+assert.doesNotMatch(
   chartsSource,
   /definitionMetricKey=\{metric\.key\}/,
-  "expected chart setup metric buttons to pass each metric option through the definitions target resolver",
+  "expected chart setup to use one section-level definition link rather than per-button targets",
 );
 
 assert.match(

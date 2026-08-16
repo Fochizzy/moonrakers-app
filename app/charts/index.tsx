@@ -21,6 +21,7 @@ import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
+import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
 import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
 import ChartHubPreview from "@/components/charts/ChartHubPreview";
 import type { LineMode } from "@/components/charts/LineChart";
@@ -466,17 +467,26 @@ function SetupSection({
   subtitle,
   contentStyle,
   children,
+  definitionMetricKey,
 }: {
   title: string;
   subtitle?: string;
   contentStyle?: StyleProp<ViewStyle>;
   children: React.ReactNode;
+  definitionMetricKey?: string | null;
 }) {
   return (
     <View style={styles.setupSection}>
       <View style={styles.setupSectionHeader}>
         <Text style={styles.setupSectionTitle}>{title}</Text>
         {subtitle ? <Text style={styles.setupSectionSubtitle}>{subtitle}</Text> : null}
+        {definitionMetricKey ? (
+          <DefinitionsJumpLink
+            label="Definition"
+            metric={definitionMetricKey}
+            category="scoring"
+          />
+        ) : null}
       </View>
       <View style={[styles.setupChipRow, contentStyle]}>{children}</View>
     </View>
@@ -2176,7 +2186,11 @@ export default function ChartsIndexScreen() {
                             }
                           >
                             {hasMetricStageChoices ? (
-                              <SetupSection title="Metric" contentStyle={styles.metricGrid}>
+                              <SetupSection
+                                title="Metric"
+                                contentStyle={styles.metricGrid}
+                                definitionMetricKey={activeMetric}
+                              >
                                 <SetupSegmentedTabs
                                   items={metricOptions}
                                   selectedKeys={activeMetric ? [activeMetric] : []}

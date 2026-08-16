@@ -10,7 +10,7 @@ const chartHubSource = fs.readFileSync(
 
 assert.match(
   chartHubSource,
-  /<SetupSection title="Metric"[\s\S]*<SetupSegmentedTabs[\s\S]*items=\{metricOptions\}[\s\S]*selectedKeys=\{activeMetric \? \[activeMetric\] : \[\]\}[\s\S]*columns=\{2\}/s,
+  /<SetupSection\s+title="Metric"[\s\S]*<SetupSegmentedTabs[\s\S]*items=\{metricOptions\}[\s\S]*selectedKeys=\{activeMetric \? \[activeMetric\] : \[\]\}[\s\S]*columns=\{2\}/s,
   "expected the metric stage to use compact segmented tabs so multiple metrics stay visible on mobile",
 );
 

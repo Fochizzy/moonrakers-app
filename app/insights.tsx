@@ -578,6 +578,9 @@ export default function InsightsScreen() {
         title={activeSectionLabel}
         helpCategory="correlations"
         state={insightsState}
+        sourceCaption={freshness.sourceCaption(
+          "These correlations come from the published Supabase insights payload, so they match what the rest of the league sees.",
+        )}
         messageTitle={insightsMessageTitle}
         messageBody={insightsMessageBody}
         primaryAction={freshness.retryAction ?? insightsPrimaryAction}
