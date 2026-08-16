@@ -278,7 +278,7 @@ export default function RegisterScreen() {
       >
         <View style={styles.stack}>
           <AppHeader
-            eyebrow="Moonrakers Command"
+            eyebrow="Moonraker's Analytics"
             title={needsProfileOnly ? "Finish Profile" : "Create Account"}
             identity="emblem"
             size="compact"

@@ -7,9 +7,9 @@ import {
   countPreviewMetrics,
 } from "@/lib/preview/previewCatalog";
 
-const TITLE = "Preview · Moonrakers Command";
+const TITLE = "Preview · Moonraker’s Analytics";
 const DESCRIPTION =
-  "See every chart, every published metric, and the game entry screen — running on real tracked games. No account needed.";
+  "Moonraker’s Analytics: every chart, every published metric, and the game entry screen — running on real tracked games. No account needed.";
 
 export const metadata: Metadata = {
   title: TITLE,

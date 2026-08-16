@@ -650,7 +650,7 @@ export default function HomeScreen() {
       contentContainerStyle={styles.homeShellContent}
     >
       <AppHeader
-        eyebrow="Moonrakers Command"
+        eyebrow="Moonraker's Analytics"
         title={headerTitle}
         identity="emblem"
         size="compact"

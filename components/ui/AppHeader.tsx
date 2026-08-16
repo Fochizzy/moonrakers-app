@@ -10,7 +10,7 @@ export default function AppHeader({
   identity = "dot",
   size = "default",
   subtitle,
-  title = "Moonrakers",
+  title = "Moonraker's Analytics",
   variant,
 }: {
   actions?: React.ReactNode;

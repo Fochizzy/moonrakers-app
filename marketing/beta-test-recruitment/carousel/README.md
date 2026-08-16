@@ -1,4 +1,13 @@
-# Moonrakers Command beta carousel
+# Superseded: the original "Moonrakers Command" beta carousel
+
+**Do not publish these.** The app is called Moonraker's Analytics, and the six
+PNGs in this folder are the earlier cut with `MOONRAKERS COMMAND` burnt into the
+brand line of every slide. The set to post is `../carousel-moonrakers-analytics/`,
+which is the same six slides with the product name and the player handles
+corrected.
+
+Kept only as the source the corrected set was localized from. The old name is
+left intact below because it describes what is actually inside these files.
 
 Attach the six PNG files in their numbered order:
 

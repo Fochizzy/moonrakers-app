@@ -55,7 +55,7 @@ describe("PreviewView", () => {
     expect(topbar.getByText("Preview")).toBeInTheDocument();
     expect(topbar.getByText(/no account needed/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /inside moonrakers command/i }),
+      screen.getByRole("heading", { name: /inside moonraker’s analytics/i }),
     ).toBeInTheDocument();
     // Said in the hero, and repeated under the chart so it travels with it.
     expect(
@@ -64,6 +64,20 @@ describe("PreviewView", () => {
     expect(
       screen.getAllByText(/published under aliases/i).length,
     ).toBeGreaterThan(1);
+  });
+
+  // The app and the board game have similar names, and the app used to be
+  // called something else again, so the preview has to settle both.
+  it("names the app, and keeps it distinct from the board game", () => {
+    renderPreview();
+
+    expect(
+      within(screen.getByRole("banner")).getByText(/moonraker’s analytics/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/companion app for the board game moonrakers/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/moonrakers command/i)).not.toBeInTheDocument();
   });
 
   it("names the tracked league in the hero", () => {

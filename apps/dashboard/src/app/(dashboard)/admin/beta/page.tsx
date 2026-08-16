@@ -12,7 +12,7 @@ import { formatCount } from "@/lib/formatNumber";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title: "Beta signups · Moonrakers Command",
+  title: "Beta signups · Moonraker’s Analytics",
   // An operator page with other people's addresses on it has no business in
   // anyone's search index.
   robots: { index: false, follow: false },

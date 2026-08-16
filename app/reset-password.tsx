@@ -161,7 +161,7 @@ export default function ResetPasswordScreen() {
       >
         <View style={styles.stack}>
           <AppHeader
-            eyebrow="Moonrakers Command"
+            eyebrow="Moonraker's Analytics"
             title="Reset Password"
             identity="emblem"
             size="compact"

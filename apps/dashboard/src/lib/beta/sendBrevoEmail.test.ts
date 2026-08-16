@@ -17,7 +17,7 @@ describe("readBrevoConfig", () => {
     expect(config).toEqual({
       apiKey: "key",
       fromEmail: "info@moonrakersapp.org",
-      fromName: "Moonrakers Command",
+      fromName: "Moonraker's Analytics",
       replyTo: "info@moonrakersapp.org",
     });
   });

@@ -122,7 +122,7 @@ export function AuthPanel() {
   return (
     <section className="auth-panel">
       <p className="eyebrow" style={{ margin: 0 }}>
-        Moonrakers command access
+        Moonraker&rsquo;s Analytics access
       </p>
       <h1 className="auth-panel__title">
         {isCreating ? "Join the crew" : "Sign in"}

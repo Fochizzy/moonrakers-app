@@ -41,6 +41,18 @@ const THEME = {
  */
 const FONT_STACK = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
 
+/**
+ * The product name, in one place because it appears in the brand band, the
+ * footer, two subject lines and the body copy — and because "Moonrakers" on its
+ * own is the board game, not this app.
+ *
+ * Two spellings: the entity is for the HTML part, and the plain apostrophe for
+ * subjects, preheaders and the text alternative, where a client would render
+ * `&rsquo;` literally.
+ */
+export const APP_NAME = "Moonraker's Analytics";
+const APP_NAME_HTML = "Moonraker&rsquo;s Analytics";
+
 export const SUPPORT_EMAIL = "info@moonrakersapp.org";
 export const BETA_GROUP_URL = "https://groups.google.com/g/moonrakers-beta";
 export const PLAY_STORE_URL =
@@ -116,7 +128,7 @@ function shell({
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="${TABLE_RESET}width:100%;max-width:600px;background-color:${THEME.card};border:1px solid ${THEME.border};border-radius:14px;overflow:hidden;">
         <tr>
           <td bgcolor="${THEME.brand}" class="mk-pad" style="background-color:${THEME.brand};padding:20px 32px;">
-            <p style="margin:0;color:#ffffff;font-family:${FONT_STACK};font-size:15px;font-weight:800;letter-spacing:-0.01em;">Moonrakers Command</p>
+            <p style="margin:0;color:#ffffff;font-family:${FONT_STACK};font-size:15px;font-weight:800;letter-spacing:-0.01em;">${APP_NAME_HTML}</p>
             <p style="margin:4px 0 0 0;color:${THEME.goldOnBrand};font-family:${FONT_STACK};font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">${escapeHtml(eyebrow)}</p>
           </td>
         </tr>
@@ -134,7 +146,7 @@ function shell({
         <tr>
           <td class="mk-pad" style="padding:16px 32px 0 32px;">
             <p style="margin:0;color:${THEME.muted};font-family:${FONT_STACK};font-size:12px;line-height:1.6;">
-              Sent by Moonrakers Command because this address was entered at
+              Sent by ${APP_NAME_HTML} because this address was entered at
               <a href="${PREVIEW_URL}" style="color:${THEME.muted};text-decoration:underline;">moonrakersapp.org</a>.
               Questions: <a href="mailto:${SUPPORT_EMAIL}" style="color:${THEME.muted};text-decoration:underline;">${SUPPORT_EMAIL}</a>
             </p>
@@ -217,7 +229,7 @@ function divider() {
 export function buildApplicantEmail(email: string): BetaEmail {
   const body = [
     paragraph(
-      "Thank you for registering for the Moonrakers Command beta. There is nothing else you need to do right now.",
+      `Thank you for registering for the ${APP_NAME_HTML} beta. There is nothing else you need to do right now.`,
     ),
     calloutRow("Registered address", email),
     paragraph("<strong>What happens next</strong>"),
@@ -239,7 +251,7 @@ export function buildApplicantEmail(email: string): BetaEmail {
   ].join("\n");
 
   return {
-    subject: "Thank you for registering for the Moonrakers beta",
+    subject: `Thank you for registering for the ${APP_NAME} beta`,
     html: shell({
       body,
       eyebrow: "Beta access",
@@ -247,7 +259,7 @@ export function buildApplicantEmail(email: string): BetaEmail {
       preheader: `Registered ${email}. A confirmation with your download link follows.`,
     }),
     text: [
-      "Thank you for registering for the Moonrakers Command beta.",
+      `Thank you for registering for the ${APP_NAME} beta.`,
       "There is nothing else you need to do right now.",
       "",
       `Registered address: ${email}`,
@@ -285,12 +297,12 @@ export function buildInviteEmail(): BetaEmail {
   ].join("\n");
 
   return {
-    subject: "Your Moonrakers beta download link",
+    subject: `Your ${APP_NAME} beta download link`,
     html: shell({
       body,
       eyebrow: "Beta access confirmed",
       heading: "Thank you for confirming",
-      preheader: "Download Moonrakers Command from the Google Play Store.",
+      preheader: `Download ${APP_NAME} from the Google Play Store.`,
     }),
     text: [
       "Thank you for confirming your interest in the beta.",

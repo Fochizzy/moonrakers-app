@@ -136,9 +136,9 @@ export function BetaAccessDialog({
         ) : (
           <form className="beta-dialog__form" onSubmit={handleSubmit}>
             <p className="beta-dialog__copy">
-              Moonrakers Command is in closed testing on Google Play. Give us the
-              email address on your Google Play account and we&rsquo;ll add you
-              to the tester list.
+              Moonraker&rsquo;s Analytics is in closed testing on Google Play.
+              Give us the email address on your Google Play account and
+              we&rsquo;ll add you to the tester list.
             </p>
 
             <label className="field">

@@ -7,8 +7,9 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.moonrakersapp.org",
   ),
-  title: "Moonrakers Dashboard",
-  description: "Signed-in Moonrakers analytics companion dashboard",
+  title: "Moonraker’s Analytics",
+  description:
+    "The signed-in companion dashboard for Moonraker’s Analytics, the app that tracks a game of Moonrakers turn by turn",
 };
 
 export default function RootLayout({

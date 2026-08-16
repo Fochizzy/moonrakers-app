@@ -22,7 +22,11 @@ const supabasePublishableKey = resolveEnvString(
 
 module.exports = {
   expo: {
-    name: 'Moonrakers',
+    // Typographic apostrophe on purpose. Expo writes this straight into
+    // `strings.xml` with no Android escaping, and AAPT2 rejects an unescaped
+    // ASCII `'` in a string resource. U+2019 has no special meaning there and
+    // renders identically.
+    name: 'Moonraker’s Analytics',
     slug: 'moonrakers-app',
     owner: 'fochizzy',
     version: pkg.version,

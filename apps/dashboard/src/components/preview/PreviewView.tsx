@@ -110,7 +110,7 @@ export function PreviewView({
   return (
     <div className="preview-shell">
       <header className="preview-topbar">
-        <span className="preview-wordmark">Moonrakers</span>
+        <span className="preview-wordmark">Moonraker&rsquo;s Analytics</span>
         <span className="preview-badge">Preview</span>
         <span className="preview-topbar__note">No account needed</span>
         <div className="preview-topbar__actions">
@@ -130,15 +130,17 @@ export function PreviewView({
               Preview
             </p>
             <h1 className="preview-hero__title">
-              What&rsquo;s inside Moonrakers Command
+              What&rsquo;s inside Moonraker&rsquo;s Analytics
             </h1>
-            {/* A cold link needs to say what the product is before it starts
-                counting what is in it. */}
+            {/* A cold link needs to say what the product is called, and that
+                the app and the board game are two different names, before it
+                starts counting what is in it. */}
             <p className="preview-hero__copy">
-              Moonrakers Command scores a game of Moonrakers turn by turn —
-              prestige, contracts, assists, objectives — and keeps every
-              finished game, so your table gets ratings, charts and a full read
-              on each player instead of a photo of the final scores.
+              Moonraker&rsquo;s Analytics is the companion app for the board
+              game Moonrakers. It scores a game turn by turn — prestige,
+              contracts, assists, objectives — and keeps every finished game, so
+              your table gets ratings, charts and a full read on each player
+              instead of a photo of the final scores.
             </p>
             <p className="preview-hero__copy preview-hero__copy--sub">
               Every chart, every published metric, and the screen you score from
@@ -299,9 +301,9 @@ export function PreviewView({
               {/* Two different doors, and readers were being shown both with no
                   way to tell which one is theirs. */}
               <p className="panel-copy">
-                <strong>New here?</strong> Moonrakers Command is in closed
-                testing on Google Play. Request access and we add the address
-                you give us to the tester list.
+                <strong>New here?</strong> Moonraker&rsquo;s Analytics is in
+                closed testing on Google Play. Request access and we add the
+                address you give us to the tester list.
               </p>
               <p className="panel-copy">
                 <strong>Already a tester?</strong> Sign in and every chart and

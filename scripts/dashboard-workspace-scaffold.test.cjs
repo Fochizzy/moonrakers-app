@@ -83,7 +83,8 @@ assert.equal(
 );
 
 const layoutText = readText(path.join("apps", "dashboard", "src", "app", "layout.tsx"));
-assert.match(layoutText, /Moonrakers Dashboard/);
+// The product is "Moonraker's Analytics"; "Moonrakers" alone is the board game.
+assert.match(layoutText, /Moonraker’s Analytics/);
 
 // The scaffold held /launchpad only until the protected home route existed.
 // Now that `(dashboard)/page.tsx` owns `/`, shipping the scaffold alongside it

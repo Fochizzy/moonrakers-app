@@ -1,4 +1,4 @@
-import type { BetaEmail } from "./betaEmails";
+import { APP_NAME, type BetaEmail } from "./betaEmails";
 
 /**
  * Brevo's transactional endpoint, which is what the app already sends through.
@@ -52,7 +52,7 @@ export function readBrevoConfig(
     // address. SPF lists Brevo alongside IONOS, and DMARC is published at
     // p=none. Nothing here needs the `auth.` subdomain any more.
     fromEmail: env.BETA_FROM_EMAIL?.trim() || "info@moonrakersapp.org",
-    fromName: env.BETA_FROM_NAME?.trim() || "Moonrakers Command",
+    fromName: env.BETA_FROM_NAME?.trim() || APP_NAME,
     replyTo: env.BETA_REPLY_TO?.trim() || "info@moonrakersapp.org",
   };
 }

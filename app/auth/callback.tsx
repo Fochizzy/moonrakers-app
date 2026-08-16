@@ -201,7 +201,7 @@ export default function AuthCallbackScreen() {
     >
       <View style={styles.stack}>
         <AppHeader
-          eyebrow="Moonrakers Command"
+          eyebrow="Moonraker's Analytics"
           title="Authorizing"
           subtitle="Finishing sign-in."
           identity="emblem"
