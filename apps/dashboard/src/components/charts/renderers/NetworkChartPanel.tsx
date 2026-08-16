@@ -28,6 +28,8 @@ type NetworkEdge = {
 const NODE_RADIUS = 28;
 const SVG_WIDTH = 880;
 const SVG_HEIGHT = 420;
+/** How far an edge bows off the straight line between two nodes. */
+const EDGE_BOW = 26;
 
 function buildPlayerDirectory(data: Record<string, unknown>) {
   const directory = new Map<string, NetworkPlayer>();
@@ -305,7 +307,7 @@ export function NetworkChartPanel({
               </marker>
             </defs>
 
-            {edges.map((edge, index) => {
+            {edges.map((edge) => {
               const from = positions.get(edge.from);
               const to = positions.get(edge.to);
               if (!from || !to) {
@@ -318,7 +320,12 @@ export function NetworkChartPanel({
                 edge.from === focusedPlayer.id ||
                 edge.to === focusedPlayer.id;
               const strokeWidth = 1.75 + (edge.weight / maxWeight) * 4;
-              const path = getEdgePath(from, to, index % 2 === 0 ? 26 : -26);
+              // The bow is perpendicular to the edge's own direction, so A→B
+              // and B→A already curve to opposite sides under one constant.
+              // Alternating the sign by position in the array cancelled that
+              // out whenever the two indices shared parity, drawing one curve
+              // over the other with both labels stacked on the same point.
+              const path = getEdgePath(from, to, EDGE_BOW);
 
               return (
                 <g key={edge.id}>

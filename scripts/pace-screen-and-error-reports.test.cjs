@@ -83,10 +83,10 @@ assert.match(
 );
 
 const hubsSource = read("utils", "appHubs.ts");
-assert.match(
+assert.doesNotMatch(
   hubsSource,
   /route: APP_ROUTES\.pace/,
-  "expected the analytics hub to link to the pace screen",
+  "expected the analytics hub to no longer link to the pace screen",
 );
 
 // --- crash telemetry wiring -------------------------------------------------

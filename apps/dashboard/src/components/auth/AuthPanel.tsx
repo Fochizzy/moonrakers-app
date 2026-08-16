@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
@@ -213,6 +214,16 @@ export function AuthPanel() {
           Send reset link
         </button>
       </form>
+
+      {/* The login form is the first thing most visitors see, and it says
+          nothing about what is behind it. */}
+      <p className="auth-panel__preview">
+        Want to look around first?{" "}
+        <Link className="term-link" href="/preview">
+          See the charts, stats, and game entry screen
+        </Link>{" "}
+        — no account needed.
+      </p>
     </section>
   );
 }

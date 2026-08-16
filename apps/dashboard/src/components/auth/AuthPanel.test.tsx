@@ -43,6 +43,14 @@ describe("AuthPanel", () => {
     window.history.replaceState({}, "", "/auth");
   });
 
+  it("offers the signed-out preview so the form is not a dead end", () => {
+    render(<AuthPanel />);
+
+    expect(
+      screen.getByRole("link", { name: /charts, stats, and game entry/i }),
+    ).toHaveAttribute("href", "/preview");
+  });
+
   it("asks for an email before requesting a reset link", async () => {
     render(<AuthPanel />);
 

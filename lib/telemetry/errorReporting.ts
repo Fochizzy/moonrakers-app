@@ -18,7 +18,8 @@ function clip(value: unknown): string {
   return String(value ?? "").slice(0, MAX_TEXT_LENGTH);
 }
 
-function getAppVersion(): string | null {
+/** Also used by the in-app bug report, so a report carries the build it came from. */
+export function getAppVersion(): string | null {
   const version = Constants.expoConfig?.version;
   return typeof version === "string" && version.trim() ? version.trim() : null;
 }

@@ -50,4 +50,32 @@ describe("NetworkChartPanel focus", () => {
       "izzy",
     );
   });
+
+  /**
+   * The bow used to be picked from the edge's index in the array, so a pair
+   * that assists both ways drew one arc on top of the other and stacked both
+   * labels on the same point.
+   */
+  it("bows the two directions of a pair onto opposite sides", () => {
+    const { container } = render(
+      <NetworkChartPanel payload={{ data: networkData }} />,
+    );
+
+    const paths = [...container.querySelectorAll("path[marker-end]")].map(
+      (node) => node.getAttribute("d"),
+    );
+
+    expect(paths).toHaveLength(2);
+    expect(paths[0]).not.toBe(paths[1]);
+
+    // With two nodes the layout stacks them vertically, so the bow shows up on
+    // the control point's x: one arc left of the straight line, one right.
+    const controlX = (d: string | null) =>
+      Number(d?.split(" Q ")[1]?.split(" ")[0] ?? 0);
+    const [first, second] = paths.map(controlX);
+    const centreX = 880 / 2;
+
+    expect(first).not.toBe(second);
+    expect(Math.sign(first - centreX)).toBe(-Math.sign(second - centreX));
+  });
 });

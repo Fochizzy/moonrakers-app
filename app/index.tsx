@@ -3,6 +3,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
+import BugReportModal from "@/components/support/BugReportModal";
 import ActionButton from "@/components/ui/ActionButton";
 import AppHeader from "@/components/ui/AppHeader";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
@@ -21,6 +23,7 @@ import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
 import { resolveHomeRedirect } from "@/lib/auth/launchRoute";
 import { runSignOutFlow } from "@/lib/auth/signOutFlow";
+import { getAppVersion } from "@/lib/telemetry/errorReporting";
 import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
 import {
   useAuthBootstrapStatus,
@@ -105,6 +108,7 @@ export default function HomeScreen() {
     passwordRecoveryPending,
   });
   const [tab, setTab] = useState<Tab>(normalizeHomeTab(params.initialTab));
+  const [bugReportOpen, setBugReportOpen] = useState(false);
   const [playerSearch, setPlayerSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<GroupLike | null>(null);
@@ -624,6 +628,18 @@ export default function HomeScreen() {
   const headerTitle =
     tab === "leaderboard" ? "Data Center" : tab === "hubs" ? "Hubs" : "Command";
 
+  // A report is only useful if it says who filed it, so resolve the same name
+  // the rest of the app shows for the signed-in player.
+  const reporterProfileId =
+    String(authProfile?.id ?? authSession?.user?.id ?? "").trim() || null;
+  const reporterName =
+    String(
+      authProfile?.display_name ??
+        authProfile?.player_name ??
+        authSession?.user?.email ??
+        "",
+    ).trim() || "Unknown player";
+
   return (
     <PageShell
       preset="command"
@@ -881,7 +897,27 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Sits under every tab: a bug is worth reporting from wherever the
+            player noticed it, not only from one screen. */}
+        <View style={styles.bugReportFooter}>
+          <ActionButton
+            title="Report a bug"
+            subtitle="Tell Izzy what went wrong"
+            variant="ghost"
+            onPress={() => setBugReportOpen(true)}
+            accessibilityHint="Opens a form to describe a problem with the app"
+          />
+        </View>
       </View>
+
+      <BugReportModal
+        appVersion={getAppVersion()}
+        onClose={() => setBugReportOpen(false)}
+        platform={Platform.OS}
+        profileId={reporterProfileId}
+        reporterName={reporterName}
+        visible={bugReportOpen}
+      />
     </PageShell>
   );
 }
@@ -1021,6 +1057,10 @@ const styles = StyleSheet.create({
   leaderboardPanel: {
     flex: 1,
     minHeight: 0,
+  },
+  bugReportFooter: {
+    paddingTop: 10,
+    paddingHorizontal: 2,
   },
   hubsPanel: {
     flex: 1,

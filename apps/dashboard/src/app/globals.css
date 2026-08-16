@@ -876,6 +876,15 @@ a.tile:hover {
   padding: 0.65rem 1rem;
 }
 
+.auth-panel__preview {
+  margin: 0;
+  padding-top: var(--s2);
+  border-top: 1px solid var(--border);
+  color: var(--sub);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+
 .btn[disabled] {
   opacity: 0.55;
   cursor: not-allowed;
@@ -1128,6 +1137,1417 @@ a.tile:hover {
   color: var(--text-strong);
 }
 
+/* -------------------------------------------------------------- preview -- */
+
+/* The signed-out preview has no sidebar and no topbar to sit inside, so it
+   carries its own shell rather than borrowing the dashboard's. */
+
+.preview-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--s5);
+  padding: var(--s5);
+}
+
+.preview-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  width: min(100%, 78rem);
+  margin: 0 auto;
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: rgba(8, 17, 32, 0.86);
+  backdrop-filter: blur(10px);
+}
+
+.preview-wordmark {
+  color: var(--text-strong);
+  font-size: var(--t-md);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.preview-badge {
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.1);
+  color: var(--gold);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.preview-topbar__note {
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.preview-topbar__actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.preview-main {
+  display: grid;
+  gap: var(--s5);
+  align-content: start;
+  width: min(100%, 78rem);
+  margin: 0 auto;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------- preview: hero -- */
+
+/* Two columns: the pitch and its call to action on the left, and everything
+   that answers "what am I actually looking at" gathered on the right. A single
+   column left the whole right half of the panel empty and stranded the CTA in
+   the middle of left-aligned copy. */
+.preview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: var(--s6);
+  align-items: start;
+  padding: var(--s6) var(--s5);
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(168, 85, 247, 0.24);
+  background:
+    radial-gradient(
+      circle at 85% 0%,
+      rgba(59, 130, 246, 0.14),
+      transparent 55%
+    ),
+    linear-gradient(160deg, rgba(168, 85, 247, 0.12) 0%, var(--level-1) 60%);
+}
+
+.preview-hero__lead {
+  display: grid;
+  gap: var(--s3);
+  align-content: start;
+}
+
+.preview-hero__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(1.6rem, 3.2vw, 2.35rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.preview-hero__copy {
+  margin: 0;
+  color: var(--sub);
+  font-size: var(--t-md);
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+/* The qualifier under the pitch: true, needed, and not the first thing to read. */
+.preview-hero__copy--sub {
+  color: var(--muted);
+  font-size: var(--t-base);
+}
+
+.preview-hero__aside {
+  display: grid;
+  gap: var(--s4);
+  align-content: start;
+  padding: var(--s4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: rgba(4, 8, 20, 0.42);
+}
+
+.preview-hero__league {
+  display: grid;
+  gap: var(--s2);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+}
+
+.preview-hero__league-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.preview-hero__league-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+}
+
+.preview-crew {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preview-crew__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--level-2);
+  font-size: var(--t-sm);
+}
+
+.preview-crew__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: var(--r-pill);
+}
+
+.preview-crew__name {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.preview-crew__meta {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s4) var(--s3);
+  margin: 0;
+}
+
+.preview-figure {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.preview-figure dt {
+  color: var(--muted);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.preview-figure dd {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.45rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* -------------------------------------------------------- preview: nav -- */
+
+/* The section switcher rides with the reader: the charts catalog and the metric
+   families both run several screens long, and having to scroll back to the top
+   to change section was the main reason a section went unread. */
+.preview-nav-rail {
+  position: sticky;
+  /* Butted against the bottom of the sticky topbar. Any daylight between the
+     two shows a strip of the page scrolling between them. */
+  top: 4rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: rgba(8, 17, 32, 0.9);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 24px rgba(4, 8, 20, 0.35);
+  scroll-margin-top: 4.6rem;
+}
+
+.preview-nav {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+/* Says what the open section holds, so the four one-word labels are not the
+   only thing the reader has to go on. */
+.preview-nav__hint {
+  margin: 0 0 0 auto;
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.preview-nav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--sub);
+  font-family: inherit;
+  font-size: var(--t-base);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.preview-nav__item:hover {
+  color: var(--text-strong);
+  background: var(--level-2);
+}
+
+.preview-nav__item[aria-current="true"] {
+  border-color: rgba(168, 85, 247, 0.45);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+
+.preview-nav__count {
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-nav__item[aria-current="true"] .preview-nav__count {
+  color: var(--text-strong);
+}
+
+/* ----------------------------------------------------- preview: charts -- */
+
+.preview-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  margin-bottom: var(--s4);
+}
+
+.preview-chart-head__text {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.preview-chart-head__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-lg);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.preview-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.preview-stepper__button {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--level-2);
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.preview-stepper__button:hover {
+  background: var(--level-3);
+}
+
+.preview-stepper__count {
+  color: var(--muted);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5rem;
+  text-align: center;
+}
+
+/* What the chart plots, stated above the chart rather than captioned under it. */
+.preview-chart-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 var(--s3);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+  color: var(--sub);
+  font-size: var(--t-sm);
+}
+
+.preview-chart-meta__label {
+  color: var(--gold);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* The chart scrolls itself into view when picked from the catalog below, so it
+   has to clear the topbar and the sticky section rail. */
+.preview-chart-anchor {
+  scroll-margin-top: 9rem;
+}
+
+.preview-note {
+  margin: var(--s3) 0 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.preview-picker {
+  display: grid;
+  gap: var(--s4);
+}
+
+.preview-picker__group {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.preview-picker__label {
+  margin: 0;
+  color: var(--gold);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.preview-picker__copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.preview-picker__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: 0.25rem;
+}
+
+.preview-chip-button {
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--t-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preview-chip-button:hover {
+  border-color: var(--border-strong);
+  background: var(--level-2);
+  color: var(--text-strong);
+}
+
+.preview-chip-button[aria-pressed="true"] {
+  border-color: rgba(168, 85, 247, 0.55);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------ preview: stats -- */
+
+.preview-table td,
+.preview-table th {
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-table__player {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.preview-table__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: var(--r-pill);
+  flex: none;
+}
+
+/* The worked-example table: a metric name, its published definition, and the
+   answer for every player on one line. */
+/* The grid lives on a wrapper, not the cell: `display: grid` on a `td` takes it
+   out of the table box tree and its row border stops short of the column. */
+.preview-metric-table td.col-text,
+.preview-metric-table th.col-text {
+  width: 38%;
+  min-width: 15rem;
+}
+
+.preview-metric-cell {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.preview-metric-name {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.preview-metric-family {
+  justify-self: start;
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--gold);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.preview-metric-body {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.preview-metric-table td {
+  vertical-align: top;
+}
+
+/* -------------------------------------------------- preview: the read -- */
+
+.preview-intel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--s3);
+}
+
+.preview-intel {
+  display: grid;
+  gap: var(--s3);
+  align-content: start;
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+}
+
+.preview-intel__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preview-intel__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: none;
+  border-radius: var(--r-pill);
+}
+
+.preview-intel__name {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-base);
+  font-weight: 700;
+}
+
+.preview-intel__reads {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+}
+
+.preview-intel__read {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.preview-intel__read dt {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  /* The full catalog definition is on the title attribute. */
+  cursor: help;
+}
+
+.preview-intel__read dd {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  text-align: right;
+}
+
+.preview-signals {
+  display: grid;
+  gap: var(--s2);
+  margin-top: var(--s4);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+}
+
+.preview-signals__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-base);
+  font-weight: 700;
+}
+
+.preview-signals__list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preview-signals__list li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--text);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.preview-signals__list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.preview-family-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--s3);
+}
+
+.preview-family {
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+  align-self: start;
+}
+
+.preview-family[open] {
+  border-color: var(--border-strong);
+  background: var(--level-2);
+}
+
+.preview-family__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.preview-family__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The native marker is hidden for the layout, and without a replacement the
+   families read as static tiles rather than as things that open. */
+.preview-family__chevron {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid var(--sub);
+  border-bottom: 2px solid var(--sub);
+  transform: translateY(-0.12rem) rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.preview-family[open] .preview-family__chevron {
+  transform: translateY(0.06rem) rotate(225deg);
+}
+
+.preview-family__title {
+  color: var(--text-strong);
+  font-size: var(--t-base);
+  font-weight: 700;
+}
+
+.preview-family__count {
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sub);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.preview-family__count-unit {
+  color: var(--muted);
+}
+
+.preview-family__copy {
+  margin: var(--s2) 0 0;
+  color: var(--sub);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.preview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: var(--s3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preview-chip {
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+  color: var(--text);
+  font-size: var(--t-xs);
+}
+
+/* ------------------------------------------------------ preview: pages -- */
+
+.preview-page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  gap: var(--s3);
+}
+
+/* Rows rather than `align-content: start`, so the contents list absorbs the
+   slack and the "best for" line sits on the same baseline across the row. */
+.preview-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--s3);
+  padding: var(--s4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+}
+
+.preview-page__head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.preview-page__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-md);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.preview-page__summary {
+  margin: 0;
+  color: var(--sub);
+  font-size: var(--t-base);
+  line-height: 1.55;
+}
+
+.preview-page__list {
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  margin: 0;
+  padding: var(--s3) 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.preview-page__list li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--text);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.preview-page__list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: var(--r-pill);
+  background: var(--gold);
+}
+
+/* Was `text-transform: lowercase` over the whole line, which turned the label
+   into a fragment and would have mangled any proper noun in the value. */
+.preview-page__meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding-top: var(--s3);
+  border-top: 1px solid var(--border);
+  color: var(--sub);
+  font-size: var(--t-xs);
+}
+
+.preview-page__meta-label {
+  color: var(--muted);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------- preview: game entry -- */
+
+.preview-split {
+  display: grid;
+  grid-template-columns: minmax(0, 23rem) minmax(0, 1fr);
+  gap: var(--s5);
+  align-items: start;
+}
+
+.preview-phone-rail {
+  position: sticky;
+  /* Clears the topbar and the sticky section rail. */
+  top: 8.75rem;
+}
+
+/* The screen is roughly twice the height of the notes beside it. Capping it and
+   letting it scroll inside its own frame keeps the annotations from ending
+   halfway down an otherwise empty column, and makes the sticky rail useful. */
+.preview-phone {
+  max-height: min(42rem, calc(100vh - 11rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border-radius: 1.75rem;
+  border: 1px solid var(--border-strong);
+  background: #05070b;
+  padding: 0.7rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.preview-phone-note {
+  margin: var(--s2) 0 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.preview-notes-column {
+  display: grid;
+  gap: var(--s3);
+  align-content: start;
+}
+
+.preview-notes-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-md);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.preview-notes {
+  display: grid;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: preview-note;
+}
+
+.preview-note-item {
+  position: relative;
+  padding: var(--s3) var(--s4) var(--s3) 2.9rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+  counter-increment: preview-note;
+}
+
+.preview-note-item::before {
+  content: counter(preview-note);
+  position: absolute;
+  left: var(--s3);
+  top: var(--s3);
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-size: var(--t-micro);
+  font-weight: 800;
+}
+
+.preview-note-item__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-base);
+  font-weight: 700;
+}
+
+.preview-note-item__copy {
+  margin: 0.2rem 0 0;
+  color: var(--sub);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------- preview: beta -- */
+
+.btn-beta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+  color: #fff;
+  font-family: inherit;
+  font-size: var(--t-base);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-beta:hover {
+  filter: brightness(1.1);
+}
+
+/* The primary ask, plus a way into the page for someone not ready to give an
+   email address yet. Left-aligned with the copy it follows. */
+.preview-hero__cta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin: var(--s3) 0 0;
+}
+
+.btn-beta--hero {
+  padding: 1rem 2.4rem;
+  font-size: var(--t-lg);
+  letter-spacing: -0.01em;
+  box-shadow: 0 14px 34px rgba(168, 85, 247, 0.32);
+}
+
+.preview-hero__browse {
+  padding: 0.7rem 1.3rem;
+}
+
+.preview-hero__cta-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.beta-dialog {
+  width: min(100% - 2rem, 30rem);
+  /* Tailwind's preflight zeroes every margin, including the `margin: auto` the
+     UA stylesheet uses to centre an open dialog — without this it pins to the
+     top-left corner. */
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-alt);
+  color: var(--text);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+
+.beta-dialog::backdrop {
+  background: rgba(4, 8, 20, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.beta-dialog__body {
+  display: grid;
+  gap: var(--s4);
+  padding: var(--s6);
+}
+
+.beta-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.beta-dialog__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-xl);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.beta-dialog__close {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--level-2);
+  color: var(--sub);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.beta-dialog__close:hover {
+  color: var(--text-strong);
+  background: var(--level-3);
+}
+
+.beta-dialog__form {
+  display: grid;
+  gap: var(--s3);
+}
+
+.beta-dialog__copy {
+  margin: 0;
+  color: var(--sub);
+  font-size: var(--t-base);
+  line-height: 1.6;
+}
+
+.beta-dialog__hint {
+  margin: -0.25rem 0 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.beta-dialog__submit {
+  justify-content: center;
+  padding: 0.7rem 1rem;
+}
+
+/* -------------------------------------------------------- beta console -- */
+
+.beta-admin__action {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.beta-admin__sent {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.1);
+  color: var(--gold);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.beta-admin__error {
+  color: var(--danger);
+  font-size: var(--t-xs);
+}
+
+/* -------------------------------------------------------- preview: cta -- */
+
+.preview-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s5);
+  flex-wrap: wrap;
+}
+
+.preview-cta__text {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.preview-cta__actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------- preview: game screen -- */
+
+/* A reproduction of the phone game screen, so the colours and spacing are the
+   app's rather than the dashboard's. */
+
+.ge-screen {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.6rem;
+  border-radius: 1.25rem;
+  background: #05070b;
+  color: #fff;
+  font-size: 0.8rem;
+}
+
+.ge-topbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  padding: 0.4rem;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #090c12;
+}
+
+.ge-topbar__chip {
+  padding: 0.4rem 0.3rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #101722;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.ge-topbar__chip--active {
+  border-color: var(--ge-accent);
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.ge-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.ge-player {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid var(--ge-player-accent);
+  background: #0c121b;
+}
+
+.ge-player--active {
+  border-color: var(--ge-player-accent);
+  background: #101722;
+}
+
+.ge-player__name {
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ge-player__totals {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.ge-player__stat {
+  flex: 1 1 0;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ge-panel {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.55rem;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #090c12;
+}
+
+.ge-panel--active {
+  border-color: var(--ge-accent);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--ge-accent) 14%, #090c12) 0%,
+    #090c12 70%
+  );
+}
+
+.ge-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ge-panel__title {
+  margin: 0;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.ge-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ge-stepper--large {
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.ge-stepper__button {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #101722;
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ge-stepper--large .ge-stepper__button {
+  width: 3rem;
+  height: 2.6rem;
+  border-color: var(--ge-accent);
+  font-size: 1.2rem;
+}
+
+.ge-stepper__button:hover:not(:disabled) {
+  background: #17202e;
+}
+
+.ge-stepper__button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ge-stepper__value {
+  min-width: 2rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ge-stepper--large .ge-stepper__value {
+  min-width: 5.5rem;
+  padding: 0.55rem;
+  border-color: var(--ge-accent);
+  font-size: 1.3rem;
+}
+
+.ge-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.ge-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.4rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #090c12;
+  color: rgba(255, 255, 255, 0.68);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ge-choice--success[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: #fff;
+}
+
+.ge-choice--failure[aria-pressed="true"] {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: #fff;
+}
+
+.ge-wide-button {
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--ge-accent);
+  background: color-mix(in srgb, var(--ge-accent) 12%, transparent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ge-none-chip {
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #101722;
+  color: rgba(255, 255, 255, 0.68);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.4rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #0b1018;
+}
+
+.ge-row__player {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 5rem;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ge-row__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: var(--r-pill);
+}
+
+.ge-row__bar {
+  flex: 1 1 6rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ge-row__bar--active {
+  border-color: var(--ge-accent);
+  color: #fff;
+}
+
+.ge-toggle {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.ge-toggle__button {
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #090c12;
+  color: rgba(255, 255, 255, 0.68);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ge-toggle__button[aria-pressed="true"] {
+  border-color: var(--ge-accent);
+  background: #17202e;
+  color: #fff;
+}
+
+.ge-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.ge-action {
+  padding: 0.55rem 0.4rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #101722;
+  color: rgba(255, 255, 255, 0.68);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ge-action--primary {
+  border-color: var(--ge-accent);
+  color: #fff;
+}
+
+.ge-action--finish {
+  border-color: rgba(45, 212, 191, 0.4);
+  color: #fff;
+}
+
 /* ------------------------------------------------------------ utilities -- */
 
 .stack-sm {
@@ -1196,6 +2616,37 @@ a.tile:hover {
   .sidebar__nav {
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   }
+
+  /* The hero's aside needs its own full width before the copy beside it starts
+     breaking into two- and three-word lines. */
+  .preview-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s5);
+  }
+
+  .preview-hero__copy {
+    max-width: none;
+  }
+
+  .preview-figures {
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  }
+
+  /* The phone and its annotations stop fitting side by side well before the
+     phone itself needs to shrink, so stack instead of squeezing. */
+  .preview-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-phone-rail {
+    position: static;
+  }
+
+  .preview-phone {
+    width: min(100%, 22rem);
+    max-height: 34rem;
+    margin: 0 auto;
+  }
 }
 
 /* On a phone the rail would otherwise fill the first screen, so collapse the
@@ -1243,6 +2694,67 @@ a.tile:hover {
   .topbar__controls .input,
   .topbar__controls .select {
     width: 100%;
+  }
+
+  .preview-shell {
+    padding: var(--s3);
+    gap: var(--s4);
+  }
+
+  .preview-main {
+    gap: var(--s4);
+  }
+
+  .preview-topbar {
+    position: static;
+  }
+
+  .preview-topbar__note {
+    display: none;
+  }
+
+  .preview-topbar__actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .preview-topbar__actions .btn {
+    flex: 1 1 8rem;
+    justify-content: center;
+  }
+
+  .preview-hero {
+    padding: var(--s5) var(--s4);
+  }
+
+  /* A sticky rail plus a sticky topbar would eat most of a phone screen. */
+  .preview-nav-rail {
+    position: static;
+    padding: var(--s2);
+  }
+
+  .preview-nav {
+    width: 100%;
+  }
+
+  .preview-nav__hint {
+    margin: var(--s1) 0 0;
+  }
+
+  .preview-nav__item {
+    flex: 1 1 7rem;
+    justify-content: center;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .preview-hero__cta {
+    display: grid;
+  }
+
+  .preview-hero__cta .btn-beta--hero,
+  .preview-hero__browse {
+    justify-content: center;
+    text-align: center;
   }
 }
 
