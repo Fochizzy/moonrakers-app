@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppStatusBanner from '@/components/status/AppStatusBanner';
+import type { GamePlayer } from '@/store/useStore';
 import {
   useActiveGame,
   useClearActiveGame,
@@ -167,8 +168,9 @@ export default function Game() {
   const players = useMemo<Player[]>(
     () =>
       Array.isArray(activeGame?.players)
-        ? activeGame.players.map((player: Player, index: number) => ({
+        ? activeGame.players.map((player: GamePlayer, index: number) => ({
             ...player,
+            name: String(player.name ?? "").trim() || `Player ${index + 1}`,
             color: resolveStoredPlayerColor(player.color, index),
           }))
         : [],

@@ -117,7 +117,7 @@ function AnimatedCard({
   const stars = useMemo(() => createSeededStars(starCount), [starCount]);
 
   const getPressableStyle = useCallback(
-    ({ pressed, hovered }: { pressed: boolean; hovered: boolean }) => {
+    ({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => {
       const active = interactive && (pressed || hovered);
 
       return [

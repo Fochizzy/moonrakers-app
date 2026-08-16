@@ -13,11 +13,11 @@ type AuthSessionLike = {
 
 type HookArgs = {
   authSession: AuthSessionLike;
-  hydrateCloudSnapshot: (input: {
-    session: AuthSessionLike;
-    snapshot: unknown;
-    statsSnapshot?: unknown;
-  }) => void;
+  // Typed against what this hook actually passes in, so the store's stricter
+  // hydrate function is assignable under strictFunctionTypes.
+  hydrateCloudSnapshot: (
+    input: Awaited<ReturnType<typeof loadHydratedCloudState>>,
+  ) => void;
 };
 
 export function useHistoryDataManager(args: HookArgs) {

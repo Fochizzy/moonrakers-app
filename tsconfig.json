@@ -1,9 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": false,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
+    "strict": true,
     "noUncheckedIndexedAccess": false,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
