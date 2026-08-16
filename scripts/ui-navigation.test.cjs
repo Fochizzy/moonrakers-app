@@ -105,6 +105,7 @@ run("Analytics and players hubs expose the consolidated navigation model", () =>
       APP_ROUTES.stats,
       APP_ROUTES.elo,
       APP_ROUTES.insights,
+      APP_ROUTES.pace,
     ]
   );
   assert.ok(
@@ -113,7 +114,7 @@ run("Analytics and players hubs expose the consolidated navigation model", () =>
   );
   assert.deepEqual(
     analyticsCards.map((card) => card.iconKey),
-    ["compare", "charts", "statistics", "elo", "ships"]
+    ["compare", "charts", "statistics", "elo", "ships", "thruster"]
   );
 
   const playersHubCards = getPlayersHubCards();

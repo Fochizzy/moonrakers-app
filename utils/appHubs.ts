@@ -59,6 +59,15 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
     eyebrow: "Meta",
     bestFor: "Signals",
   },
+  {
+    key: "pace",
+    title: "Pace",
+    description: "Game and turn length",
+    route: APP_ROUTES.pace,
+    iconKey: "thruster",
+    eyebrow: "Tempo",
+    bestFor: "Who runs long",
+  },
 ];
 
 export const PROFILE_MANAGEMENT_CARD: HubCard = {

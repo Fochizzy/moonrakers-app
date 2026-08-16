@@ -17,6 +17,7 @@ export const APP_ROUTES = {
   stats: "/stats",
   elo: "/elo",
   insights: "/insights",
+  pace: "/pace",
   definitions: "/definitions",
   dataBackup: "/data-backup",
   roster: "/add-players",

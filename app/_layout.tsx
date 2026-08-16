@@ -14,7 +14,9 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import RootErrorBoundary from "@/components/status/RootErrorBoundary";
 import Text from "@/components/ui/Text";
+import { installErrorReporting } from "@/lib/telemetry/errorReporting";
 import {
   hasAuthCallbackPayload,
   isAuthCallbackUrl,
@@ -252,12 +254,17 @@ function AppNavigator() {
   );
 }
 
+// Crash telemetry hooks the global handler once, before the first render.
+installErrorReporting();
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AppNavigator />
+          <RootErrorBoundary>
+            <AppNavigator />
+          </RootErrorBoundary>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
