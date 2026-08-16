@@ -46,11 +46,63 @@ module.exports = [
   },
 
   {
+    // The verification scripts are CommonJS node programs, not app modules.
+    // Linting them as ESM browser code produced thousands of phantom no-undef
+    // and no-require-imports errors that buried every real finding.
+    files: [
+      'scripts/**/*.{cjs,js}',
+      'scripts/**/*.ts',
+      '*.cjs',
+      'app.config.js',
+      'metro.config.js',
+    ],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: {
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        console: 'readonly',
+        module: 'writable',
+        process: 'readonly',
+        require: 'readonly',
+        exports: 'writable',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        URL: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        fetch: 'readonly',
+        structuredClone: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-restricted-imports': 'off',
+    },
+  },
+
+  {
+    // Without the scratch directories here, `lint:all` reported ~91k problems,
+    // almost all of them from checked-out worktrees and agent scratch space.
+    // Real source accounts for barely a hundred.
     ignores: [
       'node_modules/**',
       '.expo/**',
       'dist/**',
+      'dist-web/**',
       'build/**',
+      '.worktrees/**',
+      '.claude/**',
+      '.agents/**',
+      '.codex/**',
+      'tmp/**',
+      'tmp-*/**',
+      'android/**',
+      'ios/**',
     ],
   },
 ];
