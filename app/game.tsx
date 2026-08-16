@@ -41,6 +41,7 @@ import {
 } from '@/utils/gameScreenTheme';
 import { sanitizeHeadToHeadSelection } from '@/utils/headToHeadMission';
 import { toNumber } from '@/utils/numbers';
+import { formatDuration } from '@/utils/turnPace';
 import { remove } from '@/utils/storage/storage';
 import {
   commitFeedback,
@@ -299,6 +300,36 @@ export default function Game() {
     const index = displayRounds.findIndex((round) => round.id === editingRoundId);
     return index >= 0 ? index + 1 : null;
   }, [displayRounds, editingRoundId]);
+
+  // Elapsed table time, anchored on the first saved turn — the same anchor the
+  // summary's Pace section uses. activeGame.createdAt is reprojected from the
+  // draft's updatedAt on every write, so it cannot serve as a start time.
+  const gameStartedAt = useMemo(() => {
+    let earliest: number | null = null;
+    for (const round of rounds) {
+      const stamp = toNumber(round?.createdAt);
+      if (stamp > 0 && (earliest === null || stamp < earliest)) {
+        earliest = stamp;
+      }
+    }
+    return earliest;
+  }, [rounds]);
+
+  const [elapsedLabel, setElapsedLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!gameStartedAt) {
+      setElapsedLabel(null);
+      return;
+    }
+
+    const update = () =>
+      setElapsedLabel(formatDuration(Math.max(0, Date.now() - gameStartedAt)));
+
+    update();
+    const timer = setInterval(update, 30_000);
+    return () => clearInterval(timer);
+  }, [gameStartedAt]);
 
   function commitGameplayPatch(
     patch: Partial<{
@@ -881,6 +912,7 @@ export default function Game() {
             >
               <Text style={styles.roundBadgeText}>
                 Round {editingDisplayRoundNumber ?? displayRounds.length + 1}
+                {elapsedLabel ? ` · ${elapsedLabel}` : ''}
               </Text>
             </View>
 
