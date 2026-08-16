@@ -28,39 +28,41 @@ function run(name, fn) {
   }
 }
 
-run("Hubs tab keeps the four bridge cards visible in a mobile 2x2 fit-screen layout", () => {
+run("Hubs tab fills the page with the four bridge cards in a 2x2 fit-screen layout", () => {
   const indexSource = read("app/index.tsx");
 
   expectIncludes(indexSource, 'viewport="fit"', "fit home viewport");
   expectIncludes(
     indexSource,
-    "const compactBridgeDestinations = useMemo(",
-    "compact hub list for the 2x2 grid"
+    "const bridgeRows = useMemo(",
+    "paired hub rows for the 2x2 grid"
   );
-  expectIncludes(
-    indexSource,
-    "const featuredBridgeDestinations = useMemo(",
-    "full-width hub list for the bottom action row"
-  );
+  expectIncludes(indexSource, "bridgeDestinations.slice(index, index + 2)", "two tiles per hub row");
   expectIncludes(indexSource, "layout={card.layout ?? (card.iconKey ? \"graphic\" : \"text\")}", "shared hub layout hint");
   expectIncludes(indexSource, 'emphasis="large"', "large hubs emphasis");
-  expectIncludes(indexSource, "style={[styles.hubTileBase, styles.hubTileHalf]}", "compact hubs tile style");
-  expectIncludes(indexSource, "style={[styles.hubTileBase, styles.hubTileFullWidth]}", "wide profile management tile style");
-  expectIncludes(indexSource, 'hubGrid: {', "hubs grid style");
-  expectIncludes(indexSource, 'hubWideStack: {', "bottom hub action row");
-  expectIncludes(indexSource, 'width: "100%"', "full-width hubs grid footprint");
-  expectIncludes(indexSource, 'alignContent: "flex-start"', "top-aligned hub rows");
+  expectIncludes(indexSource, "style={[styles.hubTileBase, styles.hubTile]}", "hubs tile style");
+  expectIncludes(indexSource, "hubsPanel: {\n    flex: 1,", "hubs panel claims the whole tab body");
+  expectIncludes(indexSource, "hubGridRow: {\n    flex: 1,", "hub rows split the panel height evenly");
+  expectIncludes(indexSource, "hubTile: {\n    flex: 1,", "hub tiles split their row width evenly");
   expectIncludes(indexSource, "gap: 10", "tighter mobile hub tile spacing");
-  expectIncludes(indexSource, 'width: "47%"', "narrower half-tile width so two cards fit per row");
-  expectIncludes(indexSource, "minHeight: 184", "shorter half-tile minimum height for above-the-fold fit");
-  expectIncludes(indexSource, 'width: "100%"', "full-width bottom tile width");
-  expectIncludes(indexSource, 'flexBasis: "auto"', "wide tile clears the half-card flex basis so it can sit below the grid cleanly");
-  expectIncludes(indexSource, "flexShrink: 0", "bottom hub action row stays in its own row");
+  expectIncludes(indexSource, 'flexBasis: "auto"', "tile clears the shared half-card flex basis so it can grow");
+  // Nothing may pin a tile to a fixed footprint now that the grid fills the page.
+  expectNotIncludes(indexSource, "hubTileHalf", "old fixed half-tile style");
+  expectNotIncludes(indexSource, "hubTileFullWidth", "old full-width tile style");
+  expectNotIncludes(indexSource, "hubWideStack", "old bottom hub action row");
+  expectNotIncludes(indexSource, 'width: "47%"', "old fixed half-tile width");
   expectNotIncludes(indexSource, 'width: "48.5%"', "old overly wide half-tile width");
+  expectNotIncludes(indexSource, "minHeight: 184", "old half-tile minimum height");
   expectNotIncludes(indexSource, "minHeight: 224", "old tall half-tile minimum height");
   expectNotIncludes(indexSource, 'height: "48.5%"', "old percentage-sized half-tile height");
   expectNotIncludes(indexSource, "marginBottom: 10", "old stacked hub gap");
-  expectNotIncludes(indexSource, "hubGrid: {\n    flex: 1,", "old flexible grid height that let the wide tile overlap");
+});
+
+run("Hubs tab exposes exactly the four bridge destinations", () => {
+  const hubsSource = read("utils/appHubs.ts");
+
+  expectNotIncludes(hubsSource, '"data-backup"', "backup & export bridge tile");
+  expectNotIncludes(hubsSource, '"manage-user-groups"', "manage user/groups bridge tile");
 });
 
 if (process.exitCode > 0) {

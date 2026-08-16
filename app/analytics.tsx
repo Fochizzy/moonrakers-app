@@ -2,14 +2,12 @@ import React, { useMemo } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
-import AnalyticsStateSection from "@/components/analytics/AnalyticsStateSection";
+import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
-import HeroCard from "@/components/ui/HeroCard";
 import PageShell from "@/components/ui/PageShell";
 import Text from "@/components/ui/Text";
 import { getAnalyticsHome } from "@/lib/cloud/analytics/getAnalyticsHome";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
-import AnalyticsRecoveryCard from "@/components/analytics/AnalyticsRecoveryCard";
 import { useStore } from "@/store/useStore";
 import { getAnalyticsHubCards } from "@/utils/appHubs";
 import { APP_ROUTES, buildHomeRoute } from "@/utils/appRoutes";
@@ -189,9 +187,18 @@ export default function AnalyticsScreen() {
     showSourceBadgeWhenReady: false,
     staleEntityLabel: "analytics directory payload",
   });
-  const standardCards = cards.filter((card) => card.key !== "insights");
   const insightsCard = cards.find((card) => card.key === "insights") ?? null;
   const insightsTone = ANALYTICS_CARD_TONES.insights;
+  // Two per row, so the destinations split the page height instead of sitting at
+  // a fixed card height with dead space underneath.
+  const standardRows = useMemo(() => {
+    const standardCards = cards.filter((card) => card.key !== "insights");
+    const rows: typeof cards[] = [];
+    for (let index = 0; index < standardCards.length; index += 2) {
+      rows.push(standardCards.slice(index, index + 2));
+    }
+    return rows;
+  }, [cards]);
   const recoveryState = useMemo(
     () =>
       resolveAnalyticsRecoveryState({
@@ -238,83 +245,74 @@ export default function AnalyticsScreen() {
           : "Syncing the analytics hub surface from the published Supabase payload.";
 
   return (
-    <PageShell preset="analytics" density="compact" contentContainerStyle={styles.pageContent}>
-      <HeroCard
-        eyebrow="Data Center"
-        headerAction={
-          <Pressable
-            style={styles.commandButton}
-            onPress={() => router.push(buildHomeRoute())}
-          >
-            <Text style={styles.commandButtonText}>Command</Text>
-          </Pressable>
-        }
-        title="Analytics"
-        size="compact"
-        variant="stat"
-        style={styles.heroCard}
-      />
+    <PageShell preset="analytics" density="compact" viewport="fit" contentContainerStyle={styles.pageContent}>
+      <View style={styles.commandRow}>
+        <Pressable
+          style={styles.commandButton}
+          onPress={() => router.push(buildHomeRoute())}
+        >
+          <Text style={styles.commandButtonText}>Command</Text>
+        </Pressable>
+      </View>
 
-      {recoveryState.kind !== "none" && !loading && !error ? (
-        <AnalyticsRecoveryCard
-          eyebrow="Setup required"
-          title={analyticsSectionTitle}
-          body={analyticsSectionBody}
-          tone="warning"
-          primaryAction={analyticsPrimaryAction ?? undefined}
-          secondaryAction={analyticsSecondaryAction ?? undefined}
-        />
-      ) : null}
-
-      <AnalyticsStateSection
-        eyebrow="Directory"
-        title="Analytics Destinations"
-        state={analyticsSectionState}
-        style={styles.directorySection}
-        messageTitle={analyticsSectionTitle}
-        messageBody={error ? freshness.sourceCaption(analyticsSectionBody) : analyticsSectionBody}
-        primaryAction={freshness.retryAction ?? analyticsPrimaryAction}
-        secondaryAction={freshness.retryAction ? null : analyticsSecondaryAction}
-        tone={error ? "danger" : recoveryState.kind === "none" ? "info" : "warning"}
-      >
+      {analyticsSectionState === "ready" ? (
         <View style={styles.grid}>
-          {standardCards.map((card) => {
-            const tone = ANALYTICS_CARD_TONES[card.key] ?? ANALYTICS_CARD_TONES.charts;
-            if (!tone) return null;
+          {standardRows.map((row, rowIndex) => (
+            <View key={`analytics-row-${rowIndex}`} style={styles.gridRow}>
+              {row.map((card) => {
+                const tone = ANALYTICS_CARD_TONES[card.key] ?? ANALYTICS_CARD_TONES.charts;
+                if (!tone) return null;
 
-            return (
-              <AnalyticsCard
-                key={card.key}
-                accent={tone.accent}
-                card={card}
-                onPress={() => router.push(card.route)}
-                tone={tone}
-              />
-            );
-          })}
+                return (
+                  <AnalyticsCard
+                    key={card.key}
+                    accent={tone.accent}
+                    card={card}
+                    onPress={() => router.push(card.route)}
+                    tone={tone}
+                  />
+                );
+              })}
+            </View>
+          ))}
 
           {insightsCard && insightsTone ? (
-            <AnalyticsCard
-              accent={insightsTone.accent}
-              card={insightsCard}
-              fullWidth
-              onPress={() => router.push(insightsCard.route)}
-              tone={insightsTone}
-            />
+            <View style={styles.gridRow}>
+              <AnalyticsCard
+                accent={insightsTone.accent}
+                card={insightsCard}
+                fullWidth
+                onPress={() => router.push(insightsCard.route)}
+                tone={insightsTone}
+              />
+            </View>
           ) : null}
         </View>
-      </AnalyticsStateSection>
+      ) : (
+        // Loading, error, and setup states replace the destinations rather than
+        // sitting above them, so the tiles stay the whole page once they load.
+        <AnalyticsRecoveryCard
+          eyebrow="Directory"
+          title={analyticsSectionTitle}
+          body={error ? freshness.sourceCaption(analyticsSectionBody) : analyticsSectionBody}
+          tone={error ? "danger" : recoveryState.kind === "none" ? "info" : "warning"}
+          primaryAction={freshness.retryAction ?? analyticsPrimaryAction}
+          secondaryAction={freshness.retryAction ? null : analyticsSecondaryAction}
+        />
+      )}
     </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
   pageContent: {
+    flex: 1,
     gap: 10,
     paddingBottom: 8,
   },
-  heroCard: {
-    borderRadius: 22,
+  commandRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
   commandButton: {
     alignSelf: "flex-start",
@@ -331,13 +329,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.35,
   },
-  directorySection: {
-    padding: 14,
-    gap: 10,
-  },
   grid: {
+    flex: 1,
+    gap: 8,
+  },
+  gridRow: {
+    flex: 1,
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
   },
   card: {
@@ -352,12 +350,12 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardStandard: {
-    width: "48.5%",
-    minHeight: 168,
+    flex: 1,
+    minHeight: 0,
   },
   cardWide: {
-    width: "100%",
-    minHeight: 140,
+    flex: 1,
+    minHeight: 0,
   },
   cardPressed: {
     transform: [{ scale: 0.985 }],

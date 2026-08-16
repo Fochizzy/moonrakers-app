@@ -93,14 +93,15 @@ export default function HomeScreen() {
   } = useSyncedGameDraft();
 
   const bridgeDestinations = useMemo(() => getBridgeDestinations(), []);
-  const compactBridgeDestinations = useMemo(
-    () => bridgeDestinations.filter((card) => !card.fullWidth),
-    [bridgeDestinations]
-  );
-  const featuredBridgeDestinations = useMemo(
-    () => bridgeDestinations.filter((card) => card.fullWidth),
-    [bridgeDestinations]
-  );
+  // The hubs tab is nothing but its tiles, so lay them out as explicit rows that
+  // split the panel height evenly instead of a wrapping grid that leaves a gap.
+  const bridgeRows = useMemo(() => {
+    const rows: HubCard[][] = [];
+    for (let index = 0; index < bridgeDestinations.length; index += 2) {
+      rows.push(bridgeDestinations.slice(index, index + 2));
+    }
+    return rows;
+  }, [bridgeDestinations]);
   const homeRedirect = resolveHomeRedirect({
     authBootstrapStatus,
     session: authSession,
@@ -857,43 +858,27 @@ export default function HomeScreen() {
 
         {tab === "hubs" && (
           <View style={styles.hubsPanel}>
-            <View style={styles.hubGrid}>
-              {compactBridgeDestinations.map((card, index) => (
-                <HubTileCard
-                  key={card.key}
-                  title={card.title}
-                  description={card.description}
-                  emphasis="large"
-                  iconKey={card.iconKey ?? null}
-                  layout={card.layout ?? (card.iconKey ? "graphic" : "text")}
-                  tint={
-                    index % 2 === 0
-                      ? "rgba(96,165,250,0.16)"
-                      : "rgba(168,85,247,0.14)"
-                  }
-                  style={[styles.hubTileBase, styles.hubTileHalf]}
-                  onPress={() => openBridgeDestination(card)}
-                />
-              ))}
-            </View>
-            <View style={styles.hubWideStack}>
-              {featuredBridgeDestinations.map((card, index) => (
-                <HubTileCard
-                  key={card.key}
-                  title={card.title}
-                  description={card.description}
-                  iconKey={card.iconKey ?? null}
-                  layout={card.layout ?? (card.iconKey ? "graphic" : "text")}
-                  tint={
-                    index % 2 === 0
-                      ? "rgba(96,165,250,0.16)"
-                      : "rgba(168,85,247,0.14)"
-                  }
-                  style={[styles.hubTileBase, styles.hubTileFullWidth]}
-                  onPress={() => openBridgeDestination(card)}
-                />
-              ))}
-            </View>
+            {bridgeRows.map((row, rowIndex) => (
+              <View key={`hub-row-${rowIndex}`} style={styles.hubGridRow}>
+                {row.map((card, columnIndex) => (
+                  <HubTileCard
+                    key={card.key}
+                    title={card.title}
+                    description={card.description}
+                    emphasis="large"
+                    iconKey={card.iconKey ?? null}
+                    layout={card.layout ?? (card.iconKey ? "graphic" : "text")}
+                    tint={
+                      (rowIndex * 2 + columnIndex) % 2 === 0
+                        ? "rgba(96,165,250,0.16)"
+                        : "rgba(168,85,247,0.14)"
+                    }
+                    style={[styles.hubTileBase, styles.hubTile]}
+                    onPress={() => openBridgeDestination(card)}
+                  />
+                ))}
+              </View>
+            ))}
           </View>
         )}
 
@@ -1065,23 +1050,15 @@ const styles = StyleSheet.create({
   hubsPanel: {
     flex: 1,
     minHeight: 0,
-    justifyContent: "flex-start",
     paddingHorizontal: 2,
     paddingTop: 4,
     paddingBottom: 4,
     gap: 10,
   },
-  hubGrid: {
-    width: "100%",
+  hubGridRow: {
+    flex: 1,
     flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    alignContent: "flex-start",
     gap: 10,
-  },
-  hubWideStack: {
-    width: "100%",
-    flexShrink: 0,
   },
   hubTileBase: {
     minHeight: 0,
@@ -1089,14 +1066,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 10,
   },
-  hubTileHalf: {
-    width: "47%",
-    minHeight: 184,
-  },
-  hubTileFullWidth: {
-    width: "100%",
+  hubTile: {
+    flex: 1,
     flexBasis: "auto",
-    minHeight: 112,
-    paddingHorizontal: 18,
   },
 });

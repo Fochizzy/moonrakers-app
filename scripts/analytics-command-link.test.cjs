@@ -18,10 +18,12 @@ assert.match(
   "expected the analytics hub to import the shared app route helpers for Command navigation"
 );
 
+// The hub is now nothing but its destination tiles, so the Command link rides
+// in its own top row instead of a hero card.
 assert.match(
   analyticsSource,
-  /<HeroCard[\s\S]*headerAction=\{[\s\S]*router\.push\(buildHomeRoute\(\)\)[\s\S]*Command[\s\S]*\}/,
-  "expected the analytics hero to pass a top-right Command action into the shared hero card"
+  /<View style=\{styles\.commandRow\}>[\s\S]*router\.push\(buildHomeRoute\(\)\)[\s\S]*Command[\s\S]*<\/View>/,
+  "expected the analytics hub to keep a top-row Command link back to home"
 );
 
 assert.match(

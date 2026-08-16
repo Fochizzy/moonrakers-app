@@ -136,24 +136,6 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
     eyebrow: "Reference",
     bestFor: "Metric lookup",
   },
-  {
-    key: "data-backup",
-    title: "Backup & Export",
-    description: "",
-    route: APP_ROUTES.dataBackup,
-    iconKey: "reactor",
-    eyebrow: "Data",
-    bestFor: "Taking your history with you",
-  },
-  {
-    key: "manage-user-groups",
-    title: "Manage User/Groups",
-    description: "",
-    route: APP_ROUTES.roster,
-    iconKey: "missionHub",
-    layout: "graphic-horizontal",
-    fullWidth: true,
-  },
 ];
 
 function clone(cards: HubCard[]) {
