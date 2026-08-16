@@ -14,29 +14,34 @@ const LEGACY_COLOR_MAP: Record<string, PlayerColorName> = {
   green: "green",
   lime: "green",
   "#22c55e": "green",
+  "#96c260": "green",
 
   purple: "purple",
   violet: "purple",
   indigo: "purple",
   "#8b5cf6": "purple",
   "#a855f7": "purple",
+  "#d082d7": "purple",
 
   blue: "blue",
   sky: "blue",
   cyan: "blue",
   "#38bdf8": "blue",
   "#3b82f6": "blue",
+  "#40acc9": "blue",
 
   orange: "orange",
   amber: "orange",
   "#f59e0b": "orange",
   "#f97316": "orange",
   "#ff8c00": "orange",
+  "#f28413": "orange",
 
   yellow: "yellow",
   gold: "yellow",
   "#eab308": "yellow",
   "#facc15": "yellow",
+  "#ecc58a": "yellow",
 };
 
 export function isPlayerColorName(value: unknown): value is PlayerColorName {
