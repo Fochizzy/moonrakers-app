@@ -2198,6 +2198,35 @@ a.tile:hover {
   font-size: var(--t-xs);
 }
 
+/* Removing a signup is not undoable, so the control reads quietly until it is
+   armed, and then reads loudly. */
+.beta-admin__remove {
+  color: var(--muted);
+}
+
+.beta-admin__remove:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: var(--danger);
+}
+
+.beta-admin__confirm {
+  color: var(--danger);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.btn--danger {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: var(--danger-soft);
+  color: #fecaca;
+}
+
+.btn--danger:hover {
+  background: rgba(239, 68, 68, 0.28);
+  color: #fff;
+}
+
 /* -------------------------------------------------------- preview: cta -- */
 
 .preview-cta {

@@ -1,33 +1,51 @@
 /**
- * The two emails a beta request sends: a thank-you to the applicant and a
- * notification to Izzy.
+ * The three emails the beta flow sends: a thank-you to the applicant, the
+ * invite once they are on the tester list, and a notification to Izzy.
  *
  * Written as inline-styled tables rather than with the dashboard's stylesheet.
  * Mail clients strip `<style>` blocks, do not resolve CSS custom properties,
- * and several still ignore flex and grid — so the palette below is the app's
- * tokens hard-copied as literal hex, and the layout is a centred table.
+ * and several still ignore flex and grid — so the palette below is literal hex
+ * and the layout is a fixed-width centred table.
+ *
+ * Light shell, dark brand band. The dashboard is dark end to end, and these
+ * used to be too, but a dark email is the one thing Gmail and Outlook dark
+ * modes reliably ruin: they invert what they think is a light design and land
+ * on dark text over a dark panel. A light email renders the same in both
+ * modes, and the brand still leads because the header band is the app's navy.
  */
 
-/** globals.css tokens, resolved to literals mail clients can actually read. */
+/** Literal hex, because mail clients never resolve a CSS variable. */
 const THEME = {
-  accent: "#a855f7",
-  background: "#040814",
-  border: "#1c2438",
-  gold: "#2dd4bf",
-  muted: "#7d8ca3",
-  panel: "#0c1226",
-  panelSoft: "#111a33",
-  sub: "#94a3b8",
-  text: "#e2e8f0",
-  textStrong: "#f8fbff",
+  /** Purple from the app, darkened until white text on it is legible. */
+  accent: "#7c3aed",
+  /** The app's navy, used for the header band and headings. */
+  brand: "#0b1220",
+  border: "#dfe4ee",
+  callout: "#f4f6fb",
+  card: "#ffffff",
+  /** Teal from the app, darkened to stay readable on white. */
+  gold: "#0f766e",
+  /** Teal as it appears on the navy band, where it can stay bright. */
+  goldOnBrand: "#5eead4",
+  muted: "#6b7688",
+  page: "#eef1f7",
+  text: "#2b3444",
+  textOnBrand: "#e7ecf6",
 } as const;
 
-const FONT_STACK = '"Segoe UI", "Helvetica Neue", Arial, sans-serif';
+/**
+ * Single quotes, not double. Every use of this sits inside a `style="…"`
+ * attribute, and a double quote there closes the attribute early — silently
+ * dropping the font and every declaration after it. That is what made these
+ * mails render in the client's default serif.
+ */
+const FONT_STACK = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
 
 export const SUPPORT_EMAIL = "info@moonrakersapp.org";
 export const BETA_GROUP_URL = "https://groups.google.com/g/moonrakers-beta";
 export const PLAY_STORE_URL =
   "https://play.google.com/store/apps/details?id=com.fochizzy.moonrakers";
+export const PREVIEW_URL = "https://www.moonrakersapp.org/preview";
 
 export type BetaEmail = { html: string; subject: string; text: string };
 
@@ -45,6 +63,16 @@ export function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Gmail pads the preview line with whatever body copy follows the preheader.
+ * Trailing zero-width joiners give it nothing to find.
+ */
+const PREHEADER_PAD = "&#8204;&nbsp;".repeat(60);
+
+/** Resets Outlook's table spacing, which it applies whether asked or not. */
+const TABLE_RESET =
+  "border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;";
+
 function shell({
   body,
   eyebrow,
@@ -57,41 +85,64 @@ function shell({
   preheader: string;
 }) {
   return `<!doctype html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
+<!-- Declared light so a client does not "helpfully" invert it into mush. -->
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 <title>${escapeHtml(heading)}</title>
+<!--[if mso]>
+<xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+<![endif]-->
+<style>
+  /* Progressive enhancement only — every rule that matters is also inline. */
+  @media only screen and (max-width:600px) {
+    .mk-pad { padding-left:20px !important; padding-right:20px !important; }
+    .mk-h1 { font-size:22px !important; }
+    .mk-btn a { display:block !important; text-align:center !important; }
+  }
+</style>
 </head>
-<body style="margin:0;padding:0;background-color:${THEME.background};color:${THEME.text};font-family:${FONT_STACK};">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${THEME.background};padding:32px 16px;">
+<body style="margin:0;padding:0;width:100%;background-color:${THEME.page};color:${THEME.text};font-family:${FONT_STACK};-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(preheader)}${PREHEADER_PAD}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${THEME.page}" style="${TABLE_RESET}background-color:${THEME.page};">
   <tr>
-    <td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background-color:${THEME.panel};border:1px solid ${THEME.border};border-radius:16px;">
+    <td align="center" style="padding:28px 12px;">
+      <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+
+      <!-- width attribute as well as max-width: Outlook ignores the CSS. -->
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="${TABLE_RESET}width:100%;max-width:600px;background-color:${THEME.card};border:1px solid ${THEME.border};border-radius:14px;overflow:hidden;">
         <tr>
-          <td style="padding:28px 28px 8px 28px;">
-            <p style="margin:0 0 6px 0;color:${THEME.gold};font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">${escapeHtml(eyebrow)}</p>
-            <h1 style="margin:0;color:${THEME.textStrong};font-size:24px;font-weight:800;letter-spacing:-0.02em;line-height:1.2;">${escapeHtml(heading)}</h1>
+          <td bgcolor="${THEME.brand}" class="mk-pad" style="background-color:${THEME.brand};padding:20px 32px;">
+            <p style="margin:0;color:#ffffff;font-family:${FONT_STACK};font-size:15px;font-weight:800;letter-spacing:-0.01em;">Moonrakers Command</p>
+            <p style="margin:4px 0 0 0;color:${THEME.goldOnBrand};font-family:${FONT_STACK};font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">${escapeHtml(eyebrow)}</p>
           </td>
         </tr>
         <tr>
-          <td style="padding:8px 28px 28px 28px;">${body}</td>
+          <td class="mk-pad" style="padding:28px 32px 8px 32px;">
+            <h1 class="mk-h1" style="margin:0;color:${THEME.brand};font-family:${FONT_STACK};font-size:25px;font-weight:800;letter-spacing:-0.02em;line-height:1.25;">${escapeHtml(heading)}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td class="mk-pad" style="padding:12px 32px 30px 32px;">${body}</td>
         </tr>
       </table>
 
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="${TABLE_RESET}width:100%;max-width:600px;">
         <tr>
-          <td style="padding:16px 28px 0 28px;">
-            <p style="margin:0;color:${THEME.muted};font-size:12px;line-height:1.5;">
-              Moonrakers Command · sent because someone asked for beta access at
-              <a href="https://www.moonrakersapp.org/preview" style="color:${THEME.sub};text-decoration:underline;">moonrakersapp.org</a>
+          <td class="mk-pad" style="padding:16px 32px 0 32px;">
+            <p style="margin:0;color:${THEME.muted};font-family:${FONT_STACK};font-size:12px;line-height:1.6;">
+              Sent by Moonrakers Command because this address was entered at
+              <a href="${PREVIEW_URL}" style="color:${THEME.muted};text-decoration:underline;">moonrakersapp.org</a>.
+              Questions: <a href="mailto:${SUPPORT_EMAIL}" style="color:${THEME.muted};text-decoration:underline;">${SUPPORT_EMAIL}</a>
             </p>
           </td>
         </tr>
       </table>
+
+      <!--[if mso]></td></tr></table><![endif]-->
     </td>
   </tr>
 </table>
@@ -100,92 +151,133 @@ function shell({
 }
 
 function paragraph(html: string) {
-  return `<p style="margin:0 0 14px 0;color:${THEME.sub};font-size:15px;line-height:1.6;">${html}</p>`;
+  return `<p style="margin:0 0 14px 0;color:${THEME.text};font-family:${FONT_STACK};font-size:15px;line-height:1.65;">${html}</p>`;
 }
 
 function link(href: string, label: string) {
-  return `<a href="${escapeHtml(href)}" style="color:${THEME.gold};text-decoration:underline;">${escapeHtml(label)}</a>`;
+  return `<a href="${escapeHtml(href)}" style="color:${THEME.gold};font-weight:600;text-decoration:underline;">${escapeHtml(label)}</a>`;
 }
 
+/** The one fact the reader most needs to check, boxed so it cannot be skimmed. */
 function calloutRow(label: string, value: string) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${THEME.panelSoft};border:1px solid ${THEME.border};border-radius:12px;margin:0 0 16px 0;">
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${TABLE_RESET}background-color:${THEME.callout};border:1px solid ${THEME.border};border-radius:10px;margin:0 0 18px 0;">
   <tr>
     <td style="padding:14px 16px;">
-      <p style="margin:0 0 4px 0;color:${THEME.muted};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">${escapeHtml(label)}</p>
-      <p style="margin:0;color:${THEME.textStrong};font-size:16px;font-weight:700;word-break:break-all;">${escapeHtml(value)}</p>
+      <p style="margin:0 0 4px 0;color:${THEME.muted};font-family:${FONT_STACK};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">${escapeHtml(label)}</p>
+      <p style="margin:0;color:${THEME.brand};font-family:${FONT_STACK};font-size:16px;font-weight:700;word-break:break-word;">${escapeHtml(value)}</p>
     </td>
   </tr>
+</table>`;
+}
+
+/** Numbered "what happens next", so the wait is expected rather than silent. */
+function steps(items: string[]) {
+  const rows = items
+    .map(
+      (item, index) => `  <tr>
+    <td width="26" valign="top" style="padding:0 10px 10px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${TABLE_RESET}"><tr>
+        <td width="22" height="22" align="center" valign="middle" bgcolor="${THEME.accent}" style="background-color:${THEME.accent};border-radius:11px;color:#ffffff;font-family:${FONT_STACK};font-size:12px;font-weight:700;line-height:22px;">${index + 1}</td>
+      </tr></table>
+    </td>
+    <td valign="top" style="padding:0 0 10px 0;color:${THEME.text};font-family:${FONT_STACK};font-size:15px;line-height:1.5;">${item}</td>
+  </tr>`,
+    )
+    .join("\n");
+
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${TABLE_RESET}margin:0 0 18px 0;">
+${rows}
 </table>`;
 }
 
 function button(href: string, label: string) {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px 0;">
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="mk-btn" style="${TABLE_RESET}margin:2px 0 16px 0;">
   <tr>
-    <td style="background-color:${THEME.accent};border-radius:999px;">
-      <a href="${escapeHtml(href)}" style="display:inline-block;padding:12px 22px;color:#ffffff;font-family:${FONT_STACK};font-size:15px;font-weight:700;text-decoration:none;">${escapeHtml(label)}</a>
+    <td bgcolor="${THEME.accent}" align="center" style="background-color:${THEME.accent};border-radius:8px;mso-padding-alt:13px 24px;">
+      <a href="${escapeHtml(href)}" style="display:inline-block;padding:13px 24px;color:#ffffff;font-family:${FONT_STACK};font-size:15px;font-weight:700;line-height:1;text-decoration:none;">${escapeHtml(label)}</a>
     </td>
   </tr>
 </table>`;
 }
 
-/** Sent to whoever asked for access. */
+/** Buttons get blocked and images get stripped; a plain link always survives. */
+function fallbackLink(href: string) {
+  return `<p style="margin:-6px 0 16px 0;color:${THEME.muted};font-family:${FONT_STACK};font-size:12px;line-height:1.6;word-break:break-word;">Button not working? Paste this into your browser:<br><a href="${escapeHtml(href)}" style="color:${THEME.muted};text-decoration:underline;">${escapeHtml(href)}</a></p>`;
+}
+
+function divider() {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${TABLE_RESET}margin:2px 0 16px 0;"><tr><td height="1" style="height:1px;line-height:1px;font-size:0;background-color:${THEME.border};">&nbsp;</td></tr></table>`;
+}
+
+/**
+ * Sent automatically the moment the preview form is submitted. It promises the
+ * second email rather than the app itself: the download link only goes out once
+ * the request has been confirmed in the operator console.
+ */
 export function buildApplicantEmail(email: string): BetaEmail {
   const body = [
-    paragraph("Thanks for signing up to the Moonrakers Command beta."),
-    calloutRow("Google Play account", email),
     paragraph(
-      `We have your request. You'll be added to the tester list and get a Google Play invite at this address — keep an eye on it, including the spam folder.`,
+      "Thank you for registering for the Moonrakers Command beta. There is nothing else you need to do right now.",
     ),
+    calloutRow("Registered address", email),
+    paragraph("<strong>What happens next</strong>"),
+    steps([
+      "We confirm your request.",
+      `You receive a second email at the address above with a link to download the app from the Google Play Store. <strong>Check your spam folder</strong> if it does not appear.`,
+    ]),
     paragraph(
-      `If you have any questions or bug feedback, please reach out to Izzy at ${link(
+      `If that address is wrong, or nothing has arrived in a few days, reply to this email or write to ${link(
         `mailto:${SUPPORT_EMAIL}`,
         SUPPORT_EMAIL,
-      )}.`,
+      )} — questions and bug feedback both go there.`,
     ),
+    divider(),
     paragraph(
-      "In the meantime, the preview shows every chart, every statistic, and the game entry screen — no account needed.",
+      "In the meantime, the preview runs every chart, every published metric and the live game entry screen against real tracked games. No account needed.",
     ),
-    button("https://www.moonrakersapp.org/preview", "Open the preview"),
+    button(PREVIEW_URL, "Open the preview"),
   ].join("\n");
 
   return {
-    subject: "Thanks for signing up to the Moonrakers beta",
+    subject: "Thank you for registering for the Moonrakers beta",
     html: shell({
       body,
       eyebrow: "Beta access",
-      heading: "Thanks for signing up",
-      preheader: "We have your request for Moonrakers Command beta access.",
+      heading: "Thank you for registering",
+      preheader: `Registered ${email}. A confirmation with your download link follows.`,
     }),
     text: [
-      "Thanks for signing up to the Moonrakers Command beta.",
+      "Thank you for registering for the Moonrakers Command beta.",
+      "There is nothing else you need to do right now.",
       "",
-      `Google Play account: ${email}`,
+      `Registered address: ${email}`,
       "",
-      "We have your request. You'll be added to the tester list and get a Google Play invite at this address - keep an eye on it, including the spam folder.",
+      "WHAT HAPPENS NEXT",
+      "1. We confirm your request.",
+      "2. You receive a second email at the address above with a link to download the app from the Google Play Store. Check your spam folder if it does not appear.",
       "",
-      `If you have any questions or bug feedback, please reach out to Izzy at ${SUPPORT_EMAIL}.`,
+      `If that address is wrong, or nothing has arrived in a few days, reply to this email or write to ${SUPPORT_EMAIL} - questions and bug feedback both go there.`,
       "",
-      "In the meantime, the preview shows every chart, statistic, and the game entry screen - no account needed:",
-      "https://www.moonrakersapp.org/preview",
+      "In the meantime, the preview runs every chart, every published metric and the live game entry screen against real tracked games. No account needed:",
+      PREVIEW_URL,
     ].join("\n"),
   };
 }
 
 /**
- * Sent from the admin console once someone has been added to the tester group.
- * The wording is the operator's, kept verbatim; only the link is turned into a
- * button so the same sentence works in both the HTML and plain-text parts.
+ * The confirmation, sent from the operator console. This is the one that
+ * carries the download link, so the button is the whole point of the layout and
+ * the plain link underneath is there for clients that strip it.
  */
 export function buildInviteEmail(): BetaEmail {
   const body = [
-    paragraph("Thank you for registering for the Moonraker's Beta test!"),
+    paragraph("Thank you for confirming your interest in the beta."),
+    paragraph("Please download the app from the Google Play Store:"),
+    button(PLAY_STORE_URL, "Download on Google Play"),
+    fallbackLink(PLAY_STORE_URL),
+    divider(),
     paragraph(
-      "You are now eligible to download the app from the GooglePlay store using this link:",
-    ),
-    button(PLAY_STORE_URL, "Get Moonrakers on Google Play"),
-    paragraph(link(PLAY_STORE_URL, PLAY_STORE_URL)),
-    paragraph(
-      `If you have any questions or concerns please reach out to ${link(
+      `Any questions or concerns, please email ${link(
         `mailto:${SUPPORT_EMAIL}`,
         SUPPORT_EMAIL,
       )}.`,
@@ -193,20 +285,20 @@ export function buildInviteEmail(): BetaEmail {
   ].join("\n");
 
   return {
-    subject: "You're in — the Moonrakers beta is ready to download",
+    subject: "Your Moonrakers beta download link",
     html: shell({
       body,
-      eyebrow: "Beta access",
-      heading: "You're on the tester list",
-      preheader: "Download Moonrakers Command from Google Play.",
+      eyebrow: "Beta access confirmed",
+      heading: "Thank you for confirming",
+      preheader: "Download Moonrakers Command from the Google Play Store.",
     }),
     text: [
-      "Thank you for registering for the Moonraker's Beta test!",
+      "Thank you for confirming your interest in the beta.",
       "",
-      "You are now eligible to download the app from the GooglePlay store using this link:",
+      "Please download the app from the Google Play Store:",
       PLAY_STORE_URL,
       "",
-      `If you have any questions or concerns please reach out to ${SUPPORT_EMAIL}.`,
+      `Any questions or concerns, please email ${SUPPORT_EMAIL}.`,
     ].join("\n"),
   };
 }
@@ -217,14 +309,16 @@ export function buildNotificationEmail(email: string): BetaEmail {
     paragraph("Someone asked for beta access from the preview page."),
     calloutRow("Add this address to the tester group", email),
     button(`${BETA_GROUP_URL}/members`, "Open group members"),
+    fallbackLink(`${BETA_GROUP_URL}/members`),
+    divider(),
     paragraph(
-      `Google's member API only covers Workspace groups, so a consumer group has to be added to by hand. Paste the address above into ${link(
+      `Google's member API only covers Workspace groups, so a consumer group has to be added to by hand — paste the address above into ${link(
         `${BETA_GROUP_URL}/members`,
         "Add members",
       )}.`,
     ),
     paragraph(
-      `They have already had the thank-you email, so nothing is owed to them right now.`,
+      "They have already had the thank-you email, so nothing is owed to them right now.",
     ),
   ].join("\n");
 
