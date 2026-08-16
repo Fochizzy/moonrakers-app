@@ -51,7 +51,6 @@ assert.equal(
 );
 
 const previewSource = read(path.join("components", "charts", "ChartHubPreview.tsx"));
-const previewGlyphSource = read(path.join("components", "charts", "ChartPreviewGlyph.tsx"));
 
 assert.match(
   previewSource,
@@ -83,24 +82,9 @@ assert.doesNotMatch(
   "expected the ELO charts hub card to stop rendering an asset thumbnail"
 );
 
-assert.match(
-  previewGlyphSource,
-  /function PreviewElo\(/,
-  "expected ChartPreviewGlyph to mirror the dedicated ELO graph preview renderer"
-);
-
-assert.match(
-  previewGlyphSource,
-  /elo:\s*\(\{\s*stroke,\s*fill,\s*width,\s*height\s*\}\)\s*=>\s*\(\s*<PreviewElo/s,
-  "expected ChartPreviewGlyph to mirror the inline ELO graph preview mapping"
-);
-
-assert.doesNotMatch(
-  previewGlyphSource,
-  /APP_ICONS\.yellowHub|assetPreviewImage|source=\{APP_ICONS\./,
-  "expected ChartPreviewGlyph to stop rendering an ELO asset thumbnail too"
-);
-
+// ChartPreviewGlyph used to hold a second copy of these renderers and this
+// guard kept the two in sync. The duplicate is gone, so ChartHubPreview is now
+// the single source for preview shapes.
 assert.match(
   previewSource,
   /const CHART_PREVIEW_RENDERERS:/,

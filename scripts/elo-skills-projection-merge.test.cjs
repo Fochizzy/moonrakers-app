@@ -50,10 +50,6 @@ const {
 const {
   resolveEffectiveChartSetupPayload,
 } = require("../lib/cloud/analytics/resolveChartSetupPayload.ts");
-const {
-  buildFallbackEloSection,
-  buildFallbackEloInsight,
-} = require("../utils/ratingTabFallbacks.ts");
 
 const summary = {
   playerId: "focus-player",
@@ -219,23 +215,9 @@ assert.equal(
   "expected the effective chart setup payload to normalize a published Projection default onto Skills",
 );
 
-const skills = buildFallbackEloSection("Skills", summary, null);
-const skillLabels = skills.cards.map((card) => card.label);
-assert.ok(
-  skillLabels.includes("Avg ELO Change"),
-  "expected the merged Skills fallback cards to absorb the projection summary instead of dropping it",
-);
-assert.equal(
-  skillLabels.filter((label) => label === "Current ELO").length,
-  1,
-  "expected the merged Skills fallback cards to avoid duplicating shared labels from the old Projection tab",
-);
-
-const skillsInsight = buildFallbackEloInsight("Skills", summary, null);
-assert.match(
-  skillsInsight.body,
-  /Average change is \+2\.4/i,
-  "expected the merged Skills fallback insight to retain the old projection outlook copy",
-);
+// The client-side ELO fallback builders (utils/ratingTabFallbacks) were
+// unreachable once the ELO screen became fully server-authored, so the
+// Skills/Projection merge is now only asserted through the tab resolvers and
+// the published setup payload above.
 
 console.log("elo-skills-projection-merge.test.cjs passed");

@@ -8,7 +8,9 @@ function read(relPath) {
   return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
 }
 
-for (const relPath of ["app/insights.tsx", "components/InsightsScreen.tsx"]) {
+// The legacy components/InsightsScreen.tsx duplicate has been removed; the
+// route is the only insights surface left.
+for (const relPath of ["app/insights.tsx"]) {
   const source = read(relPath);
 
   assert.doesNotMatch(

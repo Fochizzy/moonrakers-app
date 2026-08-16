@@ -7,10 +7,6 @@ const source = fs.readFileSync(
   path.join(projectRoot, "app", "insights.tsx"),
   "utf8"
 );
-const legacySource = fs.readFileSync(
-  path.join(projectRoot, "components", "InsightsScreen.tsx"),
-  "utf8"
-);
 
 assert.doesNotMatch(
   source,
@@ -34,18 +30,6 @@ assert.doesNotMatch(
   source,
   /\bimportedGames\b/,
   "expected app/insights.tsx to avoid the nonexistent importedGames slice because imported history is already merged into games"
-);
-
-assert.doesNotMatch(
-  legacySource,
-  /\bimportedGames\b/,
-  "expected components/InsightsScreen.tsx to avoid the nonexistent importedGames slice because imported history is already merged into games"
-);
-
-assert.doesNotMatch(
-  legacySource,
-  /\brelationships\b\s*=\s*useStore\(/,
-  "expected components/InsightsScreen.tsx to avoid the nonexistent relationships slice"
 );
 
 console.log("insights-store-selector-regression.test.cjs passed");

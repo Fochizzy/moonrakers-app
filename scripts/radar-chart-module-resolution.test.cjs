@@ -8,19 +8,14 @@ function read(relPath) {
   return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
 }
 
-const radarIndexSource = read(path.join("components", "charts", "RadarChart", "index.ts"));
 const chartScreenSource = read(path.join("app", "charts", "[chartKey].tsx"));
 
-assert.match(
-  radarIndexSource,
-  /export \{ default \} from '\.\/RadarChart\.tsx';/,
-  "expected the RadarChart barrel to re-export the concrete TSX file explicitly for Metro resolution",
-);
-
-assert.match(
-  radarIndexSource,
-  /export \{ default as RadarChart \} from '\.\/RadarChart\.tsx';/,
-  "expected the named RadarChart export to target the concrete TSX file explicitly",
+// The RadarChart barrel existed only to steer Metro's resolution; screens now
+// import the concrete module directly, which is what has to stay true.
+assert.equal(
+  fs.existsSync(path.join(projectRoot, "components", "charts", "RadarChart", "RadarChart.tsx")),
+  true,
+  "expected the concrete RadarChart module to exist",
 );
 
 assert.match(

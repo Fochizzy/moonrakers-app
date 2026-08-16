@@ -2,13 +2,13 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const projectRoot = path.resolve(__dirname, "..");
+
 function read(relPath) {
-  return fs.readFileSync(path.join(__dirname, "..", relPath), "utf8");
+  return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
 }
 
 const actionButtonSource = read(path.join("components", "ui", "ActionButton.tsx"));
-const continueSectionSource = read(path.join("components", "ContinueSection.tsx"));
-const legacyButtonSource = read(path.join("components", "ui", "Button.tsx"));
 
 assert.ok(
   !actionButtonSource.includes("shadowOpacity"),
@@ -31,20 +31,18 @@ assert.match(
   "expected ActionButton labels to stay transparent so they do not introduce their own inner bar",
 );
 
-assert.ok(
-  !continueSectionSource.includes("buttonOverlay"),
-  "expected ContinueSection buttons to remove the explicit dark overlay layer",
-);
-
-assert.ok(
-  !legacyButtonSource.includes("shadowOpacity"),
-  "expected the legacy Button primitive to also remove its shadow-based layered treatment",
-);
-
-assert.match(
-  legacyButtonSource,
-  /backgroundColor:\s*'transparent'/,
-  "expected the legacy Button label to stay transparent for the flatter single-color look",
-);
+// The flat single-colour treatment used to be duplicated across a legacy Button
+// primitive and ContinueSection. Both were unreachable and have been removed, so
+// ActionButton is the only place the rule can drift.
+for (const removed of [
+  path.join("components", "ui", "Button.tsx"),
+  path.join("components", "ContinueSection.tsx"),
+]) {
+  assert.equal(
+    fs.existsSync(path.join(projectRoot, removed)),
+    false,
+    `expected the superseded ${removed} button surface to stay deleted`,
+  );
+}
 
 console.log("button-single-color.test.cjs passed");
