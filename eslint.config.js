@@ -107,6 +107,10 @@ module.exports = [
     // Real source accounts for barely a hundred.
     ignores: [
       'node_modules/**',
+      // The dashboard workspace lints itself (apps/dashboard/eslint.config.mjs)
+      // and ships generated files (cloudflare-env.d.ts, .open-next) that the
+      // root config must not sweep.
+      'apps/**',
       '.expo/**',
       'dist/**',
       'dist-web/**',

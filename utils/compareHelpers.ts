@@ -1,5 +1,13 @@
-import buildOverallPlayerRow from '@/utils/buildOverallPlayerRow';
+import buildOverallPlayerRow, { type PlayerLike } from '@/utils/buildOverallPlayerRow';
 import { computeSeatAdvantageSpreadFromArrays } from '@/utils/seatAdvantage';
+
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
 
 type SortDirection = 'asc' | 'desc';
 
@@ -89,6 +97,10 @@ function rgbaFromHex(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function confidenceLabel(sampleSize: number): 'strong' | 'medium' | 'low' {
+  return sampleSize >= 8 ? 'strong' : sampleSize >= 4 ? 'medium' : 'low';
+}
+
 function getEfficiencyTier(value: number): string {
   if (value >= 2) return 'Elite';
   if (value >= 1.5) return 'Strong';
@@ -108,33 +120,38 @@ function buildPalette(color?: string) {
   };
 }
 
-function getGamePlayerEntries(game: any): any[] {
-  if (Array.isArray(game?.players)) return game.players;
-  if (Array.isArray(game?.playerStats)) return game.playerStats;
-  if (Array.isArray(game?.standings)) return game.standings;
-  if (Array.isArray(game?.results)) return game.results;
+function getGamePlayerEntries(game: unknown): UnknownRecord[] {
+  const source = asRecord(game);
+  for (const key of ['players', 'playerStats', 'standings', 'results'] as const) {
+    if (Array.isArray(source[key])) {
+      return (source[key] as unknown[]).map(asRecord);
+    }
+  }
   return [];
 }
 
-function getWinnerId(game: any): string {
-  return String(game?.manualWinnerId ?? game?.selectedWinnerId ?? game?.winnerId ?? '');
+function getWinnerId(game: unknown): string {
+  const source = asRecord(game);
+  return String(source.manualWinnerId ?? source.selectedWinnerId ?? source.winnerId ?? '');
 }
 
-function getGroupLabel(group: any): string {
+function getGroupLabel(group: unknown): string {
+  const source = asRecord(group);
   const candidate =
-    group?.name ?? group?.title ?? group?.label ?? `Group ${group?.id ?? ''}`;
+    source.name ?? source.title ?? source.label ?? `Group ${source.id ?? ''}`;
 
   return typeof candidate === 'string' && candidate.trim().length > 0
     ? candidate.trim()
-    : `Group ${group?.id ?? ''}`;
+    : `Group ${source.id ?? ''}`;
 }
 
-function getPlayerDisplayName(player: any, playerId: string): string {
+function getPlayerDisplayName(player: unknown, playerId: string): string {
+  const source = asRecord(player);
   const candidate =
-    player?.name ??
-    player?.displayName ??
-    player?.nickname ??
-    player?.alias ??
+    source.name ??
+    source.displayName ??
+    source.nickname ??
+    source.alias ??
     `Player ${playerId}`;
 
   return typeof candidate === 'string' && candidate.trim().length > 0
@@ -142,33 +159,39 @@ function getPlayerDisplayName(player: any, playerId: string): string {
     : `Player ${playerId}`;
 }
 
-function normalizePlayerRow(row: any, player: any, playerId: string) {
-  const color = player?.color ?? row?.color ?? '#74C3FF';
-  const games = n(row?.gamesPlayed ?? row?.games);
-  const wins = n(row?.wins);
-  const prestige = n(row?.totalPrestige ?? row?.prestige);
-  const assistIn = n(row?.assistPrestigeReceived ?? row?.assistReceived);
-  const assistOut = n(row?.assistPrestigeSent ?? row?.assistGiven);
-  const objectiveTrackedGames = n(row?.objectiveTrackedGames);
+function normalizePlayerRow(rawRow: unknown, rawPlayer: unknown, playerId: string) {
+  const row = asRecord(rawRow);
+  const player = asRecord(rawPlayer);
+  const colorCandidate = player.color ?? row.color;
+  const color = typeof colorCandidate === 'string' ? colorCandidate : '#74C3FF';
+  const games = n(row.gamesPlayed ?? row.games);
+  const wins = n(row.wins);
+  const prestige = n(row.totalPrestige ?? row.prestige);
+  const assistIn = n(row.assistPrestigeReceived ?? row.assistReceived);
+  const assistOut = n(row.assistPrestigeSent ?? row.assistGiven);
+  const objectiveTrackedGames = n(row.objectiveTrackedGames);
 
   const avgObjectives =
-    n(row?.avgObjectivesPerTrackedGame) ||
+    n(row.avgObjectivesPerTrackedGame) ||
     (objectiveTrackedGames > 0
-      ? n(row?.avgObjectives ?? row?.objectiveRate) / Math.max(objectiveTrackedGames, 1)
+      ? n(row.avgObjectives ?? row.objectiveRate) / Math.max(objectiveTrackedGames, 1)
       : 0);
 
   const allContractsEfficiency = n(
-    row?.allContractsEfficiency ?? row?.efficiency
+    row.allContractsEfficiency ?? row.efficiency
   );
   const assistEfficiency = n(
-    row?.assistEfficiency ?? row?.assistedEfficiency
+    row.assistEfficiency ?? row.assistedEfficiency
   );
-  const directEfficiency = n(row?.directEfficiency);
+  const directEfficiency = n(row.directEfficiency);
 
   return {
     ...row,
-    id: String(row?.id ?? playerId),
-    label: row?.name ?? getPlayerDisplayName(player, playerId),
+    id: String(row.id ?? playerId),
+    label:
+      typeof row.name === 'string' && row.name.trim()
+        ? row.name
+        : getPlayerDisplayName(player, playerId),
     subtitle: `${games} game${games === 1 ? '' : 's'}`,
     members: 1,
     color,
@@ -176,28 +199,28 @@ function normalizePlayerRow(row: any, player: any, playerId: string) {
 
     games,
     wins,
-    winRate: n(row?.winRate),
+    winRate: n(row.winRate),
 
     prestige,
     totalPrestige: prestige,
-    directPrestige: n(row?.directPrestige),
+    directPrestige: n(row.directPrestige),
 
     assistPrestigeReceived: assistIn,
     assistPrestigeSent: assistOut,
-    assists: n(row?.assists ?? row?.assistGiven),
+    assists: n(row.assists ?? row.assistGiven),
 
-    objectivePrestige: n(row?.objectivePrestige),
+    objectivePrestige: n(row.objectivePrestige),
     objectiveTrackedGames,
 
-    score: n(row?.score ?? prestige),
-    failures: n(row?.failures),
-    contracts: n(row?.contracts),
+    score: n(row.score ?? prestige),
+    failures: n(row.failures),
+    contracts: n(row.contracts),
     objectiveWins: 0,
     closeGames: 0,
-    closeGameRate: n(row?.closeGameRate),
+    closeGameRate: n(row.closeGameRate),
 
-    avgPrestigePerGame: n(row?.avgPrestige),
-    avgScorePerGame: n(row?.avgScorePerGame ?? row?.avgPrestige),
+    avgPrestigePerGame: n(row.avgPrestige),
+    avgScorePerGame: n(row.avgScorePerGame ?? row.avgPrestige),
 
     allContractsEfficiency,
     assistEfficiency,
@@ -208,32 +231,32 @@ function normalizePlayerRow(row: any, player: any, playerId: string) {
     assistedEfficiency: assistEfficiency,
 
     efficiencyTier: String(
-      row?.efficiencyTier ?? getEfficiencyTier(allContractsEfficiency)
+      row.efficiencyTier ?? getEfficiencyTier(allContractsEfficiency)
     ),
     assistEfficiencyTier: String(
-      row?.assistEfficiencyTier ?? getEfficiencyTier(assistEfficiency)
+      row.assistEfficiencyTier ?? getEfficiencyTier(assistEfficiency)
     ),
     directEfficiencyTier: String(
-      row?.directEfficiencyTier ?? getEfficiencyTier(directEfficiency)
+      row.directEfficiencyTier ?? getEfficiencyTier(directEfficiency)
     ),
 
     contractFailureRatio:
-      n(row?.contracts) > 0 ? n(row?.contracts) / Math.max(1, n(row?.failures)) : 0,
-    avgPrestigeMargin: n(row?.avgPrestigeMargin),
-    avgScoreMargin: n(row?.avgScoreMargin),
-    netAssistBenefit: n(row?.netAssistValue ?? (assistIn - assistOut)),
-    synergyIndex: n(row?.synergyIndex),
-    avgStartOrder: n(row?.avgStartOrder),
-    turnOrderWinCorrelation: n(row?.turnOrderWinCorrelation ?? row?.headToHeadEdge),
-    assistWinCorrelation: n(row?.assistWinCorrelation),
+      n(row.contracts) > 0 ? n(row.contracts) / Math.max(1, n(row.failures)) : 0,
+    avgPrestigeMargin: n(row.avgPrestigeMargin),
+    avgScoreMargin: n(row.avgScoreMargin),
+    netAssistBenefit: n(row.netAssistValue ?? (assistIn - assistOut)),
+    synergyIndex: n(row.synergyIndex),
+    avgStartOrder: n(row.avgStartOrder),
+    turnOrderWinCorrelation: n(row.turnOrderWinCorrelation ?? row.headToHeadEdge),
+    assistWinCorrelation: n(row.assistWinCorrelation),
     dataConfidenceScore: Math.min(1, games / 10),
-    dataConfidenceLabel: games >= 8 ? 'strong' : games >= 4 ? 'medium' : 'low',
+    dataConfidenceLabel: confidenceLabel(games),
     avgObjectivesPerTrackedGame: avgObjectives,
-    objectiveWinRateTracked: n(row?.objectiveWinRateTracked ?? row?.objectiveRate),
+    objectiveWinRateTracked: n(row.objectiveWinRateTracked ?? row.objectiveRate),
     objectiveShareOfPrestige:
       prestige > 0
-        ? n(row?.objectivePrestige) / prestige
-        : n(row?.objectiveShareOfPrestige),
+        ? n(row.objectivePrestige) / prestige
+        : n(row.objectiveShareOfPrestige),
   };
 }
 
@@ -246,8 +269,8 @@ export function buildPlayerVsOpponentAggregateRows({
   games,
 }: {
   playerId: string;
-  playerMap: Map<string, any>;
-  games: any[];
+  playerMap: Map<string, PlayerLike>;
+  games: unknown[];
 }) {
   const normalizedPlayerId = String(playerId ?? "").trim();
   if (!normalizedPlayerId) return null;
@@ -274,46 +297,47 @@ export function buildPlayerVsOpponentAggregateRows({
     }
   }
 
-  const opponentRows = [...opponentIds]
-    .map((opponentId) => {
-      const overall = buildOverallPlayerRow(opponentId, playerMap, sharedGames);
-      if (!overall || n(overall.gamesPlayed) <= 0) return null;
-      return normalizePlayerRow(overall, playerMap.get(opponentId), opponentId);
-    })
-    .filter(Boolean);
+  const mappedOpponentRows = [...opponentIds].map((opponentId) => {
+    const overall = buildOverallPlayerRow(opponentId, playerMap, sharedGames);
+    if (!overall || n(overall.gamesPlayed) <= 0) return null;
+    return normalizePlayerRow(overall, playerMap.get(opponentId), opponentId);
+  });
+  const opponentRows = mappedOpponentRows.filter(
+    (row): row is NonNullable<(typeof mappedOpponentRows)[number]> => row !== null,
+  );
 
   if (!opponentRows.length) return null;
 
-  const aggregateGames = opponentRows.reduce((sum, row: any) => sum + n(row.games), 0);
+  const aggregateGames = opponentRows.reduce((sum, row) => sum + n(row.games), 0);
   const aggregateObjectiveGames = opponentRows.reduce(
-    (sum, row: any) => sum + n(row.objectiveTrackedGames),
+    (sum, row) => sum + n(row.objectiveTrackedGames),
     0
   );
-  const wins = opponentRows.reduce((sum, row: any) => sum + n(row.wins), 0);
-  const prestige = opponentRows.reduce((sum, row: any) => sum + n(row.prestige), 0);
-  const directPrestige = opponentRows.reduce((sum, row: any) => sum + n(row.directPrestige), 0);
+  const wins = opponentRows.reduce((sum, row) => sum + n(row.wins), 0);
+  const prestige = opponentRows.reduce((sum, row) => sum + n(row.prestige), 0);
+  const directPrestige = opponentRows.reduce((sum, row) => sum + n(row.directPrestige), 0);
   const assistIn = opponentRows.reduce(
-    (sum, row: any) => sum + n(row.assistPrestigeReceived),
+    (sum, row) => sum + n(row.assistPrestigeReceived),
     0
   );
   const assistOut = opponentRows.reduce(
-    (sum, row: any) => sum + n(row.assistPrestigeSent),
+    (sum, row) => sum + n(row.assistPrestigeSent),
     0
   );
   const objectivePrestige = opponentRows.reduce(
-    (sum, row: any) => sum + n(row.objectivePrestige),
+    (sum, row) => sum + n(row.objectivePrestige),
     0
   );
-  const score = opponentRows.reduce((sum, row: any) => sum + n(row.score), 0);
-  const assists = opponentRows.reduce((sum, row: any) => sum + n(row.assists), 0);
-  const failures = opponentRows.reduce((sum, row: any) => sum + n(row.failures), 0);
-  const contracts = opponentRows.reduce((sum, row: any) => sum + n(row.contracts), 0);
-  const closeGames = opponentRows.reduce((sum, row: any) => sum + n(row.closeGames), 0);
+  const score = opponentRows.reduce((sum, row) => sum + n(row.score), 0);
+  const assists = opponentRows.reduce((sum, row) => sum + n(row.assists), 0);
+  const failures = opponentRows.reduce((sum, row) => sum + n(row.failures), 0);
+  const contracts = opponentRows.reduce((sum, row) => sum + n(row.contracts), 0);
+  const closeGames = opponentRows.reduce((sum, row) => sum + n(row.closeGames), 0);
 
   const weightedByGames = (key: string) => {
     if (aggregateGames <= 0) return 0;
     const total = opponentRows.reduce(
-      (sum, row: any) => sum + n(row[key]) * Math.max(1, n(row.games)),
+      (sum, row) => sum + n((row as UnknownRecord)[key]) * Math.max(1, n(row.games)),
       0
     );
     return total / aggregateGames;
@@ -322,7 +346,7 @@ export function buildPlayerVsOpponentAggregateRows({
   const weightedByObjectiveGames = (key: string) => {
     if (aggregateObjectiveGames <= 0) return 0;
     const total = opponentRows.reduce(
-      (sum, row: any) => sum + n(row[key]) * Math.max(1, n(row.objectiveTrackedGames)),
+      (sum, row) => sum + n((row as UnknownRecord)[key]) * Math.max(1, n(row.objectiveTrackedGames)),
       0
     );
     return total / aggregateObjectiveGames;
@@ -381,8 +405,7 @@ export function buildPlayerVsOpponentAggregateRows({
     turnOrderWinCorrelation: weightedByGames("turnOrderWinCorrelation"),
     assistWinCorrelation: weightedByGames("assistWinCorrelation"),
     dataConfidenceScore: Math.min(1, aggregateGames / 10),
-    dataConfidenceLabel:
-      aggregateGames >= 8 ? "strong" : aggregateGames >= 4 ? "medium" : "low",
+    dataConfidenceLabel: confidenceLabel(aggregateGames),
     avgObjectivesPerTrackedGame,
     objectiveWinRateTracked: weightedByObjectiveGames("objectiveWinRateTracked"),
     objectiveShareOfPrestige,
@@ -404,26 +427,28 @@ export function buildPlayerVsOpponentAggregateRows({
 
 export function buildPlayerRows(
   selectedPlayerIds: string[],
-  playerMap: Map<string, any>,
-  games: any[]
+  playerMap: Map<string, PlayerLike>,
+  games: unknown[]
 ) {
-  return selectedPlayerIds
-    .map((playerId) => {
-      const player = playerMap.get(playerId);
-      const overall = buildOverallPlayerRow(playerId, playerMap, games);
-      if (!overall) return null;
-      return normalizePlayerRow(overall, player, playerId);
-    })
-    .filter(Boolean);
+  const mapped = selectedPlayerIds.map((playerId) => {
+    const player = playerMap.get(playerId);
+    const overall = buildOverallPlayerRow(playerId, playerMap, games);
+    if (!overall) return null;
+    return normalizePlayerRow(overall, player, playerId);
+  });
+
+  return mapped.filter(
+    (row): row is NonNullable<(typeof mapped)[number]> => row !== null,
+  );
 }
 
 export function buildGroupRows(
   selectedGroupIds: string[],
-  groupMap: Map<string, any>,
-  playerMap: Map<string, any>,
-  games: any[]
+  groupMap: Map<string, UnknownRecord>,
+  playerMap: Map<string, PlayerLike>,
+  games: unknown[]
 ) {
-  return selectedGroupIds
+  const mapped = selectedGroupIds
     .map((groupId) => {
       const group = groupMap.get(groupId);
       if (!group) return null;
@@ -480,7 +505,7 @@ export function buildGroupRows(
           turnOrderWinCorrelation: 0,
           assistWinCorrelation: 0,
           dataConfidenceScore: 0,
-          dataConfidenceLabel: 'low',
+          dataConfidenceLabel: confidenceLabel(0),
           avgObjectivesPerTrackedGame: 0,
           objectiveWinRateTracked: 0,
           objectiveShareOfPrestige: 0,
@@ -557,7 +582,7 @@ export function buildGroupRows(
           }
         }
 
-        if (game?.objectiveStatsEligible) {
+        if (asRecord(game).objectiveStatsEligible) {
           objectiveTrackedGames += 1;
         }
 
@@ -638,26 +663,35 @@ export function buildGroupRows(
         turnOrderWinCorrelation,
         assistWinCorrelation,
         dataConfidenceScore: Math.min(1, matchedGames / 10),
-        dataConfidenceLabel:
-          matchedGames >= 8 ? 'strong' : matchedGames >= 4 ? 'medium' : 'low',
+        dataConfidenceLabel: confidenceLabel(matchedGames),
         avgObjectivesPerTrackedGame,
         objectiveWinRateTracked: objectiveTrackedGames > 0 ? winRate : 0,
         objectiveShareOfPrestige,
       };
-    })
-    .filter(Boolean);
+    });
+
+  return mapped.filter(
+    (row): row is NonNullable<(typeof mapped)[number]> => row !== null,
+  );
 }
 
-export function sortRowsByMetric(
-  rows: any[],
-  metric: any,
+type MetricLike = {
+  key?: string;
+  direction?: string;
+  getValue?: (row: never) => number;
+};
+
+export function sortRowsByMetric<TRow>(
+  rows: TRow[],
+  metric: MetricLike | null | undefined,
   direction: SortDirection
 ) {
-  if (!metric?.getValue) return [...rows];
+  const getValue = metric?.getValue as ((row: TRow) => number) | undefined;
+  if (!getValue) return [...rows];
 
   return [...rows].sort((a, b) => {
-    const aVal = Number(metric.getValue(a));
-    const bVal = Number(metric.getValue(b));
+    const aVal = Number(getValue(a));
+    const bVal = Number(getValue(b));
 
     const safeA = Number.isFinite(aVal) ? aVal : 0;
     const safeB = Number.isFinite(bVal) ? bVal : 0;
@@ -671,10 +705,14 @@ export function nearlyEqual(a: number, b: number, epsilon = 0.0001): boolean {
   return Math.abs(a - b) <= epsilon;
 }
 
-export function getMetricBestWorst(metric: any, rows: any[]) {
+export function getMetricBestWorst<TRow>(
+  metric: MetricLike | null | undefined,
+  rows: TRow[]
+) {
+  const getValue = metric?.getValue as ((row: TRow) => number) | undefined;
   const values = (Array.isArray(rows) ? rows : [])
     .map((row) => {
-      const raw = metric?.getValue ? metric.getValue(row) : 0;
+      const raw = getValue ? getValue(row) : 0;
       const value = Number(raw);
       return Number.isFinite(value) ? value : null;
     })
@@ -711,7 +749,7 @@ export function formatCorrelation(value: number): string {
   return value.toFixed(2);
 }
 
-export function buildGlobalTurnOrderInsight(games: any[]) {
+export function buildGlobalTurnOrderInsight(games: unknown[]) {
   const xs: number[] = [];
   const ys: number[] = [];
 
@@ -720,10 +758,10 @@ export function buildGlobalTurnOrderInsight(games: any[]) {
     const entries = getGamePlayerEntries(game);
 
     for (const entry of entries) {
-      const seat = n(entry?.startOrder ?? entry?.seat ?? entry?.turnOrder, 0);
+      const seat = n(entry.startOrder ?? entry.seat ?? entry.turnOrder, 0);
       if (seat <= 0) continue;
 
-      const playerId = String(entry?.playerId ?? entry?.id ?? '');
+      const playerId = String(entry.playerId ?? entry.id ?? '');
       xs.push(seat);
       ys.push(playerId === winnerId ? 1 : 0);
     }
@@ -763,13 +801,19 @@ export function createMatrixLayout(_density: 'dense' | 'comfortable' = 'dense') 
   };
 }
 
-export function getVisibleMetricEntries(
-  metrics: any[],
-  metricGroups: any[],
+type MetricEntryLike = UnknownRecord & { group?: unknown; topMetric?: unknown };
+type MetricGroupLike = UnknownRecord & { key?: unknown };
+
+export function getVisibleMetricEntries<
+  TMetric extends MetricEntryLike,
+  TGroup extends MetricGroupLike,
+>(
+  metrics: TMetric[],
+  metricGroups: TGroup[],
   topMetricsOnly: boolean,
   collapsedGroups: Record<string, boolean>
 ) {
-  const entries: Array<{ type: 'group'; group: any } | { type: 'metric'; metric: any }> = [];
+  const entries: Array<{ type: 'group'; group: TGroup } | { type: 'metric'; metric: TMetric }> = [];
 
   for (const group of metricGroups) {
     const groupKey = String(group?.key ?? '');
@@ -779,7 +823,7 @@ export function getVisibleMetricEntries(
 
     entries.push({ type: 'group', group });
 
-    const groupMetrics = metrics.filter((metric: any) => {
+    const groupMetrics = metrics.filter((metric) => {
       if (String(metric?.group ?? '') !== groupKey) return false;
 
       if (!topMetricsOnly) return true;
@@ -795,27 +839,27 @@ export function getVisibleMetricEntries(
   return entries;
 }
 
-export function getAssistCountSent(totals: any, game: any, playerId: string): number {
-  const totalsAssists = n(totals?.assists);
+export function getAssistCountSent(totals: unknown, game: unknown, playerId: string): number {
+  const totalsAssists = n(asRecord(totals).assists);
   if (totalsAssists > 0) return totalsAssists;
 
-  const rounds = Array.isArray(game?.rounds)
-    ? game.rounds
-    : Array.isArray(game?.timeline)
-      ? game.timeline
-      : [];
+  const gameRecord = asRecord(game);
+  const rounds = (
+    Array.isArray(gameRecord.rounds)
+      ? gameRecord.rounds
+      : Array.isArray(gameRecord.timeline)
+        ? gameRecord.timeline
+        : []
+  ).map(asRecord);
 
   let sent = 0;
   for (const round of rounds) {
-    if (String(round?.playerId ?? '') !== playerId) continue;
+    if (String(round.playerId ?? '') !== playerId) continue;
 
-    const recipients =
-      round?.assistRecipients && typeof round.assistRecipients === 'object'
-        ? round.assistRecipients
-        : {};
+    const recipients = asRecord(round.assistRecipients);
 
     sent += Number(Object.values(recipients).reduce(
-      (sum: number, value: any) => sum + n(value),
+      (sum: number, value: unknown) => sum + n(value),
       0
     ));
   }
@@ -823,27 +867,27 @@ export function getAssistCountSent(totals: any, game: any, playerId: string): nu
   return sent;
 }
 
-export function getAssistPrestigeSent(totals: any, game: any, playerId: string): number {
-  const totalsSent = n(totals?.assistPrestigeSent);
+export function getAssistPrestigeSent(totals: unknown, game: unknown, playerId: string): number {
+  const totalsSent = n(asRecord(totals).assistPrestigeSent);
   if (totalsSent > 0) return totalsSent;
 
-  const rounds = Array.isArray(game?.rounds)
-    ? game.rounds
-    : Array.isArray(game?.timeline)
-      ? game.timeline
-      : [];
+  const gameRecord = asRecord(game);
+  const rounds = (
+    Array.isArray(gameRecord.rounds)
+      ? gameRecord.rounds
+      : Array.isArray(gameRecord.timeline)
+        ? gameRecord.timeline
+        : []
+  ).map(asRecord);
 
   let sent = 0;
   for (const round of rounds) {
-    if (String(round?.playerId ?? '') !== playerId) continue;
+    if (String(round.playerId ?? '') !== playerId) continue;
 
-    const recipients =
-      round?.assistPrestigeRecipients && typeof round.assistPrestigeRecipients === 'object'
-        ? round.assistPrestigeRecipients
-        : {};
+    const recipients = asRecord(round.assistPrestigeRecipients);
 
     sent += Number(Object.values(recipients).reduce(
-      (sum: number, value: any) => sum + n(value),
+      (sum: number, value: unknown) => sum + n(value),
       0
     ));
   }
@@ -851,20 +895,22 @@ export function getAssistPrestigeSent(totals: any, game: any, playerId: string):
   return sent;
 }
 
-export function getSeat(game: any, playerId: string): number {
-  const players = Array.isArray(game?.players) ? game.players : [];
+export function getSeat(game: unknown, playerId: string): number {
+  const source = asRecord(game);
+  const players = (Array.isArray(source.players) ? source.players : []).map(asRecord);
   const entry = players.find(
-    (player: any) => String(player?.id ?? player?.playerId ?? '') === playerId
+    (player) => String(player.id ?? player.playerId ?? '') === playerId
   );
 
   return n(entry?.startOrder ?? entry?.seat ?? entry?.turnOrder, 0);
 }
 
-export function getObjectiveCountApprox(totals: any): number {
-  const explicitCount = n(totals?.objectiveCount);
+export function getObjectiveCountApprox(totals: unknown): number {
+  const source = asRecord(totals);
+  const explicitCount = n(source.objectiveCount);
   if (explicitCount > 0) return explicitCount;
 
-  const prestigeCount = n(totals?.objectivePrestige);
+  const prestigeCount = n(source.objectivePrestige);
   if (prestigeCount > 0) return prestigeCount;
 
   return 0;
@@ -1018,8 +1064,8 @@ export function buildConditionalAnalysis(
   mustIncludeIds: string[] = [],
   mayIncludeIds: string[] = [],
   invertMatch: boolean,
-  playerMap: Map<string, any>,
-  games: any[]
+  playerMap: Map<string, PlayerLike>,
+  games: unknown[]
 ) {
   const safeAnchorPlayerId =
     typeof anchorPlayerId === 'string' && anchorPlayerId ? anchorPlayerId : null;
@@ -1060,7 +1106,7 @@ export function buildConditionalAnalysis(
 
   const players = Array.from(playerMap.values())
     .map((player) => {
-      const playerId = String(player?.id ?? '');
+      const playerId = String(player.id ?? '');
       if (!playerId) return null;
 
       const overall = buildOverallPlayerRow(playerId, playerMap, matchedGames);

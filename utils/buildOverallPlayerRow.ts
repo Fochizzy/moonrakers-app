@@ -1,7 +1,7 @@
 import { StoredGame } from '@/utils/compareTypes';
 import { computeSeatAdvantageSpreadFromArrays } from '@/utils/seatAdvantage';
 
-type PlayerLike = {
+export type PlayerLike = {
   id: string;
   name?: string;
   color?: string;
@@ -136,6 +136,14 @@ type PlacementCounts = {
   placement4: number;
 };
 
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
 function n(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -191,10 +199,10 @@ function getAliasNamesFromPlayer(player?: PlayerLike): string[] {
 }
 
 function getGamePlayerEntries(game: StoredGame): GamePlayerStats[] {
-  if (Array.isArray((game as any).players)) return (game as any).players;
-  if (Array.isArray((game as any).playerStats)) return (game as any).playerStats;
-  if (Array.isArray((game as any).standings)) return (game as any).standings;
-  if (Array.isArray((game as any).results)) return (game as any).results;
+  const source = asRecord(game);
+  for (const key of ['players', 'playerStats', 'standings', 'results'] as const) {
+    if (Array.isArray(source[key])) return source[key] as GamePlayerStats[];
+  }
   return [];
 }
 
@@ -263,23 +271,27 @@ function matchesPlayer(
   return false;
 }
 
-function getGameTotals(game: StoredGame, playerId: string, aliasIds: string[] = []): any {
-  const totals = (game as any)?.totals;
-  if (!totals || typeof totals !== 'object') return null;
+function getGameTotals(
+  game: StoredGame,
+  playerId: string,
+  aliasIds: string[] = []
+): UnknownRecord | null {
+  const totals = asRecord(asRecord(game).totals);
 
   const idsToTry = [playerId, ...aliasIds].map(normalizeId).filter(Boolean);
   for (const id of idsToTry) {
-    if ((totals as any)[id]) return (totals as any)[id];
+    if (totals[id]) return asRecord(totals[id]);
   }
 
   return null;
 }
 
 function getWinnerId(game: StoredGame): string {
-  return String((game as any)?.manualWinnerId ?? (game as any)?.selectedWinnerId ?? (game as any)?.winnerId ?? '');
+  const source = asRecord(game);
+  return String(source.manualWinnerId ?? source.selectedWinnerId ?? source.winnerId ?? '');
 }
 
-function getPrestige(entry: GamePlayerStats, totals?: any): number {
+function getPrestige(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return (
     n(entry.totalPrestige) ||
     n(entry.finalPrestige) ||
@@ -290,55 +302,71 @@ function getPrestige(entry: GamePlayerStats, totals?: any): number {
   );
 }
 
-function getScore(entry: GamePlayerStats, totals?: any): number {
+function getScore(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.score) || n(totals?.score) || getPrestige(entry, totals);
 }
 
-function getObjectivePrestige(entry: GamePlayerStats, totals?: any): number {
+function getObjectivePrestige(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.objectivePrestige) || n(totals?.objectivePrestige);
 }
 
-function getDirectPrestige(entry: GamePlayerStats, totals?: any): number {
+function getDirectPrestige(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.directPrestige) || n(entry.selfPrestige) || n(entry.prestigeFromSelf) || n(totals?.directPrestige) || n(totals?.selfPrestige) || n(totals?.prestigeFromSelf);
 }
 
-function getAssistGiven(entry: GamePlayerStats, totals?: any): number {
+function getAssistGiven(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.assistsGiven) || n(entry.assistGiven) || n(totals?.assistsGiven) || n(totals?.assists) || 0;
 }
 
-function getAssistReceived(entry: GamePlayerStats, totals?: any): number {
+function getAssistReceived(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.assistReceived) || n(entry.assistsReceived) || n(entry.assistPrestigeReceived) || n(entry.assistIn) || n(totals?.assistReceived) || n(totals?.assistsReceived) || n(totals?.assistPrestigeReceived);
 }
 
-function getObjectives(entry: GamePlayerStats, totals?: any): number {
+function getObjectives(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.objectivesCompleted) || n(entry.objectives) || n(entry.objectiveCount) || n(totals?.objectivesCompleted) || n(totals?.objectives) || n(totals?.objectiveCount) || Math.floor(n(totals?.objectivePrestige));
 }
 
-function getTurns(entry: GamePlayerStats, game: StoredGame, totals?: any): number {
-  return n(entry.turns) || n(entry.turnCount) || n(totals?.turns) || n(totals?.turnCount) || n((game as any).turnCount) || (Array.isArray((game as any).rounds) ? (game as any).rounds.length : 0);
+function getTurns(entry: GamePlayerStats, game: StoredGame, totals?: UnknownRecord | null): number {
+  const source = asRecord(game);
+  return (
+    n(entry.turns) ||
+    n(entry.turnCount) ||
+    n(totals?.turns) ||
+    n(totals?.turnCount) ||
+    n(source.turnCount) ||
+    (Array.isArray(source.rounds) ? source.rounds.length : 0)
+  );
 }
 
-function getContractSuccesses(entry: GamePlayerStats, totals?: any): number {
+function getContractSuccesses(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.missionsSucceeded) || n(entry.contractSuccesses) || n(entry.successfulContracts) || n(entry.contracts) || n(entry.successes) || n(totals?.missionsSucceeded) || n(totals?.contractSuccesses) || n(totals?.successfulContracts) || n(totals?.contracts) || n(totals?.successes);
 }
 
-function getContractFailures(entry: GamePlayerStats, totals?: any): number {
+function getContractFailures(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.missionsFailed) || n(entry.contractFailures) || n(entry.failedContracts) || n(entry.failures) || n(totals?.missionsFailed) || n(totals?.contractFailures) || n(totals?.failedContracts) || n(totals?.failures);
 }
 
-function getStayedAtBase(entry: GamePlayerStats, totals?: any): number {
+function getStayedAtBase(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.stayedAtBase) || n(entry.stayAtBase) || n(entry.baseStays) || n(totals?.stayedAtBase) || n(totals?.stayAtBase) || n(totals?.baseStays);
 }
 
-function getPlacement(entry: GamePlayerStats, totals?: any): number {
+function getPlacement(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   return n(entry.placement) || n(entry.place) || n(entry.rank) || n(totals?.placement) || n(totals?.place) || n(totals?.rank);
 }
 
-function getSeat(entry: GamePlayerStats, game: StoredGame, totals?: any): number {
-  return n(entry.startOrder) || n(entry.seat) || n(entry.turnOrder) || n(totals?.startOrder) || n(totals?.seat) || n((game as any)?.startOrder?.[getPlayerId(entry)]) || 0;
+function getSeat(entry: GamePlayerStats, game: StoredGame, totals?: UnknownRecord | null): number {
+  return (
+    n(entry.startOrder) ||
+    n(entry.seat) ||
+    n(entry.turnOrder) ||
+    n(totals?.startOrder) ||
+    n(totals?.seat) ||
+    n(asRecord(asRecord(game).startOrder)[getPlayerId(entry)]) ||
+    0
+  );
 }
 
-function getEloDelta(entry: GamePlayerStats, totals?: any): number {
+function getEloDelta(entry: GamePlayerStats, totals?: UnknownRecord | null): number {
   if (Number.isFinite(Number(entry.eloDelta))) return n(entry.eloDelta);
   if (Number.isFinite(Number(totals?.eloDelta))) return n(totals?.eloDelta);
   const before = Number.isFinite(Number(entry.eloBefore)) ? n(entry.eloBefore) : Number.isFinite(Number(totals?.eloBefore)) ? n(totals?.eloBefore) : null;
@@ -348,10 +376,11 @@ function getEloDelta(entry: GamePlayerStats, totals?: any): number {
 }
 
 function getCreatedAt(game: StoredGame): number {
-  return n((game as any)?.createdAt ?? (game as any)?.date ?? (game as any)?.playedAt);
+  const source = asRecord(game);
+  return n(source.createdAt ?? source.date ?? source.playedAt);
 }
 
-function inferWinner(entry: GamePlayerStats, game: StoredGame, playerId: string, totals?: any, aliasIds: string[] = []): boolean {
+function inferWinner(entry: GamePlayerStats, game: StoredGame, playerId: string, totals?: UnknownRecord | null, aliasIds: string[] = []): boolean {
   if (entry.won === true || entry.isWinner === true || entry.winner === true) return true;
   if (totals?.won === true || totals?.isWinner === true || totals?.winner === true) return true;
   const winnerId = normalizeId(getWinnerId(game));
@@ -371,7 +400,7 @@ function ratioString(numerator: number, denominator: number): string {
 export default function buildOverallPlayerRow(
   playerId: string,
   playerMap: PlayerMap,
-  games: StoredGame[]
+  games: readonly unknown[]
 ): OverallPlayerRow | null {
   const player = playerMap.get(playerId);
   if (!player) return null;
@@ -404,7 +433,8 @@ export default function buildOverallPlayerRow(
   const playerCountWinSamples: number[] = [];
   const placementCounts: PlacementCounts = { placement1: 0, placement2: 0, placement3: 0, placement4: 0 };
 
-  const safeGames = Array.isArray(games) ? [...games] : [];
+  // Every accessor below reads through asRecord, so unknown games are safe.
+  const safeGames = Array.isArray(games) ? ([...games] as StoredGame[]) : [];
   safeGames.sort((a, b) => getCreatedAt(b) - getCreatedAt(a));
 
   for (const game of safeGames) {
@@ -449,7 +479,7 @@ export default function buildOverallPlayerRow(
     lastFiveResults.unshift(didWin ? 'W' : 'L');
     if (lastFiveResults.length > 5) lastFiveResults.pop();
 
-    if ((game as any)?.objectiveStatsEligible || objectives > 0 || objectivePrestige > 0) {
+    if (asRecord(game).objectiveStatsEligible || objectives > 0 || objectivePrestige > 0) {
       objectiveTrackedGames += 1;
     }
 
@@ -463,7 +493,8 @@ export default function buildOverallPlayerRow(
       seatWinSamples.push(didWin ? 1 : 0);
     }
 
-    const playerCount = Array.isArray((game as any)?.players) ? (game as any).players.length : 0;
+    const gamePlayers = asRecord(game).players;
+    const playerCount = Array.isArray(gamePlayers) ? gamePlayers.length : 0;
     if (playerCount > 0) {
       playerCountSizes.push(playerCount);
       playerCountWinSamples.push(didWin ? 1 : 0);
