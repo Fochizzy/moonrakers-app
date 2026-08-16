@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import Text from "@/components/ui/Text";
+import { buildEloSnapshots } from "@/utils/elo";
 import { CHART_COLORS } from "../chartVisualSystem";
 import EloChartPlot from "./EloChartPlot";
 import {
@@ -31,9 +32,26 @@ export default function EloChart({
   subtitle = "Rating history across tracked games.",
   showHeader = true,
 }: Props) {
+  // Nothing upstream publishes an eloSnapshot, so without this the chart would
+  // fall back to deriving ratings from a plain win/loss formula of its own and
+  // disagree with every other ELO surface in the app. Attaching snapshots from
+  // the shared blend keeps the chart on the same calculation as the leaderboard.
+  const gamesWithRatings = useMemo(() => {
+    const normalized = games.map((game) => ({
+      ...game,
+      id: String(game?.id ?? game?.gameId ?? "").trim() || undefined,
+    }));
+    const snapshots = buildEloSnapshots(normalized as never);
+
+    return normalized.map((game) => {
+      const snapshot = game.id ? snapshots[game.id] : undefined;
+      return snapshot ? { ...game, eloSnapshot: snapshot } : game;
+    }) as EloChartGame[];
+  }, [games]);
+
   const chartState = useMemo(
-    () => buildEloChartState({ games, players, primaryPlayerId }),
-    [games, players, primaryPlayerId]
+    () => buildEloChartState({ games: gamesWithRatings, players, primaryPlayerId }),
+    [gamesWithRatings, players, primaryPlayerId]
   );
   const [selectedIndex, setSelectedIndex] = useState(chartState.selectedIndex);
   const [selectedMode, setSelectedMode] = useState<EloChartMode>(DEFAULT_ELO_MODE);
