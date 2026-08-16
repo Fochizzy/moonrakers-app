@@ -1,10 +1,14 @@
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
+const path = require("node:path");
+
+// Guards must resolve files relative to the repo, not this machine.
+const projectRoot = path.resolve(__dirname, "..");
 
 const migrationPath =
-  "C:/Users/izzyh/Desktop/moonrakers-app/supabase/migrations/20260525164000_moonrakers_user_game_drafts.sql";
+  path.join(projectRoot, "supabase/migrations/20260525164000_moonrakers_user_game_drafts.sql");
 const saveHelperPath =
-  "C:/Users/izzyh/Desktop/moonrakers-app/lib/cloud/game-drafts/saveUserGameDraft.ts";
+  path.join(projectRoot, "lib/cloud/game-drafts/saveUserGameDraft.ts");
 
 assert.ok(fs.existsSync(migrationPath), "expected the draft migration file to exist");
 assert.ok(fs.existsSync(saveHelperPath), "expected the save helper to exist");

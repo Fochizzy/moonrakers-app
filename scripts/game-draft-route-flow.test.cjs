@@ -1,18 +1,22 @@
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 
-const home = fs.readFileSync("C:/Users/izzyh/Desktop/moonrakers-app/app/index.tsx", "utf8");
+// Guards must resolve files relative to the repo, not this machine.
+const projectRoot = path.resolve(__dirname, "..");
+
+const home = fs.readFileSync(path.join(projectRoot, "app/index.tsx"), "utf8");
 const setup = fs.readFileSync(
-  "C:/Users/izzyh/Desktop/moonrakers-app/app/game-setup.tsx",
+  path.join(projectRoot, "app/game-setup.tsx"),
   "utf8",
 );
-const game = fs.readFileSync("C:/Users/izzyh/Desktop/moonrakers-app/app/game.tsx", "utf8");
+const game = fs.readFileSync(path.join(projectRoot, "app/game.tsx"), "utf8");
 const roster = fs.readFileSync(
-  "C:/Users/izzyh/Desktop/moonrakers-app/app/add-players.tsx",
+  path.join(projectRoot, "app/add-players.tsx"),
   "utf8",
 );
 const phase = fs.readFileSync(
-  "C:/Users/izzyh/Desktop/moonrakers-app/lib/game-draft/phase.ts",
+  path.join(projectRoot, "lib/game-draft/phase.ts"),
   "utf8",
 );
 

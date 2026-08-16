@@ -1,7 +1,11 @@
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 
-const home = fs.readFileSync("C:/Users/izzyh/Desktop/moonrakers-app/app/index.tsx", "utf8");
+// Guards must resolve files relative to the repo, not this machine.
+const projectRoot = path.resolve(__dirname, "..");
+
+const home = fs.readFileSync(path.join(projectRoot, "app/index.tsx"), "utf8");
 
 assert.match(home, /discardUnfinishedGame/);
 assert.match(home, /isDiscardingUnfinishedGame/);

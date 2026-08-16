@@ -1,8 +1,12 @@
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
+const path = require("node:path");
+
+// Guards must resolve files relative to the repo, not this machine.
+const projectRoot = path.resolve(__dirname, "..");
 
 const bootstrap = fs.readFileSync(
-  "C:/Users/izzyh/Desktop/moonrakers-app/lib/auth/useSharedCloudBootstrap.ts",
+  path.join(projectRoot, "lib/auth/useSharedCloudBootstrap.ts"),
   "utf8",
 );
 
