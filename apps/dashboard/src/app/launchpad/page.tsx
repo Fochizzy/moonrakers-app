@@ -1,3 +1,6 @@
+// Prerendered pages 404 through the OpenNext worker; render on demand.
+export const dynamic = "force-dynamic";
+
 export default function LaunchpadPage() {
   return (
     <main
