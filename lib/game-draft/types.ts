@@ -2,7 +2,7 @@ import type {
   StoredGamePlayer,
   StoredPlayerTotals,
   StoredRound,
-} from "../../utils/storage/storageKeys.ts";
+} from "@/utils/storage/storageKeys.ts";
 
 export type GameDraftPhase =
   | "player_selection"

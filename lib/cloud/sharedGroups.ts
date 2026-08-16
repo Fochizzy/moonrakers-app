@@ -1,4 +1,4 @@
-import type { Group } from "../../store/useStore";
+import type { Group } from "@/store/useStore";
 
 type CreateSharedGroupInput = {
   createdBy: string;

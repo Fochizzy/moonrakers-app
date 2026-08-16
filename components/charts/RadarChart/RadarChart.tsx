@@ -17,7 +17,7 @@ import {
   buildDefinitionsRoute,
   resolveDefinitionSourceLabel,
 } from "@/utils/appRoutes";
-import { CHART_COLORS } from "../chartVisualSystem";
+import { CHART_COLORS } from "@/components/charts/chartVisualSystem";
 import {
   buildRadarChartModel,
   useRadarChartModel,

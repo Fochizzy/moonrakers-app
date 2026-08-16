@@ -24,7 +24,6 @@ import Text from "@/components/ui/Text";
 import DefinitionsJumpLink from "@/components/ui/DefinitionsJumpLink";
 import ChartUnderlineTabs from "@/components/charts/ChartUnderlineTabs";
 import ChartHubPreview from "@/components/charts/ChartHubPreview";
-import type { LineMode } from "@/components/charts/LineChart";
 import {
   CHART_SECTIONS,
   buildFeaturedChartTakeaway,
@@ -72,9 +71,7 @@ import {
   resolvePreferredChartPlayerId,
 } from "@/utils/charts";
 import {
-  getVisibleEloMetricTabs,
   normalizeVisibleEloMetricTab,
-  type VisibleEloMetricTab,
 } from "@/utils/elo/visibleMetricTabs";
 
 function getParam(value?: string | string[]) {
@@ -97,7 +94,6 @@ function isTruthyParam(value?: string | string[]) {
   return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
-type EloSetupTab = VisibleEloMetricTab;
 type SetupOption = {
   key: string;
   label: string;
@@ -115,8 +111,6 @@ type SetupDefaults = {
   opponentId: string | null;
 };
 
-const LINE_MODE_OPTIONS: readonly LineMode[] = ["raw", "cumulative", "average"];
-const ELO_VIEW_OPTIONS: readonly EloSetupTab[] = getVisibleEloMetricTabs();
 const TOGGLE_SCOPE_PLAYER_LIST_KEY = "__toggle_scope_player_list__";
 
 function titleCase(value: string) {

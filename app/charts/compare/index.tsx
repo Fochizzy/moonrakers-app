@@ -679,17 +679,6 @@ export default function IndexScreen() {
     }
   }
 
-  function applyPreset(type: "current_compare" | "clear") {
-    if (type === "clear") {
-      dispatchConditional({ type: "clear" });
-      return;
-    }
-
-    const ids =
-      mode === "players" ? selectedPlayerIds.slice(0, MAX_COMPARE_PLAYERS) : selectedGroupIds.slice(0, MAX_COMPARE_PLAYERS);
-    dispatchConditional({ type: "apply-preset", ids, anchorId: ids[0] ?? null });
-  }
-
   function handleRunConditionalCompare() {
     if (!hasConditionalSelection) return;
     dispatchConditional({ type: "run-compare" });
@@ -709,8 +698,6 @@ export default function IndexScreen() {
       : rows.length === 1
         ? rows[0]?.label ?? "Selection"
         : `${rows.length} ${mode}`;
-  const selectionSummaryLabel =
-    currentSelectionNames.length > 0 ? currentSelectionNames.join(" • ") : selectionLabel;
 
   const resolvedSelectionSummaryLabel =
     mode === "players" &&

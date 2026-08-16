@@ -1,4 +1,4 @@
-import { coerceUuid } from "../ids/uuid.ts";
+import { coerceUuid } from "@/lib/ids/uuid.ts";
 
 type Input = {
   hostProfileId: string;

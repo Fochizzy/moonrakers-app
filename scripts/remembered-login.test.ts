@@ -5,7 +5,6 @@ import {
   readRememberedLogin,
   writeRememberedLogin,
   type KeyValueStorage,
-  type SecureKeyValueStorage,
 } from "../lib/auth/rememberedLogin.ts";
 
 function createMemoryStorage(): KeyValueStorage {

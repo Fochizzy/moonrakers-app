@@ -1,7 +1,7 @@
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 
-import { parseBackupPayload } from "../../utils/backup";
+import { parseBackupPayload } from "@/utils/backup";
 import { buildLegacyMigrationPayload } from "./buildLegacyMigrationPayload";
 import { importLegacyPayload } from "./importLegacyPayload";
 

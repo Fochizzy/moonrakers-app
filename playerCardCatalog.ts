@@ -7,6 +7,6 @@ export type CardColor =
   | "orange"
   | "pink";
 
-export function getCardsByColor(color: CardColor): Array<{ artIndex?: number }> {
+export function getCardsByColor(_color: CardColor): Array<{ artIndex?: number }> {
   return [];
 }

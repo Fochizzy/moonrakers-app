@@ -1,4 +1,4 @@
-import type { NormalizedGame } from "../../../utils/charts";
+import type { NormalizedGame } from "@/utils/charts";
 
 export type AssistNetworkDatasetEdge = {
   id: string;

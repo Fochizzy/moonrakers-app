@@ -308,7 +308,7 @@ function normalizeLookup(value: string | null | undefined): string {
     .trim()
     .toLowerCase()
     .replace(/[+]/g, " plus ")
-    .replace(/[\/]/g, " / ")
+    .replace(/[/]/g, " / ")
     .replace(/[^a-z0-9/ ]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

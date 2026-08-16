@@ -25,7 +25,7 @@ assert.match(
 
 assert.doesNotMatch(
   controllerSource,
-  /args\.router\.replace\(\"\/\"\);/,
+  /args\.router\.replace\("\/"\);/,
   "expected the finish-game controller to stop using a raw slash redirect for the post-save path",
 );
 

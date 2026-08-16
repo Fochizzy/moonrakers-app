@@ -1,32 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
-const ts = require("typescript");
 const { readGameScreenSource } = require("./support/game-screen-source.cjs");
 
-for (const extension of [".ts", ".tsx"]) {
-  require.extensions[extension] = function compileTypeScript(mod, filename) {
-    const source = fs.readFileSync(filename, "utf8");
-    const { outputText } = ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2020,
-        jsx: ts.JsxEmit.ReactJSX,
-        esModuleInterop: true,
-        allowJs: true,
-      },
-      fileName: filename,
-    });
-
-    mod._compile(outputText, filename);
-  };
-}
+require("./support/ts-require.cjs");
 
 const projectRoot = path.resolve(__dirname, "..");
-
-function read(relPath) {
-  return fs.readFileSync(path.join(projectRoot, relPath), "utf8");
-}
 
 const { getLeaderboard } = require(path.join(projectRoot, "engine", "gameEngine.ts"));
 const {

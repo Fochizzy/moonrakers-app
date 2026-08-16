@@ -1,5 +1,5 @@
-import type { AuthProfile, Game, Group, Player } from "../../store/useStore";
-import { normalizeGameWithComputedTotals } from "../../utils/gameTotals";
+import type { AuthProfile, Game, Group, Player } from "@/store/useStore";
+import { normalizeGameWithComputedTotals } from "@/utils/gameTotals";
 
 export type CloudSnapshot = {
   profile: AuthProfile;

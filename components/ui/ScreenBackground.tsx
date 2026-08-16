@@ -8,7 +8,6 @@ import {
   ViewStyle,
 } from "react-native";
 
-const MOON = require("@/assets/Moon.png");
 const BACKGROUND_ALT = require("@/assets/Background 2.png");
 const AUTH_BACKGROUND = require("@/assets/Background.png");
 const MOONRISE = require("@/assets/Moonrise.png");

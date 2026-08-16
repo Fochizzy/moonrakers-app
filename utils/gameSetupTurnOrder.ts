@@ -1,6 +1,6 @@
 import { resolveStoredPlayerColor } from "./playerColor";
 import { buildArtIndexFromRowAndColor, getRowFromArtIndex, type CardColor } from "./cardAssignment";
-import type { GameDraft } from "../lib/game-draft/types";
+import type { GameDraft } from "@/lib/game-draft/types";
 
 export type GameSetupTurnOrderPlayer = {
   id: string;

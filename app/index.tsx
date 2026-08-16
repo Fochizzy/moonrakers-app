@@ -20,10 +20,8 @@ import SectionCard from "@/components/ui/SectionCard";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
 import { resolveHomeRedirect } from "@/lib/auth/launchRoute";
-import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
 import { runSignOutFlow } from "@/lib/auth/signOutFlow";
 import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
-import { supabase } from "@/lib/supabase";
 import {
   useAuthBootstrapStatus,
   useAuthSession,

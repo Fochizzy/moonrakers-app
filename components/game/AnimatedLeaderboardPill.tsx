@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Animated, View } from 'react-native';
 
 import Text from '@/components/ui/Text';

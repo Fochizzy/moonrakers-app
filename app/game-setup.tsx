@@ -4,7 +4,6 @@ import {
   Animated,
   Easing,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -121,172 +120,6 @@ function darkenHex(hex?: string, amount = 0.42) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function TurnOrderSummary({ players }: { players: PlayerLike[] }) {
-  const startingPlayer = players[0] ?? null;
-  const accent = startingPlayer ? getAccentColor(startingPlayer.color, 0) : "#7DD3FC";
-
-  return (
-    <View style={styles.summaryCard}>
-      <View style={styles.summaryHeader}>
-        <Text variant="utilityLabel" style={styles.sectionLabel}>
-          First Captain
-        </Text>
-        <Text style={styles.summaryHint}>Set the first captain and lock the table order.</Text>
-      </View>
-
-      {startingPlayer ? (
-        <View
-          style={[
-            styles.startingCard,
-            {
-              borderColor: `${accent}55`,
-              backgroundColor: darkenHex(accent, 0.72),
-              shadowColor: accent,
-            },
-          ]}
-        >
-          <View style={styles.startingBadge}>
-            <Text style={styles.startingBadgeText}>1</Text>
-          </View>
-
-          <View style={styles.startingAvatarWrap}>
-            <PlayerCardIcon
-              player={startingPlayer as any}
-              size={52}
-              showInitial={false}
-            />
-          </View>
-
-          <View style={styles.startingCopy}>
-            <Text style={styles.startingName} numberOfLines={1}>
-              {resolveDisplayName(startingPlayer, 0)}
-            </Text>
-            <Text style={styles.startingMeta}>Launches the table and takes turn one.</Text>
-          </View>
-        </View>
-      ) : (
-        <Text style={styles.summaryEmptyText}>Select players to lock in turn order.</Text>
-      )}
-
-      <View style={styles.summaryTextBlock}>
-        <Text variant="utilityLabel" style={styles.summaryTextLabel}>
-          Locked Order
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.orderChipRail}
-        >
-          {players.map((p, index) => {
-            const chipAccent = getAccentColor(p.color, index);
-            return (
-              <View
-                key={p.id}
-                style={[
-                  styles.orderChip,
-                  {
-                    borderColor: `${chipAccent}66`,
-                    backgroundColor: `${chipAccent}12`,
-                  },
-                ]}
-              >
-                <Text style={[styles.orderChipNum, { color: chipAccent }]}>
-                  {index + 1}
-                </Text>
-                <Text style={styles.orderChipName} numberOfLines={1}>
-                  {p.name ?? "?"}
-                </Text>
-              </View>
-            );
-          })}
-        </ScrollView>
-      </View>
-    </View>
-  );
-}
-
-function CaptainNameStrip({
-  players,
-  disabled,
-  onSelect,
-}: {
-  players: PlayerLike[];
-  disabled: boolean;
-  onSelect: (playerId: string) => void;
-}) {
-  if (!players.length) return null;
-
-  return (
-    <View style={styles.nameStripBlock}>
-      <View style={styles.nameStripHeader}>
-        <Text variant="utilityLabel" style={styles.sectionLabel}>
-          Crew Names
-        </Text>
-        <Text style={styles.nameStripHint}>Tap a name to make that captain go first.</Text>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.nameStripContent}
-      >
-        {players.map((player, index) => {
-          const accent = getAccentColor(player.color, index);
-          const isLeading = index === 0;
-
-          return (
-            <Pressable
-              key={player.id}
-              onPress={disabled ? undefined : () => onSelect(player.id)}
-              disabled={disabled}
-              style={({ pressed }) => [
-                styles.nameChip,
-                {
-                  borderColor: isLeading ? accent : `${accent}55`,
-                  backgroundColor: isLeading ? `${accent}16` : "rgba(10, 18, 38, 0.94)",
-                },
-                pressed && !disabled ? styles.nameChipPressed : null,
-              ]}
-              android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-            >
-              <View
-                style={[
-                  styles.nameChipBadge,
-                  {
-                    backgroundColor: isLeading ? accent : "rgba(148,163,184,0.22)",
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.nameChipBadgeText,
-                    isLeading ? styles.nameChipBadgeTextActive : null,
-                  ]}
-                >
-                  {index + 1}
-                </Text>
-              </View>
-
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.nameChipText,
-                  isLeading ? { color: accent } : null,
-                ]}
-              >
-                {resolveDisplayName(player, index)}
-              </Text>
-
-              <Text style={styles.nameChipMeta}>
-                {isLeading ? "First" : "Make first"}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
 
 function TurnOrderRow({
   item,
@@ -339,6 +172,12 @@ function TurnOrderRow({
             <View style={[styles.rowOrderPill, isFirstCaptain ? styles.rowOrderPillPrimary : null]}>
               <Text style={styles.rowOrderPillText}>{rowIndex + 1}</Text>
             </View>
+
+            {isFirstCaptain ? (
+              <Text style={[styles.firstCaptainLabel, { color: accent }]}>
+                First Captain
+              </Text>
+            ) : null}
 
             {isSelected ? (
               <View
@@ -542,13 +381,6 @@ export default function GameSetup() {
 
   const canStart = canSubmitGameSetup(turnOrder);
 
-  const startGameSubtitle = useMemo(() => {
-    const count = turnOrder.filter((p) => String(p?.id ?? "").trim().length > 0).length;
-    if (count === 0) return "Select 2–5 players to begin.";
-    if (count === 1) return "Add at least 1 more player (2–5 required).";
-    if (count > 5) return "Too many players — remove some (max 5).";
-    return buildTurnOrderSummary(turnOrder);
-  }, [turnOrder]);
   const selectedPlayerIndex = useMemo(
     () => turnOrder.findIndex((player) => player.id === selectedPlayerId),
     [selectedPlayerId, turnOrder]
@@ -566,7 +398,9 @@ export default function GameSetup() {
 
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {}
+    } catch {
+      // Haptics are best-effort; some devices have no engine.
+    }
 
     Animated.parallel([
       Animated.timing(overlayOpacity, {
@@ -698,7 +532,11 @@ export default function GameSetup() {
       edges={["top", "left", "right", "bottom"]}
       contentContainerStyle={styles.pageContent}
       >
-        <AppHeader title="Create Game" size="compact" />
+        <AppHeader
+          title="Create Game"
+          subtitle="Set the first captain and lock the table order."
+          size="compact"
+        />
         <Animated.View
           style={[
             styles.mainContentWrap,
@@ -1075,6 +913,12 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "900",
+  },
+  firstCaptainLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
   rowAvatarWrap: {
     width: 58,

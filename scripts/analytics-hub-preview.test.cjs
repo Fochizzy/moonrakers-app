@@ -11,12 +11,6 @@ function assertMatch(source, pattern, label) {
   }
 }
 
-function assertNoMatch(source, pattern, label) {
-  if (pattern.test(source)) {
-    throw new Error(`Unexpected ${label}`);
-  }
-}
-
 const analyticsSource = read(path.join("app", "analytics.tsx"));
 const appHubsSource = read(path.join("utils", "appHubs.ts"));
 

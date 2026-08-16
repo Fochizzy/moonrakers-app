@@ -24,8 +24,21 @@ if (!testFiles.length) {
 const failures = [];
 const startedAt = process.hrtime.bigint();
 
+// --import takes a module specifier; on Windows an absolute path is only valid
+// as a file:// URL.
+const aliasRegister = require("node:url")
+  .pathToFileURL(path.join(scriptsDir, "support", "register-alias.mjs"))
+  .href;
+
 for (const file of testFiles) {
-  const result = spawnSync(process.execPath, [path.join(scriptsDir, file)], {
+  // .test.ts files run as native ESM with Node's type stripping; the --import
+  // hook teaches that path the app's "@/" alias. .cjs files resolve the alias
+  // through scripts/support/ts-require.cjs instead.
+  const args = file.endsWith(".ts")
+    ? ["--import", aliasRegister, path.join(scriptsDir, file)]
+    : [path.join(scriptsDir, file)];
+
+  const result = spawnSync(process.execPath, args, {
     encoding: "utf8",
     // Node warns about the missing package "type" field for every .test.ts.
     env: { ...process.env, NODE_NO_WARNINGS: "1" },

@@ -340,7 +340,7 @@ function resolvePlayerTotalsForGame(
   const playerId = normalizeId(player?.id);
   if (!playerId || !game) return null;
 
-  let totals = game?.totals?.[playerId];
+  const totals = game?.totals?.[playerId];
   if (totals) {
     return totals;
   }

@@ -51,21 +51,6 @@ const {
   resolveEffectiveChartSetupPayload,
 } = require("../lib/cloud/analytics/resolveChartSetupPayload.ts");
 
-const summary = {
-  playerId: "focus-player",
-  name: "Fochizzy",
-  currentElo: 906,
-  peakElo: 1000,
-  confidence: 0.75,
-  gamesPlayed: 12,
-  wins: 7,
-  losses: 5,
-  avgDelta: 2.4,
-  bestDelta: 18,
-  worstDelta: -13,
-  recentForm: "WWLW",
-};
-
 const players = [
   { id: "greg", name: "Greg", color: "blue" },
   { id: "corey", name: "Corey", color: "orange" },

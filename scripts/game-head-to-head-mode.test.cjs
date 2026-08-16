@@ -1,6 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { readGameScreenSource } = require("./support/game-screen-source.cjs");
 
 const source = readGameScreenSource();

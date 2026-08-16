@@ -1,4 +1,4 @@
-import { APP_ROUTES } from "../../utils/appRoutes.ts";
+import { APP_ROUTES } from "@/utils/appRoutes.ts";
 
 import type { GameDraft, GameDraftPhase } from "./types.ts";
 

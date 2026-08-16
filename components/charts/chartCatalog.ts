@@ -325,8 +325,8 @@ type FeaturedTakeawayArgs = {
 
 export function buildFeaturedChartTakeaway({
   chartKey,
-  selectedPlayerName,
-  comparePlayerName,
+  selectedPlayerName: _selectedPlayerName,
+  comparePlayerName: _comparePlayerName,
   scopedCount = 0,
   metricKey,
 }: FeaturedTakeawayArgs) {

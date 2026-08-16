@@ -1,4 +1,4 @@
-import { formatSupabaseConfigError } from "../../supabase.ts";
+import { formatSupabaseConfigError } from "@/lib/supabase.ts";
 
 export type AnalyticsRpcError = {
   message?: string | null;
@@ -415,7 +415,7 @@ function isAnalyticsRpcClient(
 }
 
 export async function getDefaultAnalyticsRpcClient(): Promise<AnalyticsRpcClient> {
-  const { supabase } = await import("../../supabase.ts");
+  const { supabase } = await import("@/lib/supabase.ts");
 
   return {
     async rpc<TPayload>(name: string, args: Record<string, unknown>) {

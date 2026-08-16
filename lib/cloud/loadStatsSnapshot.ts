@@ -1,4 +1,4 @@
-import type { Game, Group, StatsSnapshot } from "../../store/useStore";
+import type { Game, Group, StatsSnapshot } from "@/store/useStore";
 
 type SelectStatsSnapshotInput = {
   personal?: Record<string, unknown> | null;

@@ -258,7 +258,7 @@ export function buildLeaderboard(players: Player[], games: Game[]): PlayerStats[
       prestigeMarginsByPlayer[playerId].push(totalPrestige - runnerUpPrestige);
     });
 
-    Object.entries(gameTotals).forEach(([receiverId, receiverStats]) => {
+    Object.entries(gameTotals).forEach(([_receiverId, receiverStats]) => {
       const bySource = receiverStats?.assistPrestigeBySource ?? {};
       Object.entries(bySource).forEach(([sourceId, value]) => {
         if (!totals[sourceId]) return;

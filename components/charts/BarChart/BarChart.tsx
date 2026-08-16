@@ -87,16 +87,11 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function n(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function safeDivide(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-function normalizePlayerId(player: Player, index: number): string | null {
+function normalizePlayerId(player: Player, _index: number): string | null {
   if (typeof player?.id === "string" && player.id.trim()) {
     return player.id.trim();
   }

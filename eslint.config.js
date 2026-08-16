@@ -28,6 +28,20 @@ module.exports = [
           ],
         },
       ],
+      // require() is Metro's static-asset mechanism in React Native
+      // (require("../assets/x.png")) and the app also uses lazy requires to
+      // break module cycles. Banning it fights the platform.
+      '@typescript-eslint/no-require-imports': 'off',
+      // Underscore-prefixed bindings are the convention for intentionally
+      // unused values (kept destructure slots, documented dead params).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
     },
     settings: {
       'import/resolver': {
@@ -55,6 +69,8 @@ module.exports = [
       '*.cjs',
       'app.config.js',
       'metro.config.js',
+      'babel.config.js',
+      'eslint.config.js',
     ],
     languageOptions: {
       ecmaVersion: 'latest',

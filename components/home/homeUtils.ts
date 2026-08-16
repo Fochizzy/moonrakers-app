@@ -1,4 +1,4 @@
-import type { GameLike, GamePlayer, GroupLike, PlayerLike, PlayerTotals, SortMetric, Tab } from "./homeTypes";
+import type { GameLike, GroupLike, PlayerLike, PlayerTotals, SortMetric, Tab } from "./homeTypes";
 import { normalizeId } from "@/utils/strings";
 
 export { normalizeId };

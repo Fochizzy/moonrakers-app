@@ -274,7 +274,7 @@ function PreviewRadar({
 
 function PreviewBar({
   stroke,
-  width,
+  width: _width,
   height,
 }: {
   stroke: string;

@@ -47,7 +47,7 @@ function getSelectionIds(mode: CompareMode, selectedPlayerIds: string[], selecte
 
 export default function CompareSelectionCard({
   title,
-  subtitle,
+  subtitle: _subtitle,
   mode,
   players,
   groups,
@@ -137,7 +137,11 @@ export default function CompareSelectionCard({
                   key={item.id}
                   onPress={() => {
                     if (limitReached) return;
-                    isPlayers ? onTogglePlayer(item.id) : onToggleGroup(item.id);
+                    if (isPlayers) {
+                        onTogglePlayer(item.id);
+                      } else {
+                        onToggleGroup(item.id);
+                      }
                   }}
                   style={[
                     styles.selectRow,
@@ -203,7 +207,11 @@ export default function CompareSelectionCard({
                   key={index}
                   onPress={() => {
                     if (!id) return;
-                    isPlayers ? onTogglePlayer(id) : onToggleGroup(id);
+                    if (isPlayers) {
+                        onTogglePlayer(id);
+                      } else {
+                        onToggleGroup(id);
+                      }
                   }}
                   style={[styles.slotCard, item ? styles.slotCardFilled : styles.slotCardEmpty]}
                 >

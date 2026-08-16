@@ -43,6 +43,7 @@ import { sanitizeHeadToHeadSelection } from '@/utils/headToHeadMission';
 import { toNumber } from '@/utils/numbers';
 import { formatDuration } from '@/utils/turnPace';
 import { remove } from '@/utils/storage/storage';
+import type { StoredPlayerTotals } from '@/utils/storage/storageKeys';
 import {
   commitFeedback,
   selectionFeedback,
@@ -211,10 +212,10 @@ export default function Game() {
     [players, currentPlayer?.id]
   );
 
-  const totals = useMemo(() => buildTotals(rounds as any, players as any), [rounds, players]);
+  const totals = useMemo(() => buildTotals(rounds, players), [rounds, players]);
 
   const leaderboardEntries = useMemo(
-    () => getLeaderboard(totals as any, players as any, rounds as any),
+    () => getLeaderboard(totals, players, rounds),
     [totals, players, rounds]
   );
   const headToHeadMissionSummary = useMemo<HeadToHeadMissionSummary | null>(() => {
@@ -335,7 +336,7 @@ export default function Game() {
     patch: Partial<{
       current: Partial<CurrentTurnStats>;
       rounds: StoredRound[];
-      totals: Record<string, unknown>;
+      totals: Record<string, StoredPlayerTotals>;
       turnIndex: number;
       roundCount: number;
       selectedWinnerId: string | null;
@@ -349,7 +350,7 @@ export default function Game() {
     const nextGameplay = {
       turnIndex: patch.turnIndex ?? activeGame.turnIndex,
       rounds: patch.rounds ?? rounds,
-      totals: (patch.totals ?? totals) as any,
+      totals: patch.totals ?? totals,
       current: {
         ...current,
         ...(patch.current ?? {}),
@@ -593,8 +594,8 @@ export default function Game() {
     preBaseSnapshotRef.current = null;
   }
 
-  function validateNoNegativeTotalPrestige(candidateRounds: any[]) {
-    return buildTotals(candidateRounds as any, players as any);
+  function validateNoNegativeTotalPrestige(candidateRounds: StoredRound[]) {
+    return buildTotals(candidateRounds, players);
   }
 
   function toggleStayAtBase() {

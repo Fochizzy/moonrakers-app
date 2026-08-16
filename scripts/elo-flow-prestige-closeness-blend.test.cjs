@@ -170,7 +170,7 @@ assert.match(
 
 assert.match(
   migrationSource,
-  /flow_norm     := coalesce\(game_rec\.flow_scores\[i\], end_norm\);/,
+  /flow_norm {5}:= coalesce\(game_rec\.flow_scores\[i\], end_norm\);/,
   "expected games without round rows to fall back to the end-score standing",
 );
 

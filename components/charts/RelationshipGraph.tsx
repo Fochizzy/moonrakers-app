@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -436,25 +436,6 @@ function getAssistLabelWidth(text: string) {
   return Math.max(48, Math.ceil(text.length * 7.2));
 }
 
-function UnderlineOption({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity style={styles.underlineButton} onPress={onPress} activeOpacity={0.9}>
-      <Text style={[styles.underlineText, active && styles.underlineTextActive]}>
-        {label}
-      </Text>
-      <View style={[styles.underlineLine, active && styles.underlineLineActive]} />
-    </TouchableOpacity>
-  );
-}
-
 function normalizeRelationships(
   input: Relationships | RelationshipEdge[] | undefined
 ): Relationships {
@@ -691,7 +672,7 @@ export default function RelationshipGraph({
   subtitle,
   showHeader = true,
   showReadoutCards = true,
-  showAssistMetricControl = true,
+  showAssistMetricControl: _showAssistMetricControl = true,
 }: Props) {
   const resolvedMode = initialView ?? mode;
 

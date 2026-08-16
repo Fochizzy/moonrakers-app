@@ -45,7 +45,6 @@ import {
 
 import type {
   SelectionPoint,
-  SparkDatum,
   SparkMetricOption,
   SparklineProps,
 } from "./sparklineTypes";
@@ -151,7 +150,7 @@ function Sparkline({
   selectedIndex,
   defaultSelectedIndex,
   onSelectIndex,
-  valueFormatter = defaultValueFormatter,
+  valueFormatter: _valueFormatter = defaultValueFormatter,
   compactValueFormatter = defaultCompactValueFormatter,
   percentFormatter = defaultPercentFormatter,
   selectionFormatter = defaultSelectionFormatter,
@@ -489,8 +488,6 @@ function Sparkline({
     activeSelectedIndex != null
       ? comparisonGeometry.points[activeSelectedIndex] ?? null
       : null;
-  const primaryPeakValue = metrics?.max ?? selectedPoint?.value ?? 0;
-  const deltaFromStart = metrics?.changeFromStart ?? 0;
   const comparisonGap =
     selectedPoint && selectedComparisonPoint
       ? selectedPoint.value - selectedComparisonPoint.value

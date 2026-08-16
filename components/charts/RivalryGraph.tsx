@@ -593,9 +593,6 @@ export default function RivalryGraph({
   const playerAName = playerA?.name ?? "Player A";
   const playerAColor = getPlayerColor(playerA?.color, 0);
   const playerBName = playerB?.name ?? selected?.opponentName ?? "Player B";
-  const playerBColor = playerB?.color
-    ? getPlayerColor(playerB.color, 1)
-    : selected?.opponentColor ?? getPlayerColor(undefined, 1);
 
   const noDirectMatchup =
     !!selectedPlayerBId &&

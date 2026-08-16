@@ -1,4 +1,4 @@
-import type { NormalizedGame, PlayerTotals } from "../../../utils/charts";
+import type { NormalizedGame, PlayerTotals } from "@/utils/charts";
 
 export type AssistNetworkImpactCard = {
   label: "Total Prestige" | "Winning" | "Efficiency";

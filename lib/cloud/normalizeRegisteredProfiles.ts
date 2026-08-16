@@ -1,4 +1,4 @@
-import type { Game } from "../../store/useStore";
+import type { Game } from "@/store/useStore";
 
 type RawRegisteredProfile = {
   id?: unknown;

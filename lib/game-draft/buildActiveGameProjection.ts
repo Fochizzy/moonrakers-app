@@ -1,4 +1,4 @@
-import type { ActiveGame } from "../../store/useStore.ts";
+import type { ActiveGame } from "@/store/useStore.ts";
 
 import { isGameplayDraftPhase } from "./phase.ts";
 import type { GameDraft } from "./types.ts";

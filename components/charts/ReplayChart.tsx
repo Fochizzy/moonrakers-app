@@ -8,7 +8,6 @@ import useReplayAnalytics, {
   type ReplayPlayer,
   type ReplayPoint,
 } from "./useReplayAnalytics";
-import { getChartMetricValue } from "@/utils/chartMetricValue";
 
 type SnapshotValue =
   | number
@@ -41,36 +40,8 @@ const COLORS = {
   border: "rgba(255,255,255,0.08)",
 };
 
-function getSnapshotEntry(point: ReplayPoint | undefined, playerId: string): unknown {
-  const snapshot = point?.snapshot;
-  if (!snapshot || typeof snapshot !== "object") return undefined;
-
-  const direct = (snapshot as Record<string, unknown>)[playerId];
-  if (direct != null) return direct;
-
-  const nestedPlayers = (snapshot as Record<string, unknown>).players;
-  if (nestedPlayers && typeof nestedPlayers === "object" && !Array.isArray(nestedPlayers)) {
-    return (nestedPlayers as Record<string, unknown>)[playerId];
-  }
-
-  return undefined;
-}
-
 function buildRounds(replay: ReplayPoint[]) {
   return replay.map((point, index) => point.label ?? `Round ${point.round ?? index + 1}`);
-}
-
-function buildSeries(
-  replay: ReplayPoint[],
-  players: ReplayPlayer[],
-  statKey: ReplayMetricKey
-) {
-  return players.map((player, index) => ({
-    id: player.id,
-    label: player.name || "Unknown",
-    color: player.color ?? ["#A855F7", "#3B82F6", "#22C55E", "#3B82F6"][index % 4],
-    values: replay.map((point) => getChartMetricValue(getSnapshotEntry(point, player.id), statKey)),
-  }));
 }
 
 export default function ReplayChart({
@@ -88,11 +59,6 @@ export default function ReplayChart({
   const summary = analytics.summary;
 
   const rounds = useMemo(() => buildRounds(derivedReplay), [derivedReplay]);
-  const series = useMemo(
-    () => buildSeries(derivedReplay, safePlayers, statKey),
-    [derivedReplay, safePlayers, statKey]
-  );
-
   const proofCards = useMemo(
     () => [
       { label: "Rounds", value: String(rounds.length) },

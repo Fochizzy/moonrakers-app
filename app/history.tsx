@@ -669,7 +669,7 @@ export default function HistoryScreen() {
                       if (!normalizedGameId) return;
                       gameRowRefs.current[normalizedGameId] = node;
                     }}
-                    onLayout={(event) => {
+                    onLayout={(_event) => {
                       if (!normalizedGameId) return;
                       if (normalizedGameId === focusedGameId) {
                         setFocusedLayoutVersion((current) => current + 1);

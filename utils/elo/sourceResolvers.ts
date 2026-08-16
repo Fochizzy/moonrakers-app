@@ -51,12 +51,6 @@ export function getGameTimestamp(game: AnyGame): number {
 }
 
 export function getGameParticipants(game: AnyGame): AnyParticipant[] {
-  const direct =
-    toArray(game?.players)
-      || toArray(game?.playerStats)
-      || toArray(game?.results)
-      || toArray(game?.participants);
-
   if (Array.isArray(game?.players) && game.players.length) return game.players;
   if (Array.isArray(game?.playerStats) && game.playerStats.length) return game.playerStats;
   if (Array.isArray(game?.results) && game.results.length) return game.results;

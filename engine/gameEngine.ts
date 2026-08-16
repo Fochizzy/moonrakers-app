@@ -1,4 +1,4 @@
-import { isPlayableTurnMetaType } from "../utils/headToHeadMission";
+import { isPlayableTurnMetaType } from "@/utils/headToHeadMission";
 
 export type PlayerLike = {
   id: string;

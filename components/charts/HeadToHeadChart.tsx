@@ -54,10 +54,6 @@ function totalPrestige(row?: Record<string, number>) {
   );
 }
 
-function totalScore(row?: Record<string, number>) {
-  return n(row?.score) || totalPrestige(row);
-}
-
 function signed(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
 }

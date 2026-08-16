@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { supabase } from "@/lib/supabase";
 import { normalizeCloudSnapshot } from "./normalizeCloudSnapshot";
 import { isDeletedAtColumnMissingError } from "./profileSoftDeleteCompat";
 

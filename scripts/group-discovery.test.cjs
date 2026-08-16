@@ -60,7 +60,7 @@ const {
 
 assert.match(
   helperSource,
-  /export\s+type\s+GroupSortMode\s*=\s*\"most-played\"\s*\|\s*\"recent\"\s*\|\s*\"az\"/,
+  /export\s+type\s+GroupSortMode\s*=\s*"most-played"\s*\|\s*"recent"\s*\|\s*"az"/,
   "expected utils/groupUsageRanking.ts to export GroupSortMode with the saved-group sort modes"
 );
 
@@ -164,6 +164,7 @@ assert.match(
   );
   assert.doesNotMatch(
     hint,
+    // eslint-disable-next-line no-control-regex -- deliberately matches the full ASCII range
     /[^\x00-\x7F]/,
     "expected formatGroupUsageHint output to avoid non-ASCII separators"
   );
@@ -204,13 +205,13 @@ assert.match(
 
 assert.match(
   addPlayersSource,
-  /const\s+\[\s*groupSortMode\s*,\s*setGroupSortMode\s*\]\s*=\s*useState<[^>]*>\s*\(\s*\"most-played\"\s*\)/,
+  /const\s+\[\s*groupSortMode\s*,\s*setGroupSortMode\s*\]\s*=\s*useState<[^>]*>\s*\(\s*"most-played"\s*\)/,
   "expected app/add-players.tsx to define groupSortMode state defaulting to \"most-played\""
 );
 
 assert.match(
   addPlayersSource,
-  /placeholder=\"Search groups\"/,
+  /placeholder="Search groups"/,
   "expected app/add-players.tsx to render placeholder=\"Search groups\""
 );
 

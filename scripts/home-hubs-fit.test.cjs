@@ -17,13 +17,6 @@ function expectNotIncludes(source, pattern, label) {
   }
 }
 
-function expectCount(source, pattern, expectedCount, label) {
-  const actualCount = source.split(pattern).length - 1;
-  if (actualCount !== expectedCount) {
-    throw new Error(`Expected ${expectedCount} ${label}, found ${actualCount}: ${pattern}`);
-  }
-}
-
 function run(name, fn) {
   try {
     fn();

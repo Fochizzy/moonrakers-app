@@ -1,15 +1,15 @@
 
 import { create } from 'zustand';
-import { buildActiveGameProjection } from '../lib/game-draft/buildActiveGameProjection.ts';
-import { createUuid } from '../lib/ids/uuid.ts';
+import { buildActiveGameProjection } from '@/lib/game-draft/buildActiveGameProjection.ts';
+import { createUuid } from '@/lib/ids/uuid.ts';
 import {
   isGameplayDraftPhase,
-} from '../lib/game-draft/phase.ts';
+} from '@/lib/game-draft/phase.ts';
 import type {
   GameDraft,
   GameDraftSyncState,
-} from '../lib/game-draft/types.ts';
-import { mergeRegisteredProfileIntoPlayer } from '../utils/registeredProfilePlayer';
+} from '@/lib/game-draft/types.ts';
+import { mergeRegisteredProfileIntoPlayer } from '@/utils/registeredProfilePlayer';
 
 export type Player = {
   id: string;

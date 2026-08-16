@@ -1,6 +1,6 @@
 // Relative rather than "@/": scripts/chart-detail-provenance.test.ts runs under
 // plain node, which does not resolve the bundler alias.
-import { buildAnalyticsFreshnessPresentation } from "../../utils/analyticsFreshness.ts";
+import { buildAnalyticsFreshnessPresentation } from "@/utils/analyticsFreshness.ts";
 
 export type ChartDetailProvenanceInput = {
   hasServerPayload: boolean;

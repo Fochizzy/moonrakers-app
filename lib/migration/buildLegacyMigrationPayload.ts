@@ -1,4 +1,4 @@
-import { normalizeGameWithComputedTotals } from "../../utils/gameTotals";
+import { normalizeGameWithComputedTotals } from "@/utils/gameTotals";
 
 type LocalPlayer = {
   id: string;

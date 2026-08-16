@@ -1,6 +1,6 @@
-import type { ActiveGame } from "../../store/useStore.ts";
+import type { ActiveGame } from "@/store/useStore.ts";
 
-import { resolveStableUuid } from "../ids/uuid.ts";
+import { resolveStableUuid } from "@/lib/ids/uuid.ts";
 import type { GameDraft } from "./types.ts";
 
 // Legacy active games carry timestamp ids that Supabase will not accept as a

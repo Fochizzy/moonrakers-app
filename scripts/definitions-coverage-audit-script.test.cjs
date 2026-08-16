@@ -26,25 +26,25 @@ assert.match(
 
 assert.match(
   auditSource,
-  /app[\\\/]analytics\.tsx/,
+  /app[\\/]analytics\.tsx/,
   "expected the audit script to inspect the analytics hub surface",
 );
 
 assert.match(
   auditSource,
-  /app[\\\/]index\.tsx/,
+  /app[\\/]index\.tsx/,
   "expected the audit script to inspect the home hub surface",
 );
 
 assert.match(
   auditSource,
-  /app[\\\/]insights\.tsx/,
+  /app[\\/]insights\.tsx/,
   "expected the audit script to inspect the insights surface",
 );
 
 assert.match(
   auditSource,
-  /components[\\\/]player[\\\/]MoonrakersIntelSection\.tsx/,
+  /components[\\/]player[\\/]MoonrakersIntelSection\.tsx/,
   "expected the audit script to inspect Moonrakers Intel narrative copy",
 );
 

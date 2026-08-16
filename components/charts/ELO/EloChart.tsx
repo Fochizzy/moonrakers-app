@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 
 import Text from "@/components/ui/Text";
 import { buildEloSnapshots } from "@/utils/elo";
-import { CHART_COLORS } from "../chartVisualSystem";
+import { CHART_COLORS } from "@/components/charts/chartVisualSystem";
 import EloChartPlot from "./EloChartPlot";
 import {
   buildEloChartState,
