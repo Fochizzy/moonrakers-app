@@ -800,7 +800,7 @@ export default function RelationshipGraph({
     : "Tap a node to inspect how much it gives, receives, and dominates the current network.";
   const focusAccent = selectedNode
     ? selectedNode.colorValue
-    : normalizeColor(insight.hub?.player.color, 0);
+    : normalizeColor(insight.hub?.player.color ?? undefined, 0);
 
   return (
     <View style={styles.wrap}>

@@ -423,7 +423,7 @@ function CorrelationCard({
 
       <View style={styles.metricFooter}>
         <Text style={styles.metricFooterText}>
-          Magnitude: {Math.abs(value).toFixed(2)}
+          Magnitude: {Math.abs(value ?? 0).toFixed(2)}
         </Text>
       </View>
     </View>

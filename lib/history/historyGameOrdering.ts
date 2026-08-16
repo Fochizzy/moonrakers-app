@@ -1,6 +1,6 @@
 export type HistoryGameLike = {
   id?: string;
-  createdAt?: number;
+  createdAt?: number | null;
   winnerId?: string;
   selectedWinnerId?: string;
   manualWinnerId?: string;

@@ -79,6 +79,10 @@ function CroppedHubIcon({
   iconKey: ReturnType<typeof getAnalyticsHubCards>[number]["iconKey"];
   accent: string;
 }) {
+  if (!iconKey) {
+    return null;
+  }
+
   return (
     <View style={[styles.iconShell, { borderColor: `${accent}44` }]}>
       <View style={styles.iconPreviewFrame}>

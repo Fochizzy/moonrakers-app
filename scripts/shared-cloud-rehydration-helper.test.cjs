@@ -25,7 +25,7 @@ assert.match(
 
 assert.match(
   helperSource,
-  /loadRegisteredProfiles\(\)\.catch\(\(\) => \[\]\)/,
+  /loadRegisteredProfiles\(\)\.catch\([\s\S]{0,120}=> \[\],?\s*\)/,
   "expected the helper to merge registered profiles defensively",
 );
 

@@ -1754,6 +1754,8 @@ export function buildUnifiedSnapshots(
 export function buildReplaySnapshotsFromGame(
   game?: NormalizedGame | null
 ): SnapshotPoint[] {
+  if (!game) return [];
+
   const replayRounds =
     Array.isArray(game?.rounds) && game.rounds.length > 0
       ? game.rounds

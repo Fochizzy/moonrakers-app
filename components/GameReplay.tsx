@@ -271,6 +271,11 @@ export default function GameReplay({
     );
   }
 
+  if (!current) {
+    // Unreachable: hasTimeline guarantees an element, but TS cannot see it.
+    return null;
+  }
+
   return (
     <ChartShell
       title="Game Replay"

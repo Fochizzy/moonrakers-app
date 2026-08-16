@@ -19,6 +19,6 @@ export function isGameplayDraftPhase(phase: GameDraftPhase) {
   return phase === "in_progress" || phase === "ready_to_finish";
 }
 
-export function canResumeDraft(draft: GameDraft | null) {
+export function canResumeDraft(draft: GameDraft | null): draft is GameDraft {
   return Boolean(draft && isGameplayDraftPhase(draft.phase));
 }

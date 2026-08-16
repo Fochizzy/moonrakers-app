@@ -28,7 +28,7 @@ assert.match(
 
 assert.match(
   bootstrapSource,
-  /if\s*\(\s*sharedCloudChannelRef\.current\s*&&\s*sharedCloudChannelUserIdRef\.current === sharedCloudUserId\s*\)\s*\{\s*return;/,
+  /if\s*\(\s*sharedCloudChannelRef\.current\s*&&\s*sharedCloudChannelUserIdRef\.current === sharedCloudUserId\s*\)\s*\{\s*return( undefined)?;/,
   "expected shared-cloud realtime setup to skip re-subscribing when the same user channel is already active",
 );
 

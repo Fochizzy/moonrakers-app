@@ -1,4 +1,9 @@
-import type { GameDraft, GameDraftGameplay, GameDraftPhase } from "@/lib/game-draft/types";
+import type {
+  GameDraft,
+  GameDraftGameplay,
+  GameDraftPhase,
+  GameDraftPlayerSnapshot,
+} from "@/lib/game-draft/types";
 
 type GameDraftRow = {
   profile_id?: string | null;
@@ -108,7 +113,7 @@ export function normalizeGameDraftRow(row: GameDraftRow | null): GameDraft | nul
 
   const playerSnapshots = Array.isArray(payload.playerSnapshots)
     ? payload.playerSnapshots
-        .map((snapshot) => {
+        .map((snapshot): GameDraftPlayerSnapshot | null => {
           if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
             return null;
           }
@@ -133,7 +138,9 @@ export function normalizeGameDraftRow(row: GameDraftRow | null): GameDraft | nul
                 : null,
           };
         })
-        .filter(Boolean)
+        .filter(
+          (snapshot): snapshot is GameDraftPlayerSnapshot => Boolean(snapshot),
+        )
     : [];
 
   return {

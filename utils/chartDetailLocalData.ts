@@ -615,7 +615,7 @@ export function buildLocalChartDetailState(
   const radarComparison = radarComparisons[0]?.stats ?? null;
   const hasRadarData =
     chartKey === "radar" &&
-    Boolean(selectedPlayer) &&
+    selectedPlayer != null &&
     scopedGames.some((game) => Boolean(game?.totals?.[selectedPlayer.id]));
   const sparklineValues = selectedPlayer
     ? buildSparkSeries(

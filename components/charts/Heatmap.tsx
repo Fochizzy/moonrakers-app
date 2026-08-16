@@ -10,7 +10,11 @@ import ChartFocusCard from "./ChartFocusCard";
 import ChartStage from "./ChartStage";
 import ChartUnderlineTabs from "./ChartUnderlineTabs";
 import HeatmapGrid from "./HeatmapGrid";
-import type { HeatmapMode, MatrixRow, SelectedCell } from "./heatmapUtils";
+import type { HeatmapMode, MatrixRow, MatrixSummary, SelectedCell } from "./heatmapUtils";
+
+// Rows built by this screen always carry a summary; the optionality on
+// MatrixRow exists for server-resolved grid rows.
+type SummarizedMatrixRow = MatrixRow & { summary: MatrixSummary };
 
 type SortMode =
   | "default"
@@ -299,7 +303,7 @@ function buildSub(metricKey: string, mode: HeatmapMode) {
   return `${metric.label} · ${mode === "raw" ? "Raw values" : titleCase(mode)}`;
 }
 
-function sortRows(rows: MatrixRow[], sortMode: SortMode) {
+function sortRows(rows: SummarizedMatrixRow[], sortMode: SortMode) {
   const cloned = [...rows];
 
   switch (sortMode) {
@@ -325,7 +329,7 @@ function buildMatrixRow(
   metricKey: string,
   mode: HeatmapMode,
   playerIndex: number
-): MatrixRow {
+): SummarizedMatrixRow {
   const rawValues = points.map((point) =>
     resolveMetricValue(point.snapshot?.[player.id], metricKey, point, player.id)
   );

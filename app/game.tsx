@@ -667,7 +667,7 @@ export default function Game() {
 
   function saveRoundAndAdvance() {
     try {
-      if (!canSubmitTurn) {
+      if (!canSubmitTurn || !activeGame || !activeTurnPlayer) {
         warningFeedback();
         Alert.alert('Invalid turn', 'Please fix the turn inputs first.');
         return;
@@ -729,7 +729,7 @@ export default function Game() {
   }
 
   function undoLastTurn() {
-    if (editingRoundId) {
+    if (editingRoundId || !activeGame) {
       return;
     }
 

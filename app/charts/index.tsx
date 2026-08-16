@@ -1978,7 +1978,7 @@ export default function ChartsIndexScreen() {
                 <EmptyStateCard message="Loading chart setup options..." />
               ) : showSetupErrorCard ? (
                 <EmptyStateCard
-                  message={setupError}
+                  message={setupError ?? "Chart setup failed to load."}
                   hint="Check your connection or try switching to a different chart."
                 />
               ) : (

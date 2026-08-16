@@ -50,7 +50,9 @@ type MetricRow = {
   value: number;
 };
 
-function playerName(player?: SimplePlayer | null) {
+function playerName(
+  player?: { id?: string; name?: string | null } | null,
+) {
   return String(player?.name || "Unknown").trim() || "Unknown";
 }
 
