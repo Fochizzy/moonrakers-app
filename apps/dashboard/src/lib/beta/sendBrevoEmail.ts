@@ -28,6 +28,12 @@ export type SendResult =
 export function readBrevoConfig(
   env: Record<string, string | undefined>,
 ): BrevoConfig | null {
+  // BREVO_API_KEY must be a v3 API key from Brevo's "API keys" tab — the value
+  // starting `xkeysib-`. The SMTP credential (`xsmtpsib-`) is a different
+  // secret for a different protocol; this endpoint answers it with
+  // 401 {"message":"Key not found"}, which reads like a revoked key rather
+  // than the wrong kind of key. Revoking the SMTP credential in Brevo does not
+  // affect this one, and vice versa.
   const apiKey = env.BREVO_API_KEY?.trim();
   if (!apiKey) {
     return null;
