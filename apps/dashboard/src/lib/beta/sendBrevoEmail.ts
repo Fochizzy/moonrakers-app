@@ -45,10 +45,12 @@ export function readBrevoConfig(
     // with "sender not valid" — add it under Senders before deploying a change
     // to this value.
     //
-    // Deliverability note: `moonrakersapp.org` is not yet authenticated in
-    // Brevo, so mail from here is signed with Brevo's shared "Default" DKIM key
-    // rather than one aligned to the From domain. Authenticating the domain in
-    // Brevo fixes that without touching this code.
+    // Deliverability: `moonrakersapp.org` is authenticated. DKIM is published
+    // as CNAMEs at `brevo1._domainkey` and `brevo2._domainkey` (Brevo uses two
+    // selectors, not the single `brevo._domainkey` you might go looking for),
+    // so signatures carry `d=moonrakersapp.org` and align with this From
+    // address. SPF lists Brevo alongside IONOS, and DMARC is published at
+    // p=none. Nothing here needs the `auth.` subdomain any more.
     fromEmail: env.BETA_FROM_EMAIL?.trim() || "info@moonrakersapp.org",
     fromName: env.BETA_FROM_NAME?.trim() || "Moonrakers Command",
     replyTo: env.BETA_REPLY_TO?.trim() || "info@moonrakersapp.org",
