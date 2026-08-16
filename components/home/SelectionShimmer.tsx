@@ -13,7 +13,7 @@ export function SelectionShimmer({
   useEffect(() => {
     if (!visible) {
       translate.setValue(-220);
-      return;
+      return undefined;
     }
 
     const loop = Animated.loop(

@@ -47,7 +47,7 @@ export function useLiveAnalyticsQuery<TPayload>({
   useEffect(() => {
     if (!enabled) {
       setState(createLiveAnalyticsQueryState<TPayload>(queryKey));
-      return;
+      return undefined;
     }
 
     let cancelled = false;

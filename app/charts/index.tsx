@@ -663,11 +663,11 @@ export default function ChartsIndexScreen() {
       supabaseSetupFallbackLoading ||
       supabaseSetupFallbackPlayers.length > 0
     ) {
-      return;
+      return undefined;
     }
 
     if (setupPayload && !setupError && !setupNeedsSupplement) {
-      return;
+      return undefined;
     }
 
     let cancelled = false;
@@ -1474,7 +1474,7 @@ export default function ChartsIndexScreen() {
   }, [selectedOpponentId, selectedPlayerId]);
 
   useEffect(() => {
-    if (!setupOpen) return;
+    if (!setupOpen) return undefined;
 
     const backSubscription = BackHandler.addEventListener(
       "hardwareBackPress",

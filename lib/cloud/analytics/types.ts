@@ -418,7 +418,7 @@ export async function getDefaultAnalyticsRpcClient(): Promise<AnalyticsRpcClient
   const { supabase } = await import("../../supabase.ts");
 
   return {
-    async rpc<TPayload>(name, args) {
+    async rpc<TPayload>(name: string, args: Record<string, unknown>) {
       const result = await supabase.rpc(name as never, args as never);
       return result as AnalyticsRpcResult<TPayload>;
     },

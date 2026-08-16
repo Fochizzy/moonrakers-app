@@ -473,7 +473,9 @@ export default function StatsScreen() {
         label: "Start tracked game",
         onPress: () => router.push(buildHomeRoute("game")),
       },
-      secondaryAction: null,
+      secondaryAction: null as
+        | { label: string; variant?: "secondary"; onPress: () => void }
+        | null,
       tone: "warning" as const,
     },
     "player-empty": {

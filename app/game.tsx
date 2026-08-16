@@ -320,7 +320,7 @@ export default function Game() {
   useEffect(() => {
     if (!gameStartedAt) {
       setElapsedLabel(null);
-      return;
+      return undefined;
     }
 
     const update = () =>

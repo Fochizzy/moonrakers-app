@@ -170,7 +170,7 @@ function AppNavigator() {
   }, [authBootstrapStatus, authSession, authProfile, clearAuthState, hydrateAuthBootstrap, setPlayers, setGroups, setGames]);
 
   useEffect(() => {
-    if (authBootstrapStatus !== "ready") return;
+    if (authBootstrapStatus !== "ready") return undefined;
     let active = true;
     loadRegisteredProfiles().then((profiles) => {
       if (!active) return;

@@ -298,7 +298,7 @@ function inferTurnsForPlayer(game: any, rawPlayerId: string, canonicalPlayerId: 
   if (totalsTurns > 0) return totalsTurns;
 
   const rounds = Array.isArray(game?.rounds) ? game.rounds : [];
-  const roundTurns = rounds.filter((round) => {
+  const roundTurns = rounds.filter((round: Record<string, unknown>) => {
     const roundPlayerId = String(round?.playerId ?? "").trim();
     return roundPlayerId === canonicalPlayerId || roundPlayerId === rawPlayerId;
   }).length;

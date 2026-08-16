@@ -14,7 +14,7 @@ export type LineSeriesIdentity = {
   collisionBadgeText: string | null;
 };
 
-const COLLISION_DASH_PATTERNS = [
+const COLLISION_DASH_PATTERNS: readonly (string | null)[] = [
   null,
   "10 7",
   "3 6",

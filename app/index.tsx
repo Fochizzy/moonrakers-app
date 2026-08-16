@@ -405,7 +405,7 @@ export default function HomeScreen() {
       startGlowScale.stopAnimation();
       startGlowOpacity.setValue(0);
       startGlowScale.setValue(0.98);
-      return;
+      return undefined;
     }
 
     const loop = Animated.loop(

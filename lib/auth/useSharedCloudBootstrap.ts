@@ -180,7 +180,7 @@ export function useSharedCloudBootstrap() {
 
   useEffect(() => {
     if (authBootstrapStatus !== "ready" || !sharedCloudUserId || !authProfile?.player_name) {
-      return;
+      return undefined;
     }
 
     let active = true;
@@ -191,7 +191,7 @@ export function useSharedCloudBootstrap() {
     const refreshSession = {
       user: {
         id: sharedCloudUserId,
-        email: null,
+        email: null as string | null,
       },
     };
 
@@ -228,7 +228,7 @@ export function useSharedCloudBootstrap() {
       sharedCloudChannelRef.current &&
       sharedCloudChannelUserIdRef.current === sharedCloudUserId
     ) {
-      return;
+      return undefined;
     }
 
     async function attachSharedCloudChannel() {

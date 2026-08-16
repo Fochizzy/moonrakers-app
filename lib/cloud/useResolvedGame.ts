@@ -48,7 +48,7 @@ export function useResolvedGame<T = unknown>(gameId: unknown): ResolvedGame<T> {
 
   useEffect(() => {
     if (!shouldLoadFromCloud || cloudStatus !== "idle") {
-      return;
+      return undefined;
     }
 
     let cancelled = false;

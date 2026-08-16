@@ -633,7 +633,7 @@ export default function ChartKeyScreen() {
       cloudFallbackAttempted ||
       cloudFallbackLoading
     ) {
-      return;
+      return undefined;
     }
 
     let cancelled = false;

@@ -38,8 +38,8 @@ const EMPTY_CURRENT_STATE = {
   assistRecipients: {},
   assistPrestigeRecipients: {},
   objectiveCount: 0,
-  headToHeadFirstPlaceId: null,
-  headToHeadSecondPlaceId: null,
+  headToHeadFirstPlaceId: null as string | null,
+  headToHeadSecondPlaceId: null as string | null,
 } as const;
 
 type MissionPlayer = {

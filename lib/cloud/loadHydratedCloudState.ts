@@ -12,7 +12,9 @@ export async function loadHydratedCloudState(session: AuthSession) {
 
   const [snapshot, registeredProfiles] = await Promise.all([
     loadCloudSnapshot(profileId),
-    loadRegisteredProfiles().catch(() => []),
+    loadRegisteredProfiles().catch(
+      (): Awaited<ReturnType<typeof loadRegisteredProfiles>> => [],
+    ),
   ]);
 
   const statsSnapshot = await loadStatsSnapshot({

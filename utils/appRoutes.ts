@@ -129,12 +129,17 @@ export function buildGameTrendsRoute(gameId: string) {
   } as const;
 }
 
-export function buildDefinitionsRoute(metric: string);
+type DefinitionsRoute = {
+  pathname: typeof APP_ROUTES.definitions;
+  params: Record<string, string>;
+};
+
+export function buildDefinitionsRoute(metric: string): DefinitionsRoute;
 export function buildDefinitionsRoute(input: {
   metric?: string | null;
   category?: string | null;
   sourceLabel?: string | null;
-});
+}): DefinitionsRoute;
 export function buildDefinitionsRoute(
   input:
     | string

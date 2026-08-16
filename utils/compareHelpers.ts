@@ -734,7 +734,8 @@ export function buildGlobalTurnOrderInsight(games: any[]) {
   return {
     correlation: corr,
     samples: xs.length,
-    seatLines: [],
+    // Shape matches CompareTelemetryRow's TelemetryInsight.seatLines.
+    seatLines: [] as Array<{ label?: string; value?: number }>,
     summary:
       corr > 0.15
         ? 'Later seats trend better'
