@@ -257,7 +257,7 @@ function DatasetStat({
 
 export default function ChartKeyScreen() {
   const router = useRouter();
-  const authSession = useStore((state: any) => state.authSession);
+  const authSession = useStore((state) => state.authSession);
   const storePlayers = usePlayers();
   const storeGames = useGames();
   const params = useLocalSearchParams<{
@@ -353,8 +353,8 @@ export default function ChartKeyScreen() {
   const datasetMeta = toRecord(datasetData.meta);
   const datasetPoints = toArray(datasetData.points);
   const datasetSeries = toArray(datasetData.series);
-  const serverPlayers = toArray(datasetData.players) as any[];
-  const serverGames = toArray(datasetData.games) as any[];
+  const serverPlayers = toArray(datasetData.players) as Record<string, unknown>[];
+  const serverGames = toArray(datasetData.games) as Record<string, unknown>[];
   const serverChartData = toList(datasetData.data);
   const serverReplayData = toList(datasetData.replay);
   const serverComparisonData = toList(datasetData.comparisonData);
@@ -364,13 +364,21 @@ export default function ChartKeyScreen() {
   const serverScopedPlayerIds = toStringArray(datasetData.scopedPlayerIds);
   const serverPrimaryRadar = toOptionalRecord(datasetData.primary);
   const serverComparisonRadar = toOptionalRecord(datasetData.comparison);
-  const rpcFallbackPlayers = toArray(datasetData.sourcePlayers) as any[];
-  const rpcFallbackGames = toArray(datasetData.sourceGames) as any[];
+  const rpcFallbackPlayers = (toArray(datasetData.sourcePlayers) as Record<string, unknown>[])
+    .map((raw) => ({
+      id: String(raw.id ?? "").trim(),
+      name: typeof raw.name === "string" ? raw.name : undefined,
+      color: typeof raw.color === "string" ? raw.color : undefined,
+      assignedCardArtIndex:
+        typeof raw.assignedCardArtIndex === "number" ? raw.assignedCardArtIndex : null,
+    }))
+    .filter((player) => Boolean(player.id));
+  const rpcFallbackGames = toArray(datasetData.sourceGames) as Record<string, unknown>[];
   const serverChartPlayers = serverPlayers.length ? serverPlayers : rpcFallbackPlayers;
   const serverChartGames = serverGames.length ? serverGames : rpcFallbackGames;
   const serverRelationshipEdges = toArray(
     datasetData.relationships ?? datasetData.edges,
-  ) as any[];
+  ) as Record<string, unknown>[];
   const emptyState = toRecord(dataset?.emptyState);
   const pointCount = toNumberValue(datasetMeta.pointCount, datasetPoints.length);
   const hasData = Boolean(datasetMeta.hasData) || pointCount > 0 || datasetSeries.length > 0;
@@ -668,7 +676,7 @@ export default function ChartKeyScreen() {
       return;
     }
 
-    router.setParams({ metric: normalized } as any);
+    router.setParams({ metric: normalized });
   }
 
   function renderMetricRail() {

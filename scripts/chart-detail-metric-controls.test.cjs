@@ -16,7 +16,7 @@ assert.match(
 
 assert.match(
   source,
-  /router\.setParams\(\{\s*metric:\s*normalized\s*\}\s*as any\)/,
+  /router\.setParams\(\{\s*metric:\s*normalized\s*\}\s*(as any\s*)?\)/,
   "expected chart detail metric changes to stay on the detail route by updating the metric param"
 );
 
