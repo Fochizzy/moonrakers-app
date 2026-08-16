@@ -30,7 +30,6 @@ const homeLeaderboardSource = read(
 );
 
 for (const [label, source] of [
-  ["analytics", analyticsSource],
   ["stats", statsSource],
   ["insights", insightsSource],
   ["elo", eloSource],
@@ -42,5 +41,13 @@ for (const [label, source] of [
     `expected ${label} surface to adopt the shared AnalyticsStateSection`,
   );
 }
+
+// The analytics hub is only its destination tiles now, so it has no section to
+// wrap: it reaches for the same recovery card the shared shell renders instead.
+assert.match(
+  analyticsSource,
+  /AnalyticsRecoveryCard/,
+  "expected the analytics hub to fall back to the shared recovery card for non-ready states",
+);
 
 console.log("analytics-shared-state-shell.test.cjs passed");

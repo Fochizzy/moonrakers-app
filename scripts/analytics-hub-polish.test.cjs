@@ -7,14 +7,20 @@ const source = fs.readFileSync(path.join(projectRoot, "app", "analytics.tsx"), "
 
 assert.match(
   source,
-  /<AnalyticsStateSection[\s\S]*title="Analytics Destinations"[\s\S]*style=\{styles\.directorySection\}/,
-  "expected the analytics destinations section to use a tighter route-specific section style",
+  /<View style=\{styles\.grid\}>[\s\S]*style=\{styles\.gridRow\}/,
+  "expected the analytics destinations to render as rows inside the page-filling grid",
 );
 
 assert.match(
   source,
-  /directorySection:\s*\{[\s\S]*padding:\s*14,[\s\S]*gap:\s*10,/s,
-  "expected the analytics destinations section to trim its padding and internal gap after removing the source badge pill",
+  /grid:\s*\{\s*flex:\s*1,[\s\S]*gridRow:\s*\{\s*flex:\s*1,\s*flexDirection:\s*"row",/s,
+  "expected the destination grid and its rows to split the page height between them",
+);
+
+assert.doesNotMatch(
+  source,
+  /directorySection/,
+  "expected the destinations to drop the section wrapper so the buttons are the whole page",
 );
 
 assert.match(
