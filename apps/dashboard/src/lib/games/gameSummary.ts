@@ -40,11 +40,17 @@ export type GameHighlight = {
 export type GameSummary = {
   createdAt: number;
   groupName: string | null;
+  /**
+   * False when the game saved no winner. History labels those "No winner
+   * recorded", so the summary must not crown the top-prestige player instead.
+   */
+  hasRecordedWinner: boolean;
   highlights: GameHighlight[];
   playerCount: number;
   replayRows: GameReplayRow[];
   roundCount: number;
   standings: GameStandingRow[];
+  topPrestige: number | null;
   winnerName: string | null;
 };
 
@@ -118,6 +124,7 @@ export function buildGameReplayRows(game: ArchiveGame): GameReplayRow[] {
 export function buildGameSummary(game: ArchiveGame): GameSummary {
   const standings = buildGameStandings(game);
   const topPrestige = standings[0] ?? null;
+  const recordedWinner = standings.find((row) => row.isWinner) ?? null;
   const mostContracts = pickLeader(standings, (row) => row.contracts);
   const mostAssists = pickLeader(standings, (row) => row.assists);
 
@@ -141,11 +148,12 @@ export function buildGameSummary(game: ArchiveGame): GameSummary {
         detail: mostAssists ? `${mostAssists.assists} assists` : "No data",
       },
     ],
+    hasRecordedWinner: recordedWinner !== null,
     playerCount: game.players.length,
     replayRows: buildGameReplayRows(game),
     roundCount: game.roundCount,
     standings,
-    winnerName:
-      standings.find((row) => row.isWinner)?.name ?? standings[0]?.name ?? null,
+    topPrestige: topPrestige?.totalPrestige ?? null,
+    winnerName: recordedWinner?.name ?? topPrestige?.name ?? null,
   };
 }

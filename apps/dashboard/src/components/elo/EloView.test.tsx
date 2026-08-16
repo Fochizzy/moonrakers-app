@@ -112,16 +112,87 @@ describe("EloView", () => {
     );
 
     expect(
-      screen.getByRole("option", { name: "Nova - 1150 ELO" }),
+      screen.getByRole("option", { name: "Nova — 1,150 ELO" }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("option", { name: "Vex - 1110 ELO" }),
+      screen.getAllByRole("option", { name: "Vex — 1,110 ELO" }),
     ).toHaveLength(2);
     expect(
-      screen.queryByRole("option", { name: "Nova - 1111 ELO" }),
+      screen.queryByRole("option", { name: "Nova — 1,111 ELO" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryAllByRole("option", { name: "Vex - 999 ELO" }),
+      screen.queryAllByRole("option", { name: "Vex — 999 ELO" }),
     ).toHaveLength(0);
+  });
+
+  it("rounds the summary rating instead of printing the raw payload float", () => {
+    render(
+      <EloView
+        payload={{
+          generatedAt: "2026-07-04T03:00:00.000Z",
+          sortKey: "elo",
+          playerOptions: [],
+          selectedPlayerId: "p1",
+          selectedOpponentId: null,
+          leaderboardRows: [],
+          summary: {
+            playerId: "p1",
+            name: "Nova",
+            currentElo: 1487.3333333333333,
+            peakElo: 1502.5,
+            confidence: 0.7,
+            gamesPlayed: 12,
+            wins: 8,
+            losses: 4,
+            avgDelta: 6.4,
+            bestDelta: 18,
+            worstDelta: -12,
+            recentForm: "LLLLW",
+          },
+          topCards: [],
+          sections: {},
+          insights: {},
+        }}
+      />,
+    );
+
+    expect(screen.getByText("1,487")).toBeInTheDocument();
+    expect(screen.queryByText(/1487\.33/)).not.toBeInTheDocument();
+    expect(screen.getByText("8W–4L")).toBeInTheDocument();
+  });
+
+  it("states the reading direction of the recent-form run", () => {
+    render(
+      <EloView
+        payload={{
+          generatedAt: "2026-07-04T03:00:00.000Z",
+          sortKey: "elo",
+          playerOptions: [],
+          selectedPlayerId: "p1",
+          selectedOpponentId: null,
+          leaderboardRows: [],
+          summary: {
+            playerId: "p1",
+            name: "Nova",
+            currentElo: 1150,
+            peakElo: 1180,
+            confidence: 0.7,
+            gamesPlayed: 12,
+            wins: 8,
+            losses: 4,
+            avgDelta: 6.4,
+            bestDelta: 18,
+            worstDelta: -12,
+            recentForm: "LLLLW",
+          },
+          topCards: [],
+          sections: {},
+          insights: {},
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/most recent game is highlighted/i)).toBeInTheDocument();
+    expect(screen.getByText("Last 5 games")).toBeInTheDocument();
   });
 });

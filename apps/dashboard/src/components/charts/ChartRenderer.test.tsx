@@ -17,7 +17,7 @@ describe("ChartRenderer", () => {
       />,
     );
 
-    expect(screen.getByText("Compare players")).toBeInTheDocument();
+    expect(screen.getByText("Comparison Family")).toBeInTheDocument();
   });
 
   it("renders visible labels for comparison chart axes and series using the active metric", () => {
@@ -75,11 +75,6 @@ describe("ChartRenderer", () => {
     expect(screen.getByText("Sparkline Family")).toBeInTheDocument();
     expect(screen.getByText("X: Game")).toBeInTheDocument();
     expect(screen.getByText("Y: Assist Efficiency")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Compact metric trends for the focus player, with an optional compare line over the same sample.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.queryByText("Comparison Family")).not.toBeInTheDocument();
   });
 
@@ -104,7 +99,6 @@ describe("ChartRenderer", () => {
     );
 
     expect(screen.getByText("Radar Profile")).toBeInTheDocument();
-    expect(screen.getByText("Radar")).toBeInTheDocument();
     expect(screen.queryByText("Comparison Family")).not.toBeInTheDocument();
   });
 
@@ -158,7 +152,6 @@ describe("ChartRenderer", () => {
     );
 
     expect(screen.getByText("Line History")).toBeInTheDocument();
-    expect(screen.getByText("Line Chart")).toBeInTheDocument();
     expect(screen.queryByText("Chart Family")).not.toBeInTheDocument();
   });
 
@@ -181,7 +174,6 @@ describe("ChartRenderer", () => {
     );
 
     expect(screen.getByText("Elo Trend")).toBeInTheDocument();
-    expect(screen.getByText("Elo trend")).toBeInTheDocument();
     expect(screen.queryByText("Cartesian Family")).not.toBeInTheDocument();
   });
 
@@ -204,7 +196,7 @@ describe("ChartRenderer", () => {
                 id: "fochizzy-greg",
                 from: "fochizzy",
                 to: "greg",
-                label: "Fochizzy -> GregMTG",
+                label: "Fochizzy → GregMTG",
                 weight: 4,
               },
               {
@@ -225,7 +217,7 @@ describe("ChartRenderer", () => {
     expect(screen.getByText("Fochizzy")).toBeInTheDocument();
     expect(screen.getByText("GregMTG")).toBeInTheDocument();
     expect(screen.getByText("Corey")).toBeInTheDocument();
-    expect(screen.getAllByText("Fochizzy -> GregMTG")).toHaveLength(2);
+    expect(screen.getAllByText("Fochizzy → GregMTG")).toHaveLength(2);
     expect(screen.queryByText("Network Family")).not.toBeInTheDocument();
   });
 
@@ -266,7 +258,7 @@ describe("ChartRenderer", () => {
     expect(screen.getByText("Fochizzy")).toBeInTheDocument();
     expect(screen.getByText("GregMTG")).toBeInTheDocument();
     expect(screen.getByText("Corey")).toBeInTheDocument();
-    expect(screen.getAllByText("Fochizzy -> GregMTG")).toHaveLength(2);
+    expect(screen.getAllByText("Fochizzy → GregMTG")).toHaveLength(2);
   });
 
   it("renders relationship graphs from published links arrays", () => {
@@ -308,6 +300,6 @@ describe("ChartRenderer", () => {
     expect(screen.getByText("Fochizzy")).toBeInTheDocument();
     expect(screen.getByText("GregMTG")).toBeInTheDocument();
     expect(screen.getByText("Corey")).toBeInTheDocument();
-    expect(screen.getAllByText("Fochizzy -> GregMTG")).toHaveLength(2);
+    expect(screen.getAllByText("Fochizzy → GregMTG")).toHaveLength(2);
   });
 });

@@ -231,6 +231,14 @@ function buildComparisonRows(
         label: toOptionalString(point.label) ?? `Game ${index + 1}`,
         focusValue,
         compareValue,
+        // Compare renders one row per game, so carry through what the row needs
+        // to date-stamp itself and link back to the game read.
+        gameId: toOptionalString(point.gameId) ?? null,
+        createdAt: toNumber(point.createdAt),
+        delta:
+          focusValue !== null && compareValue !== null
+            ? focusValue - compareValue
+            : null,
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);

@@ -16,6 +16,8 @@ export type HistoryRow = {
   groupName: string | null;
   id: string;
   includesSignedInPlayer: boolean;
+  /** Winner's prestige minus the runner-up's; null when no winner was saved. */
+  margin: number | null;
   ordinal: number;
   players: HistoryRowPlayer[];
   roundCount: number;
@@ -67,12 +69,22 @@ export function buildHistoryRows(
       .sort((left, right) => left.name.localeCompare(right.name));
 
     const winner = players.find((player) => player.isWinner) ?? null;
+    const runnerUpPrestige = players
+      .filter((player) => !player.isWinner)
+      .reduce(
+        (best, player) => Math.max(best, player.totalPrestige),
+        Number.NEGATIVE_INFINITY,
+      );
 
     return {
       createdAt: game.createdAt,
       groupName: game.groupName,
       id: game.id,
       includesSignedInPlayer: gameIncludesPlayer(game, signedInPlayerId),
+      margin:
+        winner && Number.isFinite(runnerUpPrestige)
+          ? winner.totalPrestige - runnerUpPrestige
+          : null,
       ordinal: index + 1,
       players,
       roundCount: game.roundCount,

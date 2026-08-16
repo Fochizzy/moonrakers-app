@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import {
@@ -17,23 +18,23 @@ export function ChartsIndexView({
 
   return (
     <section className="view-stack">
-      <SectionHeading
+      <PageHeader
+        copy="Choose a chart family by Moonrakers use case: personal reads, direct matchups, and full-table movement."
         eyebrow="Charts"
         title="Graph launch deck"
-        copy="Choose a chart family by Moonrakers use case: personal reads, direct matchups, and full-table movement."
       />
 
       {DASHBOARD_CHART_SECTIONS.map((section) => {
         const charts = getDashboardChartsForSection(section.key);
 
         return (
-          <div key={section.key} className="view-stack">
+          <DashboardPanel key={section.key} padding="normal">
             <SectionHeading
-              eyebrow="Chart Family"
-              title={section.title}
               copy={section.subtitle}
+              eyebrow="Chart family"
+              title={section.title}
             />
-            <div className="metric-grid">
+            <div className="card-grid">
               {charts.map((chart) => {
                 const routeParams = new URLSearchParams();
 
@@ -47,49 +48,18 @@ export function ChartsIndexView({
                     : `/charts/${encodeURIComponent(chart.key)}`;
 
                 return (
-                  <DashboardPanel
-                    key={chart.key}
-                    as="article"
-                    tone={section.key === "matchup" ? "accent" : "blue"}
-                    style={{ display: "grid", gap: "0.7rem" }}
-                  >
-                    <p className="section-eyebrow" style={{ margin: 0 }}>
-                      {chart.key.replace(/_/g, " ")}
-                    </p>
-                    <h3
-                      style={{
-                        margin: 0,
-                        color: "var(--text-strong)",
-                        fontSize: "1.2rem",
-                        letterSpacing: "-0.03em",
-                      }}
-                    >
-                      {chart.title}
-                    </h3>
-                    <p style={{ margin: 0, color: "var(--sub)", lineHeight: 1.65 }}>
-                      {chart.hook}
-                    </p>
-                    <Link
-                      href={routeHref}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "0.85rem 1rem",
-                        borderRadius: "1rem",
-                        border: "1px solid rgba(255, 255, 255, 0.12)",
-                        background: "rgba(255, 255, 255, 0.04)",
-                        color: "var(--text-strong)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Open {chart.title}
-                    </Link>
-                  </DashboardPanel>
+                  // The eyebrow used to print the raw catalog key, so readers
+                  // saw "efficiency failure scatter" above the real title.
+                  <Link className="tile" href={routeHref} key={chart.key}>
+                    <span className="eyebrow">{section.title}</span>
+                    <span className="tile__title">{chart.title}</span>
+                    <span className="tile__copy">{chart.hook}</span>
+                    <span className="tile__meta">{chart.detailSubtitle}</span>
+                  </Link>
                 );
               })}
             </div>
-          </div>
+          </DashboardPanel>
         );
       })}
     </section>

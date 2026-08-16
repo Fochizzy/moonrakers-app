@@ -14,10 +14,9 @@ import {
 import { getMetricOrFallback } from "../../../../../../utils/metricMap";
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import { asArray, asRecord, toNumber, toText } from "../chartUtils";
-import { ChartLabelStrip, formatChartValue } from "./ChartLabels";
+import { ChartLabelStrip, formatChartValue, formatMetricLabel } from "./ChartLabels";
 
 function buildRows(data: Record<string, unknown>) {
   const directRows = asArray(data.rows).map((entry, index) => {
@@ -44,7 +43,7 @@ function buildRows(data: Record<string, unknown>) {
 
   return keys
     .map((key) => ({
-      label: key.replace(/_/g, " "),
+      label: formatMetricLabel(key),
       focus: toNumber(primary[key]),
       compare: toNumber(comparison[key]),
     }))
@@ -52,10 +51,8 @@ function buildRows(data: Record<string, unknown>) {
 }
 
 export function ComparisonChartPanel({
-  chartKey,
   payload,
 }: {
-  chartKey: string;
   payload: {
     data: Record<string, unknown>;
     subtitle?: string;
@@ -73,21 +70,12 @@ export function ComparisonChartPanel({
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="accent">
-        <SectionHeading
-          eyebrow="Comparison Family"
-          title={payload.title ?? "Comparison chart"}
-          copy={
-            payload.subtitle ??
-            `This ${chartKey.replace(/_/g, " ")} view tracks ${metricLabel.toLowerCase()} across the shared games for the selected matchup.`
-          }
-        />
-      </DashboardPanel>
 
       {rows.length > 0 ? (
         <DashboardPanel tone="blue">
           <div style={{ display: "grid", gap: "0.9rem" }}>
             <ChartLabelStrip
+            family="Comparison Family"
               series={[
                 { color: "var(--blue)", label: focusLabel },
                 { color: "var(--accent)", label: compareLabel },
@@ -157,7 +145,7 @@ export function ComparisonChartPanel({
         <EmptyStatePanel
           eyebrow="Comparison Family"
           title="No comparison rows returned"
-          copy="This chart family is wired for compare, radar, head-to-head, and rivalry payloads once the dataset includes comparable rows."
+          copy="These players have no finished games in common yet."
         />
       )}
     </div>

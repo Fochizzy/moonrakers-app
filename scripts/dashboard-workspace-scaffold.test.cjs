@@ -85,17 +85,27 @@ assert.equal(
 const layoutText = readText(path.join("apps", "dashboard", "src", "app", "layout.tsx"));
 assert.match(layoutText, /Moonrakers Dashboard/);
 
+// The scaffold held /launchpad only until the protected home route existed.
+// Now that `(dashboard)/page.tsx` owns `/`, shipping the scaffold alongside it
+// left an unlinked, unauthenticated copy of the old preview in production.
 assert.equal(
   fs.existsSync(
     path.join(projectRoot, "apps", "dashboard", "src", "app", "launchpad", "page.tsx"),
   ),
-  true,
-  "expected the temporary scaffold page to live under /launchpad instead of /",
+  false,
+  "expected the temporary /launchpad scaffold to be removed once the real home route shipped",
 );
 assert.equal(
   fs.existsSync(path.join(projectRoot, "apps", "dashboard", "src", "app", "page.tsx")),
   false,
-  "expected the scaffold to leave the root route free for the planned protected dashboard home",
+  "expected the root route to stay inside the (dashboard) group so it keeps the auth gate",
+);
+assert.equal(
+  fs.existsSync(
+    path.join(projectRoot, "apps", "dashboard", "src", "app", "(dashboard)", "page.tsx"),
+  ),
+  true,
+  "expected the protected dashboard home to own the root route",
 );
 
 const globalsCss = readText(path.join("apps", "dashboard", "src", "app", "globals.css"));

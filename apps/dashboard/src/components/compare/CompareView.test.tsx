@@ -27,7 +27,7 @@ describe("CompareView", () => {
 
     expect(screen.getByLabelText(/focus player/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/compare player/i)).toBeInTheDocument();
-    expect(screen.getByText("Compare players")).toBeInTheDocument();
+    expect(screen.getByText("Nova vs Vex")).toBeInTheDocument();
   });
 
   it("renders compare rows from source history when the published dataset is still a placeholder", () => {
@@ -111,8 +111,69 @@ describe("CompareView", () => {
       />,
     );
 
-    expect(screen.getByText("Current side-by-side read")).toBeInTheDocument();
+    expect(screen.getByText("Shared games")).toBeInTheDocument();
     expect(screen.getByText("Game 1")).toBeInTheDocument();
     expect(screen.queryByText("No chart data yet")).not.toBeInTheDocument();
+  });
+
+  it("computes the per-game gap the published dataset never carried", () => {
+    render(
+      <CompareView
+        setup={{
+          focusPlayerOptions: [{ key: "p1", label: "Nova" }],
+          comparePlayerOptions: [{ key: "p2", label: "Vex" }],
+          defaults: { focusPlayerId: "p1", comparePlayerId: "p2" },
+        }}
+        dataset={{
+          chartKey: "compare",
+          generatedAt: "2026-07-05T00:00:00.000Z",
+          title: "Compare players",
+          subtitle: "Direct side-by-side read",
+          data: {
+            metricKey: "score",
+            meta: { hasData: true, pointCount: 2 },
+            rows: [
+              { label: "Game 1", focusValue: 47, compareValue: 21 },
+              { label: "Game 2", focusValue: 30, compareValue: 54 },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("+26")).toBeInTheDocument();
+    expect(screen.getByText("-24")).toBeInTheDocument();
+    expect(screen.queryByText(/No delta/i)).not.toBeInTheDocument();
+  });
+
+  it("leads with the head-to-head aggregate rather than eleven bare cards", () => {
+    render(
+      <CompareView
+        setup={{
+          focusPlayerOptions: [{ key: "p1", label: "Nova" }],
+          comparePlayerOptions: [{ key: "p2", label: "Vex" }],
+          defaults: { focusPlayerId: "p1", comparePlayerId: "p2" },
+        }}
+        dataset={{
+          chartKey: "compare",
+          generatedAt: "2026-07-05T00:00:00.000Z",
+          data: {
+            metricKey: "score",
+            meta: { hasData: true, pointCount: 3 },
+            rows: [
+              { label: "Game 1", focusValue: 10, compareValue: 4 },
+              { label: "Game 2", focusValue: 6, compareValue: 9 },
+              { label: "Game 3", focusValue: 8, compareValue: 2 },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Games led")).toBeInTheDocument();
+    expect(screen.getByText("2–1")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nova leads 2 of 3 shared games on score/i),
+    ).toBeInTheDocument();
   });
 });

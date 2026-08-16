@@ -4,6 +4,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { loadDashboardHome } from "@/lib/data/loadDashboardHome";
+import { formatCount } from "@/lib/formatNumber";
 import { ANALYTICS_HUB_TILES, BRIDGE_HUB_TILES } from "@/lib/hubs";
 import { readSearchParam } from "@/lib/readSearchParam";
 
@@ -22,65 +23,49 @@ export default async function AnalyticsHubPage({
       <PageHeader
         copy={`Every analytics surface in one place for ${focusProfileName}. Each lane reads from the same server-authored contract the app uses.`}
         eyebrow="Data"
+        meta={`${formatCount(payload.hero.games)} finished games · ${formatCount(payload.hero.players)} players`}
         title="Analytics hub"
       />
 
-      <div className="stat-grid">
-        <MetricCard
-          accent="var(--blue)"
-          detail="Published commanders in this analytics profile."
-          label="Tracked players"
-          value={payload.hero.players}
+      <DashboardPanel padding="normal">
+        <SectionHeading
+          copy="Pick the lane that answers your question."
+          eyebrow="Surfaces"
+          title="Analytics lanes"
         />
-        <MetricCard
-          accent="var(--gold)"
-          detail="Finished tables feeding the current readout."
-          label="Logged games"
-          value={payload.hero.games}
-        />
-        <MetricCard
-          accent="var(--accent)"
-          detail="Report lanes surfaced by this dashboard."
-          label="Analytics views"
-          value={payload.hero.views}
-        />
-      </div>
+        <HubTileGrid tiles={ANALYTICS_HUB_TILES} />
+      </DashboardPanel>
 
       {payload.cards.length > 0 ? (
         <DashboardPanel padding="normal">
-          <div>
-            <SectionHeading eyebrow="Headline" title="Current signals" />
-            <div className="stat-grid">
-              {payload.cards.map((card) => (
-                <MetricCard key={card.key} label={card.label} value={card.value} />
-              ))}
-            </div>
+          <SectionHeading
+            copy="Published straight from the analytics contract for the focused player."
+            eyebrow="Headline"
+            title="Current signals"
+          />
+          <div className="stat-grid">
+            {payload.cards.map((card) => (
+              <MetricCard
+                accent={card.accent}
+                detail={card.detail}
+                key={card.key}
+                label={card.label}
+                value={card.value}
+              />
+            ))}
           </div>
         </DashboardPanel>
       ) : null}
 
       <DashboardPanel padding="normal">
-        <div>
-          <SectionHeading
-            copy="Pick the lane that answers your question."
-            eyebrow="Surfaces"
-            title="Analytics lanes"
-          />
-          <HubTileGrid tiles={ANALYTICS_HUB_TILES} />
-        </div>
-      </DashboardPanel>
-
-      <DashboardPanel padding="normal">
-        <div>
-          <SectionHeading
-            copy="The rest of the companion surfaces."
-            eyebrow="Elsewhere"
-            title="Other destinations"
-          />
-          <HubTileGrid
-            tiles={BRIDGE_HUB_TILES.filter((tile) => tile.key !== "analytics")}
-          />
-        </div>
+        <SectionHeading
+          copy="The rest of the companion surfaces."
+          eyebrow="Elsewhere"
+          title="Other destinations"
+        />
+        <HubTileGrid
+          tiles={BRIDGE_HUB_TILES.filter((tile) => tile.key !== "analytics")}
+        />
       </DashboardPanel>
     </section>
   );

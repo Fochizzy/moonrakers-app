@@ -14,7 +14,6 @@ import {
 
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import { asArray, asRecord, extractNumericKeys, toNumber, toText } from "../chartUtils";
 import { ChartLabelStrip, formatMetricLabel } from "./ChartLabels";
@@ -86,27 +85,18 @@ export function SparklineChartPanel({
       <EmptyStatePanel
         eyebrow="Sparkline Family"
         title={payload.title ?? "No renderable sparkline rows returned"}
-        copy="This sparkline renderer expects `data.data[]` rows and can also compare them against `data.comparisonData[]`."
+        copy="This metric has no values across the selected games yet."
       />
     );
   }
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="blue">
-        <SectionHeading
-          eyebrow="Sparkline Family"
-          title={payload.title ?? "Sparkline chart"}
-          copy={
-            payload.subtitle ??
-            "Compact metric trends for the focus player, with an optional compare line over the same sample."
-          }
-        />
-      </DashboardPanel>
 
       <DashboardPanel tone="success">
         <div style={{ display: "grid", gap: "0.9rem" }}>
           <ChartLabelStrip
+            family="Sparkline Family"
             series={[
               { color: "var(--blue)", label: primaryLabel },
               { color: "var(--accent)", label: comparisonLabel },

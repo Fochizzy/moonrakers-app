@@ -29,8 +29,13 @@ const REPLAY_COLUMNS = [
 
 export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
   const accents = assignDistinctAccents(summary.standings);
-  const title =
-    summary.groupName ?? (summary.createdAt ? "Saved game" : "Completed match");
+  // History already names the result on its row; the summary said "Saved game"
+  // even though it knows exactly who won and by how much.
+  const title = summary.winnerName
+    ? summary.hasRecordedWinner
+      ? `${summary.winnerName} won with ${summary.topPrestige ?? ""}`.trim()
+      : `${summary.winnerName} led with ${summary.topPrestige ?? ""}`.trim()
+    : "No winner recorded";
 
   return (
     <section className="view-stack">
@@ -52,9 +57,12 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
           </>
         }
         copy="Final standings, per-player totals, and the full turn-by-turn replay for this saved game."
-        eyebrow="Game Summary"
+        eyebrow="Game summary"
         meta={
-          <span suppressHydrationWarning>{formatDateTime(summary.createdAt)}</span>
+          <span suppressHydrationWarning>
+            {formatDateTime(summary.createdAt)}
+            {summary.groupName ? ` · ${summary.groupName}` : ""}
+          </span>
         }
         title={title}
       />
@@ -64,7 +72,12 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
         <MetricCard label="Rounds" value={summary.roundCount} />
         <MetricCard
           accent="var(--gold)"
-          label="Winner"
+          detail={
+            summary.hasRecordedWinner
+              ? undefined
+              : "This game saved no winner, so the highest prestige is shown."
+          }
+          label={summary.hasRecordedWinner ? "Winner" : "Top prestige"}
           value={summary.winnerName ?? "—"}
         />
       </div>
@@ -129,7 +142,11 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
                   </span>
                 </div>
 
-                {row.isWinner ? <span className="chip chip--win">Winner</span> : null}
+                {row.isWinner ? (
+                  <span className="chip chip--win">Winner</span>
+                ) : !summary.hasRecordedWinner && row.rank === 1 ? (
+                  <span className="chip">Top prestige</span>
+                ) : null}
               </div>
 
               <div className="statline">
@@ -188,7 +205,7 @@ export function GameSummaryView({ gameId, summary }: GameSummaryViewProps) {
           />
         ) : (
           <div className="table-scroll">
-            <table className="data-table">
+            <table className="data-table data-table--compact">
               <thead>
                 <tr>
                   {REPLAY_COLUMNS.map((heading) => (

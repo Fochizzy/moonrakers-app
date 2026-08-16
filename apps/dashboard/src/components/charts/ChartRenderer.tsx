@@ -28,7 +28,7 @@ export function ChartRenderer({
   }
 
   if (["compare", "head_to_head", "rivalry_graph"].includes(chartKey)) {
-    return <ComparisonChartPanel chartKey={chartKey} payload={payload} />;
+    return <ComparisonChartPanel payload={payload} />;
   }
 
   if (["relationship_graph"].includes(chartKey)) {

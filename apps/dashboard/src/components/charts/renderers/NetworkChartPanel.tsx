@@ -1,6 +1,5 @@
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import {
   asArray,
@@ -18,6 +17,7 @@ type NetworkPlayer = {
 };
 
 type NetworkEdge = {
+  detail: string | null;
   from: string;
   id: string;
   label: string;
@@ -57,8 +57,15 @@ function readEdge(
   index: number,
   playerDirectory?: Map<string, NetworkPlayer>,
 ): NetworkEdge | null {
-  const from = toText(entry.from ?? entry.source ?? entry.sourceId).trim();
-  const to = toText(entry.to ?? entry.target ?? entry.targetId).trim();
+  // The published assist graph names its endpoints `fromId`/`toId`; reading
+  // only `from`/`to` dropped every server edge and left the chart empty even
+  // though the same rows render fine on Insights.
+  const from = toText(
+    entry.from ?? entry.fromId ?? entry.source ?? entry.sourceId,
+  ).trim();
+  const to = toText(
+    entry.to ?? entry.toId ?? entry.target ?? entry.targetId,
+  ).trim();
   const weight = toNumber(
     entry.weight ??
       entry.value ??
@@ -74,12 +81,20 @@ function readEdge(
 
   const fromLabel = playerDirectory?.get(from)?.name ?? from;
   const toLabel = playerDirectory?.get(to)?.name ?? to;
+  const assistCount = toNumber(entry.assistCount ?? entry.timesAssisted);
+  const assistPrestige = toNumber(entry.assistPrestige ?? entry.totalPrestige);
 
   return {
     id: toText(entry.id, `${from}-${to}-${index}`),
     from,
     to,
-    label: toText(entry.label, `${fromLabel} -> ${toLabel}`),
+    // `labelText` is deliberately not read: it arrives half-formatted
+    // ("1.1##/game"). A written `label` still wins over the composed one.
+    label: toText(entry.label) || `${fromLabel} → ${toLabel}`,
+    detail:
+      assistCount !== null && assistPrestige !== null
+        ? `${assistCount} assists · ${assistPrestige} prestige`
+        : null,
     weight,
   };
 }
@@ -116,6 +131,9 @@ function buildEdges(data: Record<string, unknown>) {
       .filter((edge): edge is NetworkEdge => edge !== null),
   );
 }
+
+/** Exposed so the endpoint-name contract can be covered by a test. */
+export const buildEdgesForTest = buildEdges;
 
 function buildPlayers(data: Record<string, unknown>, edges: NetworkEdge[]) {
   const directory = buildPlayerDirectory(data);
@@ -204,23 +222,13 @@ export function NetworkChartPanel({
       <EmptyStatePanel
         eyebrow="Assist Flow Network"
         title="No relationship edges returned"
-        copy="This renderer expects assist-network player and edge data before it can draw the relationship graph."
+        copy="No assists have been recorded between these players yet."
       />
     );
   }
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="blue">
-        <SectionHeading
-          eyebrow="Assist Flow Network"
-          title={payload.title ?? "Assist network"}
-          copy={
-            payload.subtitle ??
-            "Directed assist flow between players, weighted by the selected relationship sample."
-          }
-        />
-      </DashboardPanel>
 
       <DashboardPanel tone="success">
         <div
@@ -230,6 +238,7 @@ export function NetworkChartPanel({
           }}
         >
           <ChartLabelStrip
+            family="Assist Flow Network"
             series={[
               { color: "var(--blue)", label: "Players" },
               { color: "var(--accent)", label: "Assist Direction" },
@@ -379,7 +388,10 @@ export function NetworkChartPanel({
                     marginTop: "0.2rem",
                   }}
                 >
-                  Weight {edge.weight.toFixed(Number.isInteger(edge.weight) ? 0 : 1)}
+                  {edge.detail ??
+                    `Weight ${edge.weight.toFixed(
+                      Number.isInteger(edge.weight) ? 0 : 1,
+                    )}`}
                 </div>
               </div>
             ))}

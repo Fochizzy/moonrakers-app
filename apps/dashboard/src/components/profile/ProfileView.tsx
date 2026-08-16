@@ -1,153 +1,294 @@
 import Link from "next/link";
 import type { PlayerProfileScreenPayload } from "@moonrakers/analytics-contract";
 
+import { asArray, asRecord, toText } from "@/components/charts/chartUtils";
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { formatShortDate } from "@/lib/formatDateTime";
+import {
+  formatCount,
+  formatPercent,
+  formatRating,
+  formatRecord,
+} from "@/lib/formatNumber";
+import { assignDistinctAccents } from "@/lib/playerColor";
 
-function asRecord(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+/**
+ * The hero row already states these, so a section repeating them is noise. Any
+ * other card in a section is what makes that section worth opening.
+ */
+const HERO_LABELS = new Set([
+  "current elo",
+  "peak elo",
+  "win rate",
+  "record",
+  "rated games",
+]);
+
+function isHeroLabel(label: string) {
+  return HERO_LABELS.has(label.trim().toLowerCase());
 }
 
-function toText(value: unknown, fallback = "") {
-  return typeof value === "string" || typeof value === "number"
-    ? String(value)
-    : fallback;
+type RecentGame = {
+  finishedAt: string;
+  groupName: string;
+  id: string;
+  players: Array<{
+    color: string | null;
+    id: string;
+    isWinner: boolean;
+    name: string;
+    totalPrestige: number;
+  }>;
+  playerPrestige: number | null;
+  won: boolean;
+  winnerName: string;
+};
+
+/**
+ * `recentGames` carries the full roster for each game. The view previously
+ * rendered a placeholder sentence over the top of it.
+ */
+function toRecentGames(
+  value: unknown,
+  focusPlayerId: string,
+): RecentGame[] {
+  return asArray(value).map((entry, index) => {
+    const game = asRecord(entry);
+    const players = asArray(game.players).map((playerEntry, playerIndex) => {
+      const player = asRecord(playerEntry);
+      const id = toText(player.id ?? player.profileId, `player-${playerIndex}`);
+
+      return {
+        color: toText(player.color) || null,
+        id,
+        isWinner: player.isWinner === true,
+        name: toText(player.name, "Player"),
+        totalPrestige: Number(player.totalPrestige) || 0,
+      };
+    });
+
+    const focusPlayer = players.find((player) => player.id === focusPlayerId);
+    const winner = players.find((player) => player.isWinner);
+
+    return {
+      finishedAt: toText(game.finishedAt ?? game.createdAt),
+      groupName: toText(game.groupName),
+      id: toText(game.gameId ?? game.id, `recent-game-${index}`),
+      playerPrestige: focusPlayer ? focusPlayer.totalPrestige : null,
+      players,
+      winnerName: winner?.name ?? "",
+      won: Boolean(focusPlayer?.isWinner),
+    };
+  });
 }
 
 export function ProfileView({ payload }: { payload: PlayerProfileScreenPayload }) {
   const selectedPlayerId = payload.selectedPlayerId ?? payload.hero.id ?? "";
   const compareLabel = payload.quickActions?.compareLabel?.trim() || "Compare player";
-  const profileSections = Object.entries(payload.tabs).map(([key, section]) => ({
-    key,
-    title: section.title,
-    cards: section.cards,
-  }));
+  const heroDetails = new Map(
+    payload.topCards.map((card) => [
+      card.label.trim().toLowerCase(),
+      card.sub?.trim() || undefined,
+    ]),
+  );
+  const extraTopCards = payload.topCards.filter(
+    (card) => !isHeroLabel(card.label),
+  );
+  const profileSections = Object.entries(payload.tabs)
+    .map(([key, section]) => ({
+      cards: section.cards.filter((card) => !isHeroLabel(card.label)),
+      key,
+      title: section.title,
+    }))
+    .filter((section) => section.cards.length > 0);
+  const recentGames = toRecentGames(payload.recentGames, selectedPlayerId);
 
   return (
     <section className="view-stack">
-      <SectionHeading
-        eyebrow="Profile"
-        title={payload.hero.name}
-        copy="Player profile keeps compare as a first-class action so the signed-in dashboard can jump straight from individual intel into side-by-side analysis."
-        action={
+      <PageHeader
+        actions={
           <Link
+            className="btn btn--primary"
             href={`/compare?focusPlayerId=${encodeURIComponent(selectedPlayerId)}`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "0.85rem 1rem",
-              borderRadius: "999px",
-              border: "1px solid rgba(168, 85, 247, 0.34)",
-              background:
-                "linear-gradient(135deg, rgba(168, 85, 247, 0.18) 0%, rgba(59, 130, 246, 0.12) 100%)",
-              color: "var(--text-strong)",
-              fontWeight: 700,
-            }}
           >
             {compareLabel}
           </Link>
         }
+        copy={payload.profileInsight?.body}
+        eyebrow="Profile"
+        meta={`${formatCount(payload.hero.totalGames)} rated games · ${formatRecord(
+          payload.hero.totalWins,
+          payload.hero.totalGames - payload.hero.totalWins,
+        )}`}
+        title={payload.hero.name}
       />
 
-      <div className="metric-grid">
-        <MetricCard label="Current ELO" value={payload.hero.currentElo} accent="var(--accent)" />
-        <MetricCard label="Peak ELO" value={payload.hero.peakElo} accent="var(--blue)" />
+      <div className="stat-grid">
         <MetricCard
-          label="Win Rate"
-          value={`${Math.round(payload.hero.winRate * 100)}%`}
+          accent="var(--accent)"
+          detail={heroDetails.get("current elo")}
+          label="Current ELO"
+          value={formatRating(payload.hero.currentElo)}
+        />
+        <MetricCard
+          accent="var(--blue)"
+          detail={heroDetails.get("peak elo")}
+          label="Peak ELO"
+          value={formatRating(payload.hero.peakElo)}
+        />
+        <MetricCard
           accent="var(--gold)"
+          detail={heroDetails.get("win rate")}
+          label="Win rate"
+          value={formatPercent(payload.hero.winRate)}
+        />
+        <MetricCard
+          label="Record"
+          value={formatRecord(
+            payload.hero.totalWins,
+            payload.hero.totalGames - payload.hero.totalWins,
+          )}
         />
       </div>
 
-      {payload.topCards.length > 0 ? (
-        <div className="metric-grid">
-          {payload.topCards.map((card) => (
-            <MetricCard key={card.key} label={card.label} value={card.value} />
+      {extraTopCards.length > 0 ? (
+        <div className="stat-grid">
+          {extraTopCards.map((card) => (
+            <MetricCard
+              detail={card.sub ?? undefined}
+              key={card.key}
+              label={card.label}
+              value={card.value}
+            />
           ))}
         </div>
       ) : null}
 
-      {payload.profileInsight ? (
-        <DashboardPanel tone="accent">
+      {profileSections.map((section) => (
+        <DashboardPanel key={section.key} padding="normal">
           <SectionHeading
-            eyebrow="Profile Insight"
-            title={payload.profileInsight.title}
-            copy={payload.profileInsight.body}
+            eyebrow="Profile section"
+            title={section.title}
           />
-        </DashboardPanel>
-      ) : null}
-
-      {profileSections.length > 0 ? (
-        <div className="view-stack">
-          {profileSections.map((section) => (
-            <DashboardPanel key={section.key} tone="blue">
-              <SectionHeading
-                eyebrow="Profile section"
-                title={section.title}
-                copy={`${section.cards.length} published cards in this section.`}
+          <div className="stat-grid">
+            {section.cards.map((card) => (
+              <MetricCard
+                detail={card.sub ?? undefined}
+                key={card.key}
+                label={card.label}
+                value={card.value}
               />
-              {section.cards.length > 0 ? (
-                <div className="metric-grid" style={{ marginTop: "1rem" }}>
-                  {section.cards.map((card) => (
-                    <MetricCard key={card.key} label={card.label} value={card.value} />
-                  ))}
-                </div>
-              ) : null}
-            </DashboardPanel>
-          ))}
-        </div>
-      ) : null}
+            ))}
+          </div>
+        </DashboardPanel>
+      ))}
 
-      {payload.recentGames.length > 0 ? (
-        <div className="view-stack">
-          <SectionHeading
-            eyebrow="Recent Games"
-            title="Latest table history"
-            copy="Recent games stay directly visible on web so the profile route remains actionable instead of collapsing into a static bio."
-          />
-          <div className="metric-grid">
-            {payload.recentGames.map((entry, index) => {
-              const game = asRecord(entry);
+      <DashboardPanel padding="normal">
+        <div className="panel-head">
+          <div className="panel-head__text">
+            <p className="eyebrow" style={{ margin: 0 }}>
+              Recent games
+            </p>
+            <h2 className="panel-title">Latest table history</h2>
+          </div>
+          <Link className="btn" href="/history">
+            Full archive
+          </Link>
+        </div>
+
+        {recentGames.length > 0 ? (
+          <div className="row-list">
+            {recentGames.map((game) => {
+              const accents = assignDistinctAccents(game.players);
+              const winnerId =
+                game.players.find((player) => player.isWinner)?.id ?? null;
 
               return (
-                <DashboardPanel
-                  key={toText(game.id, `recent-game-${index}`)}
-                  as="article"
-                  tone="default"
-                  style={{ display: "grid", gap: "0.55rem" }}
+                <article
+                  className="row"
+                  key={game.id}
+                  style={
+                    {
+                      "--row-accent":
+                        (winnerId && accents[winnerId]) || "var(--border-strong)",
+                    } as React.CSSProperties
+                  }
                 >
-                  <p className="section-eyebrow" style={{ margin: 0 }}>
-                    {toText(game.result, "Game")}
-                  </p>
-                  <p
-                    style={{
-                      margin: 0,
-                      color: "var(--text-strong)",
-                      fontSize: "1.05rem",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {toText(game.label ?? game.title, `Game ${index + 1}`)}
-                  </p>
-                  <p style={{ margin: 0, color: "var(--sub)", lineHeight: 1.65 }}>
-                    {toText(game.summary ?? game.description, "Published recent-game detail.")}
-                  </p>
-                </DashboardPanel>
+                  <div className="row__head">
+                    <div className="stack-sm" style={{ minWidth: 0 }}>
+                      <span className="eyebrow" suppressHydrationWarning>
+                        {game.finishedAt
+                          ? formatShortDate(game.finishedAt)
+                          : "Saved game"}
+                        {game.groupName ? ` · ${game.groupName}` : ""}
+                      </span>
+                      <h3 className="row__title">
+                        {game.won
+                          ? `Won with ${formatCount(game.playerPrestige)}`
+                          : game.winnerName
+                            ? `${game.winnerName} won`
+                            : "No winner recorded"}
+                      </h3>
+                      {!game.won && game.playerPrestige !== null ? (
+                        <p className="row__meta">
+                          {formatCount(game.playerPrestige)} prestige ·{" "}
+                          {game.players.length} players
+                        </p>
+                      ) : (
+                        <p className="row__meta">
+                          {game.players.length} players
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="page-header__actions">
+                      <Link
+                        className="btn btn--primary"
+                        href={`/summary/${encodeURIComponent(game.id)}`}
+                      >
+                        Summary
+                      </Link>
+                      <Link
+                        className="btn"
+                        href={`/game-trends/${encodeURIComponent(game.id)}`}
+                      >
+                        Trends
+                      </Link>
+                    </div>
+                  </div>
+
+                  <div className="pill-row">
+                    {game.players.map((player) => (
+                      <span
+                        className={player.isWinner ? "chip chip--win" : "chip"}
+                        key={`${game.id}-${player.id}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="chip__dot"
+                          style={{ background: accents[player.id] }}
+                        />
+                        {player.name}
+                        <span className="chip__num">{player.totalPrestige}</span>
+                      </span>
+                    ))}
+                  </div>
+                </article>
               );
             })}
           </div>
-        </div>
-      ) : (
-        <EmptyStatePanel
-          eyebrow="Recent Games"
-          title="No recent games returned"
-          copy="The profile route is connected, but the current payload did not include recent game rows."
-        />
-      )}
+        ) : (
+          <EmptyStatePanel
+            copy="Games this player finished will appear here once they are saved to the cloud."
+            eyebrow="Recent games"
+            title="No recent games returned"
+          />
+        )}
+      </DashboardPanel>
     </section>
   );
 }

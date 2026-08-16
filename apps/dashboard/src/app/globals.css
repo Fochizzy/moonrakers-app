@@ -189,6 +189,26 @@ button:active {
   );
 }
 
+/* `blue` and `warning` used to be aliased onto the two tones above, so five
+   named tones rendered as three and the name told the reader nothing. */
+.panel--blue {
+  border-color: rgba(59, 130, 246, 0.28);
+  background: linear-gradient(
+    160deg,
+    rgba(59, 130, 246, 0.1) 0%,
+    var(--level-1) 60%
+  );
+}
+
+.panel--warning {
+  border-color: rgba(234, 179, 8, 0.28);
+  background: linear-gradient(
+    160deg,
+    rgba(234, 179, 8, 0.09) 0%,
+    var(--level-1) 60%
+  );
+}
+
 .panel-head {
   display: flex;
   align-items: baseline;
@@ -228,15 +248,6 @@ button:active {
 }
 
 .eyebrow {
-  color: var(--gold);
-  font-size: var(--t-micro);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-/* Kept for compatibility with views that still use the old class name. */
-.section-eyebrow {
   color: var(--gold);
   font-size: var(--t-micro);
   font-weight: 700;
@@ -298,13 +309,6 @@ button:active {
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: var(--s3);
-}
-
-/* Legacy alias used by the older analytics views. */
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: var(--s3);
 }
 
@@ -489,19 +493,6 @@ button:active {
 .chip__num {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-/* Legacy alias. */
-.dashboard-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.4rem 0.75rem;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--border);
-  background: var(--level-2);
-  color: var(--text-strong);
-  font-size: var(--t-sm);
-  font-weight: 700;
 }
 
 /* ---------------------------------------------------------------- lists -- */
@@ -689,6 +680,86 @@ a.tile:hover {
   font-weight: 700;
 }
 
+.data-table td.is-bad {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* Numeric replay tables were stretching single digits across the full page, so
+   the value columns stay only as wide as their contents and the label column
+   absorbs the rest. */
+.data-table--compact {
+  width: auto;
+  min-width: min(100%, 34rem);
+}
+
+.data-table--compact .col-text {
+  width: 99%;
+}
+
+.data-table--compact th,
+.data-table--compact td {
+  padding: 0.4rem 0.7rem;
+}
+
+.data-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* Intensity is carried by the cell fill, so the zebra banding and hover tint
+   would fight it. */
+.heatmap tbody tr:nth-child(even) td,
+.heatmap tbody tr:hover td {
+  background: none;
+}
+
+.heatmap td {
+  text-align: center;
+  min-width: 3.25rem;
+}
+
+.heatmap td.col-text {
+  text-align: left;
+}
+
+/* --------------------------------------------------------------- form run -- */
+
+.form-run {
+  display: inline-flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.form-run__tick {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--level-2);
+  color: var(--sub);
+  font-size: var(--t-sm);
+  font-weight: 800;
+}
+
+.form-run__tick[data-result="W"] {
+  border-color: rgba(45, 212, 191, 0.4);
+  background: rgba(45, 212, 191, 0.14);
+  color: var(--gold);
+}
+
+.form-run__tick[data-result="L"] {
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+.form-run__tick.is-latest {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* ----------------------------------------------------------------- bars -- */
 
 .meter {
@@ -704,6 +775,34 @@ a.tile:hover {
   height: 100%;
   border-radius: var(--r-pill);
   background: var(--meter-color, var(--accent));
+}
+
+.load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s3);
+}
+
+/* -------------------------------------------------------------- details -- */
+
+.details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--s3);
+}
+
+.details__summary {
+  cursor: pointer;
+  color: var(--sub);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.details__summary:hover {
+  color: var(--text-strong);
 }
 
 /* ---------------------------------------------------------------- empty -- */
@@ -732,6 +831,114 @@ a.tile:hover {
   font-size: var(--t-base);
   line-height: 1.6;
   max-width: 48ch;
+}
+
+/* ----------------------------------------------------------------- auth -- */
+
+.auth-panel {
+  display: grid;
+  gap: var(--s3);
+  width: min(100%, 26rem);
+  padding: var(--s6);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-strong);
+  background: var(--level-1);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
+}
+
+.auth-panel__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--t-xl);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.auth-panel__copy {
+  margin: 0;
+  color: var(--sub);
+  font-size: var(--t-base);
+  line-height: 1.55;
+}
+
+.auth-panel__modes {
+  justify-self: start;
+}
+
+.auth-panel__form {
+  display: grid;
+  gap: var(--s3);
+}
+
+.auth-panel__submit,
+.auth-panel__reset {
+  justify-content: center;
+  padding: 0.65rem 1rem;
+}
+
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Auth failures used to arrive as a browser alert, which blocks the page and
+   loses the message the moment it is dismissed. */
+.notice {
+  margin: 0;
+  padding: var(--s3);
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.1);
+  color: var(--text-strong);
+  font-size: var(--t-base);
+  line-height: 1.5;
+}
+
+.notice--error {
+  border-color: rgba(239, 68, 68, 0.36);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.swatch-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.swatch-row {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  margin-top: 0.3rem;
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--level-1);
+  color: var(--sub);
+  font-family: inherit;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.swatch__dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--r-pill);
+  background: var(--swatch, var(--blue));
+}
+
+.swatch--active {
+  border-color: var(--swatch, var(--accent));
+  background: var(--level-3);
+  color: var(--text-strong);
 }
 
 /* -------------------------------------------------------------- sidebar -- */

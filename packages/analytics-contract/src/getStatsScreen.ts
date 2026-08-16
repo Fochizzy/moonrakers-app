@@ -3,6 +3,7 @@ import {
   resolveAnalyticsCall,
   type AnalyticsRpcClient,
 } from "./internal.ts";
+import { normalizeAnalyticsMetricCards } from "./metricCards.ts";
 import type { StatsScreenParams, StatsScreenPayload } from "./types.ts";
 
 export async function getStatsScreen(
@@ -11,7 +12,7 @@ export async function getStatsScreen(
 ): Promise<StatsScreenPayload> {
   const resolved = await resolveAnalyticsCall(client, params);
 
-  return executeAnalyticsReadRpc(
+  const payload = await executeAnalyticsReadRpc<StatsScreenPayload>(
     resolved.client,
     "get_stats_screen",
     {
@@ -20,4 +21,12 @@ export async function getStatsScreen(
     },
     resolved.params.profileId,
   );
+
+  return {
+    ...payload,
+    overview: {
+      ...payload?.overview,
+      cards: normalizeAnalyticsMetricCards(payload?.overview?.cards),
+    },
+  };
 }

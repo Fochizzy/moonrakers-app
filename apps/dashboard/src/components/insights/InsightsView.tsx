@@ -1,33 +1,20 @@
 import type { InsightsScreenPayload } from "@moonrakers/analytics-contract";
 
+import { asArray, asRecord, toText } from "@/components/charts/chartUtils";
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { PageHeader } from "@/components/ui/PageHeader";
-
-function asRecord(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function asArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter(
-        (entry): entry is Record<string, unknown> =>
-          Boolean(entry) && typeof entry === "object",
-      )
-    : [];
-}
-
-function toText(value: unknown, fallback = "") {
-  return typeof value === "string" || typeof value === "number"
-    ? String(value)
-    : fallback;
-}
+import { formatCount, MISSING, toFiniteNumber } from "@/lib/formatNumber";
 
 function toNumber(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  return toFiniteNumber(value);
+}
+
+/**
+ * Server signal copy is written with `--` where an em dash belongs.
+ */
+function cleanCopy(value: string) {
+  return value.replace(/\s--\s/g, " — ");
 }
 
 const TONE_COLORS: Record<string, string> = {
@@ -125,15 +112,15 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
   const playerNames = new Map(
     assistPlayers.map((entry) => {
       const node = asRecord(entry);
-      return [toText(node.id), toText(node.label ?? node.name, "Player")];
+      return [toText(node.id), toText(node.label ?? node.name)];
     }),
   );
 
+  // An unwritten summary used to be replaced by a sentence describing the
+  // feature, which read as the page's actual headline.
   const summary =
-    toText(relationships.summary) ||
-    toText(correlations.summary) ||
-    "Server-authored relationship summaries will appear here.";
-  const games = Number(meta.games ?? 0) || 0;
+    toText(relationships.summary) || toText(correlations.summary) || "";
+  const games = toNumber(meta.games);
 
   const outcomeRows = toCorrelationRows(
     correlations.items ?? correlations.winLoseSplit,
@@ -146,9 +133,13 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
   return (
     <section className="view-stack">
       <PageHeader
-        copy={summary}
+        copy={summary ? cleanCopy(summary) : undefined}
         eyebrow="Insights"
-        meta={`Published over ${games} tracked games.`}
+        meta={
+          games === null
+            ? undefined
+            : `Published over ${formatCount(games)} tracked games.`
+        }
         title="Signals and relationships"
       />
 
@@ -171,11 +162,11 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
                   className="stat__value stat__value--text"
                   style={{ margin: 0, color: tone }}
                 >
-                  {toText(row.value, "—")}
+                  {toText(row.value, MISSING)}
                 </p>
                 {toText(row.meaning) ? (
                   <p className="stat__detail" style={{ margin: 0 }}>
-                    {toText(row.meaning)}
+                    {cleanCopy(toText(row.meaning))}
                   </p>
                 ) : null}
               </article>
@@ -198,19 +189,23 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
                 Head to head
               </p>
               <h2 className="panel-title">Rivalries</h2>
+              <p className="panel-copy">
+                Moonrakers has no draws — the last column counts shared games a
+                third player won.
+              </p>
             </div>
             <span className="panel-count">{rivalries.length} opponents</span>
           </div>
 
           <div className="table-scroll">
-            <table className="data-table">
+            <table className="data-table data-table--compact">
               <thead>
                 <tr>
                   <th className="col-text">Opponent</th>
                   <th>Games together</th>
                   <th>Wins</th>
                   <th>Losses</th>
-                  <th>Draws</th>
+                  <th>Others won</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,10 +217,10 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
                       <td className="col-text is-strong">
                         {toText(row.opponentName, "Opponent")}
                       </td>
-                      <td>{toText(row.gamesTogether, "0")}</td>
-                      <td className="is-good">{toText(row.wins, "0")}</td>
-                      <td>{toText(row.losses, "0")}</td>
-                      <td className="is-muted">{toText(row.draws, "0")}</td>
+                      <td>{formatCount(row.gamesTogether)}</td>
+                      <td className="is-good">{formatCount(row.wins)}</td>
+                      <td>{formatCount(row.losses)}</td>
+                      <td className="is-muted">{formatCount(row.draws)}</td>
                     </tr>
                   );
                 })}
@@ -254,7 +249,7 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
 
           <div className="stack-md">
             <div className="table-scroll">
-              <table className="data-table">
+              <table className="data-table data-table--compact">
                 <thead>
                   <tr>
                     <th className="col-text">Player</th>
@@ -273,10 +268,10 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
                         <td className="col-text is-strong">
                           {toText(node.label ?? node.name, "Player")}
                         </td>
-                        <td>{toText(node.assistsGiven, "0")}</td>
-                        <td>{toText(node.prestigeGiven, "0")}</td>
-                        <td>{toText(node.assistsReceived, "0")}</td>
-                        <td>{toText(node.prestigeReceived, "0")}</td>
+                        <td>{formatCount(node.assistsGiven)}</td>
+                        <td>{formatCount(node.prestigeGiven)}</td>
+                        <td>{formatCount(node.assistsReceived)}</td>
+                        <td>{formatCount(node.prestigeReceived)}</td>
                       </tr>
                     );
                   })}
@@ -286,7 +281,7 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
 
             {assistEdges.length > 0 ? (
               <div className="table-scroll">
-                <table className="data-table">
+                <table className="data-table data-table--compact">
                   <thead>
                     <tr>
                       <th className="col-text">Assist lane</th>
@@ -305,13 +300,13 @@ export function InsightsView({ payload }: { payload: InsightsScreenPayload }) {
                       return (
                         <tr key={`${fromId}-${toId}-${index}`}>
                           <td className="col-text is-strong">
-                            {playerNames.get(fromId) ?? "Player"} →{" "}
-                            {playerNames.get(toId) ?? "Player"}
+                            {playerNames.get(fromId) ?? MISSING} →{" "}
+                            {playerNames.get(toId) ?? MISSING}
                           </td>
-                          <td>{toText(edge.assistCount, "0")}</td>
-                          <td>{toText(edge.assistPrestige, "0")}</td>
+                          <td>{formatCount(edge.assistCount)}</td>
+                          <td>{formatCount(edge.assistPrestige)}</td>
                           <td className="is-muted">
-                            {perGame !== null ? perGame.toFixed(2) : "—"}
+                            {perGame !== null ? perGame.toFixed(2) : MISSING}
                           </td>
                         </tr>
                       );

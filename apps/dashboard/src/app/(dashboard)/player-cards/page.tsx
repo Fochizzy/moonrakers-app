@@ -15,9 +15,16 @@ export default async function PlayerCardsPage({
 
   return (
     <PlayerCardsView
-      focusPlayerId={normalizeOptionalSearchParam(
-        readSearchParam(resolvedSearchParams.playerId),
-      )}
+      // The topbar publishes `focusPlayerId`; `playerId` stays supported so
+      // older shared links keep working.
+      focusPlayerId={
+        normalizeOptionalSearchParam(
+          readSearchParam(resolvedSearchParams.focusPlayerId),
+        ) ??
+        normalizeOptionalSearchParam(
+          readSearchParam(resolvedSearchParams.playerId),
+        )
+      }
       players={roster.players}
       signedInPlayerId={roster.signedInPlayerId}
     />

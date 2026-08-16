@@ -3,13 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DashboardSidebar } from "./DashboardSidebar";
 
-const { usePathnameMock } = vi.hoisted(() => ({
+const { usePathnameMock, useSearchParamsMock } = vi.hoisted(() => ({
   usePathnameMock: vi.fn(() => "/"),
+  useSearchParamsMock: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: useSearchParamsMock,
 }));
 
 describe("DashboardSidebar", () => {
@@ -55,5 +56,24 @@ describe("DashboardSidebar", () => {
       "href",
       "/player-profile",
     );
+  });
+
+  it("carries the focus player only to routes that read it", () => {
+    usePathnameMock.mockReturnValue("/");
+    useSearchParamsMock.mockReturnValue(
+      new URLSearchParams({ focusPlayerId: "p1" }),
+    );
+    render(<DashboardSidebar />);
+
+    const hrefFor = (label: string) =>
+      screen.getByRole("link", { name: label }).getAttribute("href");
+
+    expect(hrefFor("Stats")).toBe("/stats?focusPlayerId=p1");
+    expect(hrefFor("Player Cards")).toBe("/player-cards?focusPlayerId=p1");
+    // History and Definitions ignore the parameter, so it is not appended.
+    expect(hrefFor("History")).toBe("/history");
+    expect(hrefFor("Definitions")).toBe("/definitions");
+
+    useSearchParamsMock.mockReturnValue(new URLSearchParams());
   });
 });

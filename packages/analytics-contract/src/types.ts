@@ -136,6 +136,8 @@ export type AnalyticsMetricCard = {
   key: string;
   label: string;
   value: string | number;
+  /** Supporting line under the value, e.g. "Finished games involving this profile." */
+  detail?: string;
   accent?: string;
   metricKey?: string;
 };
@@ -195,9 +197,19 @@ export type StatsScreenPayload = {
     turnOrderOverview?: AnalyticsTurnOrderRow[];
     turnOrderByTableSize?: AnalyticsTurnOrderGroup[];
   };
+  /** Contract conversion and abandonment rates across the sample. */
   contractEfficiency?: Record<string, unknown>;
+  /** Prestige spread, chaos index, and the per-table-size split. */
   groupMeta?: Record<string, unknown>;
   headToHead?: Record<string, unknown>[];
+  /** First-half versus second-half scoring pace. */
+  paceProfile?: Record<string, unknown>;
+  /** Share of prestige coming from direct, assist, and objective play. */
+  prestigeSources?: Record<string, unknown>;
+  /** Per-round averages keyed by `early` / `mid` / `late`. */
+  roundPhaseStats?: Record<string, unknown>;
+  /** How often a round scores at all, and the best single round. */
+  consistencyProfile?: Record<string, unknown>;
 };
 
 export type InsightsScreenPayload = {

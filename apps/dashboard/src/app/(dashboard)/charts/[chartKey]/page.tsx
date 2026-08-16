@@ -1,5 +1,10 @@
+import { notFound } from "next/navigation";
+
 import { ChartDetailView } from "@/components/charts/ChartDetailView";
-import { normalizeDashboardChartKey } from "@/components/charts/chartCatalog";
+import {
+  isKnownDashboardChartKey,
+  normalizeDashboardChartKey,
+} from "@/components/charts/chartCatalog";
 import { loadChartScreen } from "@/lib/data/loadChartScreen";
 import { readSearchParam } from "@/lib/readSearchParam";
 
@@ -12,6 +17,11 @@ export default async function ChartDetailPage({
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = (await searchParams) ?? {};
+
+  if (!isKnownDashboardChartKey(resolvedParams.chartKey)) {
+    notFound();
+  }
+
   const chartKey = normalizeDashboardChartKey(resolvedParams.chartKey);
   const focusPlayerId = readSearchParam(resolvedSearchParams.focusPlayerId);
   const comparePlayerId = readSearchParam(resolvedSearchParams.comparePlayerId);

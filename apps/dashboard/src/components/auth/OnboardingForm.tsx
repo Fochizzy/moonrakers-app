@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import type { DashboardProfile } from "@/lib/auth/profileReadiness";
+import { playerAccent } from "@/lib/playerColor";
 
 type OnboardingResult = {
   ok: boolean;
@@ -12,113 +15,123 @@ type OnboardingFormProps = {
   initialProfile: DashboardProfile | null;
 };
 
-const formShellStyle = {
-  width: "min(100%, 38rem)",
-  padding: "2rem",
-  borderRadius: "1.5rem",
-  border: "1px solid var(--border-strong)",
-  background:
-    "linear-gradient(180deg, rgba(9, 18, 38, 0.96) 0%, rgba(7, 12, 28, 0.94) 100%)",
-  boxShadow: "0 24px 60px rgba(0, 0, 0, 0.38)",
-} satisfies React.CSSProperties;
+/**
+ * The accent system keys off these palette names, so a typed color that is not
+ * one of them silently falls back to the default blue. Offering the palette as
+ * swatches makes the field a choice instead of a spelling test.
+ */
+const PLAYER_COLORS = ["green", "purple", "blue", "yellow", "orange"] as const;
 
-const fieldStyle = {
-  width: "100%",
-  padding: "0.95rem 1rem",
-  borderRadius: "1rem",
-  border: "1px solid var(--border)",
-  background: "rgba(7, 12, 28, 0.78)",
-  color: "var(--text-strong)",
-} satisfies React.CSSProperties;
+function normalizeInitialColor(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return (PLAYER_COLORS as readonly string[]).includes(normalized)
+    ? normalized
+    : "blue";
+}
 
 export function OnboardingForm({
   action,
   initialProfile,
 }: OnboardingFormProps) {
+  const [color, setColor] = useState(() =>
+    normalizeInitialColor(initialProfile?.favorite_color),
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPending(true);
+    setError(null);
 
-    const result = await action(new FormData(event.currentTarget));
-    if (!result.ok) {
-      if (result.message) {
-        window.alert(result.message);
+    try {
+      const result = await action(new FormData(event.currentTarget));
+
+      if (!result.ok) {
+        setError(result.message ?? "Could not save your profile. Try again.");
+        return;
       }
-      return;
-    }
 
-    window.location.assign("/");
+      window.location.assign("/");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not save your profile. Try again.",
+      );
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
-    <section style={formShellStyle}>
-      <p
-        style={{
-          margin: 0,
-          color: "var(--gold)",
-          fontSize: "0.78rem",
-          fontWeight: 700,
-          letterSpacing: "0.18em",
-          textTransform: "uppercase",
-        }}
-      >
-        Profile Bootstrap
+    <section className="auth-panel" style={{ width: "min(100%, 34rem)" }}>
+      <p className="eyebrow" style={{ margin: 0 }}>
+        Profile setup
       </p>
-      <h1 style={{ margin: "0.8rem 0 0.4rem", fontSize: "2rem" }}>
-        Set your player identity
-      </h1>
-      <p style={{ margin: 0, color: "var(--sub)", lineHeight: 1.6 }}>
+      <h1 className="auth-panel__title">Set your player identity</h1>
+      <p className="auth-panel__copy">
         Moonrakers analytics need your published player profile before the
         dashboard can unlock stats, insights, and compare views.
       </p>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: "grid", gap: "1rem", marginTop: "1.5rem" }}
-      >
-        <label style={{ display: "grid", gap: "0.45rem" }}>
-          <span style={{ color: "var(--sub)", fontSize: "0.9rem" }}>Player Name</span>
+      {error ? (
+        <p className="notice notice--error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <form className="auth-panel__form" onSubmit={handleSubmit}>
+        <label className="field">
+          <span className="field__label">Player name</span>
           <input
             aria-label="Player Name"
+            className="input"
             defaultValue={initialProfile?.player_name ?? ""}
             name="player_name"
             required
-            style={fieldStyle}
           />
         </label>
 
-        <label style={{ display: "grid", gap: "0.45rem" }}>
-          <span style={{ color: "var(--sub)", fontSize: "0.9rem" }}>Display Name</span>
+        <label className="field">
+          <span className="field__label">Display name (optional)</span>
           <input
             aria-label="Display Name"
+            className="input"
             defaultValue={initialProfile?.display_name ?? ""}
             name="display_name"
-            style={fieldStyle}
           />
         </label>
 
-        <label style={{ display: "grid", gap: "0.45rem" }}>
-          <span style={{ color: "var(--sub)", fontSize: "0.9rem" }}>Favorite Color</span>
-          <input
-            aria-label="Favorite Color"
-            defaultValue={initialProfile?.favorite_color ?? ""}
-            name="favorite_color"
-            required
-            style={fieldStyle}
-          />
-        </label>
+        <fieldset className="field swatch-field">
+          <legend className="field__label">Favorite color</legend>
+          <input name="favorite_color" type="hidden" value={color} />
+          <div className="swatch-row">
+            {PLAYER_COLORS.map((name) => (
+              <button
+                aria-label={name}
+                aria-pressed={color === name}
+                className={
+                  color === name ? "swatch swatch--active" : "swatch"
+                }
+                key={name}
+                onClick={() => setColor(name)}
+                style={{ "--swatch": playerAccent(name) } as React.CSSProperties}
+                type="button"
+              >
+                <span aria-hidden="true" className="swatch__dot" />
+                <span className="swatch__name">{name}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         <button
-          style={{
-            padding: "0.95rem 1rem",
-            borderRadius: "1rem",
-            border: "1px solid var(--accent)",
-            background: "linear-gradient(135deg, var(--accent) 0%, var(--blue) 100%)",
-            color: "var(--text-strong)",
-            fontWeight: 700,
-          }}
+          className="btn btn--primary auth-panel__submit"
+          disabled={pending}
           type="submit"
         >
-          Save Profile
+          {pending ? "Saving…" : "Save profile"}
         </button>
       </form>
     </section>

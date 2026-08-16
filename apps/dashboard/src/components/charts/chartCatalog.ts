@@ -137,19 +137,37 @@ export const DASHBOARD_CHARTS: DashboardChartEntry[] = [
   },
 ];
 
+function findDashboardChart(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  return (
+    DASHBOARD_CHARTS.find(
+      (chart) =>
+        chart.key === normalized ||
+        (chart.aliases ?? []).some((alias) => alias === normalized),
+    ) ?? null
+  );
+}
+
 export function normalizeDashboardChartKey(value: string | null | undefined) {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (!normalized) {
     return "radar";
   }
 
-  const entry = DASHBOARD_CHARTS.find(
-    (chart) =>
-      chart.key === normalized ||
-      (chart.aliases ?? []).some((alias) => alias === normalized),
-  );
+  return findDashboardChart(normalized)?.key ?? normalized;
+}
 
-  return entry?.key ?? normalized;
+/**
+ * A key that matches no catalog entry used to fall through to the first chart,
+ * so a stale link rendered radar chrome over an unrelated dataset instead of
+ * saying the chart does not exist.
+ */
+export function isKnownDashboardChartKey(value: string | null | undefined) {
+  return findDashboardChart(value) !== null;
 }
 
 export function getDashboardChartEntry(value: string | null | undefined) {

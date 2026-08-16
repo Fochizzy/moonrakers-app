@@ -12,6 +12,7 @@ const ROWS: HistoryRow[] = [
     groupName: "Crew",
     id: "g-old",
     includesSignedInPlayer: true,
+    margin: 3,
     ordinal: 1,
     players: [
       { color: "#f00", id: "p1", isWinner: true, name: "Alix", totalPrestige: 31 },
@@ -26,6 +27,7 @@ const ROWS: HistoryRow[] = [
     groupName: null,
     id: "g-new",
     includesSignedInPlayer: false,
+    margin: 3,
     ordinal: 2,
     players: [
       { color: null, id: "p2", isWinner: true, name: "Bo", totalPrestige: 40 },

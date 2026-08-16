@@ -14,7 +14,6 @@ import {
 
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import {
   asArray,
@@ -207,27 +206,18 @@ export function LineHistoryPanel({
       <EmptyStatePanel
         eyebrow="Line History"
         title={payload.title ?? "No renderable line history returned"}
-        copy="This line-history renderer expects per-game snapshot rows plus visible players before it can draw the selected metric."
+        copy="No games in the selected sample carry this metric yet."
       />
     );
   }
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="blue">
-        <SectionHeading
-          eyebrow="Line History"
-          title={payload.title ?? "Line chart"}
-          copy={
-            payload.subtitle ??
-            `Track ${formatModeLabel(lineMode).toLowerCase()} ${metricKey} movement across the selected game history.`
-          }
-        />
-      </DashboardPanel>
 
       <DashboardPanel tone="success">
         <div style={{ display: "grid", gap: "0.9rem" }}>
           <ChartLabelStrip
+            family="Line History"
             series={visiblePlayers.map((player) => ({
               color: player.color,
               label: player.name,

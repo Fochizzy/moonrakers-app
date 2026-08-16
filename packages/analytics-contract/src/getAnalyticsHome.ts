@@ -3,6 +3,7 @@ import {
   resolveAnalyticsCall,
   type AnalyticsRpcClient,
 } from "./internal.ts";
+import { normalizeAnalyticsMetricCards } from "./metricCards.ts";
 import type { AnalyticsHomeParams, AnalyticsHomePayload } from "./types.ts";
 
 export async function getAnalyticsHome(
@@ -11,7 +12,7 @@ export async function getAnalyticsHome(
 ): Promise<AnalyticsHomePayload> {
   const resolved = await resolveAnalyticsCall(client, params);
 
-  return executeAnalyticsReadRpc(
+  const payload = await executeAnalyticsReadRpc<AnalyticsHomePayload>(
     resolved.client,
     "get_analytics_home",
     {
@@ -19,4 +20,9 @@ export async function getAnalyticsHome(
     },
     resolved.params.profileId,
   );
+
+  return {
+    ...payload,
+    cards: normalizeAnalyticsMetricCards(payload?.cards),
+  };
 }

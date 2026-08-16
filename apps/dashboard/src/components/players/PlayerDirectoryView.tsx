@@ -8,6 +8,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { RosterGroup, RosterPlayer } from "@/lib/data/loadPlayerRoster";
+import { formatCount, formatRating, formatRecord } from "@/lib/formatNumber";
 import { playerAccent } from "@/lib/playerColor";
 
 type PlayerDirectoryViewProps = {
@@ -133,7 +134,10 @@ export function PlayerDirectoryView({
                   </span>
                   <span className="tile__meta">
                     {player.gamesPlayed > 0
-                      ? `${player.currentElo} ELO · ${player.wins}W / ${player.losses}L · ${player.gamesPlayed} games`
+                      ? `${formatRating(player.currentElo)} ELO · ${formatRecord(
+                          player.wins,
+                          player.losses,
+                        )} · ${formatCount(player.gamesPlayed)} games`
                       : "No rated games yet"}
                   </span>
                 </Link>

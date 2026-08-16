@@ -12,13 +12,27 @@ export default async function DashboardHomePage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
-  const { focusProfileName, payload } = await loadDashboardHome({
+  const {
+    focusProfileName,
+    leaderboardRows,
+    payload,
+    recentGames,
+    summary,
+    totalGames,
+  } = await loadDashboardHome({
     focusPlayerId: readSearchParam(resolvedSearchParams.focusPlayerId),
   });
 
   return (
     <div className="view-stack">
-      <HomeView focusName={focusProfileName} payload={payload} />
+      <HomeView
+        focusName={focusProfileName}
+        leaderboardRows={leaderboardRows}
+        payload={payload}
+        recentGames={recentGames}
+        summary={summary}
+        totalGames={totalGames}
+      />
 
       <DashboardPanel padding="normal">
         <SectionHeading

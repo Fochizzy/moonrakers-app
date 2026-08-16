@@ -37,6 +37,23 @@ const navSections = [
   },
 ] as const;
 
+/**
+ * Routes that actually read `?focusPlayerId`. Appending it everywhere made the
+ * topbar selector look broken on the pages that ignore it, and left a stale id
+ * in the URL of pages it means nothing to.
+ */
+const FOCUS_AWARE_ROUTES = new Set([
+  "/",
+  "/analytics",
+  "/charts",
+  "/compare",
+  "/elo",
+  "/insights",
+  "/player-cards",
+  "/profile",
+  "/stats",
+]);
+
 /** `/` prefixes every route, so it only counts as active on an exact match. */
 function isNavItemActive(href: string, pathname: string | null) {
   if (!pathname) {
@@ -69,9 +86,10 @@ export function DashboardSidebar() {
             <ul className="sidebar__list">
               {section.items.map(([href, label]) => {
                 const active = isNavItemActive(href, pathname);
-                const routeHref = focusPlayerId
-                  ? `${href}?focusPlayerId=${encodeURIComponent(focusPlayerId)}`
-                  : href;
+                const routeHref =
+                  focusPlayerId && FOCUS_AWARE_ROUTES.has(href)
+                    ? `${href}?focusPlayerId=${encodeURIComponent(focusPlayerId)}`
+                    : href;
 
                 return (
                   <li key={href}>

@@ -1,3 +1,5 @@
+import { getPlayerBaseColor } from "../../../../../utils/colors";
+
 export function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -43,6 +45,14 @@ export const PLAYER_FALLBACK_COLORS = [
   "#EF4444",
 ];
 
+const PLAYER_COLOR_NAMES = new Set([
+  "green",
+  "purple",
+  "blue",
+  "yellow",
+  "orange",
+]);
+
 export function resolvePlayerFallbackColor(value: unknown, index: number) {
   const normalized = toText(value).trim();
   if (
@@ -52,6 +62,13 @@ export function resolvePlayerFallbackColor(value: unknown, index: number) {
     normalized.startsWith("var(")
   ) {
     return normalized;
+  }
+
+  // Payloads store colors as palette words, and the chart RPC capitalizes some
+  // of them ("Purple"). Falling through to the index palette here painted chart
+  // nodes in colors that did not match the player's accent anywhere else.
+  if (PLAYER_COLOR_NAMES.has(normalized.toLowerCase())) {
+    return getPlayerBaseColor(normalized);
   }
 
   return (

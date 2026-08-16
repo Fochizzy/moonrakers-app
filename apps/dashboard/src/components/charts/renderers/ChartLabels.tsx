@@ -19,10 +19,13 @@ export function formatMetricLabel(value: string) {
 }
 
 export function ChartLabelStrip({
+  family,
   series = [],
   xLabel,
   yLabel,
 }: {
+  /** Which renderer drew this chart, e.g. "Radar Profile". */
+  family?: string;
   series?: SeriesLabel[];
   xLabel: string;
   yLabel: string;
@@ -49,6 +52,11 @@ export function ChartLabelStrip({
           textTransform: "uppercase",
         }}
       >
+        {family ? (
+          <span className="eyebrow" style={{ letterSpacing: "0.14em" }}>
+            {family}
+          </span>
+        ) : null}
         <span>X: {xLabel}</span>
         <span>Y: {yLabel}</span>
       </div>

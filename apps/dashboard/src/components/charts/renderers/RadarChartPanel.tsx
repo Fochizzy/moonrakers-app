@@ -13,7 +13,6 @@ import {
 
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import { asArray, asRecord, toNumber, toText } from "../chartUtils";
 import { ChartLabelStrip } from "./ChartLabels";
@@ -72,24 +71,18 @@ export function RadarChartPanel({
       <EmptyStatePanel
         eyebrow="Radar Profile"
         title={payload.title ?? "No radar rows returned"}
-        copy="This radar renderer expects trait rows with focus values and optional comparison values."
+        copy="This player has no finished games to build a trait profile from yet."
       />
     );
   }
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="accent">
-        <SectionHeading
-          eyebrow="Radar Profile"
-          title={payload.title ?? "Radar chart"}
-          copy={payload.subtitle ?? "Round trait profile across the selected player's tracked games."}
-        />
-      </DashboardPanel>
 
       <DashboardPanel tone="blue">
         <div style={{ display: "grid", gap: "0.9rem" }}>
           <ChartLabelStrip
+            family="Radar Profile"
             series={[
               { color: "var(--blue)", label: "Focus" },
               ...(hasCompare ? [{ color: "var(--accent)", label: "Compare" }] : []),

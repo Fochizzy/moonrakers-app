@@ -14,7 +14,6 @@ import {
 
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import { asArray, asRecord, toNumber, toText } from "../chartUtils";
 import { ChartLabelStrip } from "./ChartLabels";
@@ -52,24 +51,18 @@ export function EloTrendPanel({
       <EmptyStatePanel
         eyebrow="Elo Trend"
         title={payload.title ?? "No Elo rows returned"}
-        copy="This Elo renderer expects rating rows with `elo` and optional `compareElo` values."
+        copy="No rated games are saved for this player yet."
       />
     );
   }
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="blue">
-        <SectionHeading
-          eyebrow="Elo Trend"
-          title={payload.title ?? "Elo trend"}
-          copy={payload.subtitle ?? "Rating movement across the selected game history."}
-        />
-      </DashboardPanel>
 
       <DashboardPanel tone="success">
         <div style={{ display: "grid", gap: "0.9rem" }}>
           <ChartLabelStrip
+            family="Elo Trend"
             series={[
               { color: "var(--blue)", label: "Focus Elo" },
               ...(hasCompare ? [{ color: "var(--accent)", label: "Opponent Elo" }] : []),

@@ -1,12 +1,18 @@
-import { getAnalyticsHome } from "@moonrakers/analytics-contract";
+import { getAnalyticsHome, getEloScreen } from "@moonrakers/analytics-contract";
 
 import { requireDashboardAccess } from "../auth/serverAccess";
+import { buildHistoryRows } from "../history/historyRows";
+import { resolvePlayerName } from "../playerName";
 import { normalizeOptionalSearchParam } from "../readSearchParam";
+import { loadGameArchiveWithClient } from "./loadGameArchive";
 import { createAnalyticsRpcClient } from "./rpcClient";
 
 type LoadDashboardHomeInput = {
   focusPlayerId?: string | null;
 };
+
+/** How many finished games the home overview strip shows. */
+const RECENT_GAME_COUNT = 3;
 
 export async function loadDashboardHome(input: LoadDashboardHomeInput = {}) {
   const { supabase, userId, profile } = await requireDashboardAccess();
@@ -15,10 +21,7 @@ export async function loadDashboardHome(input: LoadDashboardHomeInput = {}) {
     input.focusPlayerId,
   );
   const effectiveProfileId = requestedFocusPlayerId ?? userId;
-  let focusProfileName =
-    profile?.player_name?.trim() ||
-    profile?.display_name?.trim() ||
-    "Commander";
+  let focusProfileName = resolvePlayerName(profile, "Commander");
 
   if (effectiveProfileId !== userId) {
     const { data: focusProfile } = await supabase
@@ -28,16 +31,37 @@ export async function loadDashboardHome(input: LoadDashboardHomeInput = {}) {
       .maybeSingle();
 
     if (focusProfile) {
-      focusProfileName =
-        String(focusProfile.player_name ?? "").trim() ||
-        String(focusProfile.display_name ?? "").trim() ||
-        focusProfileName;
+      focusProfileName = resolvePlayerName(focusProfile, focusProfileName);
     }
   }
 
-  const payload = await getAnalyticsHome(client, {
-    profileId: effectiveProfileId,
-  });
+  // The archive and leaderboard turn the home route into an actual overview
+  // rather than a second copy of the analytics hub's tile list.
+  const [payload, eloScreen, archive] = await Promise.all([
+    getAnalyticsHome(client, { profileId: effectiveProfileId }),
+    getEloScreen(client, {
+      profileId: userId,
+      focusPlayerId: effectiveProfileId,
+      opponentId: null,
+      sortKey: "elo",
+    }).catch(() => null),
+    loadGameArchiveWithClient(supabase as never, userId).catch(() => null),
+  ]);
 
-  return { focusProfileName, payload };
+  const historyRows = archive
+    ? buildHistoryRows(archive.games, userId)
+    : [];
+  const recentGames = [...historyRows]
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, RECENT_GAME_COUNT);
+
+  return {
+    focusProfileName,
+    focusPlayerId: effectiveProfileId,
+    leaderboardRows: eloScreen?.leaderboardRows ?? [],
+    payload,
+    recentGames,
+    summary: eloScreen?.summary ?? null,
+    totalGames: historyRows.length,
+  };
 }

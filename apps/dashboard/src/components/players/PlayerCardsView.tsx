@@ -7,6 +7,7 @@ import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { formatCount, formatRating } from "@/lib/formatNumber";
 import type { RosterPlayer } from "@/lib/data/loadPlayerRoster";
 import { playerAccent } from "@/lib/playerColor";
 
@@ -120,11 +121,11 @@ export function PlayerCardsView({
           <MetricCard
             accent={playerAccent(focusedPlayer.color)}
             label="Current ELO"
-            value={focusedPlayer.currentElo}
+            value={formatRating(focusedPlayer.currentElo)}
           />
-          <MetricCard label="Peak ELO" value={focusedPlayer.peakElo} />
-          <MetricCard label="Prestige" value={focusedPlayer.prestige} />
-          <MetricCard label="Score" value={focusedPlayer.score} />
+          <MetricCard label="Peak ELO" value={formatRating(focusedPlayer.peakElo)} />
+          <MetricCard label="Prestige" value={formatCount(focusedPlayer.prestige)} />
+          <MetricCard label="Score" value={formatCount(focusedPlayer.score)} />
         </div>
       </DashboardPanel>
 
@@ -164,7 +165,7 @@ export function PlayerCardsView({
                   className={
                     player.id === focusedPlayer.id ? "tile row--focus" : "tile"
                   }
-                  href={`/player-cards?playerId=${encodeURIComponent(player.id)}`}
+                  href={`/player-cards?focusPlayerId=${encodeURIComponent(player.id)}`}
                   key={player.id}
                   style={{
                     borderTop: `3px solid ${playerAccent(player.color)}`,
@@ -185,7 +186,9 @@ export function PlayerCardsView({
                   <span className="tile-stats">
                     <span className="statline__item">
                       <span className="statline__label">ELO</span>
-                      <span className="statline__value">{player.currentElo}</span>
+                      <span className="statline__value">
+                        {formatRating(player.currentElo)}
+                      </span>
                     </span>
                     <span className="statline__item">
                       <span className="statline__label">Win rate</span>
@@ -193,11 +196,15 @@ export function PlayerCardsView({
                     </span>
                     <span className="statline__item">
                       <span className="statline__label">Games</span>
-                      <span className="statline__value">{player.gamesPlayed}</span>
+                      <span className="statline__value">
+                        {formatCount(player.gamesPlayed)}
+                      </span>
                     </span>
                     <span className="statline__item">
                       <span className="statline__label">Prestige</span>
-                      <span className="statline__value">{player.prestige}</span>
+                      <span className="statline__value">
+                        {formatCount(player.prestige)}
+                      </span>
                     </span>
                   </span>
                 </Link>

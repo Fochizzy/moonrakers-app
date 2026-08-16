@@ -125,6 +125,8 @@ function upsertPlayer(
   input: {
     id: string;
     name?: string | null;
+    /** Kept alongside `name` so consumers can choose which one to show. */
+    displayName?: string | null;
     color?: string | null;
     assignedCardArtIndex?: number | null;
   },
@@ -137,6 +139,8 @@ function upsertPlayer(
   playersById.set(input.id, {
     id: input.id,
     name: String(input.name ?? current?.name ?? "Player").trim() || "Player",
+    displayName:
+      String(input.displayName ?? current?.displayName ?? "").trim() || undefined,
     color: String(input.color ?? current?.color ?? "").trim() || undefined,
     assignedCardArtIndex:
       typeof input.assignedCardArtIndex === "number"
@@ -167,6 +171,7 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
         upsertPlayer(playersById, {
           id: profile.id,
           name: profile.player_name ?? profile.display_name,
+          displayName: profile.display_name ?? null,
           color: profile.favorite_color ?? null,
           assignedCardArtIndex: profile.assigned_card_art_index ?? null,
         });
@@ -197,10 +202,13 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
             participant.display_name_snapshot ??
             `Player ${index + 1}`,
         ).trim() || `Player ${index + 1}`;
+      const displayName =
+        String(participant.display_name_snapshot ?? "").trim() || undefined;
 
       upsertPlayer(playersById, {
         id,
         name,
+        displayName,
         color: participant.color_snapshot ?? null,
         assignedCardArtIndex:
           participant.assigned_card_art_index_snapshot ?? null,
@@ -213,6 +221,7 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
       return {
         id,
         name,
+        displayName,
         color: String(participant.color_snapshot ?? "").trim() || undefined,
         assignedCardArtIndex:
           typeof participant.assigned_card_art_index_snapshot === "number"
@@ -328,6 +337,7 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
     upsertPlayer(playersById, {
       id: input.profile.id,
       name: input.profile.player_name ?? input.profile.display_name,
+      displayName: input.profile.display_name ?? null,
       color: input.profile.favorite_color ?? null,
       assignedCardArtIndex: input.profile.assigned_card_art_index ?? null,
     });

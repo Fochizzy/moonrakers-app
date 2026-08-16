@@ -11,7 +11,6 @@ import {
 
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import { asArray, asRecord, toNumber, toText } from "../chartUtils";
 import { ChartLabelStrip } from "./ChartLabels";
@@ -40,21 +39,12 @@ export function ReplayPanel({
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="success">
-        <SectionHeading
-          eyebrow="Replay Family"
-          title={payload.title ?? "Replay chart"}
-          copy={
-            payload.subtitle ??
-            "Replay charts step through the sample over time, so the web renderer keeps a continuous timeline instead of a static summary."
-          }
-        />
-      </DashboardPanel>
 
       {rows.length > 0 ? (
         <DashboardPanel tone="blue">
           <div style={{ display: "grid", gap: "0.9rem" }}>
             <ChartLabelStrip
+            family="Replay Family"
               series={[{ color: "var(--blue)", label: "Replay Value" }]}
               xLabel="Replay Step"
               yLabel="Value"
@@ -108,7 +98,7 @@ export function ReplayPanel({
         <EmptyStatePanel
           eyebrow="Replay Family"
           title="No replay timeline returned"
-          copy="This renderer expects replay rows before it can draw the metric timeline."
+          copy="This game was saved without round-level detail, so there is no replay to step through."
         />
       )}
     </div>

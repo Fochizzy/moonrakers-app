@@ -20,7 +20,7 @@ export default function DashboardLoading() {
         </div>
       </DashboardPanel>
 
-      <div className="metric-grid">
+      <div className="stat-grid">
         {[0, 1, 2].map((entry) => (
           <DashboardPanel
             key={entry}

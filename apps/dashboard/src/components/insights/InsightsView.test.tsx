@@ -153,4 +153,81 @@ describe("InsightsView", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/No top signals returned/i)).toBeInTheDocument();
   });
+
+  it("does not promote placeholder copy into the page header", () => {
+    render(
+      <InsightsView
+        payload={
+          {
+            generatedAt: "2026-07-05T03:00:00.000Z",
+            meta: {},
+            topSignals: [],
+            correlations: {},
+          } as never
+        }
+      />,
+    );
+
+    expect(
+      screen.queryByText(/Server-authored relationship summaries will appear/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Published over 0 tracked games/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps a missing rivalry field distinguishable from a real zero", () => {
+    render(
+      <InsightsView
+        payload={{
+          generatedAt: "2026-07-04T03:00:00.000Z",
+          meta: { games: 18 },
+          topSignals: [],
+          rivalries: [
+            {
+              opponentId: "p2",
+              opponentName: "GregMTG",
+              gamesTogether: 18,
+              wins: 0,
+              losses: 8,
+            },
+          ],
+          correlations: {},
+        }}
+      />,
+    );
+
+    const cells = screen.getAllByRole("cell");
+    // wins is a real 0; draws was never published and must not read as 0.
+    expect(cells[2]).toHaveTextContent("0");
+    expect(cells[4]).toHaveTextContent("—");
+  });
+
+  it("labels shared games a third player won rather than calling them draws", () => {
+    render(
+      <InsightsView
+        payload={{
+          generatedAt: "2026-07-04T03:00:00.000Z",
+          meta: { games: 18 },
+          topSignals: [],
+          rivalries: [
+            {
+              opponentId: "p2",
+              opponentName: "GregMTG",
+              gamesTogether: 18,
+              wins: 1,
+              losses: 8,
+              draws: 9,
+            },
+          ],
+          correlations: {},
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("columnheader", { name: "Others won" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Draws" }),
+    ).not.toBeInTheDocument();
+  });
 });

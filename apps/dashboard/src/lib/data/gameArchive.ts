@@ -67,6 +67,15 @@ function toArchiveTotals(value: unknown): ArchivePlayerTotals {
   };
 }
 
+/**
+ * The snapshot keeps both the table name and the handle. ELO, insights, and the
+ * player directory all publish the handle, so the archive follows suit rather
+ * than showing the same person as "Izzy" here and "Fochizzy" one page over.
+ */
+function toDisplayName(player: LooseRecord, fallback: string) {
+  return toText(player.displayName) || toText(player.name) || fallback;
+}
+
 function toArchiveGamePlayer(value: unknown, index: number): ArchiveGamePlayer {
   const player = asRecord(value);
   const startOrder = player.startOrder;
@@ -75,7 +84,7 @@ function toArchiveGamePlayer(value: unknown, index: number): ArchiveGamePlayer {
     assignedCardArtIndex: toOptionalIndex(player.assignedCardArtIndex),
     color: toOptionalText(player.color),
     id: toText(player.id),
-    name: toText(player.name) || `Player ${index + 1}`,
+    name: toDisplayName(player, `Player ${index + 1}`),
     startOrder:
       typeof startOrder === "number" && Number.isFinite(startOrder)
         ? startOrder
@@ -150,7 +159,7 @@ function toArchivePlayer(value: unknown): ArchivePlayer | null {
     assignedCardArtIndex: toOptionalIndex(player.assignedCardArtIndex),
     color: toOptionalText(player.color),
     id,
-    name: toText(player.name) || "Player",
+    name: toDisplayName(player, "Player"),
   };
 }
 

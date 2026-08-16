@@ -116,6 +116,28 @@ describe("buildGameSummary", () => {
       prestige: 5,
     });
   });
+
+  it("flags a game that saved no winner instead of crowning the leader", () => {
+    // History shows "No winner recorded" for this same game, so the summary
+    // must not present the top-prestige player as the winner.
+    const summary = buildGameSummary({
+      ...GAME,
+      winnerId: null,
+      players: GAME.players.map((player) => ({ ...player })),
+    });
+
+    expect(summary.hasRecordedWinner).toBe(false);
+    expect(summary.standings.every((row) => !row.isWinner)).toBe(true);
+    expect(summary.winnerName).toBe("Alix");
+    expect(summary.topPrestige).toBe(12);
+  });
+
+  it("reports a recorded winner alongside their prestige", () => {
+    const summary = buildGameSummary(GAME);
+
+    expect(summary.hasRecordedWinner).toBe(true);
+    expect(summary.topPrestige).toBe(12);
+  });
 });
 
 describe("buildGameTrends", () => {

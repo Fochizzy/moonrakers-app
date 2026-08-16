@@ -16,7 +16,6 @@ import {
 
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
-import { SectionHeading } from "@/components/ui/SectionHeading";
 
 import {
   asArray,
@@ -87,7 +86,7 @@ export function CartesianChartPanel({
       <EmptyStatePanel
         eyebrow="Chart Family"
         title={payload.title ?? "No renderable chart rows returned"}
-        copy="This cartesian renderer expects `data.data[]` rows with at least one numeric metric."
+        copy="No finished games match these filters yet, so there is nothing to plot."
       />
     );
   }
@@ -124,20 +123,11 @@ export function CartesianChartPanel({
 
   return (
     <div className="view-stack">
-      <DashboardPanel tone="blue">
-        <SectionHeading
-          eyebrow="Cartesian Family"
-          title={payload.title ?? "Chart detail"}
-          copy={
-            payload.subtitle ??
-            "The web chart detail route uses the published dataset rows directly, with tone-aware axes and graph colors that match the Moonrakers analytics language."
-          }
-        />
-      </DashboardPanel>
 
       <DashboardPanel tone="success">
         <div style={{ display: "grid", gap: "0.9rem" }}>
           <ChartLabelStrip
+            family="Cartesian Family"
             series={[{ color: isScatter ? "var(--accent)" : "var(--blue)", label: yLabel }]}
             xLabel={xLabel}
             yLabel={yLabel}

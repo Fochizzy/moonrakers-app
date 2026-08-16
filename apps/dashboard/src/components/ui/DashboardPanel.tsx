@@ -22,9 +22,9 @@ const paddingMap: Record<DashboardPanelPadding, string> = {
 const toneClass: Record<DashboardPanelTone, string | null> = {
   default: null,
   accent: "panel--accent",
-  blue: "panel--accent",
+  blue: "panel--blue",
   success: "panel--success",
-  warning: "panel--success",
+  warning: "panel--warning",
 };
 
 export function DashboardPanel({

@@ -1,6 +1,7 @@
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { DashboardTopbar } from "@/components/layout/DashboardTopbar";
 import { requireDashboardAccess } from "@/lib/auth/serverAccess";
+import { resolvePlayerName } from "@/lib/playerName";
 
 export default async function DashboardLayout({
   children,
@@ -8,20 +9,16 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }>) {
   const { profile, supabase, userId } = await requireDashboardAccess();
-  const profileName =
-    profile?.player_name?.trim() ||
-    profile?.display_name?.trim() ||
-    "Commander";
+  // The topbar chip and the focus dropdown sit side by side, so they have to
+  // resolve the same person to the same name.
+  const profileName = resolvePlayerName(profile, "Commander");
   const { data: playerRows } = await supabase
     .from("profiles")
     .select("id, player_name, display_name");
   const playerOptions = (playerRows ?? [])
     .map((row) => ({
       id: String(row.id),
-      label:
-        String(row.display_name ?? "").trim() ||
-        String(row.player_name ?? "").trim() ||
-        "Player",
+      label: resolvePlayerName(row),
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
 

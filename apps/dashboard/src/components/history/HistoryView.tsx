@@ -8,6 +8,7 @@ import { EmptyStatePanel } from "@/components/ui/EmptyStatePanel";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { formatCount } from "@/lib/formatNumber";
 import { assignDistinctAccents } from "@/lib/playerColor";
 import {
   filterHistoryRows,
@@ -29,6 +30,9 @@ const FILTER_TABS: Array<{ key: HistoryFilter; label: string }> = [
   { key: "mine", label: "Include Me" },
 ];
 
+/** Rows mounted before the reader asks for more. */
+const PAGE_SIZE = 25;
+
 const SORT_OPTIONS: Array<{ key: HistorySort; label: string }> = [
   { key: "newest", label: "Newest first" },
   { key: "oldest", label: "Oldest first" },
@@ -41,6 +45,9 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
   const [sort, setSort] = useState<HistorySort>("newest");
   const [groupName, setGroupName] = useState("all");
   const [query, setQuery] = useState("");
+  // The archive is read in full so search and filters stay instant, but every
+  // row carries a roster and a stat line, so only a page of them is mounted.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const groupNames = useMemo(() => listHistoryGroupNames(rows), [rows]);
 
@@ -59,6 +66,7 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
     [filter, groupName, query, rows, sort],
   );
 
+  const pagedRows = visibleRows.slice(0, visibleCount);
   const totalRounds = rows.reduce((count, row) => count + row.roundCount, 0);
   const myGames = rows.filter((row) => row.includesSignedInPlayer).length;
 
@@ -101,7 +109,10 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
               <span className="field__label">Search</span>
               <input
                 className="input"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setVisibleCount(PAGE_SIZE);
+                }}
                 placeholder="Search by winner, player, group, or date"
                 type="search"
                 value={query}
@@ -118,6 +129,7 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
                     key={tab.key}
                     onClick={() => {
                       setFilter(tab.key);
+                      setVisibleCount(PAGE_SIZE);
                       if (tab.key !== "group") {
                         setGroupName("all");
                       }
@@ -134,7 +146,10 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
               <span className="field__label">Sort</span>
               <select
                 className="select"
-                onChange={(event) => setSort(event.target.value as HistorySort)}
+                onChange={(event) => {
+                  setSort(event.target.value as HistorySort);
+                  setVisibleCount(PAGE_SIZE);
+                }}
                 value={sort}
               >
                 {SORT_OPTIONS.map((option) => (
@@ -151,7 +166,10 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
               <button
                 aria-pressed={groupName === "all"}
                 className="segmented__item"
-                onClick={() => setGroupName("all")}
+                onClick={() => {
+                  setGroupName("all");
+                  setVisibleCount(PAGE_SIZE);
+                }}
                 type="button"
               >
                 All groups
@@ -161,7 +179,10 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
                   aria-pressed={groupName === name}
                   className="segmented__item"
                   key={name}
-                  onClick={() => setGroupName(name)}
+                  onClick={() => {
+                    setGroupName(name);
+                    setVisibleCount(PAGE_SIZE);
+                  }}
                   type="button"
                 >
                   {name}
@@ -185,7 +206,7 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
       ) : null}
 
       <div className="row-list">
-        {visibleRows.map((row) => {
+        {pagedRows.map((row) => {
           const accents = assignDistinctAccents(row.players);
           const winnerId =
             row.players.find((player) => player.isWinner)?.id ?? null;
@@ -214,6 +235,9 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
                   <p className="row__meta" suppressHydrationWarning>
                     {formatDateTime(row.createdAt)} · {row.roundCount} rounds ·{" "}
                     {row.players.length} players
+                    {row.margin !== null
+                      ? ` · won by ${formatCount(row.margin)}`
+                      : ""}
                   </p>
                 </div>
 
@@ -253,6 +277,21 @@ export function HistoryView({ focusGameId, rows }: HistoryViewProps) {
           );
         })}
       </div>
+
+      {pagedRows.length < visibleRows.length ? (
+        <div className="load-more">
+          <p className="panel-count" style={{ margin: 0 }}>
+            Showing {pagedRows.length} of {visibleRows.length} matching games.
+          </p>
+          <button
+            className="btn"
+            onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            type="button"
+          >
+            Show {Math.min(PAGE_SIZE, visibleRows.length - pagedRows.length)} more
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
