@@ -1,5 +1,10 @@
 export type AnalyticsHomeParams = {
   profileId: string;
+  /**
+   * Whose numbers to publish. `profileId` stays the authenticated requester —
+   * the RPC rejects any other value — so the focused player travels separately.
+   */
+  focusPlayerId?: string | null;
 };
 
 export type StatsScreenParams = {

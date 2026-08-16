@@ -37,8 +37,14 @@ export async function loadDashboardHome(input: LoadDashboardHomeInput = {}) {
 
   // The archive and leaderboard turn the home route into an actual overview
   // rather than a second copy of the analytics hub's tile list.
+  // `profileId` is the requester, never the focused player: the RPC raises when
+  // the two differ, which used to take the whole route down through the error
+  // boundary the moment the topbar focused anyone else.
   const [payload, eloScreen, archive] = await Promise.all([
-    getAnalyticsHome(client, { profileId: effectiveProfileId }),
+    getAnalyticsHome(client, {
+      profileId: userId,
+      focusPlayerId: requestedFocusPlayerId,
+    }),
     getEloScreen(client, {
       profileId: userId,
       focusPlayerId: effectiveProfileId,

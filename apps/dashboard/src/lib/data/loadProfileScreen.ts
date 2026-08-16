@@ -1,6 +1,7 @@
 import { getPlayerProfileScreen } from "@moonrakers/analytics-contract";
 
 import { requireDashboardAccess } from "../auth/serverAccess";
+import { normalizeOptionalSearchParam } from "../readSearchParam";
 import { createAnalyticsRpcClient } from "./rpcClient";
 
 type LoadProfileScreenInput = {
@@ -14,7 +15,13 @@ export async function loadProfileScreen(input: LoadProfileScreenInput = {}) {
 
   return getPlayerProfileScreen(client, {
     profileId: userId,
-    focusPlayerId: input.focusPlayerId ?? null,
-    opponentId: input.opponentId ?? null,
+    // `?opponentId=` arrives as an empty string, which is not null and is not a
+    // uuid either — Postgres rejects the call before the function body runs.
+    focusPlayerId: normalizeOptionalSearchParam(input.focusPlayerId, {
+      emptyValues: ["none"],
+    }),
+    opponentId: normalizeOptionalSearchParam(input.opponentId, {
+      emptyValues: ["none"],
+    }),
   });
 }

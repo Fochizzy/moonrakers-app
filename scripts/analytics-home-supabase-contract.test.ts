@@ -29,9 +29,26 @@ async function main() {
     name: "get_analytics_home",
     args: {
       profile_id: "11111111-1111-4111-8111-111111111111",
+      focus_player_id: null,
     },
   });
   assert.equal(payload.hero.games, 12);
+
+  // profile_id is the authenticated requester and the RPC raises on anything
+  // else, so a focused player has to travel in its own argument.
+  await getAnalyticsHome(client, {
+    profileId: "11111111-1111-4111-8111-111111111111",
+    focusPlayerId: "22222222-2222-4222-8222-222222222222",
+  });
+
+  assert.equal(rpcCalls.length, 2, "expected a second analytics-home RPC call");
+  assert.deepEqual(rpcCalls[1], {
+    name: "get_analytics_home",
+    args: {
+      profile_id: "11111111-1111-4111-8111-111111111111",
+      focus_player_id: "22222222-2222-4222-8222-222222222222",
+    },
+  });
 }
 
 main()

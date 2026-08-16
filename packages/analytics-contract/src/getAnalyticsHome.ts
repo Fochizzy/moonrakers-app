@@ -17,6 +17,7 @@ export async function getAnalyticsHome(
     "get_analytics_home",
     {
       profile_id: resolved.params.profileId,
+      focus_player_id: resolved.params.focusPlayerId ?? null,
     },
     resolved.params.profileId,
   );

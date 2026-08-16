@@ -96,6 +96,7 @@ async function main() {
     readRpcName: "get_analytics_home",
     readRpcArgs: {
       profile_id: "home-profile",
+      focus_player_id: null,
     },
     successPayload: {
       generatedAt: "2026-05-24T00:00:00.000Z",
