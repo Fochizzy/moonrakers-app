@@ -36,6 +36,9 @@ import {
   conditionalReducer,
   initialConditionalState,
 } from "@/utils/conditionalCompareHelpers";
+// utils/compareTypes also declares a ConditionalState, but it predates
+// hasRunCompare; the reducer's own type is the live one.
+import type { ConditionalState } from "@/utils/conditionalCompareHelpers";
 import {
   buildGlobalTurnOrderInsight,
   buildGroupRows,
@@ -357,10 +360,16 @@ export default function IndexScreen() {
   const [compareSetupCollapsed, setCompareSetupCollapsed] = useState(false);
   const [hasRunCohesionAnalyze, setHasRunCohesionAnalyze] = useState(false);
 
-  const [conditionalState, dispatchConditional] = useReducer(conditionalReducer, {
+  // Annotated so subjectMode keeps its literal union type instead of widening
+  // to string, which silently broke the ConditionalState contract downstream.
+  const initialConditionalReducerState: ConditionalState = {
     ...initialConditionalState,
     subjectMode: initialMode === "groups" ? "groups" : "players",
-  });
+  };
+  const [conditionalState, dispatchConditional] = useReducer(
+    conditionalReducer,
+    initialConditionalReducerState,
+  );
 
   const store = useStore() as FlexibleStore;
   const authSession = store.authSession as AuthSessionLike;
