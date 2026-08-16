@@ -237,7 +237,7 @@ export type EloMetricCard = {
   label: string;
   value: string;
   sub?: string;
-  tone?: "default" | "accent" | "blue" | "green" | "danger";
+  tone?: "default" | "accent" | "blue" | "green" | "amber" | "danger";
 };
 
 export type EloPlayerOption = {

@@ -6,5 +6,6 @@ export {
 export {
   resolveVisibleEloInsight,
   resolveVisibleEloSection,
+  type LooseEloSection,
   type VisibleEloMetricTab,
 } from "@/utils/elo/visibleMetricTabs";

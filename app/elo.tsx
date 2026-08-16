@@ -28,6 +28,7 @@ import { buildHomeRoute, buildPlayerProfileRoute } from "@/utils/appRoutes";
 import {
   buildGameRowsByPlayer,
   describeRecentForm,
+  type LooseEloSection,
   replaceRecentFormSummaryInText,
   resolveVisibleEloInsight,
   resolveVisibleEloSection,
@@ -52,6 +53,14 @@ type EloMetricTab = VisibleEloMetricTab;
 type StorePlayer = { id: string; name?: string; color?: string };
 
 const DEFAULT_ELO = 1000;
+
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
 
 function toneStyles(
   tone?: "default" | "accent" | "blue" | "green" | "danger" | "amber"
@@ -117,25 +126,31 @@ export default function EloScreen() {
       : [];
 
     return source
-      .map((entry: any) => ({
-        id: normalizeId(entry?.id),
-        name:
-          String(entry?.name ?? entry?.label ?? entry?.displayName ?? "")
-            .trim() || "Unknown",
-        color: String(entry?.color ?? "").trim() || undefined,
-      }))
+      .map((raw: unknown) => {
+        const entry = asRecord(raw);
+        return {
+          id: normalizeId(entry.id),
+          name:
+            String(entry.name ?? entry.label ?? entry.displayName ?? "")
+              .trim() || "Unknown",
+          color: String(entry.color ?? "").trim() || undefined,
+        };
+      })
       .filter((player) => Boolean(player.id));
   }, [payload?.playerOptions]);
 
   const storePlayerOptions = useMemo<StorePlayer[]>(() => {
     return (Array.isArray(players) ? players : [])
-      .map((player: any) => ({
-        id: normalizeId(player?.id),
-        name:
-          String(player?.name ?? player?.label ?? player?.displayName ?? "")
-            .trim() || "Unknown",
-        color: String(player?.color ?? "").trim() || undefined,
-      }))
+      .map((raw: unknown) => {
+        const player = asRecord(raw);
+        return {
+          id: normalizeId(player.id),
+          name:
+            String(player.name ?? player.label ?? player.displayName ?? "")
+              .trim() || "Unknown",
+          color: String(player.color ?? "").trim() || undefined,
+        };
+      })
       .filter((player) => Boolean(player.id));
   }, [players]);
 
@@ -145,19 +160,22 @@ export default function EloScreen() {
       : [];
 
     return source
-      .map((row: any) => ({
-        rank: toNumber(row?.rank),
-        playerId: normalizeId(row?.playerId ?? row?.id),
-        name:
-          String(row?.name ?? row?.label ?? row?.displayName ?? "").trim() ||
-          "Unknown",
-        currentElo: toNumber(row?.currentElo) || DEFAULT_ELO,
-        peakElo: toNumber(row?.peakElo) || toNumber(row?.currentElo) || DEFAULT_ELO,
-        confidence: toNumber(row?.confidence),
-        gamesPlayed: toNumber(row?.gamesPlayed),
-        wins: toNumber(row?.wins),
-        losses: toNumber(row?.losses),
-      }))
+      .map((raw: unknown) => {
+        const row = asRecord(raw);
+        return {
+          rank: toNumber(row.rank),
+          playerId: normalizeId(row.playerId ?? row.id),
+          name:
+            String(row.name ?? row.label ?? row.displayName ?? "").trim() ||
+            "Unknown",
+          currentElo: toNumber(row.currentElo) || DEFAULT_ELO,
+          peakElo: toNumber(row.peakElo) || toNumber(row.currentElo) || DEFAULT_ELO,
+          confidence: toNumber(row.confidence),
+          gamesPlayed: toNumber(row.gamesPlayed),
+          wins: toNumber(row.wins),
+          losses: toNumber(row.losses),
+        };
+      })
       .filter((row) => Boolean(row.playerId));
   }, [payload?.leaderboardRows]);
 
@@ -224,13 +242,15 @@ export default function EloScreen() {
   }, [mergedPlayerOptions, rawLeaderboardRows]);
   const gameDrivenPlayerIds = useMemo(() => {
     return new Set(
-      (Array.isArray(games) ? games : []).flatMap((game: any) => {
-        const participantIds = Array.isArray(game?.players)
-          ? game.players.map((player: any) =>
-              normalizeId(player?.id ?? player?.playerId),
-            )
-          : Array.isArray(game?.playerIds)
-            ? game.playerIds.map((playerId: any) => normalizeId(playerId))
+      (Array.isArray(games) ? games : []).flatMap((rawGame: unknown) => {
+        const game = asRecord(rawGame);
+        const participantIds: string[] = Array.isArray(game.players)
+          ? game.players.map((player: unknown) => {
+              const record = asRecord(player);
+              return normalizeId(record.id ?? record.playerId);
+            })
+          : Array.isArray(game.playerIds)
+            ? game.playerIds.map((playerId: unknown) => normalizeId(playerId))
             : [];
 
         return participantIds.filter(Boolean);
@@ -335,47 +355,50 @@ export default function EloScreen() {
   }, [opponentOptions, selectedOpponentId, selectedPlayerId]);
 
   const selectedSummary = useMemo<EloSummary>(() => {
-    const summary = payload?.summary;
+    const summary = asRecord(payload?.summary);
     return {
-      playerId: normalizeId((summary as any)?.playerId ?? selectedPlayerId),
+      playerId: normalizeId(summary.playerId ?? selectedPlayerId),
       name:
-        String((summary as any)?.name ?? selectedPlayer?.name ?? "Unknown").trim() ||
+        String(summary.name ?? selectedPlayer?.name ?? "Unknown").trim() ||
         "Unknown",
-      currentElo: toNumber((summary as any)?.currentElo) || DEFAULT_ELO,
+      currentElo: toNumber(summary.currentElo) || DEFAULT_ELO,
       peakElo:
-        toNumber((summary as any)?.peakElo) ||
-        toNumber((summary as any)?.currentElo) ||
+        toNumber(summary.peakElo) ||
+        toNumber(summary.currentElo) ||
         DEFAULT_ELO,
-      confidence: toNumber((summary as any)?.confidence),
-      gamesPlayed: toNumber((summary as any)?.gamesPlayed),
-      wins: toNumber((summary as any)?.wins),
-      losses: toNumber((summary as any)?.losses),
-      avgDelta: toNumber((summary as any)?.avgDelta),
-      bestDelta: toNumber((summary as any)?.bestDelta),
-      worstDelta: toNumber((summary as any)?.worstDelta),
+      confidence: toNumber(summary.confidence),
+      gamesPlayed: toNumber(summary.gamesPlayed),
+      wins: toNumber(summary.wins),
+      losses: toNumber(summary.losses),
+      avgDelta: toNumber(summary.avgDelta),
+      bestDelta: toNumber(summary.bestDelta),
+      worstDelta: toNumber(summary.worstDelta),
       recentForm:
-        String((summary as any)?.recentForm ?? "").trim() || "-",
+        String(summary.recentForm ?? "").trim() || "-",
     };
   }, [payload?.summary, selectedPlayer, selectedPlayerId]);
 
   const topCards = useMemo<EloMetricCard[]>(() => {
     const source = Array.isArray(payload?.topCards) ? payload.topCards : [];
 
-    return source.map((card: any) => ({
-      key: String(card?.key ?? ""),
-      label: String(card?.label ?? ""),
-      value: String(card?.value ?? "0"),
-      sub:
-        typeof card?.sub === "string" && card.sub.trim() ? card.sub.trim() : undefined,
-      tone:
-        card?.tone === "accent" ||
-        card?.tone === "blue" ||
-        card?.tone === "green" ||
-        card?.tone === "amber" ||
-        card?.tone === "danger"
-          ? card.tone
-          : "default",
-    }));
+    return source.map((raw: unknown) => {
+      const card = asRecord(raw);
+      return {
+        key: String(card.key ?? ""),
+        label: String(card.label ?? ""),
+        value: String(card.value ?? "0"),
+        sub:
+          typeof card.sub === "string" && card.sub.trim() ? card.sub.trim() : undefined,
+        tone:
+          card.tone === "accent" ||
+          card.tone === "blue" ||
+          card.tone === "green" ||
+          card.tone === "amber" ||
+          card.tone === "danger"
+            ? card.tone
+            : "default",
+      };
+    });
   }, [payload?.topCards]);
 
   const activeSection = useMemo(() => {
@@ -387,31 +410,34 @@ export default function EloScreen() {
     }
 
     const section = resolveVisibleEloSection(
-      payload.sections as Record<string, any>,
+      payload.sections as Record<string, LooseEloSection>,
       activeTab,
     );
     const cards = Array.isArray(section?.cards)
       ? section.cards
-          .map((card: any) => ({
-            key: String(card?.key ?? ""),
-            label: String(card?.label ?? ""),
+          .map((raw: unknown): EloMetricCard => {
+            const card = asRecord(raw);
+            return {
+            key: String(card.key ?? ""),
+            label: String(card.label ?? ""),
             value:
-              String(card?.key ?? "") === "recent-form"
-                ? describeRecentForm(String(card?.value ?? ""))
-                : String(card?.value ?? "0"),
+              String(card.key ?? "") === "recent-form"
+                ? describeRecentForm(String(card.value ?? ""))
+                : String(card.value ?? "0"),
             sub:
-              typeof card?.sub === "string" && card.sub.trim()
+              typeof card.sub === "string" && card.sub.trim()
                 ? card.sub.trim()
                 : undefined,
             tone:
-              card?.tone === "accent" ||
-              card?.tone === "blue" ||
-              card?.tone === "green" ||
-              card?.tone === "amber" ||
-              card?.tone === "danger"
+              card.tone === "accent" ||
+              card.tone === "blue" ||
+              card.tone === "green" ||
+              card.tone === "amber" ||
+              card.tone === "danger"
                 ? card.tone
                 : "default",
-          }))
+            };
+          })
           .filter((card: EloMetricCard) => Boolean(card.key && card.label))
       : [];
 
@@ -505,9 +531,9 @@ export default function EloScreen() {
   const secondaryCards = topCards.slice(1, 3);
   const emptyStateDescription =
     error ||
-    (typeof (payload?.emptyState as any)?.description === "string" &&
-    String((payload?.emptyState as any)?.description).trim()
-      ? String((payload?.emptyState as any)?.description).trim()
+    (typeof asRecord(payload?.emptyState).description === "string" &&
+    String(asRecord(payload?.emptyState).description).trim()
+      ? String(asRecord(payload?.emptyState).description).trim()
       : "No server-authored ELO data is available yet.");
   const {
     recoveryState,
@@ -875,7 +901,7 @@ export default function EloScreen() {
                   ]}
                   onPress={() => {
                     setSelectedPlayerId(row.playerId);
-                    router.push(buildPlayerProfileRoute(row.playerId) as any);
+                    router.push(buildPlayerProfileRoute(row.playerId));
                   }}
                 >
                   <View style={styles.leaderboardLeft}>
