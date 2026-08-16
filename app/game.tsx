@@ -553,7 +553,7 @@ export default function Game() {
     updateCurrent({
       assistPrestigeRecipients: {
         ...(current.assistPrestigeRecipients ?? {}),
-        [playerId]: value,
+        [playerId]: Math.max(0, toNumber(value)),
       },
     });
   }

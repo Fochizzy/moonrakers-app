@@ -49,6 +49,19 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function toNonNegativeNumber(value: unknown) {
+  return Math.max(0, toNumber(value));
+}
+
+function toNonNegativeRecord(value: Record<string, number> | undefined) {
+  return Object.fromEntries(
+    Object.entries(value ?? {}).map(([key, amount]) => [
+      key,
+      toNonNegativeNumber(amount),
+    ]),
+  );
+}
+
 export function buildCompletedGamePayload(input: Input) {
   const clientGameId = coerceUuid(input.activeGame.id);
 
@@ -76,7 +89,7 @@ export function buildCompletedGamePayload(input: Input) {
         start_order: player.startOrder ?? 0,
         total_prestige: toNumber(totals.totalPrestige ?? totals.prestige),
         direct_prestige: toNumber(totals.directPrestige),
-        assist_prestige_received: toNumber(totals.assistPrestigeReceived),
+        assist_prestige_received: toNonNegativeNumber(totals.assistPrestigeReceived),
         objective_prestige: toNumber(totals.objectivePrestige),
         score: toNumber(totals.score),
         assists: toNumber(totals.assists),
@@ -91,7 +104,9 @@ export function buildCompletedGamePayload(input: Input) {
       contracts: toNumber(round.contracts),
       failures: toNumber(round.failures),
       assist_recipients: round.assistRecipients ?? {},
-      assist_prestige_recipients: round.assistPrestigeRecipients ?? {},
+      assist_prestige_recipients: toNonNegativeRecord(
+        round.assistPrestigeRecipients,
+      ),
       objective_count: toNumber(round.objectiveCount),
       objective_prestige: toNumber(round.objectivePrestige),
       created_at: round.createdAt

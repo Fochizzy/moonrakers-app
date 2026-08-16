@@ -81,6 +81,10 @@ function n(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+function nonNegativeNumber(value: unknown): number {
+  return Math.max(0, n(value));
+}
+
 function objectiveCount(value: unknown): number {
   return Math.max(0, Math.floor(n(value)));
 }
@@ -134,7 +138,7 @@ export function createRound(
     assistPrestigeRecipients: Object.fromEntries(
       Object.entries(current.assistPrestigeRecipients ?? {}).filter(
         ([recipientId]) => n((current.assistRecipients ?? {})[recipientId]) > 0
-      )
+      ).map(([recipientId, value]) => [recipientId, nonNegativeNumber(value)])
     ),
     objectiveCount: count,
     objectivePrestige: count,
@@ -216,7 +220,7 @@ export function buildTotals(
         }
 
         const recipientTotals = totals[recipientId];
-        const assistPrestige = n(rawAssistPrestige);
+        const assistPrestige = nonNegativeNumber(rawAssistPrestige);
         const assistCountForRecipient =
           n((round.assistRecipients ?? {})[recipientId]) > 0 ? 1 : 0;
 

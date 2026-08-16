@@ -166,6 +166,10 @@ export default function AssistSection({
           {visiblePlayers.map((player, index) => {
             const accent = getPlayerAccentColor(resolveStoredPlayerColor(player.color, index));
             const assistOn = toNumber(currentAssistRecipients[player.id]) > 0;
+            const assistPrestige = Math.max(
+              0,
+              toNumber(currentAssistPrestigeRecipients[player.id])
+            );
             const rowCollapsed = !!collapsedByPlayer[player.id];
             const rowIsCollapsing = !!collapsingAssistPlayers[player.id];
 
@@ -241,11 +245,11 @@ export default function AssistSection({
 
                         <View style={[styles.assistInlinePrestige, !assistOn && styles.disabled]}>
                           <ScaleButton
-                            disabled={!assistOn}
+                            disabled={!assistOn || assistPrestige <= 0}
                             onPress={() =>
                               onSetAssistPrestige(
                                 player.id,
-                                toNumber(currentAssistPrestigeRecipients[player.id]) - 1
+                                assistPrestige - 1
                               )
                             }
                             accessibilityLabel={`Decrease assist prestige from ${player.name}`}
@@ -255,7 +259,7 @@ export default function AssistSection({
                           </ScaleButton>
 
                           <Text style={styles.miniValue}>
-                            {toNumber(currentAssistPrestigeRecipients[player.id])}
+                            {assistPrestige}
                           </Text>
 
                           <ScaleButton
@@ -263,7 +267,7 @@ export default function AssistSection({
                             onPress={() =>
                               onSetAssistPrestige(
                                 player.id,
-                                toNumber(currentAssistPrestigeRecipients[player.id]) + 1
+                                assistPrestige + 1
                               )
                             }
                             accessibilityLabel={`Increase assist prestige from ${player.name}`}
