@@ -72,15 +72,15 @@ const BASE_PLAYER_COLORS = {
   },
   orange: {
     key: 'orange',
-    accent: '#f97316',
+    accent: '#ff8c00',
     background: '#3b1d0a',
-    rgb: [249, 115, 22],
+    rgb: [255, 140, 0],
   },
   yellow: {
     key: 'yellow',
-    accent: '#eab308',
+    accent: '#facc15',
     background: '#3a2f00',
-    rgb: [234, 179, 8],
+    rgb: [250, 204, 21],
   },
   default: {
     key: 'default',

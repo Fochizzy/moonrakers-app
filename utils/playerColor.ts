@@ -31,6 +31,7 @@ const LEGACY_COLOR_MAP: Record<string, PlayerColorName> = {
   amber: "orange",
   "#f59e0b": "orange",
   "#f97316": "orange",
+  "#ff8c00": "orange",
 
   yellow: "yellow",
   gold: "yellow",
