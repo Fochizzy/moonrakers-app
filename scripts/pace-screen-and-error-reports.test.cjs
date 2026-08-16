@@ -122,4 +122,37 @@ assert.match(
   "expected the root layout to wrap the app in the error boundary",
 );
 
+// --- owner digest loop --------------------------------------------------
+const digestMigration = fs
+  .readdirSync(migrationDir)
+  .filter((file) => file.includes("error_report_digest"))
+  .at(-1);
+
+assert.ok(digestMigration, "expected the error-report digest migration to exist");
+const digestSource = read("supabase", "migrations", digestMigration);
+
+assert.match(
+  digestSource,
+  /viewer_email <> 'izzy\.hodnett@gmail\.com'/,
+  "expected the digest RPC to be restricted to the app owner",
+);
+
+assert.doesNotMatch(
+  digestSource,
+  /'stack'/,
+  "expected the digest to expose messages and counts, never stack traces",
+);
+
+const backupScreenSource = read("app", "data-backup.tsx");
+assert.match(
+  backupScreenSource,
+  /supabase\.rpc\("get_error_report_digest"\)/,
+  "expected the backup screen to load the owner crash digest",
+);
+assert.match(
+  backupScreenSource,
+  /if \(digest\.isOwner\)/,
+  "expected the crash digest card to stay hidden for non-owners",
+);
+
 console.log("pace-screen-and-error-reports.test.cjs passed");

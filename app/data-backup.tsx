@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { File, Paths } from "expo-file-system";
@@ -20,10 +20,31 @@ import {
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { importBackupFromPicker } from "@/lib/migration/importBackupFromPicker";
 import { buildPlayersCsv, exportGamesToCSV } from "@/utils/csv/exportCSV";
+import { supabase } from "@/lib/supabase";
 import { commitFeedback, warningFeedback } from "@/utils/haptics";
 import { buildHomeRoute } from "@/utils/appRoutes";
 
 type BusyAction = "backup" | "players" | "import" | null;
+
+type ErrorDigest = {
+  isOwner?: boolean;
+  total30d?: number;
+  fatal30d?: number;
+  last7d?: number;
+  latest?: Array<{
+    message?: string;
+    platform?: string;
+    appVersion?: string | null;
+    isFatal?: boolean;
+    count?: number;
+    lastSeen?: string;
+  }>;
+};
+
+function toCount(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 function timestampSlug(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -45,6 +66,7 @@ export default function DataBackupScreen() {
 
   const [busy, setBusy] = useState<BusyAction>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [errorDigest, setErrorDigest] = useState<ErrorDigest | null>(null);
 
   const signedInProfileId = String(authSession?.user?.id ?? "").trim();
   const signedInPlayerName = String(
@@ -201,6 +223,33 @@ export default function DataBackupScreen() {
     }
   }
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadDigest() {
+      try {
+        const { data } = await supabase.rpc("get_error_report_digest");
+        if (!active || !data || typeof data !== "object") {
+          return;
+        }
+        const digest = data as ErrorDigest;
+        if (digest.isOwner) {
+          setErrorDigest(digest);
+        }
+      } catch {
+        // The digest is a convenience; failing to load it is not an error.
+      }
+    }
+
+    if (signedInProfileId) {
+      void loadDigest();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [signedInProfileId]);
+
   return (
     <PageShell preset="quiet">
       <AppHeader
@@ -263,6 +312,33 @@ export default function DataBackupScreen() {
         </View>
       </SectionCard>
 
+      {errorDigest ? (
+        <SectionCard
+          title="Crash reports"
+          subtitle={`${toCount(errorDigest.last7d)} this week · ${toCount(errorDigest.total30d)} in 30 days (${toCount(errorDigest.fatal30d)} fatal)`}
+        >
+          {Array.isArray(errorDigest.latest) && errorDigest.latest.length > 0 ? (
+            <View style={styles.digestList}>
+              {errorDigest.latest.map((entry, index) => (
+                <View key={`${entry.message}-${index}`} style={styles.digestRow}>
+                  <Text style={styles.digestMessage} numberOfLines={2}>
+                    {entry.isFatal ? "⚠ " : ""}
+                    {entry.message}
+                  </Text>
+                  <Text style={styles.digestMeta}>
+                    {entry.platform} · v{entry.appVersion ?? "?"} · x{toCount(entry.count)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.digestEmpty}>
+              No crashes reported in the last 30 days.
+            </Text>
+          )}
+        </SectionCard>
+      ) : null}
+
       {lastResult ? (
         <SectionCard>
           <Text style={styles.result}>{lastResult}</Text>
@@ -297,5 +373,25 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: 8,
+  },
+  digestList: {
+    gap: 10,
+  },
+  digestRow: {
+    gap: 2,
+  },
+  digestMessage: {
+    color: "#FCA5A5",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  digestMeta: {
+    color: "rgba(226,232,240,0.6)",
+    fontSize: 11,
+  },
+  digestEmpty: {
+    color: "#86EFAC",
+    fontSize: 12,
+    fontWeight: "600",
   },
 });
