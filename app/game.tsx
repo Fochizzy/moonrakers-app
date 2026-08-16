@@ -274,7 +274,14 @@ export default function Game() {
   const currentDark = mixWithBlack(currentAccent, 0.8);
   const currentDarker = mixWithBlack(currentAccent, 0.88);
   const appBackground = getPlayerBackgroundColor(currentPlayer?.color ?? getFallbackPlayerColor(0));
-  const hasOutcomeSelection = current.contracts === 1 || current.failures === 1;
+  // An outcome counts whether it has landed in the synced draft (current.*) or
+  // only in the local tap state so far - otherwise completing the fields in an
+  // unlucky order leaves End Turn disabled until an unrelated re-render.
+  const hasOutcomeSelection =
+    current.contracts === 1 ||
+    current.failures === 1 ||
+    contractChoice === 1 ||
+    failureChoice === 1;
 
   const canSubmitTurn = useMemo(() => {
     if (!activeGame || !currentPlayer) return false;
@@ -291,6 +298,8 @@ export default function Game() {
     hasOutcomeSelection,
     current.contracts,
     current.failures,
+    contractChoice,
+    failureChoice,
   ]);
 
   const latestDisplayRound = useMemo(() => {
@@ -334,6 +343,29 @@ export default function Game() {
     return () => clearInterval(timer);
   }, [gameStartedAt]);
 
+  // Rapid taps can fire before the draft projection re-renders; composing each
+  // patch onto the last *committed* current (not the render snapshot) keeps
+  // them order-independent.
+  const latestCurrentRef = useRef<CurrentTurnStats>(current);
+
+  useEffect(() => {
+    latestCurrentRef.current = current;
+  }, [current]);
+
+  // updateGameplay drops writes made before the synced draft exists (fresh
+  // game, slow draft creation): the chip lights up from local state but the
+  // draft never hears about it, leaving End Turn dead in an order-dependent
+  // way. When the draft appears, flush the pending intent.
+  useEffect(() => {
+    if (!gameDraft || !activeGame) {
+      return;
+    }
+    if (latestCurrentRef.current !== current) {
+      commitGameplayPatch({ current: latestCurrentRef.current });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- flush once per draft arrival
+  }, [gameDraft?.draftId]);
+
   function commitGameplayPatch(
     patch: Partial<{
       current: Partial<CurrentTurnStats>;
@@ -354,13 +386,15 @@ export default function Game() {
       rounds: patch.rounds ?? rounds,
       totals: patch.totals ?? totals,
       current: {
-        ...current,
+        ...latestCurrentRef.current,
         ...(patch.current ?? {}),
       },
       roundCount: patch.roundCount ?? activeGame.roundCount,
       selectedWinnerId:
         patch.selectedWinnerId ?? activeGame.selectedWinnerId ?? null,
     };
+
+    latestCurrentRef.current = nextGameplay.current;
 
     // updateGameplay reprojects activeGame from the draft synchronously, so the
     // UI already reflects this patch on the next render. Writing activeGame
@@ -678,7 +712,7 @@ export default function Game() {
 
       const candidate = buildSubmitRoundCandidate({
         activeTurnPlayerId: activeTurnPlayer.id,
-        current,
+        current: latestCurrentRef.current,
         existingRounds: rounds,
         objectiveAwardsByPlayer,
       });
@@ -707,7 +741,7 @@ export default function Game() {
       if (!editingRoundId) return;
       const candidate = buildEditRoundCandidate({
         editingRoundId,
-        current,
+        current: latestCurrentRef.current,
         existingRounds: rounds,
         objectiveAwardsByPlayer,
       });
