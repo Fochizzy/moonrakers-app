@@ -45,7 +45,8 @@ assert.match(
 
 assert.match(
   source,
-  /<AnalyticsControlRail[\s\S]*search=\{\s*activeSectionTab === "pairingCorrelations"[\s\S]*query:\s*playerSearchQuery,[\s\S]*onQueryChange:\s*setPlayerSearchQuery,[\s\S]*items:\s*filteredPlayerOptions\.map\(\(player\)\s*=>[\s\S]*selectedIds:\s*selectedProfileId \? \[selectedProfileId\] : \[\],[\s\S]*onSelect:\s*\(id\)\s*=>\s*setSelectedProfileId\(id\),[\s\S]*variant:\s*"list"/,
+  // The picker's presentation variant is a layout choice; the wiring is not.
+  /<AnalyticsControlRail[\s\S]*search=\{\s*activeSectionTab === "pairingCorrelations"[\s\S]*query:\s*playerSearchQuery,[\s\S]*onQueryChange:\s*setPlayerSearchQuery,[\s\S]*items:\s*filteredPlayerOptions\.map\(\(player\)\s*=>[\s\S]*selectedIds:\s*selectedProfileId \? \[selectedProfileId\] : \[\],[\s\S]*onSelect:\s*\(id\)\s*=>\s*setSelectedProfileId\(id\),[\s\S]*variant:\s*"(list|rail)"/,
   "expected Personal Correlations to drive the shared player search picker from the selected profile state",
 );
 

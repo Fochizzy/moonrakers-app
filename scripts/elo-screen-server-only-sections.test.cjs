@@ -14,10 +14,19 @@ assert.doesNotMatch(
   "expected the ELO route to stop rebuilding section cards and insight copy locally once the Supabase contract returns them directly",
 );
 
-assert.doesNotMatch(
+// Local game rows are still allowed as a whole-record fallback for players the
+// server has not ranked. What is banned is mixing the two sources inside one
+// row, which used to clamp a 12-4 record to 12W / 0L.
+assert.match(
   source,
-  /buildGameRowsByPlayer/,
-  "expected the ELO route to stop using local game history to fill leaderboard analytics gaps",
+  /const hasServerRecord =\s*typeof serverRow\?\.wins === "number" &&\s*typeof serverRow\?\.losses === "number";/,
+  "expected the ELO leaderboard to decide server-vs-local record per row instead of blending them",
+);
+
+assert.match(
+  source,
+  /const wins = hasServerRecord \? \(serverRow!\.wins as number\) : localWins;/,
+  "expected wins to come from one source or the other, never a mix",
 );
 
 assert.doesNotMatch(

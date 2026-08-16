@@ -226,9 +226,11 @@ assert.match(
   "expected the correlations tab to reuse the shared no-players and no-games recovery handling",
 );
 
+// The games tab additionally suppresses the recovery card when the server did
+// return games, so its condition spans several lines.
 assert.match(
   statsSource,
-  /function renderGamesTab\(\)[\s\S]*overviewRecoveryState\.kind === "no-players" \|\| overviewRecoveryState\.kind === "no-games"[\s\S]*renderSharedRecoveryCard\(overviewRecoveryState\.kind\)/s,
+  /function renderGamesTab\(\)[\s\S]*overviewRecoveryState\.kind === "no-players" \|\|\s*overviewRecoveryState\.kind === "no-games"[\s\S]*renderSharedRecoveryCard\(overviewRecoveryState\.kind\)/s,
   "expected the games tab to reuse the shared no-players and no-games recovery handling",
 );
 

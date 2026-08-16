@@ -7,21 +7,23 @@ const source = fs.readFileSync(
   "utf8",
 );
 
+// Canonicalization moved from canonicalizeSelectablePlayers to the shared
+// analytics player directory, which returns the same alias map.
 assert.match(
   source,
-  /canonicalizeSelectablePlayers/,
+  /buildAnalyticsPlayerDirectory/,
   "expected the player profile detail route to import the canonical player resolver",
 );
 
 assert.match(
   source,
-  /const canonicalPlayerDirectory = useMemo\(\s*\(\) => canonicalizeSelectablePlayers\(players, \[\]\)/s,
+  /const analyticsPlayerDirectory = useMemo\(\s*\(\) =>\s*buildAnalyticsPlayerDirectory\(\{/s,
   "expected the player profile detail route to canonicalize the live store players before resolving the focus id",
 );
 
 assert.match(
   source,
-  /const resolvedPlayerId = useMemo\(\s*\(\) =>[\s\S]*canonicalPlayerDirectory\.aliases\[normalizedRoutePlayerId\] \?\? normalizedRoutePlayerId/s,
+  /const resolvedPlayerId = useMemo\(\s*\(\) =>[\s\S]*analyticsPlayerDirectory\.aliases\[normalizedRoutePlayerId\] \?\? normalizedRoutePlayerId/s,
   "expected the player profile detail route to remap stale local player ids to canonical registered ids",
 );
 

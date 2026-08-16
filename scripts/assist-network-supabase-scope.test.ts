@@ -52,8 +52,10 @@ assert.equal(
   "assist data should still include Supabase games when the scoped roster is only a visual focus",
 );
 assert.equal(focusedDataset.edges.length, 1);
-assert.equal(focusedDataset.edges[0]?.sourceId, "p1");
-assert.equal(focusedDataset.edges[0]?.targetId, "p2");
+// A round's assistRecipients names who helped the player taking the turn, so
+// the assister is the edge source and the turn player is the target.
+assert.equal(focusedDataset.edges[0]?.sourceId, "p2");
+assert.equal(focusedDataset.edges[0]?.targetId, "p1");
 
 const exactDataset = buildAssistNetworkDataset({
   games: [game],

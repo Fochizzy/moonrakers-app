@@ -18,16 +18,28 @@ assert.match(
   "expected the charts setup route to order focus quick picks with the shared signed-in-first helper",
 );
 
+// The scope rail carries an extra explicit pick, so it shows fewer common
+// players than the focus rail. The count is a layout choice; what matters here
+// is that the shared signed-in-first helper still orders the rail.
 assert.match(
   chartsSource,
-  /prioritizeSignedInPlayerOptions\(\{[\s\S]*players:\s*scopePlayerDirectoryPlayers[\s\S]*authProfileId:\s*authProfile\?\.id[\s\S]*authSessionUserId:\s*authSession\?\.user\?\.id[\s\S]*commonPlayerLimit:\s*4[\s\S]*\}\)/,
+  /prioritizeSignedInPlayerOptions\(\{[\s\S]*players:\s*scopePlayerDirectoryPlayers[\s\S]*authProfileId:\s*authProfile\?\.id[\s\S]*authSessionUserId:\s*authSession\?\.user\?\.id[\s\S]*commonPlayerLimit:\s*\d+[\s\S]*\}\)/,
   "expected the charts setup route to order scope quick picks with the shared signed-in-first helper",
+);
+
+// Insights has no "common players" rail to cap, so it resolves the signed-in
+// option and sorts it to the front directly rather than going through
+// prioritizeSignedInPlayerOptions.
+assert.match(
+  insightsSource,
+  /resolveSignedInPlayerOptionId\(\{[\s\S]{0,400}authSessionUserId:\s*authSession\?\.user\?\.id/,
+  "expected the insights route to resolve the signed-in player against the live option list",
 );
 
 assert.match(
   insightsSource,
-  /prioritizeSignedInPlayerOptions\(\{[\s\S]*authSessionUserId:\s*authSession\?\.user\?\.id[\s\S]*commonPlayerLimit:\s*4[\s\S]*\}\)/,
-  "expected the insights route to order personal-correlation player picks with the shared signed-in-first helper",
+  /const leftSignedIn = signedInPlayerOptionId && left\.id === signedInPlayerOptionId \? 0 : 1;/,
+  "expected the insights route to sort the signed-in player to the front of the personal-correlation picks",
 );
 
 assert.match(

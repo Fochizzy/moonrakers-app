@@ -7,16 +7,26 @@ const source = fs.readFileSync(
   "utf8",
 );
 
+// The rails are driven by the union of players this device has games for and
+// players the server already ranked, with the full roster as a fallback. That
+// is what keeps an opponent tap alive when a payload refresh returns a
+// narrower player list.
 assert.match(
   source,
-  /const storePlayerOptions = useMemo<StorePlayer\[]>\(/,
-  "expected the ELO screen to build a stable local player-option fallback so opponent taps survive filtered payload refreshes",
+  /const analyticsPlayers = useMemo<StorePlayer\[]>\(\(\) => \{/,
+  "expected the ELO screen to build a stable player-option list so opponent taps survive filtered payload refreshes",
 );
 
 assert.match(
   source,
-  /const analyticsPlayers = useMemo<StorePlayer\[]>\(\(\) => \{[\s\S]*const mergedPlayers = new Map<string,\s*StorePlayer>\(\);[\s\S]*rawPlayerOptions[\s\S]*storePlayerOptions[\s\S]*return Array\.from\(mergedPlayers\.values\(\)\);[\s\S]*\}, \[rawPlayerOptions, storePlayerOptions\]\);/,
-  "expected the ELO screen to merge server player options with the local roster before driving player and opponent rails",
+  /gameDrivenPlayerIds\.has\(playerId\) \|\| leaderboardPlayerIds\.has\(playerId\)/,
+  "expected the ELO screen to merge server-ranked players with the local roster before driving player and opponent rails",
+);
+
+assert.match(
+  source,
+  /return playersWithAnalytics\.length \? playersWithAnalytics : sortedPlayers;/,
+  "expected the ELO screen to fall back to the full roster rather than rendering empty rails",
 );
 
 assert.match(

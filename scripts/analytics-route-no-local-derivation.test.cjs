@@ -49,9 +49,18 @@ assert.doesNotMatch(
   "expected app/insights.tsx to stop deriving insights locally",
 );
 
+// The chart route may still read the metric catalog from utils/charts — that
+// describes which metrics a chart supports, it does not build data. What it
+// must not do is import the local dataset builders.
 assert.doesNotMatch(
   chartRouteSource,
-  /utils\/charts|utils\/analyticsPlayers/,
+  /utils\/analyticsPlayers/,
+  "expected app/charts/[chartKey].tsx to stop deriving chart player rows locally",
+);
+
+assert.doesNotMatch(
+  chartRouteSource,
+  /\b(buildUnifiedSnapshots|buildMetricDataMap|buildRadarStatsForPlayer|buildRelationships|collectUnifiedGames|normalizeStoreGames)\b/,
   "expected app/charts/[chartKey].tsx to stop deriving chart datasets locally",
 );
 

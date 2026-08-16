@@ -54,10 +54,13 @@ assert.match(
   "expected the charts setup route to resolve the signed-in quick-pick option before rendering focus labels",
 );
 
+// The signed-in quick pick is labelled "You" rather than echoing a name that a
+// stale payload could have gotten wrong, and only once the live auth profile
+// confirms who that is. Insights labels its signed-in option the same way.
 assert.match(
   chartsSource,
-  /label:\s*authProfilePlayer\.name/,
-  "expected the charts setup quick picks to override stale signed-in labels with the live auth profile name",
+  /authProfilePlayer\?\.name\s*\?\s*\{\s*\.\.\.option,\s*label:\s*"You"\s*\}/,
+  "expected the charts setup quick picks to label the signed-in option 'You' once the live auth profile resolves it",
 );
 
 assert.match(
@@ -68,8 +71,8 @@ assert.match(
 
 assert.match(
   insightsSource,
-  /label:\s*authProfilePlayerOption\.label\s*\|\|\s*currentSignedInOption\.label/,
-  "expected the insights route to override stale signed-in labels with the live auth profile label",
+  /label:\s*"You",[\s\S]{0,200}authProfilePlayerOption\.displayName\s*\|\|\s*currentSignedInOption\.displayName/,
+  "expected the insights route to label the signed-in option 'You' and back it with the live auth profile naming",
 );
 
 assert.match(

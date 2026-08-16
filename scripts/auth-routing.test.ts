@@ -102,8 +102,13 @@ const loginScreenSource = fs.readFileSync(
   "utf8",
 );
 
-assert.match(loginScreenSource, /Create Profile/);
-assert.match(loginScreenSource, /Forgot Password/);
-assert.match(loginScreenSource, /Send Confirmation Email/);
+// Assert the route out to registration rather than the button copy, which has
+// been reworded more than once.
+assert.match(loginScreenSource, /router\.push\(APP_ROUTES\.register/);
+assert.match(loginScreenSource, /title="Create account"/i);
+assert.match(loginScreenSource, /onPress=\{handleResetPassword\}/);
+assert.match(loginScreenSource, /Reset password email/i);
+assert.match(loginScreenSource, /onPress=\{handleResendConfirmation\}/);
+assert.match(loginScreenSource, /Resend confirmation email/i);
 
 console.log("auth-routing.test.ts passed");

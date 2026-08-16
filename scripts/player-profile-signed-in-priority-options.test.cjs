@@ -7,13 +7,21 @@ const migrationFiles = fs
   .readdirSync(migrationDir)
   .filter((file) => file.endsWith(".sql"))
   .sort();
+// Later player-profile migrations only wrap or re-grant the RPC, so pick the
+// most recent one that actually defines the quick-player rail payload rather
+// than whichever file sorts last.
 const latestProfileMigration = migrationFiles
   .filter((file) => file.includes("moonrakers_player_profile"))
+  .filter((file) =>
+    fs
+      .readFileSync(path.join(migrationDir, file), "utf8")
+      .includes("signedInTopPlayerOptions"),
+  )
   .at(-1);
 
 assert.ok(
   latestProfileMigration,
-  "expected a Moonrakers player-profile migration to exist",
+  "expected a Moonrakers player-profile migration to define signedInTopPlayerOptions",
 );
 
 const source = fs.readFileSync(

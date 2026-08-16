@@ -28,10 +28,18 @@ assert.match(
   "expected app/index.tsx to derive a filteredPlayers list from rankedPlayers",
 );
 
+// filteredPlayers reaches the grid through the collapsible preview list, so the
+// search results are what the Command grid actually renders.
 assert.match(
   screenSource,
-  /filteredPlayers\.map\(\(player\)\s*=>/,
-  "expected app/index.tsx to render filteredPlayers in the Command player grid",
+  /const\s+visiblePlayerOptions\s*=\s*useMemo\([\s\S]{0,240}filteredPlayers/,
+  "expected app/index.tsx to derive the visible player options from filteredPlayers",
+);
+
+assert.match(
+  screenSource,
+  /visiblePlayerOptions\.map\(\(player\)\s*=>/,
+  "expected app/index.tsx to render the filtered player options in the Command player grid",
 );
 
 console.log("home-command-player-search.test.cjs passed");

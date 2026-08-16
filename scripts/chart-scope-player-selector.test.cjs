@@ -51,8 +51,15 @@ assert.match(
 
 assert.match(
   source,
-  /setupScopePlayerOptions\.filter\(\s*\(option\)\s*=>[\s\S]*scopeAllowedPlayerIds\.has\(String\(option\.key\)\)\s*\)/s,
+  /scopePlayerOptions\.filter\(\(option\)\s*=>\s*scopeAllowedPlayerIds\.has\(String\(option\.key\)\)\s*\)/s,
   "expected the scope selector to filter its setup options down to the played-with roster",
+);
+
+// Filtering must never leave the rail with nothing to pick.
+assert.match(
+  source,
+  /return filtered\.length \? filtered : scopePlayerOptions;/,
+  "expected the scope selector to fall back to the unfiltered options rather than rendering an empty rail",
 );
 
 assert.doesNotMatch(
