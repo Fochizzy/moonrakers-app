@@ -98,6 +98,18 @@ function toNumericRecord(value: unknown): Record<string, number> {
   );
 }
 
+function remapNumericRecordKeys(
+  value: unknown,
+  idMap: Map<string, string>,
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(toNumericRecord(value)).map(([key, rawValue]) => [
+      idMap.get(key) ?? key,
+      rawValue,
+    ]),
+  );
+}
+
 function resolvePlayerId(participant: RawParticipant) {
   const profileId = String(participant.profile_id ?? "").trim();
   if (profileId) {
@@ -220,9 +232,12 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
         return toMillis(left.created_at) - toMillis(right.created_at);
       })
       .map((round, index) => {
-        const playerId = participantIdsByRowId.get(
-          String(round.participant_id ?? "").trim(),
-        );
+        const rawParticipantId = String(round.participant_id ?? "").trim();
+        const playerId =
+          participantIdsByRowId.get(rawParticipantId) ??
+          (players.some((player) => player.id === rawParticipantId)
+            ? rawParticipantId
+            : null);
 
         if (!playerId) {
           return null;
@@ -235,9 +250,13 @@ export function normalizeCloudSnapshot(input: NormalizeInput): CloudSnapshot {
           contracts: toNumber(round.contracts),
           failures: toNumber(round.failures),
           turnsAtBase: 0,
-          assistRecipients: toNumericRecord(round.assist_recipients),
-          assistPrestigeRecipients: toNumericRecord(
+          assistRecipients: remapNumericRecordKeys(
+            round.assist_recipients,
+            participantIdsByRowId,
+          ),
+          assistPrestigeRecipients: remapNumericRecordKeys(
             round.assist_prestige_recipients,
+            participantIdsByRowId,
           ),
           objectiveCount: toNumber(round.objective_count),
           objectivePrestige: toNumber(round.objective_prestige),

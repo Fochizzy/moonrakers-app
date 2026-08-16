@@ -1,11 +1,10 @@
 import {
-  executeAnalyticsReadRpc,
-  getDefaultAnalyticsRpcClient,
-  resolveAnalyticsCall,
+  getStatsScreen as getSharedStatsScreen,
   type AnalyticsRpcClient,
   type StatsScreenParams,
   type StatsScreenPayload,
-} from "./types.ts";
+} from "@moonrakers/analytics-contract";
+import { getDefaultAnalyticsRpcClient, resolveAnalyticsCall } from "./types.ts";
 
 export async function getStatsScreen(
   params: StatsScreenParams,
@@ -23,13 +22,6 @@ export async function getStatsScreen(
     clientOrParams,
     maybeParams,
   );
-  return executeAnalyticsReadRpc(
-    client,
-    "get_stats_screen",
-    {
-      profile_id: params.profileId,
-      focus_player_id: params.focusPlayerId,
-    },
-    params.profileId,
-  );
+
+  return getSharedStatsScreen(client, params);
 }

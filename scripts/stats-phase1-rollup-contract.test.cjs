@@ -9,11 +9,13 @@ const migrationPath = path.join(
   "migrations",
   "20260527143000_moonrakers_phase1_additional_stats_turn_order.sql",
 );
+// The analytics types moved into the shared contract package when the
+// dashboard workspace landed; lib/cloud/analytics/types.ts is now a shim.
 const typesPath = path.join(
   projectRoot,
-  "lib",
-  "cloud",
-  "analytics",
+  "packages",
+  "analytics-contract",
+  "src",
   "types.ts",
 );
 

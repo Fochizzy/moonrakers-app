@@ -130,17 +130,26 @@ export function buildGameTrendsRoute(gameId: string) {
   } as const;
 }
 
-type DefinitionsRoute = {
+export function buildDefinitionsRoute(metric: string): {
   pathname: typeof APP_ROUTES.definitions;
-  params: Record<string, string>;
+  params: {
+    metric?: string;
+    category?: string;
+    sourceLabel?: string;
+  };
 };
-
-export function buildDefinitionsRoute(metric: string): DefinitionsRoute;
 export function buildDefinitionsRoute(input: {
   metric?: string | null;
   category?: string | null;
   sourceLabel?: string | null;
-}): DefinitionsRoute;
+}): {
+  pathname: typeof APP_ROUTES.definitions;
+  params: {
+    metric?: string;
+    category?: string;
+    sourceLabel?: string;
+  };
+};
 export function buildDefinitionsRoute(
   input:
     | string
@@ -149,7 +158,14 @@ export function buildDefinitionsRoute(
         category?: string | null;
         sourceLabel?: string | null;
       }
-) {
+): {
+  pathname: typeof APP_ROUTES.definitions;
+  params: {
+    metric?: string;
+    category?: string;
+    sourceLabel?: string;
+  };
+} {
   if (typeof input === "string") {
     const metric = input.trim();
     return {

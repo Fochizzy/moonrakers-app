@@ -68,6 +68,7 @@ export function normalizeTotals(t: any) {
     assistedEfficiency: toNumber(t?.assistedEfficiency),
     directEfficiency: toNumber(t?.directEfficiency),
 
+    assistCountBySource: normalizeAssistMap(t?.assistCountBySource),
     assistPrestigeBySource: normalizeAssistMap(t?.assistPrestigeBySource),
   };
 }
@@ -116,6 +117,7 @@ export function computeTotalsFromRounds(game: any) {
         failures: 0,
         contracts: 0,
         score: 0,
+        assistCountBySource: {},
         assistPrestigeBySource: {},
       };
     }
@@ -141,8 +143,32 @@ export function computeTotalsFromRounds(game: any) {
         ? r.assistRecipients
         : {};
 
-    for (const value of Object.values(assistRecipients)) {
-      t.assists += toNumber(value);
+    for (const [target, value] of Object.entries(assistRecipients)) {
+      const v = toNumber(value);
+
+      t.assists += v;
+
+      if (!totals[target]) {
+        totals[target] = {
+          directPrestige: 0,
+          assistPrestigeReceived: 0,
+          assistPrestigeSent: 0,
+          objectiveCount: 0,
+          objectivePrestige: 0,
+          assists: 0,
+          failures: 0,
+          contracts: 0,
+          score: 0,
+          assistCountBySource: {},
+          assistPrestigeBySource: {},
+        };
+      }
+
+      totals[target].assistCountBySource = {
+        ...(totals[target].assistCountBySource ?? {}),
+        [r.playerId]:
+          toNumber(totals[target].assistCountBySource?.[r.playerId]) + v,
+      };
     }
 
     if (
@@ -166,6 +192,7 @@ export function computeTotalsFromRounds(game: any) {
             failures: 0,
             contracts: 0,
             score: 0,
+            assistCountBySource: {},
             assistPrestigeBySource: {},
           };
         }
@@ -219,6 +246,14 @@ function chooseAssistMap(existing: any, computed: any) {
   return normalizeAssistMap(computed?.assistPrestigeBySource);
 }
 
+function chooseAssistCountMap(existing: any, computed: any) {
+  const existingMap = normalizeAssistMap(existing?.assistCountBySource);
+  if (Object.keys(existingMap).length > 0) {
+    return existingMap;
+  }
+  return normalizeAssistMap(computed?.assistCountBySource);
+}
+
 function mergeExistingAndComputedTotals(existing: any, computed: any) {
   const objectiveCount = chooseObjectiveCount(existing, computed);
   const directPrestige = chooseNumber(existing, computed, 'directPrestige');
@@ -261,6 +296,7 @@ function mergeExistingAndComputedTotals(existing: any, computed: any) {
     efficiency,
     assistedEfficiency,
     directEfficiency,
+    assistCountBySource: chooseAssistCountMap(existing, computed),
     assistPrestigeBySource: chooseAssistMap(existing, computed),
   };
 }
@@ -312,6 +348,7 @@ export function normalizeGameWithComputedTotals(game: any) {
           directPrestige: normalized.directPrestige,
           assistPrestigeReceived: normalized.assistPrestigeReceived,
           assistPrestigeSent: normalized.assistPrestigeSent,
+          assistCountBySource: normalized.assistCountBySource,
           assistPrestigeBySource: normalized.assistPrestigeBySource,
           objectiveCount: normalized.objectiveCount,
           objectivePrestige: normalized.objectivePrestige,

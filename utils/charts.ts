@@ -1608,6 +1608,7 @@ function getAssistSourceMap(entry?: Record<string, any>): Record<string, number>
     entry.assistPrestigeFromPlayers,
     entry.assistSources,
     entry.assistPrestigeBySource,
+    entry.assistCountBySource,
   ];
 
   for (const candidate of candidates) {
@@ -1821,7 +1822,7 @@ export function buildReplaySnapshotsFromGame(
       };
     }
 
-    const player = (game.players ?? []).find(
+    const player = (game?.players ?? []).find(
       (candidate) => String(candidate?.id ?? "").trim() === playerId
     );
     const existing = running[playerId] ?? {

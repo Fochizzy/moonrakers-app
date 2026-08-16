@@ -10,6 +10,8 @@ Build a separate Next.js web app inside this repository that gives each player a
 
 The visual design should match the current app's analytics language and extend it into a richer browser surface using cues from the Moonrakers board game: deep space-command backgrounds, luminous purple/blue/green/teal signal accents, metallic card framing, and dense "intel board" presentation rather than generic SaaS dashboard styling.
 
+The deployment target for v1 should be Cloudflare Workers using Cloudflare's current Next.js guidance and the OpenNext adapter, so the site can launch on Cloudflare without inventing a separate hosting path later.
+
 The dashboard should explicitly cover graphs, statistics, insights, correlations, and compare workflows rather than limiting the site to a lightweight summary view.
 
 The web app should support both sign in and account creation from its auth entry point. After account creation, a player who does not yet have a complete Moonrakers profile should be routed through a lightweight onboarding step before entering the dashboard.
@@ -23,6 +25,7 @@ The web app should support both sign in and account creation from its auth entry
 - Match the current app's colors, chrome, and chart styling while letting the web UI feel like a premium Moonrakers command table.
 - Keep analytics answers aligned between mobile and web for the same signed-in player.
 - Separate shared data logic from platform-specific presentation so the web app can evolve without bending the mobile UI around desktop needs.
+- Ship on Cloudflare Workers using a deployment path that is consistent with current Cloudflare Next.js guidance.
 
 ## Non-Goals
 
@@ -55,7 +58,7 @@ These files establish the dark-space palette, accent hierarchy, card borders, ch
 
 ## Recommended Architecture
 
-Create a separate web application in this repository, likely at `apps/dashboard`, using Next.js App Router.
+Create a separate web application in this repository, likely at `apps/dashboard`, using Next.js App Router and targeting Cloudflare Workers through the OpenNext adapter.
 
 The resulting structure should conceptually split into three layers:
 
@@ -72,6 +75,13 @@ The resulting structure should conceptually split into three layers:
    - This layer should not reuse React Native screen components.
 
 This architecture gives one analytics truth source and two presentation surfaces.
+
+The web runtime should be Cloudflare-first:
+
+- scaffold with Cloudflare's Next.js workflow rather than a generic Next-only starter
+- keep a committed `wrangler.jsonc` and `open-next.config.ts`
+- use local `preview` runs against the Workers runtime before deployment
+- deploy through Worker-compatible build output rather than a separate ad hoc host
 
 ## Route Map
 
@@ -255,7 +265,7 @@ Suggested implementation order:
 4. Compare, stats, and profile routes
 5. Charts index and chart detail routes
 6. Insights, correlations, and ELO routes
-7. Test hardening and deployment preparation
+7. Test hardening, Cloudflare preview verification, and deployment preparation
 
 This sequence ships the foundation first without changing the agreed product scope.
 
@@ -273,6 +283,7 @@ Proceed with a separate in-repo Next.js web app that:
 - exposes graphs, statistics, insights, correlations, and compare as real dashboard surfaces
 - reuses shared analytics contract logic instead of duplicating backend semantics
 - visually matches the app's analytics palette and chrome while borrowing board-game command-table cues from Moonrakers
+- targets Cloudflare Workers with the OpenNext adapter as the launch platform
 - implements a desktop-first analytics dashboard rather than stretching the mobile UI to fit the browser
 
 ## References

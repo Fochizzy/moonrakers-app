@@ -400,7 +400,7 @@ function collectRelationshipScopeIds(
     }
   }
 
-  return [...scopedIds];
+  return scopedIds.size > 1 ? [...scopedIds] : [];
 }
 
 function filterRelationshipsToScope(

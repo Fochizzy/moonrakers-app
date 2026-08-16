@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a separate in-repo Next.js dashboard that lets a signed-in Moonrakers player create an account, complete profile onboarding, and use desktop-first home, compare, stats, charts, insights, correlations, ELO, and profile analytics surfaces backed by the existing Supabase contracts and styled to match the Moonrakers app.
+**Goal:** Build a separate in-repo Next.js dashboard that lets a signed-in Moonrakers player create an account, complete profile onboarding, and use desktop-first home, compare, stats, charts, insights, correlations, ELO, and profile analytics surfaces backed by the existing Supabase contracts, styled to match the Moonrakers app, and ready to launch on Cloudflare Workers.
 
-**Architecture:** Add `apps/dashboard` as a Next.js App Router workspace and extract the current analytics RPC wrappers into a shared workspace package so both Expo and Next can consume the same typed Supabase contract layer. Keep auth and route protection web-native with `@supabase/ssr`, make route pages thin server components, and render desktop-specific view components that consume server-loaded payloads for home, compare, stats/correlations, charts, insights, ELO, and profile. Derive the web visual system from the existing app tokens in `utils/colors.ts`, `utils/chartTheme.ts`, and `components/charts/chartVisualSystem.ts` so the browser UI feels like the same Moonrakers analytics product.
+**Architecture:** Add `apps/dashboard` as a Next.js App Router workspace and extract the current analytics RPC wrappers into a shared workspace package so both Expo and Next can consume the same typed Supabase contract layer. Target Cloudflare Workers from day one using Cloudflare's Next.js workflow and the OpenNext adapter, keep auth and route protection web-native with `@supabase/ssr`, make route pages thin server components, and render desktop-specific view components that consume server-loaded payloads for home, compare, stats/correlations, charts, insights, ELO, and profile. Derive the web visual system from the existing app tokens in `utils/colors.ts`, `utils/chartTheme.ts`, and `components/charts/chartVisualSystem.ts` so the browser UI feels like the same Moonrakers analytics product.
 
-**Tech Stack:** Next.js App Router, React 19, TypeScript, npm workspaces, `@supabase/supabase-js`, `@supabase/ssr`, Recharts, Vitest, React Testing Library, Playwright, existing Moonrakers Supabase analytics RPCs, `npm.cmd`, `npx.cmd`
+**Tech Stack:** Next.js App Router, React 19, TypeScript, npm workspaces, Cloudflare Workers, OpenNext (`@opennextjs/cloudflare`), Wrangler, `@supabase/supabase-js`, `@supabase/ssr`, Recharts, Vitest, React Testing Library, Playwright, existing Moonrakers Supabase analytics RPCs, `npm.cmd`, `npx.cmd`
 
 **Visual Direction:** Reuse the app's dark-space palette, chart accent hierarchy, and compact analytics chrome. The site should feel like a Moonrakers command board with luminous purple/blue/green/teal signals, translucent tactical panels, and dense intel cards, not a generic white or gray SaaS dashboard.
 
@@ -59,11 +59,14 @@
 - Create: `apps/dashboard/package.json`
 - Create: `apps/dashboard/tsconfig.json`
 - Create: `apps/dashboard/next.config.ts`
+- Create: `apps/dashboard/wrangler.jsonc`
+- Create: `apps/dashboard/open-next.config.ts`
+- Create: `apps/dashboard/cloudflare-env.d.ts`
 - Create: `apps/dashboard/eslint.config.mjs`
 - Create: `apps/dashboard/vitest.config.ts`
 - Create: `apps/dashboard/playwright.config.ts`
 - Create: `apps/dashboard/proxy.ts`
-  - Dashboard workspace scaffold and runtime entry points.
+  - Dashboard workspace scaffold, OpenNext config, and Cloudflare runtime entry points.
 - Create: `apps/dashboard/src/test/setup.ts`
   - Vitest + Testing Library setup.
 - Create: `apps/dashboard/src/app/layout.tsx`
@@ -154,6 +157,8 @@
 - Modify: `.env.example`
 - Create: `apps/dashboard/package.json`
 - Create: `apps/dashboard/next.config.ts`
+- Create: `apps/dashboard/wrangler.jsonc`
+- Create: `apps/dashboard/open-next.config.ts`
 - Create: `apps/dashboard/vitest.config.ts`
 - Create: `apps/dashboard/src/test/setup.ts`
 - Create: `apps/dashboard/src/app/layout.tsx`
@@ -260,10 +265,10 @@ Expected: FAIL because `apps/dashboard/package.json` and the new workspace scrip
 
 - [ ] **Step 3: Scaffold the dashboard workspace and wire the root scripts**
 
-Create the app scaffold with:
+Create the app scaffold with Cloudflare's Next.js workflow, or use `create-next-app` plus the equivalent manual OpenNext/Wrangler setup if that integrates more cleanly into the existing monorepo:
 
 ```powershell
-npx.cmd create-next-app@latest apps/dashboard --ts --eslint --app --src-dir --import-alias "@/*" --use-npm --yes --disable-git
+npx.cmd create cloudflare@latest apps/dashboard --framework=next --platform=workers
 ```
 
 Then update the root `package.json` scripts and workspaces to this shape:
@@ -303,6 +308,29 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
+Create `apps/dashboard/open-next.config.ts` with:
+
+```ts
+import { defineCloudflareConfig } from "@opennextjs/cloudflare";
+
+export default defineCloudflareConfig();
+```
+
+Create `apps/dashboard/wrangler.jsonc` with:
+
+```jsonc
+{
+  "name": "moonrakers-dashboard",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+}
+```
+
 Replace `apps/dashboard/package.json` with this shape so the workspace name and typecheck command exist immediately:
 
 ```json
@@ -312,8 +340,11 @@ Replace `apps/dashboard/package.json` with this shape so the workspace name and 
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "build": "next build",
     "start": "next start",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test"
@@ -440,13 +471,14 @@ Keep these tokens aligned with `utils/colors.ts`, `utils/chartTheme.ts`, and `co
 Run:
 
 ```powershell
-npm.cmd install --workspace @moonrakers/dashboard @supabase/ssr recharts clsx zod
+npm.cmd install --workspace @moonrakers/dashboard @opennextjs/cloudflare wrangler @supabase/ssr recharts clsx zod
 npm.cmd install -D --workspace @moonrakers/dashboard vitest @vitest/coverage-v8 jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event @playwright/test
 node .\scripts\dashboard-workspace-scaffold.test.cjs
+npm.cmd run --workspace @moonrakers/dashboard cf-typegen
 npm.cmd run dashboard:typecheck
 ```
 
-Expected: the source guard prints `dashboard-workspace-scaffold.test.cjs passed` and the dashboard workspace typecheck exits `0`.
+Expected: the source guard prints `dashboard-workspace-scaffold.test.cjs passed`, `cloudflare-env.d.ts` is generated, and the dashboard workspace typecheck exits `0`.
 
 - [ ] **Step 5: Commit the scaffold**
 
