@@ -407,7 +407,7 @@ export default function LoginScreen() {
                 title="Create account"
                 variant="secondary"
                 disabled={busy}
-                onPress={() => router.push(APP_ROUTES.register as any)}
+                onPress={() => router.push(APP_ROUTES.register)}
               />
 
               <ActionButton

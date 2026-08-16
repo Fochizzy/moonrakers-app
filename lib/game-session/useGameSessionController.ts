@@ -2,12 +2,14 @@ import { useRef, useState } from "react";
 import { Alert } from "react-native";
 
 import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/app-status/store";
+import { markRollupPossiblyStale } from "@/lib/cloud/analytics/reconcileStaleRollup";
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { createSharedGroup } from "@/lib/cloud/sharedGroups";
 import { resolveCloudGameSaveState } from "@/lib/game-save/resolveCloudGameSave";
 import { refreshFinishedGameCloudState } from "@/lib/game-save/refreshFinishedGameCloudState";
 import { saveCompletedGame } from "@/lib/game-save/saveCompletedGame";
 import { formatSupabaseConfigError } from "@/lib/supabase";
+import type { AuthSession } from "@/store/useStore";
 import { buildHomeRoute } from "@/utils/appRoutes";
 
 import { prepareFinishGameState, type SessionRound } from "./gameSessionController.ts";
@@ -17,6 +19,8 @@ type AuthSessionLike = {
     id?: string | null;
   } | null;
 } | null;
+
+type CloudGameSaveInput = Parameters<typeof resolveCloudGameSaveState>[0];
 
 type RouterLike = {
   replace: (href: string | ReturnType<typeof buildHomeRoute>) => void;
@@ -112,10 +116,12 @@ export function useGameSessionController(args: HookArgs) {
       });
 
       const cloudSave = resolveCloudGameSaveState({
-        activeGame: prepared.cloudGame as any,
+        // prepareFinishGameState works over loose records, so the prepared game
+        // has no declared `id`; the resolver normalizes it defensively.
+        activeGame: prepared.cloudGame as unknown as CloudGameSaveInput["activeGame"],
         winnerId: prepared.winnerId,
-        playerDirectory: args.playerDirectory as any,
-        groupDirectory: args.groupDirectory as any,
+        playerDirectory: args.playerDirectory as CloudGameSaveInput["playerDirectory"],
+        groupDirectory: args.groupDirectory as CloudGameSaveInput["groupDirectory"],
       });
 
       if (cloudSave.unresolvedPlayerNames.length) {
@@ -166,7 +172,7 @@ export function useGameSessionController(args: HookArgs) {
             .filter(Boolean),
         });
 
-        const hydratedSnapshot = await loadHydratedCloudState(args.authSession as any);
+        const hydratedSnapshot = await loadHydratedCloudState(args.authSession as AuthSession);
         args.hydrateCloudSnapshot(hydratedSnapshot);
 
         publishAppStatus({
@@ -177,6 +183,9 @@ export function useGameSessionController(args: HookArgs) {
         });
       } catch (refreshError) {
         console.error("Finished game saved, but cloud refresh failed:", refreshError);
+        // The rollup is now known to be behind this save; make sure the
+        // once-per-session reconcile re-checks instead of trusting its earlier run.
+        markRollupPossiblyStale();
         publishAppStatus({
           scope: "cloud_refresh",
           state: "success_with_warning",

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable } from 'react-native';
+import { Pressable, type StyleProp, type ViewStyle } from 'react-native';
 
 import { UI } from './gameScreenUi';
 import { styles } from './gameScreenStyles';
@@ -16,7 +16,7 @@ export default function ScaleButton({
 }: {
   onPress?: () => void;
   disabled?: boolean;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
   accessibilityLabel?: string;
   accessibilityHint?: string;

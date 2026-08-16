@@ -37,8 +37,8 @@ export default function PlayerIndexScreen() {
   const players = useMemo<Player[]>(
     () =>
       playerDirectory.players
-        .filter((player: any) => player?.id)
-        .sort((a: any, b: any) =>
+        .filter((player) => player?.id)
+        .sort((a, b) =>
           String(a?.name ?? "").localeCompare(String(b?.name ?? ""))
         ),
     [playerDirectory.players]

@@ -44,12 +44,15 @@ import {
   buildRecentGameOpponentOptions,
   prioritizeSignedInPlayerOptions,
   resolveSignedInPlayerOptionId,
+  type NormalizedGame,
 } from "@/utils/charts";
 import { COLORS } from "@/utils/colors";
 import {
   getVisibleEloMetricTabs,
   resolveVisibleEloInsight,
   resolveVisibleEloSection,
+  type LooseEloInsight,
+  type LooseEloSection,
   type VisibleEloMetricTab,
 } from "@/utils/elo/visibleMetricTabs";
 import {
@@ -62,6 +65,7 @@ import {
 } from "@/utils/eloScreenAnalytics";
 import { getPlayerCardSourceByArtIndex } from "@/utils/playerCardAssets";
 import { buildPlayerProfileMetricPresentation } from "@/utils/playerProfileMetricPresentation";
+import type { MoonrakersIntelProfile } from "@/utils/playerProfileMoonrakers";
 import { resolveAssignedCardArtIndexForProfile } from "@/utils/profileAppearance";
 import { isValidPlayerCardArtIndex } from "@/utils/playerCards";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
@@ -249,8 +253,8 @@ export default function PlayerProfileDetailScreen() {
   const analyticsPlayerDirectory = useMemo(
     () =>
       buildAnalyticsPlayerDirectory({
-        players: players as any,
-        games: games as any,
+        players,
+        games,
         groups: [],
       }),
     [games, players],
@@ -462,8 +466,8 @@ export default function PlayerProfileDetailScreen() {
 
     return buildRecentGameOpponentOptions({
       playerId: signedInPlayerId,
-      players: sortedPlayers as any,
-      recentGames: toArray(payloadRecord?.recentGames) as Array<Record<string, any>>,
+      players: sortedPlayers,
+      recentGames: toArray(payloadRecord?.recentGames),
       limit: 4,
     }).map((player) => String(player.id));
   }, [
@@ -476,8 +480,10 @@ export default function PlayerProfileDetailScreen() {
   const rankedPlayerOptions = useMemo<StorePlayer[]>(
     () =>
       prioritizeSignedInPlayerOptions({
-        players: sortedPlayers as any,
-        games: games as any,
+        players: sortedPlayers,
+        // Store games are looser than the normalized shape the helper declares;
+        // it reads them defensively, so bridge the boundary without `any`.
+        games: games as unknown as NormalizedGame[],
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
         authProfilePlayer: authProfilePlayerOption,
@@ -746,7 +752,7 @@ export default function PlayerProfileDetailScreen() {
   const hasTabRecords = Object.keys(tabs).length > 0;
   const activeSection = toRecord(
     hasTabRecords
-      ? resolveVisibleEloSection(tabs as Record<string, any>, activeTab)
+      ? resolveVisibleEloSection(tabs as Record<string, LooseEloSection>, activeTab)
       : null,
   );
   const sectionCards = useMemo(
@@ -769,7 +775,7 @@ export default function PlayerProfileDetailScreen() {
   const hasTabInsights = Object.keys(tabInsights).length > 0;
   const activeInsight = toRecord(
     hasTabInsights
-      ? resolveVisibleEloInsight(tabInsights as Record<string, any>, activeTab)
+      ? resolveVisibleEloInsight(tabInsights as Record<string, LooseEloInsight>, activeTab)
       : payload?.activeInsight,
   );
   const profileInsight = toRecord(payload?.profileInsight);
@@ -779,9 +785,12 @@ export default function PlayerProfileDetailScreen() {
       buildLocalPlayerProfileFallback({
         playerId: resolvedPlayerId,
         opponentId: selectedOpponentId,
-        players: canonicalStorePlayers as any,
-        games: canonicalStoreGames as any,
-        recentGamesPayload: toArray(payload?.recentGames) as any,
+        players:
+          canonicalStorePlayers as Parameters<
+            typeof buildLocalPlayerProfileFallback
+          >[0]["players"],
+        games: canonicalStoreGames,
+        recentGamesPayload: toArray(payload?.recentGames),
         moonrakersIntelPayload:
           payload?.moonrakersIntel && typeof payload.moonrakersIntel === "object"
             ? (payload.moonrakersIntel as Record<string, unknown>)
@@ -799,7 +808,7 @@ export default function PlayerProfileDetailScreen() {
   const recentGames = localProfileFallback.recentGames;
   const moonrakersIntel = localProfileFallback.moonrakersIntel;
   const fallbackRowsByPlayer = useMemo(
-    () => buildGameRowsByPlayer(canonicalStoreGames as any, canonicalStorePlayers as any),
+    () => buildGameRowsByPlayer(canonicalStoreGames, canonicalStorePlayers),
     [canonicalStoreGames, canonicalStorePlayers],
   );
   const fallbackPlayerRows = fallbackRowsByPlayer[resolvedPlayerId] ?? [];
@@ -814,7 +823,7 @@ export default function PlayerProfileDetailScreen() {
 
     const nextSummary = buildFallbackSummary(
       resolvedPlayerId,
-      canonicalStorePlayers as any,
+      canonicalStorePlayers,
       fallbackRowsByPlayer,
       { [resolvedPlayerId]: currentElo },
     );
@@ -1269,7 +1278,7 @@ export default function PlayerProfileDetailScreen() {
         )}
 
         {moonrakersIntel && typeof moonrakersIntel === "object" ? (
-          <MoonrakersIntelSection profile={moonrakersIntel as any} />
+          <MoonrakersIntelSection profile={moonrakersIntel as MoonrakersIntelProfile} />
         ) : (
           <EmptyStateCard
             message="No Moonrakers Intel available yet."

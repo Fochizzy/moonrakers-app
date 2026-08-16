@@ -1,4 +1,6 @@
-﻿export const PLAYER_CARD_IMAGE_BY_FILE: Record<string, any> = {
+﻿import type { ImageSourcePropType } from 'react-native';
+
+export const PLAYER_CARD_IMAGE_BY_FILE: Record<string, ImageSourcePropType> = {
   'card-00.png': require('../assets/images/player-cards/card-00.png'),
   'card-01.png': require('../assets/images/player-cards/card-01.png'),
   'card-02.png': require('../assets/images/player-cards/card-02.png'),

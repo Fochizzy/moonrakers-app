@@ -46,13 +46,13 @@ function escapeCsvCell(value: string | number): string {
   return stringValue;
 }
 
-function asArray<T = any>(value: unknown): T[] {
+function asArray<T = unknown>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
-function asRecord(value: unknown): Record<string, any> {
+function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, any>)
+    ? (value as Record<string, unknown>)
     : {};
 }
 
@@ -75,10 +75,10 @@ export function buildPlayersCsv(players: SourcePlayerLike[]): string {
     const metrics = buildPlayerMetrics(player);
 
     return [
-      (player as any)?.id ?? '',
-      (player as any)?.name ?? '',
-      (player as any)?.color ?? '',
-      ...CSV_COLUMNS.map((column) => (metrics as any)?.[column] ?? 0),
+      player?.id ?? '',
+      player?.name ?? '',
+      player?.color ?? '',
+      ...CSV_COLUMNS.map((column) => metrics[column] ?? 0),
     ]
       .map(escapeCsvCell)
       .join(',');
@@ -88,12 +88,12 @@ export function buildPlayersCsv(players: SourcePlayerLike[]): string {
 }
 
 function getAssistPrestigeSent(
-  totalsEntry: Record<string, any>,
-  allTotals: Record<string, any>,
+  totalsEntry: Record<string, unknown>,
+  allTotals: Record<string, unknown>,
   playerId: string
 ): number {
   if (
-    typeof totalsEntry?.assistPrestigeSent === 'number' &&
+    typeof totalsEntry.assistPrestigeSent === 'number' &&
     Number.isFinite(totalsEntry.assistPrestigeSent)
   ) {
     return totalsEntry.assistPrestigeSent;
@@ -102,72 +102,54 @@ function getAssistPrestigeSent(
   let sent = 0;
   for (const [targetId, targetTotals] of Object.entries(allTotals || {})) {
     if (targetId === playerId) continue;
-    const bySource =
-      targetTotals &&
-      typeof targetTotals === 'object' &&
-      !Array.isArray(targetTotals) &&
-      (targetTotals as any).assistPrestigeBySource &&
-      typeof (targetTotals as any).assistPrestigeBySource === 'object' &&
-      !Array.isArray((targetTotals as any).assistPrestigeBySource)
-        ? (targetTotals as any).assistPrestigeBySource
-        : {};
+    const bySource = asRecord(asRecord(targetTotals).assistPrestigeBySource);
 
-    sent += toNumber((bySource as any)[playerId]);
+    sent += toNumber(bySource[playerId]);
   }
 
   return sent;
 }
 
-function buildTurnByTurnData(game: any) {
-  const timeline = asArray(game?.timeline).length
-    ? asArray(game?.timeline)
-    : asArray(game?.rounds);
+function buildTurnByTurnData(game: unknown) {
+  const source = asRecord(game);
+  const timeline = asArray(source.timeline).length
+    ? asArray(source.timeline)
+    : asArray(source.rounds);
 
-  return timeline.map((round: any, index: number) => ({
-    turnIndex: index + 1,
-    id: normalizeId(round?.id),
-    playerId: normalizeId(round?.playerId),
-    directPrestige: toNumber(round?.prestige),
-    contracts: toNumber(round?.contracts),
-    failures: toNumber(round?.failures),
-    objectiveCount: toNumber(round?.objectiveCount ?? round?.objectivePrestige),
-    objectivePrestige: toNumber(
-      round?.objectivePrestige ?? round?.objectiveCount
-    ),
-    assistRecipients:
-      round?.assistRecipients &&
-      typeof round.assistRecipients === 'object' &&
-      !Array.isArray(round.assistRecipients)
-        ? Object.fromEntries(
-            Object.entries(round.assistRecipients).map(([k, v]) => [
-              String(k),
-              toNumber(v),
-            ])
-          )
-        : {},
-    assistPrestigeRecipients:
-      round?.assistPrestigeRecipients &&
-      typeof round.assistPrestigeRecipients === 'object' &&
-      !Array.isArray(round.assistPrestigeRecipients)
-        ? Object.fromEntries(
-            Object.entries(round.assistPrestigeRecipients).map(([k, v]) => [
-              String(k),
-              toNumber(v),
-            ])
-          )
-        : {},
-    assistedPrestige: Object.values(
-      round?.assistPrestigeRecipients &&
-        typeof round.assistPrestigeRecipients === 'object' &&
-        !Array.isArray(round.assistPrestigeRecipients)
-        ? round.assistPrestigeRecipients
-        : {}
-    ).reduce((sum: number, value: any) => sum + toNumber(value), 0),
-    createdAt: toNumber(round?.createdAt),
-  }));
+  return timeline.map((rawRound, index: number) => {
+    const round = asRecord(rawRound);
+
+    return {
+      turnIndex: index + 1,
+      id: normalizeId(round.id),
+      playerId: normalizeId(round.playerId),
+      directPrestige: toNumber(round.prestige),
+      contracts: toNumber(round.contracts),
+      failures: toNumber(round.failures),
+      objectiveCount: toNumber(round.objectiveCount ?? round.objectivePrestige),
+      objectivePrestige: toNumber(
+        round.objectivePrestige ?? round.objectiveCount
+      ),
+      assistRecipients: Object.fromEntries(
+        Object.entries(asRecord(round.assistRecipients)).map(([k, v]) => [
+          String(k),
+          toNumber(v),
+        ])
+      ),
+      assistPrestigeRecipients: Object.fromEntries(
+        Object.entries(asRecord(round.assistPrestigeRecipients)).map(
+          ([k, v]) => [String(k), toNumber(v)]
+        )
+      ),
+      assistedPrestige: Object.values(
+        asRecord(round.assistPrestigeRecipients)
+      ).reduce((sum: number, value) => sum + toNumber(value), 0),
+      createdAt: toNumber(round.createdAt),
+    };
+  });
 }
 
-function normalizeExportGame(raw: any) {
+function normalizeExportGame(raw: unknown) {
   const game = normalizeGameWithComputedTotals(raw);
   const totals = asRecord(game?.totals);
   const rounds = asArray(game?.rounds);
@@ -204,17 +186,11 @@ function normalizeExportGame(raw: any) {
           efficiency: toNumber(entry.efficiency),
           assistedEfficiency: toNumber(entry.assistedEfficiency),
           directEfficiency: toNumber(entry.directEfficiency),
-          assistPrestigeBySource:
-            entry.assistPrestigeBySource &&
-            typeof entry.assistPrestigeBySource === 'object' &&
-            !Array.isArray(entry.assistPrestigeBySource)
-              ? Object.fromEntries(
-                  Object.entries(entry.assistPrestigeBySource).map(([k, v]) => [
-                    String(k),
-                    toNumber(v),
-                  ])
-                )
-              : {},
+          assistPrestigeBySource: Object.fromEntries(
+            Object.entries(asRecord(entry.assistPrestigeBySource)).map(
+              ([k, v]) => [String(k), toNumber(v)]
+            )
+          ),
         },
       ];
     })

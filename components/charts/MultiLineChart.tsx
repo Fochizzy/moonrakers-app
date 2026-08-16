@@ -7,7 +7,7 @@ type ChartDatum = {
   round?: number;
   gameIndex?: number;
   label?: string;
-  snapshot?: Record<string, any>;
+  snapshot?: Record<string, unknown>;
 };
 
 type Player = {

@@ -26,6 +26,7 @@ import {
   NODE_LABEL_OFFSET,
 } from "./relationshipGraph.constants";
 import { buildRelationshipInsightModel } from "./relationshipGraphModel";
+import type { Player as LayoutPlayer } from "./relationshipGraph.types";
 import {
   buildArrowPath,
   buildQuadraticPath,
@@ -538,7 +539,7 @@ function buildDeterministicAssistLayout(
   graphMode: GraphMode
 ): { nodes: SuperNode[]; edges: SuperEdge[] } {
   const network = buildAssistNetworkLayout(relationships, players);
-  const filteredLinks = filterTopEdgesPerNode(network.links as any[], topEdgesPerNode);
+  const filteredLinks = filterTopEdgesPerNode(network.links, topEdgesPerNode);
 
   const cx = GRAPH_WIDTH / 2;
   const cy = GRAPH_HEIGHT / 2;
@@ -591,13 +592,13 @@ function buildDeterministicAssistLayout(
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const edgeMax = Math.max(
     1,
-    ...filteredLinks.map((link: any) =>
+    ...filteredLinks.map((link) =>
       safeNum(link.assistFrequencyPerGame ?? link.value)
     )
   );
 
   const edges: SuperEdge[] = filteredLinks
-    .map((link: any) => {
+    .map((link): SuperEdge | null => {
       const fromNode = nodeById.get(link.source);
       const toNode = nodeById.get(link.target);
       if (!fromNode || !toNode) return null;
@@ -654,7 +655,7 @@ function buildDeterministicAssistLayout(
         angle: Math.atan2(endY - controlY, endX - controlX),
       };
     })
-    .filter((edge) => Boolean(edge && isFiniteEdge(edge))) as SuperEdge[];
+    .filter((edge): edge is SuperEdge => Boolean(edge && isFiniteEdge(edge)));
 
   return { nodes, edges };
 }
@@ -714,7 +715,9 @@ export default function RelationshipGraph({
     }
 
     return buildRelationshipGraphLayout(
-      resolvedPlayers as any,
+      // The layout's Player type requires a name; these graph players may omit
+      // it, matching how this call has always run at runtime.
+      resolvedPlayers as unknown as LayoutPlayer[],
       scopedRelationships ?? {},
       maxItems,
       internalTopEdgesPerNode,
@@ -896,23 +899,23 @@ export default function RelationshipGraph({
                 .filter((edge) => isFiniteEdge(edge))
                 .map((edge) => {
                   const edgeInput = {
-                    fromX: safeNum((edge as any).fromX ?? edge.startX),
-                    fromY: safeNum((edge as any).fromY ?? edge.startY),
-                    toX: safeNum((edge as any).toX ?? edge.endX),
-                    toY: safeNum((edge as any).toY ?? edge.endY),
+                    fromX: safeNum(edge.fromX ?? edge.startX),
+                    fromY: safeNum(edge.fromY ?? edge.startY),
+                    toX: safeNum(edge.toX ?? edge.endX),
+                    toY: safeNum(edge.toY ?? edge.endY),
                     curveOffset:
-                      safeNum((edge as any).curveOffset) ||
+                      safeNum(edge.curveOffset) ||
                       Math.max(
                         12,
                         Math.sqrt(
                           Math.pow(
-                            safeNum((edge as any).toX ?? edge.endX) -
-                              safeNum((edge as any).fromX ?? edge.startX),
+                            safeNum(edge.toX ?? edge.endX) -
+                              safeNum(edge.fromX ?? edge.startX),
                             2
                           ) +
                             Math.pow(
-                              safeNum((edge as any).toY ?? edge.endY) -
-                                safeNum((edge as any).fromY ?? edge.startY),
+                              safeNum(edge.toY ?? edge.endY) -
+                                safeNum(edge.fromY ?? edge.startY),
                               2
                             )
                         ) * 0.14
@@ -931,17 +934,17 @@ export default function RelationshipGraph({
                             edge.endY
                           ).toFixed(2)}`
                         )
-                      : safePath(buildQuadraticPath(edgeInput as any));
+                      : safePath(buildQuadraticPath(edgeInput));
 
                   const arrow =
                     variant === "assist_network"
                       ? safePath(
                           buildArrowPath(
-                            edgeInput as any,
+                            edgeInput,
                             safeNum(edge.arrowSize, EDGE_ARROW_SIZE)
                           )
                         )
-                      : safePath(buildArrowPath(edgeInput as any, EDGE_ARROW_SIZE));
+                      : safePath(buildArrowPath(edgeInput, EDGE_ARROW_SIZE));
 
                   if (!path) return null;
                   const active = isEdgeActive(edge, selectedNodeId);
@@ -964,7 +967,7 @@ export default function RelationshipGraph({
                           edge.color,
                           active ? Math.min(1, safeNum(edge.opacity, 0.7) + 0.12) : safeNum(edge.opacity, 0.7)
                         )}
-                        strokeWidth={getSelectedEdgeStrokeWidth(edge as any, active)}
+                        strokeWidth={getSelectedEdgeStrokeWidth(edge, active)}
                         opacity={1}
                         fill="none"
                       />

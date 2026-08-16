@@ -15,8 +15,8 @@ import { APP_ROUTES } from "@/utils/appRoutes";
 export default function PlayersScreen() {
   const router = useRouter();
   const cards = useMemo(() => getPlayersHubCards(), []);
-  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
-  const groups = useStore((state: any) => (Array.isArray(state?.groups) ? state.groups : []));
+  const players = useStore((state) => (Array.isArray(state?.players) ? state.players : []));
+  const groups = useStore((state) => (Array.isArray(state?.groups) ? state.groups : []));
 
   return (
     <PageShell preset="quiet" density="compact">
@@ -73,7 +73,7 @@ export default function PlayersScreen() {
                 card.iconKey ? styles.surfaceTileGraphic : styles.surfaceTileText,
                 card.key === "cards" ? styles.surfaceTileWide : null,
               ]}
-              onPress={() => router.push(card.route as any)}
+              onPress={() => router.push(card.route)}
             />
           ))}
         </View>

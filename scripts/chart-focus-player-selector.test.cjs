@@ -9,7 +9,7 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /const\s+authProfile\s*=\s*useStore\(\(state:\s*any\)\s*=>\s*state\?\.authProfile\s*\?\?\s*null\)/,
+  /const\s+authProfile\s*=\s*useStore\(\(state\)\s*=>\s*state\?\.authProfile\s*\?\?\s*null\)/,
   "expected the chart setup screen to read authProfile so it can default the focus player to the signed-in user",
 );
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { AnalyticsRpcClient } from "@moonrakers/analytics-contract";
 
 import { getChartDataset } from "../lib/cloud/analytics/getChartDataset.ts";
 
@@ -7,15 +8,15 @@ async function main() {
   const rpcPayload = {
     chartKey: "elo",
   };
-  const client = {
-    async rpc(name: string, args: Record<string, unknown>) {
+  const client: AnalyticsRpcClient = {
+    async rpc<TPayload>(name: string, args: Record<string, unknown>) {
       rpcCalls.push({ name, args });
-      return { data: rpcPayload, error: null };
+      return { data: rpcPayload as TPayload, error: null };
     },
   };
 
   const payload = await getChartDataset(
-    client as any,
+    client,
     {
       chartKey: "elo",
       profileId: "chart-profile",
@@ -52,7 +53,7 @@ async function main() {
     () =>
       getChartDataset(
         {
-          async rpc() {
+          async rpc<_TPayload>() {
             return {
               data: null,
               error: {
@@ -61,7 +62,7 @@ async function main() {
               },
             };
           },
-        } as any,
+        } satisfies AnalyticsRpcClient,
         {
           chartKey: "elo",
           profileId: "chart-profile",

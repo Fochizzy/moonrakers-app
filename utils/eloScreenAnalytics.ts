@@ -51,26 +51,37 @@ export type StatCard = {
 
 const DEFAULT_ELO = 1000;
 
-function getGameWinnerId(game: any): string | null {
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function getGameWinnerId(game: unknown): string | null {
+  const source = asRecord(game);
   const explicit = normalizeId(
-    game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId
+    source.winnerId ?? source.selectedWinnerId ?? source.manualWinnerId
   );
   if (explicit) return explicit;
 
-  const totals = game?.totals ?? {};
-  const players = Array.isArray(game?.players) ? game.players : [];
+  const totals = asRecord(source.totals);
+  const players = Array.isArray(source.players) ? source.players : [];
 
   const ranked = players
-    .map((p: any) => {
-      const id = normalizeId(p?.id ?? p?.playerId);
+    .map((p) => {
+      const participant = asRecord(p);
+      const id = normalizeId(participant.id ?? participant.playerId);
+      const playerTotals = asRecord(totals[id]);
       const totalPrestige = toNumber(
-        totals?.[id]?.totalPrestige ?? totals?.[id]?.prestige
+        playerTotals.totalPrestige ?? playerTotals.prestige
       );
-      const score = toNumber(totals?.[id]?.score);
+      const score = toNumber(playerTotals.score);
       return { id, totalPrestige, score };
     })
-    .filter((row: any) => row.id)
-    .sort((a: any, b: any) => {
+    .filter((row) => row.id)
+    .sort((a, b) => {
       if (b.totalPrestige !== a.totalPrestige) {
         return b.totalPrestige - a.totalPrestige;
       }
@@ -81,16 +92,16 @@ function getGameWinnerId(game: any): string | null {
   return ranked[0]?.id ?? null;
 }
 
-function getChronologicalGames(games: any[]): any[] {
+function getChronologicalGames(games: unknown[]): unknown[] {
   return [...(Array.isArray(games) ? games : [])].sort((a, b) => {
-    const createdDiff = toNumber(a?.createdAt) - toNumber(b?.createdAt);
+    const createdDiff = toNumber(asRecord(a).createdAt) - toNumber(asRecord(b).createdAt);
     if (createdDiff !== 0) return createdDiff;
-    return normalizeId(a?.id).localeCompare(normalizeId(b?.id));
+    return normalizeId(asRecord(a).id).localeCompare(normalizeId(asRecord(b).id));
   });
 }
 
 export function buildGameRowsByPlayer(
-  games: any[],
+  games: unknown[],
   players: StorePlayer[]
 ): Record<string, SimpleEloRow[]> {
   const rowsByPlayer: Record<string, SimpleEloRow[]> = {};
@@ -104,11 +115,15 @@ export function buildGameRowsByPlayer(
   }
 
   for (const game of getChronologicalGames(games)) {
+    const source = asRecord(game);
     const participantIds: string[] = Array.from(
       new Set(
-        (Array.isArray(game?.players) ? game.players : [])
-          .map((player: any) => normalizeId(player?.id ?? player?.playerId))
-          .filter((id: string) => Boolean(id) && validPlayerIds.has(id))
+        (Array.isArray(source.players) ? source.players : [])
+          .map((player) => {
+            const entry = asRecord(player);
+            return normalizeId(entry.id ?? entry.playerId);
+          })
+          .filter((id) => Boolean(id) && validPlayerIds.has(id))
       )
     );
 
@@ -118,14 +133,14 @@ export function buildGameRowsByPlayer(
     if (!winnerId || !participantIds.includes(winnerId)) continue;
 
     const gameId =
-      normalizeId(game?.id ?? game?.gameId) ||
-      `${toNumber(game?.createdAt)}-${winnerId}`;
+      normalizeId(source.id ?? source.gameId) ||
+      `${toNumber(source.createdAt)}-${winnerId}`;
 
     for (const playerId of participantIds) {
       if (!rowsByPlayer[playerId]) rowsByPlayer[playerId] = [];
       rowsByPlayer[playerId].push({
         gameId,
-        createdAt: toNumber(game?.createdAt),
+        createdAt: toNumber(source.createdAt),
         playerId,
         opponentIds: participantIds.filter((id) => id !== playerId),
         win: playerId === winnerId ? 1 : 0,

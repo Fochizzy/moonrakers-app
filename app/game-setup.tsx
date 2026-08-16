@@ -201,7 +201,7 @@ function TurnOrderRow({
           <View style={styles.rowBody}>
             <View style={[styles.rowAvatarWrap, { borderColor: `${accent}55` }]}>
               <PlayerCardIcon
-                player={item as any}
+                player={item}
                 size={48}
                 borderRadius={10}
                 showInitial={false}
@@ -317,7 +317,7 @@ export default function GameSetup() {
 
   const selectedGroup =
     mode === "group"
-      ? (storedGroups.find((group: any) => group.id === gameDraft?.selectedGroupId) as GroupLike) ??
+      ? (storedGroups.find((group) => group.id === gameDraft?.selectedGroupId) as GroupLike) ??
         selectedGroups[0] ??
         null
       : null;
@@ -515,7 +515,7 @@ export default function GameSetup() {
     await beginGameplay();
 
     setTimeout(() => {
-      router.push(APP_ROUTES.game as any);
+      router.push(APP_ROUTES.game);
     }, 520);
   }, [
     beginGameplay,

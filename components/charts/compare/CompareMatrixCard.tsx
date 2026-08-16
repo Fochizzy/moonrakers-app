@@ -54,7 +54,7 @@ function getMatchupVerdict(
 
   if (rows.length === 2 && otherRows[0]) {
     const other = otherRows[0];
-    const delta = toNumber(metric.getValue(other as any)) - toNumber(metric.getValue(baseline as any));
+    const delta = toNumber(metric.getValue(other)) - toNumber(metric.getValue(baseline));
 
     if (delta === 0) {
       return `Even on ${metric.label.toLowerCase()}.`;
@@ -65,12 +65,12 @@ function getMatchupVerdict(
   }
 
   let bestRow: CompareRow | null = baseline;
-  let bestValue = toNumber(metric.getValue(baseline as any));
+  let bestValue = toNumber(metric.getValue(baseline));
   let worstRow: CompareRow | null = baseline;
-  let worstValue = toNumber(metric.getValue(baseline as any));
+  let worstValue = toNumber(metric.getValue(baseline));
 
   for (const row of rows) {
-    const value = toNumber(metric.getValue(row as any));
+    const value = toNumber(metric.getValue(row));
     if (value > bestValue) {
       bestValue = value;
       bestRow = row;
@@ -96,7 +96,7 @@ function getMatchupVerdict(
 function isMetricFlat(metric: MetricDescriptor, rows: CompareRow[]): boolean {
   if (rows.length < 2) return false;
 
-  const values = rows.map((row) => toNumber(metric.getValue(row as any)));
+  const values = rows.map((row) => toNumber(metric.getValue(row)));
   const first = values[0] ?? 0;
 
   return values.every((value) => nearlyEqual(value, first));
@@ -221,9 +221,9 @@ export default function CompareMatrixCard({
 
               <View style={styles.rowStack}>
                 {rows.map((row) => {
-                  const value = metric.getValue(row as any);
+                  const value = metric.getValue(row);
                   const numericValue = toNumber(value);
-                  const baseValue = baseline ? toNumber(metric.getValue(baseline as any)) : 0;
+                  const baseValue = baseline ? toNumber(metric.getValue(baseline)) : 0;
                   const delta = row.id !== baseline?.id ? numericValue - baseValue : 0;
                   const deltaColor = getDeltaColor(delta);
                   const tier =
@@ -251,7 +251,7 @@ export default function CompareMatrixCard({
                             tier ? { color: tier.color } : null,
                           ]}
                         >
-                          {metric.format(row as any)}
+                          {metric.format(row)}
                         </Text>
 
                         {row.id !== baseline?.id ? (

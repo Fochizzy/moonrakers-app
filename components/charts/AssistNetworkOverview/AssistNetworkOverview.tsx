@@ -214,8 +214,8 @@ export default function AssistNetworkOverview({
           />
 
           <RelationshipGraph
-            players={visiblePlayers as any}
-            relationships={dataset.edges as any}
+            players={visiblePlayers}
+            relationships={dataset.edges}
             scopedPlayerIds={scopedPlayerIds}
             variant="assist_network"
             mode={mode}

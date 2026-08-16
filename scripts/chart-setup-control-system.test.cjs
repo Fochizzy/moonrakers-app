@@ -73,7 +73,7 @@ assert.doesNotMatch(
 
 assert.match(
   source,
-  /function replaceChartHubRoute\(chart: ChartCatalogEntry, setupOpen: boolean\)\s*\{[\s\S]*router\.setParams\(\s*buildChartHubParams\(chart,\s*setupOpen\)\s+as any\s*\);[\s\S]*\}/,
+  /function replaceChartHubRoute\(chart: ChartCatalogEntry, setupOpen: boolean\)\s*\{[\s\S]*router\.setParams\(\s*buildChartHubParams\(chart,\s*setupOpen\)\s*\);[\s\S]*\}/,
   "expected the charts hub route state to keep relationship_graph in sync without re-navigating the current screen"
 );
 

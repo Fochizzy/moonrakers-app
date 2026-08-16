@@ -157,15 +157,23 @@ function buildPlayers(data: Record<string, unknown>, edges: NetworkEdge[]) {
   );
 }
 
-function getNodePositions(players: NetworkPlayer[]) {
+function getNodePositions(players: NetworkPlayer[], focusPlayerId: string | null) {
   const centerX = SVG_WIDTH / 2;
   const centerY = SVG_HEIGHT / 2;
   const radiusX = 300;
   const radiusY = 135;
+  const orderedPlayers = focusPlayerId
+    ? [
+        ...players.filter((player) => player.id === focusPlayerId),
+        ...players.filter((player) => player.id !== focusPlayerId),
+      ]
+    : players;
 
   return new Map(
-    players.map((player, index) => {
-      const angle = players.length === 1 ? -Math.PI / 2 : (index / players.length) * Math.PI * 2 - Math.PI / 2;
+    orderedPlayers.map((player, index) => {
+      const angle = orderedPlayers.length === 1
+        ? -Math.PI / 2
+        : (index / orderedPlayers.length) * Math.PI * 2 - Math.PI / 2;
 
       return [
         player.id,
@@ -214,8 +222,19 @@ export function NetworkChartPanel({
 }) {
   const edges = buildEdges(payload.data).sort((left, right) => right.weight - left.weight);
   const players = buildPlayers(payload.data, edges);
-  const positions = getNodePositions(players);
+  const meta = asRecord(payload.data.meta);
+  const requestedFocusPlayerId = toText(
+    payload.data.focusPlayerId ?? payload.data.playerId ?? meta.focusPlayerId,
+  ).trim();
+  const focusedPlayer =
+    players.find((player) => player.id === requestedFocusPlayerId) ?? null;
+  const positions = getNodePositions(players, focusedPlayer?.id ?? null);
   const maxWeight = Math.max(1, ...edges.map((edge) => edge.weight));
+  const focusedSummaryEdges = focusedPlayer
+    ? edges.filter(
+        (edge) => edge.from === focusedPlayer.id || edge.to === focusedPlayer.id,
+      )
+    : edges;
 
   if (edges.length === 0 || players.length === 0) {
     return (
@@ -246,8 +265,22 @@ export function NetworkChartPanel({
             xLabel="Source Player"
             yLabel="Assist Weight"
           />
+          {focusedPlayer ? (
+            <div
+              aria-live="polite"
+              role="status"
+              style={{
+                color: "var(--text-strong)",
+                fontSize: "0.9rem",
+                fontWeight: 800,
+              }}
+            >
+              Focus: {focusedPlayer.name}
+            </div>
+          ) : null}
           <svg
             aria-label="Assist network diagram"
+            data-focus-player-id={focusedPlayer?.id}
             role="img"
             viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
             style={{
@@ -280,6 +313,10 @@ export function NetworkChartPanel({
               }
 
               const fromPlayer = players.find((player) => player.id === edge.from);
+              const isFocusEdge =
+                !focusedPlayer ||
+                edge.from === focusedPlayer.id ||
+                edge.to === focusedPlayer.id;
               const strokeWidth = 1.75 + (edge.weight / maxWeight) * 4;
               const path = getEdgePath(from, to, index % 2 === 0 ? 26 : -26);
 
@@ -289,7 +326,10 @@ export function NetworkChartPanel({
                     d={path.d}
                     fill="none"
                     markerEnd="url(#assist-network-arrow)"
-                    opacity={0.52 + (edge.weight / maxWeight) * 0.34}
+                    opacity={
+                      (0.52 + (edge.weight / maxWeight) * 0.34) *
+                      (isFocusEdge ? 1 : 0.2)
+                    }
                     stroke={fromPlayer?.color ?? "rgba(255,255,255,0.72)"}
                     strokeLinecap="round"
                     strokeWidth={strokeWidth}
@@ -324,14 +364,16 @@ export function NetworkChartPanel({
                 return null;
               }
 
+              const isFocusedPlayer = player.id === focusedPlayer?.id;
+
               return (
                 <g key={player.id}>
                   <circle
                     cx={position.x}
                     cy={position.y}
                     fill={player.color}
-                    opacity="0.22"
-                    r={NODE_RADIUS + 10}
+                    opacity={isFocusedPlayer ? "0.42" : "0.18"}
+                    r={NODE_RADIUS + (isFocusedPlayer ? 15 : 10)}
                   />
                   <circle
                     cx={position.x}
@@ -339,8 +381,22 @@ export function NetworkChartPanel({
                     fill="rgba(7, 12, 28, 0.95)"
                     r={NODE_RADIUS}
                     stroke={player.color}
-                    strokeWidth="3"
+                    strokeWidth={isFocusedPlayer ? "5" : "3"}
                   />
+                  {isFocusedPlayer ? (
+                    <text
+                      aria-hidden="true"
+                      fill={player.color}
+                      fontSize="10"
+                      fontWeight="900"
+                      letterSpacing="1.5"
+                      textAnchor="middle"
+                      x={position.x}
+                      y={position.y - NODE_RADIUS - 20}
+                    >
+                      FOCUS
+                    </text>
+                  ) : null}
                   <text
                     fill="rgba(248,250,252,0.96)"
                     fontSize="13"
@@ -363,7 +419,7 @@ export function NetworkChartPanel({
               gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
             }}
           >
-            {edges.slice(0, 6).map((edge) => (
+            {focusedSummaryEdges.slice(0, 6).map((edge) => (
               <div
                 key={`summary-${edge.id}`}
                 style={{

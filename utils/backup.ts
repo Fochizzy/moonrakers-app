@@ -216,7 +216,7 @@ function safeRound(raw: unknown): Round | null {
             Object.entries(value.assistPrestigeRecipients as Record<string, unknown>).map(([k, v]) => [String(k).trim(), safeNumber(v)])
           )
         : {},
-    objectivePrestige: safeNumber((value as any).objectivePrestige),
+    objectivePrestige: safeNumber(value.objectivePrestige),
     createdAt: safeNumber(value.createdAt) || Date.now(),
   };
 }

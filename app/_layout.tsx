@@ -3,6 +3,7 @@ import "react-native-gesture-handler";
 import React, { useEffect } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
   Pressable,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
   isAuthCallbackUrl,
 } from "@/lib/auth/handleAuthCallback";
 import { useSharedCloudBootstrap } from "@/lib/auth/useSharedCloudBootstrap";
+import { reconcileStaleRollupOnForeground } from "@/lib/cloud/analytics/reconcileStaleRollup";
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
 import { useStore } from "@/store/useStore";
 import { ThemeProvider, useTheme } from "@/theme";
@@ -157,19 +159,30 @@ function AppNavigator() {
     const profile = authProfile;
     if (!session?.user?.id) {
       clearAuthState();
-      setPlayers([] as any);
-      setGroups([] as any);
-      setGames([] as any);
+      setPlayers([]);
+      setGroups([]);
+      setGames([]);
       return;
     }
     if (!profile?.player_name) {
-      setPlayers([] as any);
-      setGroups([] as any);
-      setGames([] as any);
+      setPlayers([]);
+      setGroups([]);
+      setGames([]);
       hydrateAuthBootstrap({ session, profile });
       return;
     }
   }, [authBootstrapStatus, authSession, authProfile, clearAuthState, hydrateAuthBootstrap, setPlayers, setGroups, setGames]);
+
+  // A stale rollup can outlive the once-per-session reconcile when the app stays in
+  // memory for days; returning to the foreground re-checks on a throttle.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && useStore.getState().authSession?.user?.id) {
+        void reconcileStaleRollupOnForeground();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (authBootstrapStatus !== "ready") return undefined;
@@ -177,7 +190,7 @@ function AppNavigator() {
     loadRegisteredProfiles().then((profiles) => {
       if (!active) return;
       const current = useStore.getState().players;
-      setPlayers(mergeRegisteredProfilesIntoPlayers(current, profiles) as any);
+      setPlayers(mergeRegisteredProfilesIntoPlayers(current, profiles));
     }).catch((err) => { console.error("[layout] loadRegisteredProfiles failed:", err); });
     return () => { active = false; };
   }, [authBootstrapStatus, setPlayers]);
@@ -197,7 +210,7 @@ function AppNavigator() {
       router.replace({
         pathname: APP_ROUTES.authCallback,
         params: { confirmation_url: url },
-      } as any);
+      });
     }
 
     void Linking.getInitialURL().then(routeAuthUrl);

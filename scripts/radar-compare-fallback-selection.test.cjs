@@ -108,7 +108,7 @@ assert.ok(
 
 assert.match(
   detailSource,
-  /comparison=\{localChartData\.radarComparison \? \(localChartData\.radarComparison as any\) : undefined\}/,
+  /comparison=\{localChartData\.radarComparison \?\? undefined\}/,
   "expected the radar detail fallback route to forward comparison stats into RadarChart",
 );
 

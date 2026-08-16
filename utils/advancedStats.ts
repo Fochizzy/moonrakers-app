@@ -32,10 +32,24 @@ export type StoredGame = {
   id: string;
   date?: string;
   timestamp?: number;
-  players: any[];
+  createdAt?: number;
+  players: unknown[];
+  totals?: Record<string, unknown> | null;
+  rounds?: unknown[] | null;
+  timeline?: unknown[] | null;
   winnerId?: string;
-  [key: string]: any;
+  selectedWinnerId?: string;
+  manualWinnerId?: string;
+  [key: string]: unknown;
 };
+
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
 
 function sortedPairKey(a: string, b: string) {
   return [a, b].sort().join("::");
@@ -46,16 +60,16 @@ function getGameWinnerId(game: StoredGame): string | undefined {
 }
 
 function getGamePlayerIds(game: StoredGame): string[] {
-  return Object.keys((game?.totals as Record<string, any>) ?? {}).filter(Boolean);
+  return Object.keys(game?.totals ?? {}).filter(Boolean);
 }
 
-function toNumber(value: any): number {
+function toNumber(value: unknown): number {
   if (value == null) return 0;
   const n = Number(value);
   return isNaN(n) ? 0 : n;
 }
 
-function getRoundsLike(game: any): any[] {
+function getRoundsLike(game: StoredGame): unknown[] {
   if (Array.isArray(game?.rounds)) return game.rounds;
   if (Array.isArray(game?.timeline)) return game.timeline;
   return [];
@@ -77,7 +91,7 @@ export function buildAssistSynergyPairs(
   >();
 
   for (const game of Array.isArray(games) ? games : []) {
-    const totals = (game?.totals as Record<string, any>) ?? {};
+    const totals = game?.totals ?? {};
     const playerIds = getGamePlayerIds(game);
     const winnerId = getGameWinnerId(game);
 
@@ -110,14 +124,9 @@ export function buildAssistSynergyPairs(
     }
 
     for (const [targetId, totalsEntry] of Object.entries(totals)) {
-      const totalsRow = (totalsEntry as Record<string, any>) ?? {};
+      const totalsRow = asRecord(totalsEntry);
 
-      const assistSources =
-        totalsRow.assistPrestigeBySource &&
-        typeof totalsRow.assistPrestigeBySource === "object" &&
-        !Array.isArray(totalsRow.assistPrestigeBySource)
-          ? totalsRow.assistPrestigeBySource
-          : {};
+      const assistSources = asRecord(totalsRow.assistPrestigeBySource);
 
       for (const [sourceId, rawValue] of Object.entries(assistSources)) {
         const value = toNumber(rawValue);
@@ -200,10 +209,10 @@ export function buildContractSuccessModels(
   >();
 
   for (const game of Array.isArray(games) ? games : []) {
-    const totals = (game?.totals as Record<string, any>) ?? {};
+    const totals = game?.totals ?? {};
 
     for (const [playerId, totalsEntry] of Object.entries(totals)) {
-      const totalsRow = (totalsEntry as Record<string, any>) ?? {};
+      const totalsRow = asRecord(totalsEntry);
 
       if (!modelMap.has(playerId)) {
         modelMap.set(playerId, {
@@ -232,8 +241,10 @@ export function buildContractSuccessModels(
 
     if (rounds.length > 0) {
       for (const round of rounds) {
-        const playerId = round?.playerId;
-        if (!playerId) continue;
+        const rawPlayerId = asRecord(round).playerId;
+        if (!rawPlayerId) continue;
+
+        const playerId = String(rawPlayerId);
 
         if (!modelMap.has(playerId)) {
           modelMap.set(playerId, {
@@ -361,25 +372,37 @@ function getRoundOneLeaderMap(game: StoredGame): Record<string, number> {
     return result;
   }
 
-  const firstRound = rounds[0];
+  const firstRound = asRecord(rounds[0]);
+  const firstRoundTotalsMap = asRecord(firstRound.totals);
   const firstRoundTotals: Record<string, number> = {};
 
   for (const player of players) {
-    const playerId = player?.id;
-    if (!playerId) continue;
+    const rawPlayerId = asRecord(player).id;
+    if (!rawPlayerId) continue;
+
+    const playerId = String(rawPlayerId);
+    const playerRoundTotals = asRecord(firstRoundTotalsMap[playerId]);
 
     let value = 0;
 
-    if (firstRound?.totals?.[playerId]?.totalPrestige != null) {
-      value = toNumber(firstRound.totals[playerId].totalPrestige);
-    } else if (firstRound?.totals?.[playerId]?.prestige != null) {
-      value = toNumber(firstRound.totals[playerId].prestige);
-    } else if (Array.isArray(firstRound?.entries)) {
-      const entry = firstRound.entries.find((candidate: any) => candidate?.playerId === playerId);
-      value = toNumber(entry?.totalPrestige ?? entry?.prestige);
-    } else if (Array.isArray(firstRound?.players)) {
-      const entry = firstRound.players.find((candidate: any) => candidate?.id === playerId);
-      value = toNumber(entry?.totalPrestige ?? entry?.prestige);
+    if (playerRoundTotals.totalPrestige != null) {
+      value = toNumber(playerRoundTotals.totalPrestige);
+    } else if (playerRoundTotals.prestige != null) {
+      value = toNumber(playerRoundTotals.prestige);
+    } else if (Array.isArray(firstRound.entries)) {
+      const entry = asRecord(
+        firstRound.entries.find(
+          (candidate) => asRecord(candidate).playerId === rawPlayerId
+        )
+      );
+      value = toNumber(entry.totalPrestige ?? entry.prestige);
+    } else if (Array.isArray(firstRound.players)) {
+      const entry = asRecord(
+        firstRound.players.find(
+          (candidate) => asRecord(candidate).id === rawPlayerId
+        )
+      );
+      value = toNumber(entry.totalPrestige ?? entry.prestige);
     }
 
     firstRoundTotals[playerId] = value;
@@ -390,8 +413,9 @@ function getRoundOneLeaderMap(game: StoredGame): Record<string, number> {
 
   const maxValue = Math.max(...values);
   for (const player of players) {
-    const playerId = player?.id;
-    if (!playerId) continue;
+    const rawPlayerId = asRecord(player).id;
+    if (!rawPlayerId) continue;
+    const playerId = String(rawPlayerId);
     result[playerId] = firstRoundTotals[playerId] === maxValue && maxValue > 0 ? 1 : 0;
   }
 
@@ -400,7 +424,7 @@ function getRoundOneLeaderMap(game: StoredGame): Record<string, number> {
 
 export function buildCorrelationResults(
   games: StoredGame[],
-  _relationships?: Record<string, any>
+  _relationships?: Record<string, unknown>
 ): CorrelationResult[] {
   const turnOrders: number[] = [];
   const totalPrestiges: number[] = [];
@@ -426,11 +450,12 @@ export function buildCorrelationResults(
     const earlyLeaderMap = getRoundOneLeaderMap(game);
 
     for (let index = 0; index < players.length; index += 1) {
-      const player = players[index];
-      const playerId = player?.id;
-      if (!playerId) continue;
+      const player = asRecord(players[index]);
+      const rawPlayerId = player.id;
+      if (!rawPlayerId) continue;
 
-      const totals = ((game?.totals as Record<string, any>) ?? {})[playerId] ?? {};
+      const playerId = String(rawPlayerId);
+      const totals = asRecord((game?.totals ?? {})[playerId]);
       const totalPrestige = toNumber(
         totals.totalPrestige ??
           toNumber(totals.directPrestige ?? totals.prestige) +
@@ -441,13 +466,13 @@ export function buildCorrelationResults(
       const failures = toNumber(totals.failures);
       const assists = toNumber(totals.assists);
       const assistReceived = toNumber(totals.assistPrestigeReceived);
-      const turnOrder = Number.isFinite(player?.startOrder)
+      const turnOrder = Number.isFinite(player.startOrder)
         ? Number(player.startOrder)
         : index + 1;
 
       turnOrders.push(turnOrder);
       totalPrestiges.push(totalPrestige);
-      wins.push(playerId === winnerId ? 1 : 0);
+      wins.push(rawPlayerId === winnerId ? 1 : 0);
       playerCounts.push(players.length);
       scores.push(score);
 
@@ -489,7 +514,7 @@ export function buildCorrelationResults(
 }
 
 export function getTopSynergyPairs(
-  relationships: Record<string, any>,
+  relationships: Record<string, unknown>,
   limit = 5
 ): SynergyPair[] {
   const scores = new Map<string, SynergyPair>();
@@ -503,7 +528,7 @@ export function getTopSynergyPairs(
       const numericValue =
         typeof rawValue === 'number'
           ? rawValue
-          : toNumber((rawValue as any)?.score ?? (rawValue as any)?.value);
+          : toNumber(asRecord(rawValue).score ?? asRecord(rawValue).value);
 
       if (!numericValue) continue;
 

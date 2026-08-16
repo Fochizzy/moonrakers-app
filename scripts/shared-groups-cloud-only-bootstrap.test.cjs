@@ -23,13 +23,13 @@ assert.doesNotMatch(
 
 assert.match(
   layoutSource,
-  /if\s*\(!session\?\.user\?\.id\)\s*\{[\s\S]*?clearAuthState\(\);[\s\S]*?setPlayers\(\[\]\s+as any\);[\s\S]*?setGroups\(\[\]\s+as any\);[\s\S]*?setGames\(\[\]\s+as any\);/s,
+  /if\s*\(!session\?\.user\?\.id\)\s*\{[\s\S]*?clearAuthState\(\);[\s\S]*?setPlayers\(\[\]\);[\s\S]*?setGroups\(\[\]\);[\s\S]*?setGames\(\[\]\);/s,
   "expected signed-out bootstrap to clear store data instead of restoring local app data",
 );
 
 assert.match(
   layoutSource,
-  /if\s*\(!profile\?\.player_name\)\s*\{[\s\S]*?setPlayers\(\[\]\s+as any\);[\s\S]*?setGroups\(\[\]\s+as any\);[\s\S]*?setGames\(\[\]\s+as any\);[\s\S]*?hydrateAuthBootstrap\(\{\s*session,\s*profile\s*\}\);/s,
+  /if\s*\(!profile\?\.player_name\)\s*\{[\s\S]*?setPlayers\(\[\]\);[\s\S]*?setGroups\(\[\]\);[\s\S]*?setGames\(\[\]\);[\s\S]*?hydrateAuthBootstrap\(\{\s*session,\s*profile\s*\}\);/s,
   "expected incomplete-profile bootstrap to keep app data empty instead of restoring local app data",
 );
 

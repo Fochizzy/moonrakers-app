@@ -220,7 +220,7 @@ export default function AuthCallbackScreen() {
           {showBackAction ? (
             <ActionButton
               variant="ghost"
-              onPress={() => router.replace(APP_ROUTES.login as any)}
+              onPress={() => router.replace(APP_ROUTES.login)}
               title="Back To Login"
             />
           ) : null}

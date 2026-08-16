@@ -1,4 +1,4 @@
-import { MetricDescriptor, MetricGroup } from './compareTypes';
+import { CompareRow, MetricDescriptor, MetricGroup } from './compareTypes';
 import { formatCorrelation, formatPercent, formatSigned } from './compareHelpers';
 
 export const METRIC_GROUPS: MetricGroup[] = [
@@ -10,15 +10,15 @@ export const METRIC_GROUPS: MetricGroup[] = [
   { key: 'positioning', label: 'Positioning', accent: '#f59e0b' },
 ];
 
-function hasObjectiveData(r: any) {
+function hasObjectiveData(r: CompareRow) {
   return Number(r.objectiveTrackedGames ?? 0) > 0;
 }
 
-function hasPositionData(r: any) {
+function hasPositionData(r: CompareRow) {
   return Number(r.avgStartOrder ?? 0) > 0;
 }
 
-function hasAssistData(r: any) {
+function hasAssistData(r: CompareRow) {
   return (
     Number(r.assists ?? 0) > 0 ||
     Number(r.assistPrestigeReceived ?? 0) > 0 ||
@@ -276,8 +276,8 @@ export const METRICS: MetricDescriptor[] = [
     kind: 'decimal',
     direction: 'higher',
     topMetric: true,
-    getValue: (r: any) => Number(r.directEfficiency ?? 0),
-    format: (r: any) => Number(r.directEfficiency ?? 0).toFixed(2),
+    getValue: (r) => Number(r.directEfficiency ?? 0),
+    format: (r) => Number(r.directEfficiency ?? 0).toFixed(2),
   },
   {
     key: 'contracts',

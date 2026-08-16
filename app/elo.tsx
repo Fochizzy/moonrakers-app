@@ -459,7 +459,7 @@ export default function EloScreen() {
     }
 
     const insight = resolveVisibleEloInsight(
-      payload.insights as Record<string, any>,
+      payload.insights as Parameters<typeof resolveVisibleEloInsight>[0],
       activeTab,
     );
 

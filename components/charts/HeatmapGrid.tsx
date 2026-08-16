@@ -5,6 +5,7 @@ import Svg, { Rect, Text as SvgText } from "react-native-svg";
 import {
   HEATMAP_LAYOUT,
   HeatmapMode,
+  MatrixCell,
   MatrixRow,
   SelectedCell,
   formatDisplayValue,
@@ -85,7 +86,11 @@ export default function HeatmapGrid({
   const svgHeight = PAD * 2 + HEADER_H + safeMatrix.length * CELL_H;
 
   const selectedRound = safeNumber(selectedCell?.round, 0) || null;
-  const selectedPlayerId = safeString(selectedCell?.playerId, null as any);
+  const selectedPlayerId =
+    typeof selectedCell?.playerId === "string" &&
+    selectedCell.playerId.trim().length > 0
+      ? selectedCell.playerId
+      : null;
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -272,14 +277,13 @@ export default function HeatmapGrid({
               </SvgText>
 
               {Array.from({ length: safeLength }).map((_, colIndex) => {
-                const rawCell = rowCells[colIndex] ?? {};
-                const round = safeNumber((rawCell as any).round, colIndex + 1);
-                const intensity = safeNumber((rawCell as any).intensity, 0);
-                const rawValue = safeNumber((rawCell as any).rawValue, 0);
-                const displayValue =
-                  (rawCell as any).displayValue ?? rawValue;
+                const rawCell: Partial<MatrixCell> = rowCells[colIndex] ?? {};
+                const round = safeNumber(rawCell.round, colIndex + 1);
+                const intensity = safeNumber(rawCell.intensity, 0);
+                const rawValue = safeNumber(rawCell.rawValue, 0);
+                const displayValue = rawCell.displayValue ?? rawValue;
                 const fill = safeString(
-                  (rawCell as any).fill,
+                  rawCell.fill,
                   withAlpha(rowColor, 0.12)
                 );
 

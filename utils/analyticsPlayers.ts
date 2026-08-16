@@ -1,3 +1,4 @@
+import type { Game as StoreGame } from "@/store/useStore";
 import {
   canonicalizeGames,
   collectUnifiedGames,
@@ -138,7 +139,9 @@ export function buildAnalyticsPlayerDirectory(
     };
   }
 
-  const resolvedPlayers = resolveAllGamesToPlayers(unifiedGames as any) as StorePlayer[];
+  const resolvedPlayers = resolveAllGamesToPlayers(
+    unifiedGames as unknown as StoreGame[],
+  ) as StorePlayer[];
   if (!resolvedPlayers.length) {
     return {
       players: canonicalRoster.players as StorePlayer[],

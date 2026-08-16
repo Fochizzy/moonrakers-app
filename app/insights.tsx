@@ -229,10 +229,10 @@ function buildPlayerOptionMeta(player: PlayerOption, authProfileId: string | nul
 
 export default function InsightsScreen() {
   const router = useRouter();
-  const authSession = useStore((state: any) => state.authSession);
-  const authProfile = useStore((state: any) => state?.authProfile ?? null);
-  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
-  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
+  const authSession = useStore((state) => state.authSession);
+  const authProfile = useStore((state) => state?.authProfile ?? null);
+  const players = useStore((state) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state) => (Array.isArray(state?.games) ? state.games : []));
   const authProfileId =
     String(authProfile?.id ?? authSession?.user?.id ?? "").trim() || null;
   const [activeSectionTab, setActiveSectionTab] =

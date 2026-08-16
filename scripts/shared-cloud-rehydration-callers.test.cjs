@@ -42,7 +42,7 @@ assert.doesNotMatch(
 );
 assert.match(
   historySource,
-  /args\.hydrateCloudSnapshot\(await loadHydratedCloudState\(activeSession as any\)\)/,
+  /args\.hydrateCloudSnapshot\(await loadHydratedCloudState\(activeSession as AuthSession\)\)/,
   "expected history refresh to pass the shared helper payload straight into hydration",
 );
 assert.doesNotMatch(

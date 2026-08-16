@@ -58,10 +58,10 @@ export default function PlayerProfileRecentGames({
             key={String(game.id ?? game.gameId ?? index)}
             style={({ pressed }) => [styles.gameRow, pressed && styles.gameRowPressed]}
             onPress={() => {
-              if (gameId) router.push(buildSummaryRoute(gameId) as any);
+              if (gameId) router.push(buildSummaryRoute(gameId));
             }}
             onLongPress={() => {
-              if (gameId) router.push(buildHistoryRoute({ gameId }) as any);
+              if (gameId) router.push(buildHistoryRoute({ gameId }));
             }}
           >
             <View style={styles.gameLeft}>

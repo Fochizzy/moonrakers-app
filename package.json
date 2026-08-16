@@ -1,6 +1,6 @@
 {
   "name": "moonrakers-app",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -31,7 +31,9 @@
     "verify": "npm run typecheck && npm run test",
     "release:patch": "npm version patch --no-git-tag-version",
     "build:android:prod": "eas build -p android --profile production",
-    "release:android": "npm run release:patch && npm run build:android:prod"
+    "update:preview": "eas update --channel preview --environment preview --non-interactive",
+    "update:production": "eas update --channel production --environment production --non-interactive",
+    "release:android": "npm run release:patch && eas build -p android --profile production --auto-submit-with-profile production --non-interactive"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -56,6 +58,7 @@
     "expo-secure-store": "~57.0.1",
     "expo-sharing": "~57.0.12",
     "expo-status-bar": "~57.0.1",
+    "expo-updates": "~57.0.14",
     "expo-web-browser": "~57.0.2",
     "papaparse": "^5.5.3",
     "react": "19.2.3",

@@ -10,7 +10,7 @@ const source = fs.readFileSync(
 
 assert.match(
   source,
-  /function replaceChartHubRoute\(chart: ChartCatalogEntry, setupOpen: boolean\)\s*\{[\s\S]*router\.setParams\(\s*buildChartHubParams\(chart,\s*setupOpen\)\s+as any\s*\);[\s\S]*\}/,
+  /function replaceChartHubRoute\(chart: ChartCatalogEntry, setupOpen: boolean\)\s*\{[\s\S]*router\.setParams\(\s*buildChartHubParams\(chart,\s*setupOpen\)\s*\);[\s\S]*\}/,
   "expected chart-hub state changes to update params in place so selecting a chart does not re-navigate the same screen"
 );
 

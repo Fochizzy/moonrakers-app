@@ -25,6 +25,7 @@ import {
 } from "./chartVisualSystem";
 import { getMetricOrFallback } from "@/utils/metricMap";
 import { buildBumpChartModel } from "./bumpChartModel";
+import type { SnapshotPoint as ChartSnapshotPoint } from "@/utils/charts";
 
 type Player = {
   id: string;
@@ -91,8 +92,10 @@ export default function BumpChart({
   const model = useMemo(
     () =>
       buildBumpChartModel({
-        players: visiblePlayers as any,
-        data: data as any,
+        players: visiblePlayers,
+        // The chart accepts loose snapshot rows; the model only reads the
+        // label/snapshot fields both shapes share.
+        data: data as ChartSnapshotPoint[],
         metricKey: statKey,
       }),
     [data, statKey, visiblePlayers]

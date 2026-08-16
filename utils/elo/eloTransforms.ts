@@ -26,7 +26,11 @@ import {
   getTempoIndex,
   getTurns,
   getAttempts,
+  type AnyGame,
+  type AnyParticipant,
 } from "./sourceResolvers";
+
+type UnknownRecord = Record<string, unknown>;
 
 export type EloGameRecord = {
   gameId: string;
@@ -65,7 +69,7 @@ export type EloGameRecord = {
 };
 
 type PreparedEntry = {
-  participant: any;
+  participant: AnyParticipant;
   participantIndex: number;
   playerId: string;
   preGameElo: number;
@@ -78,29 +82,38 @@ type PreparedEntry = {
   finishPosition: number;
 };
 
-export function buildEloRecords(games: any[], players: any[]): EloGameRecord[] {
-  const safeGames = dedupeGames(Array.isArray(games) ? games : []);
+export function buildEloRecords(games: unknown[], players: unknown[]): EloGameRecord[] {
+  const safeGames = dedupeGames(Array.isArray(games) ? (games as AnyGame[]) : []);
   const records: EloGameRecord[] = [];
 
-  safeGames.forEach((game: any, gameIndex: number) => {
+  safeGames.forEach((game, gameIndex) => {
     const participants = getGameParticipants(game);
     if (!participants.length) return;
 
     const gameId = getGameId(game, gameIndex);
     const timestamp = getGameTimestamp(game);
-    const totalsMap =
-      game?.totals && typeof game.totals === "object" ? game.totals : {};
+    const rawTotalsMap = game?.totals;
+    const totalsMap: UnknownRecord =
+      rawTotalsMap && typeof rawTotalsMap === "object"
+        ? (rawTotalsMap as UnknownRecord)
+        : {};
     const winnerId = String(
       game?.manualWinnerId ?? game?.selectedWinnerId ?? game?.winnerId ?? ""
     );
 
     let prepared = participants
-      .map((participant: any, participantIndex: number): PreparedEntry | null => {
+      .map((participant, participantIndex): PreparedEntry | null => {
         const playerId = getParticipantId(participant);
         if (!playerId) return null;
 
-        const totals = totalsMap?.[playerId] ?? null;
-        const merged = totals ? { ...participant, ...totals } : participant;
+        const rawTotals = totalsMap[playerId] ?? null;
+        const totals =
+          rawTotals && typeof rawTotals === "object"
+            ? (rawTotals as UnknownRecord)
+            : null;
+        const merged: AnyParticipant = totals
+          ? { ...participant, ...totals }
+          : participant;
 
         const preGameElo = getPreGameElo(merged);
         const postGameElo = getPostGameElo(merged);
@@ -114,15 +127,15 @@ export function buildEloRecords(games: any[], players: any[]): EloGameRecord[] {
 
         if (preGameElo && postGameElo) {
           eloDelta = postGameElo - preGameElo;
-        } else if (Number.isFinite(Number((merged as any)?.eloDelta))) {
-          eloDelta = Number((merged as any).eloDelta);
-        } else if (Number.isFinite(Number((participant as any)?.eloDelta))) {
-          eloDelta = Number((participant as any).eloDelta);
+        } else if (Number.isFinite(Number(merged?.eloDelta))) {
+          eloDelta = Number(merged.eloDelta);
+        } else if (Number.isFinite(Number(participant?.eloDelta))) {
+          eloDelta = Number(participant.eloDelta);
         } else {
           const syntheticBase = 1000 + score * 4;
           const syntheticResultBonus =
             (didWin ? 24 : -12) +
-            safeNum((merged as any)?.totalPrestige ?? (merged as any)?.score ?? score) * 0.15;
+            safeNum(merged?.totalPrestige ?? merged?.score ?? score) * 0.15;
 
           normalizedPreGameElo = syntheticBase;
           eloDelta = syntheticResultBonus;
@@ -137,11 +150,11 @@ export function buildEloRecords(games: any[], players: any[]): EloGameRecord[] {
         }
 
         const rawFinishPosition = safeNum(
-          (merged as any)?.rank ??
-            (merged as any)?.place ??
-            (merged as any)?.placement ??
-            (merged as any)?.finishPosition ??
-            (merged as any)?.position
+          merged?.rank ??
+            merged?.place ??
+            merged?.placement ??
+            merged?.finishPosition ??
+            merged?.position
         );
         const finishPosition =
           rawFinishPosition > 0 ? rawFinishPosition : didWin ? 1 : 0;
@@ -160,7 +173,7 @@ export function buildEloRecords(games: any[], players: any[]): EloGameRecord[] {
           finishPosition,
         };
       })
-      .filter(Boolean) as PreparedEntry[];
+      .filter((entry): entry is PreparedEntry => entry !== null);
 
     if (!prepared.length) return;
 

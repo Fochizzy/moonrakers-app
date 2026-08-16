@@ -48,7 +48,10 @@ import {
   getVisibleMetricEntries,
   sortRowsByMetric,
 } from "@/utils/compareHelpers";
-import { prioritizeSignedInPlayerOptions } from "@/utils/charts";
+import {
+  prioritizeSignedInPlayerOptions,
+  type NormalizedGame,
+} from "@/utils/charts";
 import {
   CompareMode,
   CompareStoreShape,
@@ -96,28 +99,44 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
-function makeGameSignature(game: StoredGame): string {
-  const anyGame = game as any;
+type UnknownRecord = Record<string, unknown>;
 
-  if (anyGame?.id) return `id:${String(anyGame.id)}`;
-  if (anyGame?.gameId) return `gameId:${String(anyGame.gameId)}`;
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function makeGameSignature(game: StoredGame): string {
+  const source: UnknownRecord = game;
+
+  if (source.id) return `id:${String(source.id)}`;
+  if (source.gameId) return `gameId:${String(source.gameId)}`;
 
   const startedAt =
-    anyGame?.startedAt ??
-    anyGame?.createdAt ??
-    anyGame?.date ??
-    anyGame?.timestamp ??
+    source.startedAt ??
+    source.createdAt ??
+    source.date ??
+    source.timestamp ??
     "unknown-time";
 
-  const players = Array.isArray(anyGame?.playerIds)
-    ? anyGame.playerIds.join(",")
-    : Array.isArray(anyGame?.players)
-      ? anyGame.players
-          .map((entry: any) => entry?.playerId ?? entry?.id ?? entry?.name ?? "unknown-player")
+  const players = Array.isArray(source.playerIds)
+    ? source.playerIds.join(",")
+    : Array.isArray(source.players)
+      ? source.players
+          .map((entry: unknown) => {
+            const entryRecord = asRecord(entry);
+            return (
+              entryRecord.playerId ??
+              entryRecord.id ??
+              entryRecord.name ??
+              "unknown-player"
+            );
+          })
           .join(",")
       : "unknown-players";
 
-  const winner = anyGame?.winnerId ?? anyGame?.winner ?? "unknown-winner";
+  const winner = source.winnerId ?? source.winner ?? "unknown-winner";
 
   return `fallback:${String(startedAt)}:${String(players)}:${String(winner)}`;
 }
@@ -272,11 +291,11 @@ function buildConditionalQuickSelectPlayerIds(args: {
       };
 
     return prioritizeSignedInPlayerOptions({
-      players: validPlayers as any,
-      games: games as any,
+      players: validPlayers,
+      games: games as NormalizedGame[],
       authProfileId,
       authSessionUserId,
-      authProfilePlayer: authProfilePlayer as any,
+      authProfilePlayer,
       commonPlayerLimit: 4,
     })
       .slice(0, 5)
@@ -490,25 +509,26 @@ export default function IndexScreen() {
 
     if (!aliases.length) return allVisibleMetrics;
 
-    return allVisibleMetrics.filter((entry: any) => {
-      if (entry?.type === "group") {
+    return allVisibleMetrics.filter((entry) => {
+      const entryRecord = asRecord(entry);
+
+      if (entryRecord.type === "group") {
+        const group = asRecord(entryRecord.group);
         const groupKey = normalizeGroupKey(
-          entry?.group?.key ??
-            entry?.groupKey ??
-            entry?.group?.label ??
-            entry?.label
+          group.key ?? entryRecord.groupKey ?? group.label ?? entryRecord.label
         );
 
         return aliases.includes(groupKey);
       }
 
+      const metric = asRecord(entryRecord.metric);
       const metricGroupKey = normalizeGroupKey(
-        entry?.metric?.groupKey ??
-          entry?.metric?.group?.key ??
-          entry?.groupKey ??
-          entry?.metricGroupKey ??
-          entry?.metric?.group ??
-          entry?.metric?.category
+        metric.groupKey ??
+          asRecord(metric.group).key ??
+          entryRecord.groupKey ??
+          entryRecord.metricGroupKey ??
+          metric.group ??
+          metric.category
       );
 
       return aliases.includes(metricGroupKey);
@@ -960,7 +980,7 @@ export default function IndexScreen() {
 
       <MetricInfoModal
         visible={!!selectedMetricInfo}
-        metric={selectedMetricInfo as any}
+        metric={selectedMetricInfo}
         onClose={() => setSelectedMetricInfo(null)}
       />
     </PageShell>

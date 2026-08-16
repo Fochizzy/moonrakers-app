@@ -120,7 +120,7 @@ export default function HomeScreen() {
       openFullProfileFromHubs();
       return;
     }
-    router.push(card.route as any);
+    router.push(card.route);
   };
   const dockPulse = useRef(new Animated.Value(1)).current;
   const dockGlowOpacity = useRef(new Animated.Value(0)).current;
@@ -133,7 +133,7 @@ export default function HomeScreen() {
   const players = useMemo(
     () =>
       rawPlayers
-        .map((player: any, index: number) => normalizePlayer(player, index))
+        .map((player, index) => normalizePlayer(player, index))
         .filter((player: PlayerLike | null): player is PlayerLike => Boolean(player)),
     [rawPlayers]
   );
@@ -141,7 +141,7 @@ export default function HomeScreen() {
   const groups = useMemo(
     () =>
       rawGroups
-        .map((group: any, index: number) => normalizeGroup(group, index))
+        .map((group, index) => normalizeGroup(group, index))
         .filter((group: GroupLike | null): group is GroupLike => Boolean(group)),
     [rawGroups]
   );
@@ -149,7 +149,7 @@ export default function HomeScreen() {
   const games = useMemo(
     () =>
       rawGames
-        .map((game: any) => normalizeGame(game))
+        .map((game) => normalizeGame(game))
         .filter((game: GameLike | null): game is GameLike => Boolean(game)),
     [rawGames]
   );
@@ -480,7 +480,7 @@ export default function HomeScreen() {
   }, [dockGlowOpacity, dockPulse, selectedIds]);
 
   if (homeRedirect) {
-    return <Redirect href={homeRedirect as any} />;
+    return <Redirect href={homeRedirect} />;
   }
 
   const triggerRemovePulse = () => {
@@ -567,7 +567,7 @@ export default function HomeScreen() {
       await ensureDraftForLegacyActiveGame(activeGame);
     }
 
-    router.push(APP_ROUTES.game as any);
+    router.push(APP_ROUTES.game);
   };
 
   const launchSeededDraft = async () => {
@@ -607,7 +607,7 @@ export default function HomeScreen() {
       gameplay: null,
     });
 
-    router.push(APP_ROUTES.gameSetup as any);
+    router.push(APP_ROUTES.gameSetup);
   };
 
   const startGame = () => {

@@ -168,9 +168,9 @@ function AnalyticsCard({
 
 export default function AnalyticsScreen() {
   const router = useRouter();
-  const authSession = useStore((state: any) => state.authSession);
-  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
-  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
+  const authSession = useStore((state) => state.authSession);
+  const players = useStore((state) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state) => (Array.isArray(state?.games) ? state.games : []));
   const cards = useMemo(() => getAnalyticsHubCards(), []);
   const profileId = String(authSession?.user?.id ?? "").trim();
   const analyticsQuery = useLiveAnalyticsQuery({
@@ -287,7 +287,7 @@ export default function AnalyticsScreen() {
                 key={card.key}
                 accent={tone.accent}
                 card={card}
-                onPress={() => router.push(card.route as any)}
+                onPress={() => router.push(card.route)}
                 tone={tone}
               />
             );
@@ -298,7 +298,7 @@ export default function AnalyticsScreen() {
               accent={insightsTone.accent}
               card={insightsCard}
               fullWidth
-              onPress={() => router.push(insightsCard.route as any)}
+              onPress={() => router.push(insightsCard.route)}
               tone={insightsTone}
             />
           ) : null}

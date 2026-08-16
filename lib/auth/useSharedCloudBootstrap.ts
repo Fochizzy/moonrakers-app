@@ -96,9 +96,9 @@ export function useSharedCloudBootstrap() {
           await remove("gameDraft");
           await clearCachedSnapshot();
           clearAuthState();
-          setPlayers([] as any);
-          setGroups([] as any);
-          setGames([] as any);
+          setPlayers([]);
+          setGroups([]);
+          setGames([]);
           setStatsSnapshot(null);
           setPasswordRecoveryPending(pendingIntent === "recovery-ready");
           setAuthBootstrapStatus("ready");
@@ -123,9 +123,9 @@ export function useSharedCloudBootstrap() {
         }
 
         if (!profile?.player_name) {
-          setPlayers([] as any);
-          setGroups([] as any);
-          setGames([] as any);
+          setPlayers([]);
+          setGroups([]);
+          setGames([]);
           setStatsSnapshot(null);
           setPasswordRecoveryPending(pendingIntent === "recovery-ready");
           hydrateAuthBootstrap({ session, profile });
@@ -310,27 +310,27 @@ export function useSharedCloudBootstrap() {
 
     if (launchRoute === APP_ROUTES.home) {
       if (PUBLIC_AUTH_ROUTES.has(pathname)) {
-        router.replace(buildHomeRoute() as any);
+        router.replace(buildHomeRoute());
       }
       return;
     }
 
     if (launchRoute === APP_ROUTES.register) {
       if (pathname !== APP_ROUTES.register) {
-        router.replace(APP_ROUTES.register as any);
+        router.replace(APP_ROUTES.register);
       }
       return;
     }
 
     if (launchRoute === APP_ROUTES.resetPassword) {
       if (pathname !== APP_ROUTES.resetPassword) {
-        router.replace(APP_ROUTES.resetPassword as any);
+        router.replace(APP_ROUTES.resetPassword);
       }
       return;
     }
 
     if (launchRoute === APP_ROUTES.login && !PUBLIC_AUTH_ROUTES.has(pathname)) {
-      router.replace(APP_ROUTES.login as any);
+      router.replace(APP_ROUTES.login);
     }
   }, [
     authBootstrapStatus,
@@ -358,7 +358,7 @@ export function useSharedCloudBootstrap() {
       setStatsSnapshot(null);
       setAuthError(null);
       setAuthBootstrapStatus("ready");
-      router.replace(APP_ROUTES.login as any);
+      router.replace(APP_ROUTES.login);
     }
   }
 

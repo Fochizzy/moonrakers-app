@@ -307,7 +307,7 @@ export default function PlaystyleSection({
 
     for (const player of players) {
       if (player?.id) {
-        map.set(player.id, getPlayerAccentColor((player as any)?.color));
+        map.set(player.id, getPlayerAccentColor(player?.color));
       }
     }
 

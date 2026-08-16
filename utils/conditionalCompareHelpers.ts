@@ -181,9 +181,22 @@ function nameForEntity(
     : groupMap.get(entityId)?.name ?? 'Unknown Group';
 }
 
+type ConditionalRowLike = {
+  id: string;
+  label?: unknown;
+  name?: unknown;
+  color?: unknown;
+  games?: unknown;
+  winRate?: unknown;
+  avgPrestigePerGame?: unknown;
+  avgScorePerGame?: unknown;
+  efficiency?: unknown;
+  synergyIndex?: unknown;
+};
+
 function toConditionalDelta(
-  row: any,
-  overall: any,
+  row: ConditionalRowLike,
+  overall: ConditionalRowLike | undefined,
   isAnchor: boolean
 ): ConditionalEntityDelta {
   return {
@@ -250,19 +263,19 @@ export function buildConditionalAnalysis(args: {
     )
   );
 
-  const allOverallRows =
+  const allOverallRows: ConditionalRowLike[] =
     subjectMode === 'players'
       ? buildPlayerRows(Array.from(playerMap.keys()), playerMap, games)
       : buildGroupRows(Array.from(groupMap.keys()), groupMap, playerMap, games);
 
-  const sampleRows =
+  const sampleRows: ConditionalRowLike[] =
     subjectMode === 'players'
       ? buildPlayerRows(selectedUniverse, playerMap, matchedGames)
       : buildGroupRows(selectedUniverse, groupMap, playerMap, matchedGames);
 
-  const overallById = new Map(allOverallRows.map((row: any) => [row.id, row]));
+  const overallById = new Map(allOverallRows.map((row) => [row.id, row] as const));
 
-  const entities = sampleRows.map((row: any) =>
+  const entities = sampleRows.map((row) =>
     toConditionalDelta(
       {
         ...row,

@@ -28,13 +28,13 @@ assert.match(
 
 assert.match(
   source,
-  /<Sparkline[\s\S]*metricOptions=\{serverMetricOptions as any\}[\s\S]*activeMetricKey=\{activeMetric \?\? undefined\}[\s\S]*onChangeMetric=\{handleMetricChange\}/,
+  /<Sparkline[\s\S]*metricOptions=\{serverMetricOptions as ChartMetricOption\[\]\}[\s\S]*activeMetricKey=\{activeMetric \?\? undefined\}[\s\S]*onChangeMetric=\{handleMetricChange\}/,
   "expected Sparkline chart detail wiring to pass metric options and a shared change handler"
 );
 
 assert.match(
   source,
-  /<StackedBarChart[\s\S]*metricOptions=\{serverMetricOptions as any\}[\s\S]*activeMetricKey=\{activeMetric \?\? undefined\}[\s\S]*onChangeMetric=\{handleMetricChange\}/,
+  /<StackedBarChart[\s\S]*metricOptions=\{serverMetricOptions as ChartMetricOption\[\]\}[\s\S]*activeMetricKey=\{activeMetric \?\? undefined\}[\s\S]*onChangeMetric=\{handleMetricChange\}/,
   "expected StackedBarChart detail wiring to pass metric options and a shared change handler"
 );
 

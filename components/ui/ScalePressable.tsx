@@ -1,10 +1,10 @@
 import React, { useRef } from "react";
-import { Animated, Pressable } from "react-native";
+import { Animated, Pressable, type StyleProp, type ViewStyle } from "react-native";
 
 type ScalePressableProps = {
   onPress?: () => void;
   onLongPress?: () => void;
-  style?: any;
+  style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
   disabled?: boolean;
   accessibilityHint?: string;

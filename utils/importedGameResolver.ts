@@ -20,6 +20,7 @@ export type ResolvedChartPlayer = {
 };
 
 type ResolvedTotals = {
+  [key: string]: unknown;
   score?: number;
   prestige?: number;
   totalPrestige?: number;
@@ -43,9 +44,9 @@ function safeNumber(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0;
 }
 
-function ensureObject(value: unknown): Record<string, any> {
+function ensureObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, any>)
+    ? (value as Record<string, unknown>)
     : {};
 }
 
@@ -58,11 +59,12 @@ function normalizeLooseName(value: unknown): string {
     .replace(/\s+/g, " ");
 }
 
-function getInitials(player: any): string {
-  if (typeof player?.initials === "string" && player.initials.trim()) {
-    return player.initials.trim().charAt(0).toUpperCase();
+function getInitials(player: unknown): string {
+  const source = ensureObject(player);
+  if (typeof source.initials === "string" && source.initials.trim()) {
+    return source.initials.trim().charAt(0).toUpperCase();
   }
-  return String(player?.name ?? "").trim().charAt(0).toUpperCase() || "?";
+  return String(source.name ?? "").trim().charAt(0).toUpperCase() || "?";
 }
 
 function totalPrestigeFromTotals(totals: ResolvedTotals) {
@@ -117,25 +119,26 @@ function mergeAssistMaps(
 }
 
 function buildResolvedPlayer(
-  player: any,
+  player: unknown,
   totals: ResolvedTotals,
   turns: number
 ): ResolvedChartPlayer {
   const totalPrestige = totalPrestigeFromTotals(totals);
+  const source = ensureObject(player);
 
   return {
-    id: String(player?.id ?? ""),
-    name: String(player?.name ?? "Player"),
+    id: String(source.id ?? ""),
+    name: String(source.name ?? "Player"),
     initials: getInitials(player),
-    color: player?.color,
+    color: typeof source.color === "string" ? source.color : undefined,
     assignedCardArtIndex:
-      typeof player?.assignedCardArtIndex === "number" &&
-      Number.isFinite(player.assignedCardArtIndex)
-        ? player.assignedCardArtIndex
+      typeof source.assignedCardArtIndex === "number" &&
+      Number.isFinite(source.assignedCardArtIndex)
+        ? source.assignedCardArtIndex
         : null,
     artIndex:
-      typeof player?.artIndex === "number" && Number.isFinite(player.artIndex)
-        ? player.artIndex
+      typeof source.artIndex === "number" && Number.isFinite(source.artIndex)
+        ? source.artIndex
         : null,
     score: safeNumber(totals.score) || totalPrestige,
     totalPrestige,
@@ -202,7 +205,7 @@ function mergeTotalsEntry(
 }
 
 function normalizeTotalsEntry(
-  entry: any,
+  entry: Record<string, unknown>,
   rawPlayerId: string,
   canonicalPlayerId: string,
   idMap: Record<string, string>
@@ -251,16 +254,17 @@ function normalizeTotalsEntry(
 }
 
 function findTotalsEntry(
-  player: any,
-  players: any[],
-  totalsMap: Record<string, any>
+  player: unknown,
+  players: unknown[],
+  totalsMap: Record<string, unknown>
 ): ResolvedTotals {
-  const playerId = String(player?.id ?? "").trim();
+  const source = ensureObject(player);
+  const playerId = String(source.id ?? "").trim();
   if (playerId && totalsMap[playerId]) {
     return ensureObject(totalsMap[playerId]) as ResolvedTotals;
   }
 
-  const nameKey = normalizeLooseName(player?.name);
+  const nameKey = normalizeLooseName(source.name);
   if (nameKey) {
     const directByName = Object.entries(totalsMap).find(([, entry]) => {
       const e = ensureObject(entry);
@@ -272,15 +276,16 @@ function findTotalsEntry(
     }
   }
 
-  for (const gamePlayer of players) {
-    const gamePlayerId = String(gamePlayer?.id ?? "").trim();
+  for (const rawGamePlayer of players) {
+    const gamePlayer = ensureObject(rawGamePlayer);
+    const gamePlayerId = String(gamePlayer.id ?? "").trim();
     if (playerId && gamePlayerId === playerId && totalsMap[gamePlayerId]) {
       return ensureObject(totalsMap[gamePlayerId]) as ResolvedTotals;
     }
 
     if (
       nameKey &&
-      normalizeLooseName(gamePlayer?.name) === nameKey &&
+      normalizeLooseName(gamePlayer.name) === nameKey &&
       gamePlayerId &&
       totalsMap[gamePlayerId]
     ) {
@@ -291,15 +296,15 @@ function findTotalsEntry(
   return {};
 }
 
-function inferTurnsForPlayer(game: any, rawPlayerId: string, canonicalPlayerId: string): number {
-  const totalsTurns = safeNumber(
-    game?.totals?.[canonicalPlayerId]?.turns ?? game?.totals?.[canonicalPlayerId]?.turnCount
-  );
+function inferTurnsForPlayer(game: unknown, rawPlayerId: string, canonicalPlayerId: string): number {
+  const source = ensureObject(game);
+  const playerTotals = ensureObject(ensureObject(source.totals)[canonicalPlayerId]);
+  const totalsTurns = safeNumber(playerTotals.turns ?? playerTotals.turnCount);
   if (totalsTurns > 0) return totalsTurns;
 
-  const rounds = Array.isArray(game?.rounds) ? game.rounds : [];
-  const roundTurns = rounds.filter((round: Record<string, unknown>) => {
-    const roundPlayerId = String(round?.playerId ?? "").trim();
+  const rounds = Array.isArray(source.rounds) ? source.rounds : [];
+  const roundTurns = rounds.filter((round) => {
+    const roundPlayerId = String(ensureObject(round).playerId ?? "").trim();
     return roundPlayerId === canonicalPlayerId || roundPlayerId === rawPlayerId;
   }).length;
 
@@ -368,24 +373,32 @@ export function resolveAllGamesToPlayers(games: Game[]): ResolvedChartPlayer[] {
   return buildCanonicalPlayerMap(Array.isArray(games) ? games : []);
 }
 
+type CanonicalPlayerLike = {
+  id: string;
+  name?: string;
+  initials?: string;
+  color?: string;
+  assignedCardArtIndex?: number | null;
+  artIndex?: number | null;
+};
+
+type CanonicalGamePlayer = Game["players"][number] & {
+  name: string;
+  initials: string;
+  artIndex?: number | null;
+};
+
 export function canonicalizeImportedGamesForCharts(
   games: Game[],
-  canonicalPlayers?: Array<{
-    id: string;
-    name?: string;
-    initials?: string;
-    color?: string;
-    assignedCardArtIndex?: number | null;
-    artIndex?: number | null;
-  }>
+  canonicalPlayers?: CanonicalPlayerLike[]
 ): Game[] {
   const players =
     Array.isArray(canonicalPlayers) && canonicalPlayers.length > 0
       ? canonicalPlayers
       : resolveAllGamesToPlayers(games);
 
-  const byId = new Map<string, any>();
-  const byName = new Map<string, any>();
+  const byId = new Map<string, CanonicalPlayerLike>();
+  const byName = new Map<string, CanonicalPlayerLike>();
 
   for (const player of players) {
     const id = String(player?.id ?? "").trim();
@@ -398,8 +411,8 @@ export function canonicalizeImportedGamesForCharts(
     const rawPlayers = Array.isArray(game?.players) ? game.players : [];
     const rawTotals = ensureObject(game?.totals);
     const idMap: Record<string, string> = {};
-    const canonicalPlayersForGame: any[] = [];
-    const canonicalTotals: Record<string, any> = {};
+    const canonicalPlayersForGame: CanonicalGamePlayer[] = [];
+    const canonicalTotals: Record<string, ResolvedTotals> = {};
 
     for (const rawPlayer of rawPlayers) {
       const rawId = String(rawPlayer?.id ?? "").trim();
@@ -469,17 +482,21 @@ export function canonicalizeImportedGamesForCharts(
       );
     }
 
-    const remapRoundList = (list: any[]) =>
-      (Array.isArray(list) ? list : []).map((round: any, index: number) => ({
-        ...round,
-        id: String(round?.id ?? `round-${index + 1}`),
-        playerId: idMap[String(round?.playerId ?? "")] ?? String(round?.playerId ?? ""),
-        assistRecipients: remapAssistMap(round?.assistRecipients, idMap),
-        assistPrestigeRecipients: remapAssistMap(
-          round?.assistPrestigeRecipients,
-          idMap
-        ),
-      }));
+    const remapRoundList = (list: unknown[]) =>
+      (Array.isArray(list) ? list : []).map((rawRound, index: number) => {
+        const round = ensureObject(rawRound);
+
+        return {
+          ...round,
+          id: String(round.id ?? `round-${index + 1}`),
+          playerId: idMap[String(round.playerId ?? "")] ?? String(round.playerId ?? ""),
+          assistRecipients: remapAssistMap(round.assistRecipients, idMap),
+          assistPrestigeRecipients: remapAssistMap(
+            round.assistPrestigeRecipients,
+            idMap
+          ),
+        };
+      });
 
     const remapWinnerId = (value: unknown) => {
       const raw = String(value ?? "").trim();
@@ -487,7 +504,7 @@ export function canonicalizeImportedGamesForCharts(
       return idMap[raw] ?? raw;
     };
 
-    const dedupedPlayers = new Map<string, any>();
+    const dedupedPlayers = new Map<string, CanonicalGamePlayer>();
     for (const player of canonicalPlayersForGame) {
       if (!dedupedPlayers.has(String(player.id))) {
         dedupedPlayers.set(String(player.id), player);
@@ -499,9 +516,9 @@ export function canonicalizeImportedGamesForCharts(
         const matched = byId.get(playerId);
         dedupedPlayers.set(playerId, {
           id: playerId,
-          name: String(matched?.name ?? (totals as any)?.name ?? "Player"),
+          name: String(matched?.name ?? totals?.name ?? "Player"),
           initials: String(
-            matched?.initials ?? getInitials({ name: matched?.name ?? (totals as any)?.name })
+            matched?.initials ?? getInitials({ name: matched?.name ?? totals?.name })
           ),
           color: matched?.color,
           assignedCardArtIndex:
@@ -527,12 +544,12 @@ export function canonicalizeImportedGamesForCharts(
     return {
       ...game,
       players: [...dedupedPlayers.values()],
-      totals: canonicalTotals,
-      rounds,
-      timeline,
-      winnerId: remapWinnerId((game as any)?.winnerId),
-      selectedWinnerId: remapWinnerId((game as any)?.selectedWinnerId),
-      manualWinnerId: remapWinnerId((game as any)?.manualWinnerId),
+      totals: canonicalTotals as Game["totals"],
+      rounds: rounds as Game["rounds"],
+      timeline: timeline as Game["timeline"],
+      winnerId: remapWinnerId(game?.winnerId),
+      selectedWinnerId: remapWinnerId(game?.selectedWinnerId),
+      manualWinnerId: remapWinnerId(game?.manualWinnerId),
     };
   });
 }

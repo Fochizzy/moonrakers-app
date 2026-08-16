@@ -12,7 +12,7 @@ async function main() {
   };
 
   const deletedGameId = await deleteCompletedGame("game-123", {
-    supabaseClient: client as any,
+    supabaseClient: client,
   });
 
   assert.equal(deletedGameId, "deleted-game-id");

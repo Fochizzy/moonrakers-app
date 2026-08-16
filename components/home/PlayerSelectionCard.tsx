@@ -75,7 +75,7 @@ export function PlayerSelectionCard({
         </View>
 
         <PlayerCardIcon
-          player={player as any}
+          player={player}
           size={58}
           borderRadius={12}
           showInitial={showInitial}

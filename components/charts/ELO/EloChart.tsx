@@ -5,6 +5,10 @@ import Text from "@/components/ui/Text";
 import { buildEloSnapshots } from "@/utils/elo";
 import { CHART_COLORS } from "@/components/charts/chartVisualSystem";
 import EloChartPlot from "./EloChartPlot";
+import type {
+  Game as EloPlotGame,
+  RenderSeries,
+} from "@/components/charts/ELO/eloChartUtils";
 import {
   buildEloChartState,
   DEFAULT_ELO_MODE,
@@ -93,8 +97,8 @@ export default function EloChart({
       ) : null}
 
       <EloChartPlot
-        games={chartState.games as any}
-        seriesPaths={activeSeriesPaths as any}
+        games={chartState.games as EloPlotGame[]}
+        seriesPaths={activeSeriesPaths as unknown as RenderSeries[]}
         selectedIndex={selectedIndex}
         selectedMode={selectedMode}
         modeOptions={ELO_CHART_MODE_OPTIONS}

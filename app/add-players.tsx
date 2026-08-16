@@ -133,32 +133,42 @@ function normalizeId(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function normalizeGame(raw: any): GameLike | null {
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function normalizeGame(raw: unknown): GameLike | null {
   if (!raw || typeof raw !== "object") {
     return null;
   }
 
+  const source = raw as UnknownRecord;
+
   const createdAt =
-    typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
-      ? raw.createdAt
+    typeof source.createdAt === "number" && Number.isFinite(source.createdAt)
+      ? source.createdAt
       : undefined;
 
   return {
-    groupId: normalizeId(raw.groupId) || undefined,
+    groupId: normalizeId(source.groupId) || undefined,
     createdAt,
-    players: Array.isArray(raw.players)
-      ? raw.players.map((player: any) =>
+    players: Array.isArray(source.players)
+      ? source.players.map((player: unknown) =>
           typeof player === "string"
             ? normalizeId(player)
             : {
-                id: normalizeId(player?.id) || undefined,
-                playerId: normalizeId(player?.playerId) || undefined,
+                id: normalizeId(asRecord(player).id) || undefined,
+                playerId: normalizeId(asRecord(player).playerId) || undefined,
               }
         )
       : undefined,
     totals:
-      raw.totals && typeof raw.totals === "object"
-        ? (raw.totals as Record<string, unknown>)
+      source.totals && typeof source.totals === "object"
+        ? (source.totals as Record<string, unknown>)
         : undefined,
   };
 }
@@ -182,20 +192,20 @@ export default function AddPlayersScreen() {
   const router = useRouter();
   const routeParams = useLocalSearchParams<AddPlayersRouteParams>();
 
-  const players = useStore((state: any) => state.players ?? []) as PlayerLike[];
-  const groups = useStore((state: any) => state.groups ?? []) as GroupLike[];
-  const rawGames = useStore((state: any) => state.games ?? []);
-  const authSession = useStore((state: any) => state.authSession);
-  const authProfile = useStore((state: any) => state.authProfile);
-  const setAuthProfile = useStore((state: any) => state.setAuthProfile);
-  const hydrateCloudSnapshot = useStore((state: any) => state.hydrateCloudSnapshot);
+  const players = useStore((state) => state.players ?? []) as PlayerLike[];
+  const groups = useStore((state) => state.groups ?? []) as GroupLike[];
+  const rawGames = useStore((state) => state.games ?? []);
+  const authSession = useStore((state) => state.authSession);
+  const authProfile = useStore((state) => state.authProfile);
+  const setAuthProfile = useStore((state) => state.setAuthProfile);
+  const hydrateCloudSnapshot = useStore((state) => state.hydrateCloudSnapshot);
   const upsertRegisteredProfile = useStore(
-    (state: any) => state.upsertRegisteredProfile,
+    (state) => state.upsertRegisteredProfile,
   );
   const clearAuthState = useClearAuthState();
   const setPasswordRecoveryPending = useSetPasswordRecoveryPending();
-  const setPlayers = useStore((state: any) => state.setPlayers);
-  const resetStore = useStore((state: any) => state.resetStore);
+  const setPlayers = useStore((state) => state.setPlayers);
+  const resetStore = useStore((state) => state.resetStore);
   const { gameDraft } = useSyncedGameDraft();
 
   const requestedTab = useMemo(
@@ -386,20 +396,20 @@ export default function AddPlayersScreen() {
       return;
     }
 
-    const hydratedSnapshot = await loadHydratedCloudState(authSession as any);
+    const hydratedSnapshot = await loadHydratedCloudState(authSession);
     hydrateCloudSnapshot(hydratedSnapshot);
   }
 
   function ensureSharedGroupAccess() {
     if (!signedInUserId) {
       Alert.alert("Login required", "Log in before managing shared groups.");
-      router.push(APP_ROUTES.login as any);
+      router.push(APP_ROUTES.login);
       return false;
     }
 
     if (!profileReady) {
       Alert.alert("Finish profile", "Finish profile setup before managing shared groups.");
-      router.push(APP_ROUTES.register as any);
+      router.push(APP_ROUTES.register);
       return false;
     }
 
@@ -491,7 +501,7 @@ export default function AddPlayersScreen() {
       if (signOutError) {
         throw signOutError;
       }
-      router.replace(APP_ROUTES.login as any);
+      router.replace(APP_ROUTES.login);
     } catch (error) {
       Alert.alert("Couldn't delete profile", formatSupabaseConfigError(error));
     } finally {
@@ -752,7 +762,7 @@ export default function AddPlayersScreen() {
                 <ActionButton
                   title="Assign card art to other players"
                   variant="secondary"
-                  onPress={() => router.push(APP_ROUTES.playerCards as any)}
+                  onPress={() => router.push(APP_ROUTES.playerCards)}
                 />
 
                 <Text style={styles.deleteHint}>
@@ -776,7 +786,7 @@ export default function AddPlayersScreen() {
                 <ActionButton
                   title="Finish profile setup"
                   variant="secondary"
-                  onPress={() => router.push(APP_ROUTES.register as any)}
+                  onPress={() => router.push(APP_ROUTES.register)}
                 />
               </>
             )}
@@ -855,7 +865,7 @@ export default function AddPlayersScreen() {
                     ]}
                   >
                     <PlayerCardIcon
-                      player={player as any}
+                      player={player}
                       size={72}
                       borderRadius={14}
                       showInitial={false}
@@ -984,7 +994,7 @@ export default function AddPlayersScreen() {
                         return (
                           <View key={id} style={styles.groupCardPlayer}>
                             <PlayerCardIcon
-                              player={player as any}
+                              player={player}
                               size={54}
                               borderRadius={12}
                               showInitial={false}

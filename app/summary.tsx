@@ -61,7 +61,10 @@ type RoundLike = {
   assistPrestigeReceived?: number;
   turnOrder?: number;
   roundNumber?: number;
-  [key: string]: any;
+  metaType?: string | null;
+  assistRecipients?: Record<string, unknown> | null;
+  assistPrestigeRecipients?: Record<string, unknown> | null;
+  [key: string]: unknown;
 };
 
 type StoredGame = {
@@ -245,7 +248,7 @@ export default function SummaryScreen() {
 
     return [...game.players]
       .map((player) => {
-        const totals = getResolvedTotalsForPlayer(game as any, player.id) as PlayerTotals;
+        const totals = getResolvedTotalsForPlayer(game, player.id) as PlayerTotals;
 
         return {
           id: player.id,
@@ -689,7 +692,7 @@ export default function SummaryScreen() {
 
           <Pressable
             style={[styles.actionButton, styles.primaryAction]}
-            onPress={() => router.push(buildGameTrendsRoute(routeGameId) as any)}
+            onPress={() => router.push(buildGameTrendsRoute(routeGameId))}
           >
             <Text style={styles.actionButtonText}>Game Trends</Text>
           </Pressable>

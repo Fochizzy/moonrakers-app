@@ -533,10 +533,10 @@ export function PlayerCard({
       const built = buildPlayerIdentity(safePlayer);
       return {
         displayName:
-          safeString((built as any)?.displayName, "") ||
+          safeString(built.displayName, "") ||
           safeString(safePlayer.name, "Unknown Player"),
         subtitle:
-          safeString((built as any)?.subtitle, "") ||
+          safeString(built.subtitle, "") ||
           safeString(
             safePlayer.subtitle,
             `Callsign ${getInitials(safePlayer.name)}`

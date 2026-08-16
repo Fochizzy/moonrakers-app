@@ -1,54 +1,64 @@
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
 export function toChartNumber(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? value
     : Number(value) || 0;
 }
 
-export function getChartMetricValue(entry: any, statKey: string): number {
+export function getChartMetricValue(entry: unknown, statKey: string): number {
   if (!entry) return 0;
   if (typeof entry === 'number') return toChartNumber(entry);
 
+  const source = asRecord(entry);
+
   const directPrestige =
-    toChartNumber(entry?.directPrestige) ||
-    toChartNumber(entry?.selfPrestige) ||
-    toChartNumber(entry?.prestigeFromSelf);
+    toChartNumber(source.directPrestige) ||
+    toChartNumber(source.selfPrestige) ||
+    toChartNumber(source.prestigeFromSelf);
 
   const assistPrestigeReceived =
-    toChartNumber(entry?.assistPrestigeReceived) ||
-    toChartNumber(entry?.assistsReceived) ||
-    toChartNumber(entry?.assistIn);
+    toChartNumber(source.assistPrestigeReceived) ||
+    toChartNumber(source.assistsReceived) ||
+    toChartNumber(source.assistIn);
 
   const objectivePrestige =
-    toChartNumber(entry?.objectivePrestige) ||
-    toChartNumber(entry?.objectiveCount);
+    toChartNumber(source.objectivePrestige) ||
+    toChartNumber(source.objectiveCount);
 
   const contracts =
-    toChartNumber(entry?.contracts) ||
-    toChartNumber(entry?.successes) ||
-    toChartNumber(entry?.contractSuccesses) ||
-    toChartNumber(entry?.successfulContracts);
+    toChartNumber(source.contracts) ||
+    toChartNumber(source.successes) ||
+    toChartNumber(source.contractSuccesses) ||
+    toChartNumber(source.successfulContracts);
 
   const failures =
-    toChartNumber(entry?.failures) ||
-    toChartNumber(entry?.contractFailures) ||
-    toChartNumber(entry?.failedContracts);
+    toChartNumber(source.failures) ||
+    toChartNumber(source.contractFailures) ||
+    toChartNumber(source.failedContracts);
 
   const assists =
-    toChartNumber(entry?.assists) ||
-    toChartNumber(entry?.assistsGiven) ||
-    toChartNumber(entry?.assistGiven);
+    toChartNumber(source.assists) ||
+    toChartNumber(source.assistsGiven) ||
+    toChartNumber(source.assistGiven);
 
   const turns =
-    toChartNumber(entry?.turns) ||
-    toChartNumber(entry?.turnCount) ||
+    toChartNumber(source.turns) ||
+    toChartNumber(source.turnCount) ||
     1;
 
   const totalPrestige =
-    toChartNumber(entry?.totalPrestige) ||
-    toChartNumber(entry?.prestige) ||
+    toChartNumber(source.totalPrestige) ||
+    toChartNumber(source.prestige) ||
     directPrestige + assistPrestigeReceived + objectivePrestige;
 
-  const score = toChartNumber(entry?.score) || totalPrestige;
+  const score = toChartNumber(source.score) || totalPrestige;
 
   switch (statKey) {
     case 'score':
@@ -56,7 +66,7 @@ export function getChartMetricValue(entry: any, statKey: string): number {
     case 'totalPrestige':
       return totalPrestige;
     case 'prestige':
-      return toChartNumber(entry?.prestige) || totalPrestige;
+      return toChartNumber(source.prestige) || totalPrestige;
     case 'directPrestige':
       return directPrestige;
     case 'assistPrestigeReceived':
@@ -72,11 +82,11 @@ export function getChartMetricValue(entry: any, statKey: string): number {
     case 'turns':
       return turns;
     case 'efficiency':
-      return toChartNumber(entry?.efficiency) || (turns > 0 ? score / turns : 0);
+      return toChartNumber(source.efficiency) || (turns > 0 ? score / turns : 0);
     case 'assistEfficiency':
-      return toChartNumber(entry?.assistEfficiency) || (turns > 0 ? assistPrestigeReceived / turns : 0);
+      return toChartNumber(source.assistEfficiency) || (turns > 0 ? assistPrestigeReceived / turns : 0);
     case 'directEfficiency':
-      return toChartNumber(entry?.directEfficiency) || (turns > 0 ? directPrestige / turns : 0);
+      return toChartNumber(source.directEfficiency) || (turns > 0 ? directPrestige / turns : 0);
     case 'contractSuccessRate': {
       const attempts = contracts + failures;
       return attempts > 0 ? (contracts / attempts) * 100 : 0;
@@ -86,6 +96,6 @@ export function getChartMetricValue(entry: any, statKey: string): number {
     case 'supportBalance':
       return assistPrestigeReceived - directPrestige;
     default:
-      return toChartNumber(entry?.[statKey]);
+      return toChartNumber(source[statKey]);
   }
 }

@@ -38,6 +38,7 @@ import {
 } from '@/utils/gameTotals';
 import { COLORS } from '@/utils/colors';
 import { formatDate } from '@/utils/formatters';
+import { hasMissingRoundByRoundDetail } from '@/utils/roundDetailAvailability';
 import ScalePressable from '@/components/ui/ScalePressable';
 
 type Player = {
@@ -64,6 +65,7 @@ type PlayerTotals = {
 type Round = {
   id?: string;
   playerId: string;
+  prestige?: number;
 };
 
 type StoredGame = {
@@ -75,7 +77,7 @@ type StoredGame = {
   manualWinnerId?: string;
   groupId?: string;
   groupName?: string;
-  players?: any[];
+  players?: unknown[];
   rounds?: Round[];
   timeline?: Round[];
   roundCount?: number;
@@ -88,6 +90,14 @@ type HistorySort = 'newest' | 'oldest' | 'winner' | 'rounds';
 
 function normalizeHistoryId(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
 }
 
 function isHistoryUuid(value: unknown): boolean {
@@ -167,10 +177,10 @@ function gameIncludesPlayer(game: StoredGame, playerId: string) {
 
   if (
     Array.isArray(game.players) &&
-    game.players.some(
-      (player) =>
-        normalizeHistoryId((player as any)?.id ?? (player as any)?.playerId) === normalizedPlayerId
-    )
+    game.players.some((player) => {
+      const record = asRecord(player);
+      return normalizeHistoryId(record.id ?? record.playerId) === normalizedPlayerId;
+    })
   ) {
     return true;
   }
@@ -479,7 +489,7 @@ export default function HistoryScreen() {
                   setSelectedGameId(undefined);
                 }
 
-                const hydratedSnapshot = await loadHydratedCloudState(activeSession as any);
+                const hydratedSnapshot = await loadHydratedCloudState(activeSession);
                 hydrateCloudSnapshot(hydratedSnapshot);
               } catch (error) {
                 console.error('Delete Game failed:', error);
@@ -503,7 +513,7 @@ export default function HistoryScreen() {
       return;
     }
 
-    router.push(buildSummaryRoute(game.id) as any);
+    router.push(buildSummaryRoute(game.id));
   };
 
   return (
@@ -661,6 +671,7 @@ export default function HistoryScreen() {
                 const rounds = getRoundsCount(game);
                 const isSelected = !!game.id && game.id === selectedGameId;
                 const normalizedGameId = normalizeHistoryId(game?.id);
+                const roundDetailUnavailable = hasMissingRoundByRoundDetail(game);
 
                 return (
                   <View
@@ -714,6 +725,11 @@ export default function HistoryScreen() {
                               {game.groupName ? `   ${game.groupName}` : ''}
                             </Text>
                             <Text style={styles.gameDateText}>{formatDate(game.createdAt)}</Text>
+                            {roundDetailUnavailable ? (
+                              <Text style={styles.importedGameNote}>
+                                Imported game — no round-by-round detail
+                              </Text>
+                            ) : null}
                           </View>
                         </View>
 
@@ -752,7 +768,7 @@ export default function HistoryScreen() {
                                 }
 
                                 router.push({
-                                  pathname: APP_ROUTES.replay as any,
+                                  pathname: APP_ROUTES.replay,
                                   params: {
                                     gameId: game.id,
                                     selectedGameId: game.id,
@@ -1013,6 +1029,12 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 10,
     marginTop: 2,
+  },
+  importedGameNote: {
+    color: '#FDE68A',
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 3,
   },
   chevronWrap: {
     width: 24,

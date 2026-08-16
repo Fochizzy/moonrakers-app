@@ -31,6 +31,7 @@ type Props = {
   statKey?: ReplayMetricKey;
   title?: string;
   showHeader?: boolean;
+  roundDetailUnavailable?: boolean;
 };
 
 const COLORS = {
@@ -50,6 +51,7 @@ export default function ReplayChart({
   statKey = "totalPrestige",
   title = "Replay Chart",
   showHeader = true,
+  roundDetailUnavailable = false,
 }: Props) {
   const safeReplay = (Array.isArray(replay) ? replay : []) as ReplayPoint[];
   const safePlayers = (Array.isArray(players) ? players : []) as ReplayPlayer[];
@@ -80,14 +82,23 @@ export default function ReplayChart({
   return (
     <View style={styles.container}>
       <MultiLineChart
-        data={derivedReplay as any}
-        players={safePlayers as any}
+        data={derivedReplay}
+        players={safePlayers}
         statKey={statKey}
         title={title}
         subtitle="Replay progression"
         scopedPlayerIds={safePlayers.map((player) => player.id)}
         showHeader={showHeader}
       />
+
+      {roundDetailUnavailable ? (
+        <View style={styles.flatNoteCard}>
+          <Text style={styles.flatNoteText}>
+            Imported game — no round-by-round prestige or assist detail. Final
+            totals are still available.
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.metricGridDense}>
         {proofCards.map((card) => (
@@ -140,5 +151,17 @@ const styles = StyleSheet.create({
     color: COLORS.sub,
     fontSize: 12,
     fontWeight: "700",
+  },
+  flatNoteCard: {
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: COLORS.cardAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  flatNoteText: {
+    color: COLORS.sub,
+    fontSize: 11,
+    lineHeight: 16,
   },
 });

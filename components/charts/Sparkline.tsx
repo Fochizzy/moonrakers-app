@@ -528,11 +528,11 @@ function Sparkline({
   const backgroundId = `sparkline-bg-${defsKey}`;
   const beamId = `sparkline-beam-${defsKey}`;
   const primaryPath = useMemo(
-    () => createSmoothPath(geometry.points as any),
+    () => createSmoothPath(geometry.points),
     [geometry.points]
   );
   const comparisonPath = useMemo(
-    () => createSmoothPath(comparisonGeometry.points as any),
+    () => createSmoothPath(comparisonGeometry.points),
     [comparisonGeometry.points]
   );
   const slotWidth =

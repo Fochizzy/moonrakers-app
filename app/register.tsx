@@ -182,7 +182,7 @@ export default function RegisterScreen() {
         };
 
         try {
-          const hydratedSnapshot = await loadHydratedCloudState(authSession as any);
+          const hydratedSnapshot = await loadHydratedCloudState(authSession);
           hydrateCloudSnapshot(hydratedSnapshot);
         } catch {
           setAuthProfile(savedProfile);
@@ -197,7 +197,7 @@ export default function RegisterScreen() {
             tab: "players",
             profileSetup: "1",
           },
-        } as any);
+        });
         return;
       }
 
@@ -250,7 +250,7 @@ export default function RegisterScreen() {
         });
         setPasswordRecoveryPending(false);
         await clearPendingAuthIntent();
-        router.replace(buildHomeRoute() as any);
+        router.replace(buildHomeRoute());
         return;
       }
 
@@ -409,7 +409,7 @@ export default function RegisterScreen() {
               {!needsProfileOnly ? (
                 <ActionButton
                   variant="ghost"
-                  onPress={() => router.push(APP_ROUTES.login as any)}
+                  onPress={() => router.push(APP_ROUTES.login)}
                   title="Back to Login"
                 />
               ) : null}

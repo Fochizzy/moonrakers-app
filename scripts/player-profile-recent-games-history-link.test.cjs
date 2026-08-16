@@ -69,7 +69,7 @@ assert.match(
 
 assert.match(
   recentGamesSource,
-  /onLongPress=\{\(\) => \{\s*if \(gameId\) router\.push\(buildHistoryRoute\(\{\s*gameId\s*\}\) as any\);\s*\}\}/s,
+  /onLongPress=\{\(\) => \{\s*if \(gameId\) router\.push\(buildHistoryRoute\(\{\s*gameId\s*\}\)\);\s*\}\}/s,
   "expected a long press on a profile recent-game row to jump into History focused on that game",
 );
 

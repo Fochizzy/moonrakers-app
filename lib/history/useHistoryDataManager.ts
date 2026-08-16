@@ -4,6 +4,7 @@ import { publishAppStatus, useClearAppStatus, useCurrentAppStatus } from "@/lib/
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
 import { deleteCompletedGame } from "@/lib/game-save/deleteCompletedGame";
 import { formatSupabaseConfigError } from "@/lib/supabase";
+import type { AuthSession } from "@/store/useStore";
 
 type AuthSessionLike = {
   user?: {
@@ -30,7 +31,7 @@ export function useHistoryDataManager(args: HookArgs) {
       return;
     }
 
-    args.hydrateCloudSnapshot(await loadHydratedCloudState(activeSession as any));
+    args.hydrateCloudSnapshot(await loadHydratedCloudState(activeSession as AuthSession));
   }
 
   async function removeGame(gameId: string, activeSession: AuthSessionLike = args.authSession) {

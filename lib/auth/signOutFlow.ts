@@ -5,7 +5,7 @@ import { APP_ROUTES } from "@/utils/appRoutes";
 type SignOutFlowArgs = {
   setPasswordRecoveryPending: (pending: boolean) => void;
   clearAuthState: () => void;
-  router: { replace: (href: any) => void };
+  router: { replace: (href: string) => void };
 };
 
 /**

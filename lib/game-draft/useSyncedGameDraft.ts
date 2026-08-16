@@ -205,7 +205,7 @@ export function useSyncedGameDraft() {
     });
 
     const cloudPreview = resolveCloudGameSaveState({
-      activeGame: activeGame as any,
+      activeGame: activeGame as Parameters<typeof resolveCloudGameSaveState>[0]["activeGame"],
       winnerId: activeGame.selectedWinnerId ?? null,
       playerDirectory: players,
       groupDirectory: groups,

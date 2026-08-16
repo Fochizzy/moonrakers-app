@@ -30,6 +30,15 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     scheme: 'moonrakers',
     icon: APP_ICON_PATH,
+    // OTA updates: JS-only fixes ship straight to installed builds through EAS
+    // Update. appVersion policy means each store release (1.0.2, 1.0.3, ...) is
+    // its own update target, so an update never lands on an incompatible binary.
+    runtimeVersion: {
+      policy: 'appVersion'
+    },
+    updates: {
+      url: 'https://u.expo.dev/2393165c-d58c-4414-8f95-c09d72a274cc'
+    },
     plugins: [
       'expo-router',
       'expo-secure-store',

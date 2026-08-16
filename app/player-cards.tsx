@@ -50,28 +50,49 @@ type PlayerLike = {
   subtitle?: string;
 };
 
-function getWinnerId(game: any) {
-  return game?.winnerId ?? game?.selectedWinnerId ?? game?.manualWinnerId;
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
 }
 
-function getGameEntryForPlayer(game: any, playerId: string) {
-  const gamePlayers = Array.isArray(game?.players) ? game.players : [];
-  return gamePlayers.find((player: any) => player?.id === playerId || player?.playerId === playerId);
+function getWinnerId(game: unknown) {
+  const record = asRecord(game);
+  return record.winnerId ?? record.selectedWinnerId ?? record.manualWinnerId;
 }
 
-function getGameTotalsForPlayer(game: any, playerId: string) {
-  return game?.totals?.[playerId];
+function getGameEntryForPlayer(game: unknown, playerId: string): UnknownRecord | undefined {
+  const players = asRecord(game).players;
+  if (!Array.isArray(players)) {
+    return undefined;
+  }
+
+  const match = players.find(
+    (player: unknown) =>
+      asRecord(player).id === playerId || asRecord(player).playerId === playerId,
+  );
+  return match && typeof match === "object" && !Array.isArray(match)
+    ? (match as UnknownRecord)
+    : undefined;
 }
 
-function getPrestigeFromGame(game: any, playerId: string) {
+function getGameTotalsForPlayer(game: unknown, playerId: string) {
+  const totals = asRecord(game).totals as UnknownRecord | null | undefined;
+  return totals?.[playerId];
+}
+
+function getPrestigeFromGame(game: unknown, playerId: string) {
   const totals = getGameTotalsForPlayer(game, playerId);
   if (totals) {
-    const explicit = totals?.totalPrestige ?? totals?.prestige;
+    const totalsRecord = asRecord(totals);
+    const explicit = totalsRecord.totalPrestige ?? totalsRecord.prestige;
     if (typeof explicit === "number" && Number.isFinite(explicit)) {
       return explicit;
     }
 
-    return toNumber(totals?.directPrestige) + toNumber(totals?.assistPrestigeReceived);
+    return toNumber(totalsRecord.directPrestige) + toNumber(totalsRecord.assistPrestigeReceived);
   }
 
   const entry = getGameEntryForPlayer(game, playerId);
@@ -80,17 +101,17 @@ function getPrestigeFromGame(game: any, playerId: string) {
   );
 }
 
-function getScoreFromGame(game: any, playerId: string) {
+function getScoreFromGame(game: unknown, playerId: string) {
   const totals = getGameTotalsForPlayer(game, playerId);
   if (totals) {
-    return toNumber(totals?.score);
+    return toNumber(asRecord(totals).score);
   }
 
   const entry = getGameEntryForPlayer(game, playerId);
   return toNumber(entry?.score);
 }
 
-function derivePlayerCardStats(player: PlayerLike, games: any[]) {
+function derivePlayerCardStats(player: PlayerLike, games: unknown[]) {
   const savedWins = toNumber(player.wins);
   const savedGames = toNumber(player.gamesPlayed);
   const savedPrestige = toNumber(player.totalPrestige ?? player.prestige);
@@ -175,7 +196,7 @@ export default function PlayerCardsScreen() {
   const [playerQuery, setPlayerQuery] = useState("");
 
   const players = (usePlayers() ?? []) as PlayerLike[];
-  const games = (useGames() ?? []) as any[];
+  const games = useGames() ?? [];
   const authSession = useAuthSession();
   const authProfile = useAuthProfile();
   const selectedPlayerIdFromStore = useSelectedPlayerId();

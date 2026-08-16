@@ -1,3 +1,4 @@
+import type { StoredGame } from "@/utils/advancedStats";
 import { calculateElo } from "@/utils/elo";
 import { toNumber } from "@/utils/numbers";
 
@@ -5,7 +6,7 @@ const DEFAULT_ELO = 1000;
 
 export function buildPlayerCardEloMap(games: unknown[]): Record<string, number> {
   try {
-    const ratings = calculateElo(Array.isArray(games) ? (games as any[]) : []);
+    const ratings = calculateElo(Array.isArray(games) ? (games as StoredGame[]) : []);
     return ratings && typeof ratings === "object"
       ? (ratings as Record<string, number>)
       : {};

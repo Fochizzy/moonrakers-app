@@ -399,7 +399,7 @@ export default function GameTrendsScreen() {
             {gameId ? (
               <NavButton
                 label="View Summary"
-                onPress={() => router.push(buildSummaryRoute(gameId) as any)}
+                onPress={() => router.push(buildSummaryRoute(gameId))}
               />
             ) : null}
           </View>

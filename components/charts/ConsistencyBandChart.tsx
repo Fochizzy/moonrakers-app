@@ -9,6 +9,7 @@ import { CHART_COLORS } from "./chartVisualSystem";
 import { buildLineSeriesIdentities } from "./lineSeriesIdentity";
 import { getMetricOrFallback } from "@/utils/metricMap";
 import { buildConsistencyBandModel } from "./consistencyBandModel";
+import type { SnapshotPoint as ChartSnapshotPoint } from "@/utils/charts";
 
 type Player = {
   id: string;
@@ -66,8 +67,10 @@ export default function ConsistencyBandChart({
   const model = useMemo(
     () =>
       buildConsistencyBandModel({
-        players: visiblePlayers as any,
-        data: data as any,
+        players: visiblePlayers,
+        // The chart accepts loose snapshot rows; the model only reads the
+        // label/snapshot fields both shapes share.
+        data: data as ChartSnapshotPoint[],
         metricKey: statKey,
       }),
     [data, statKey, visiblePlayers]

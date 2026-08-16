@@ -24,7 +24,7 @@ run("Relationship graph detail route mounts AssistNetworkOverview from unified g
 
   assert.match(
     detailSource,
-    /case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*games=\{unifiedGames as any\}[\s\S]*players=\{resolvedPlayers as any\}[\s\S]*scopedPlayerIds=\{routeIds.length \? routeIds : scopedPlayerIds\}[\s\S]*exactScopePlayerIds=\{routeIds.length >= 2 \? routeIds : undefined\}[\s\S]*mode=\{routeMode\}/,
+    /case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*games=\{unifiedGames\}[\s\S]*players=\{resolvedPlayers\}[\s\S]*scopedPlayerIds=\{routeIds.length \? routeIds : scopedPlayerIds\}[\s\S]*exactScopePlayerIds=\{routeIds.length >= 2 \? routeIds : undefined\}[\s\S]*mode=\{routeMode\}/,
     "expected the relationship_graph route to mount AssistNetworkOverview from unified games and exact route ids"
   );
 
@@ -46,7 +46,7 @@ run("Relationship graph server renderer keeps the full assist-network overview i
 
   assert.match(
     detailSource,
-    /function renderServerChart\(\)\s*\{[\s\S]*case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*games=\{relationshipGames as any\}[\s\S]*players=\{relationshipPlayers as any\}[\s\S]*scopedPlayerIds=\{routeIds.length \? routeIds : scopedPlayerIds\}[\s\S]*exactScopePlayerIds=\{routeIds.length >= 2 \? routeIds : undefined\}[\s\S]*mode=\{routeMode\}/,
+    /function renderServerChart\(\)\s*\{[\s\S]*case "relationship_graph":[\s\S]*<AssistNetworkOverview[\s\S]*games=\{relationshipGames as NormalizedGame\[\]\}[\s\S]*players=\{relationshipPlayers as ChartPlayerLike\[\]\}[\s\S]*scopedPlayerIds=\{routeIds.length \? routeIds : scopedPlayerIds\}[\s\S]*exactScopePlayerIds=\{routeIds.length >= 2 \? routeIds : undefined\}[\s\S]*mode=\{routeMode\}/,
     "expected the relationship_graph server renderer to keep mounting AssistNetworkOverview from the resolved relationship games and exact route ids"
   );
 

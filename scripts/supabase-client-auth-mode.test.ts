@@ -7,7 +7,10 @@ const client = createSupabaseClient({
   EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_demo",
 });
 
-const authClient = (client as any).auth;
+const authClient = client.auth as typeof client.auth & {
+  flowType: string;
+  detectSessionInUrl: boolean;
+};
 
 assert.equal(
   authClient.flowType,

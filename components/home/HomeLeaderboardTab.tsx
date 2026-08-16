@@ -7,7 +7,11 @@ import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import RankBadge from "@/components/RankBadge";
 import DefinitionRichText from "@/components/ui/DefinitionRichText";
 import Text from "@/components/ui/Text";
-import type { EloScreenParams, EloScreenPayload } from "@/lib/cloud/analytics/types";
+import type {
+  EloLeaderboardRow,
+  EloScreenParams,
+  EloScreenPayload,
+} from "@/lib/cloud/analytics/types";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
 import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
@@ -47,8 +51,8 @@ export function HomeLeaderboardTab({
   fetchEloScreen: (params: EloScreenParams) => Promise<EloScreenPayload>;
 }) {
   const router = useRouter();
-  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
-  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
+  const players = useStore((state) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state) => (Array.isArray(state?.games) ? state.games : []));
   const [sortBy, setSortBy] = useState<SortMetric>("elo");
   const leaderboardQuery = useLiveAnalyticsQuery({
     enabled: Boolean(profileId),
@@ -88,11 +92,13 @@ export function HomeLeaderboardTab({
     ],
   );
   const sorted = useMemo<EnrichedPlayer[]>(() => {
-    const rows = Array.isArray(leaderboardQuery.payload?.leaderboardRows)
-      ? leaderboardQuery.payload.leaderboardRows
-      : [];
+    // Older payload rows carried `id` instead of `playerId`; keep reading both.
+    const rows: Array<EloLeaderboardRow & { id?: string }> =
+      Array.isArray(leaderboardQuery.payload?.leaderboardRows)
+        ? leaderboardQuery.payload.leaderboardRows
+        : [];
 
-    return rows.map((row: any) => ({
+    return rows.map((row) => ({
       id: normalizeId(row?.playerId ?? row?.id),
       name: normalizeName(row?.name) || "Unknown",
       color: normalizeName(row?.color) || undefined,
@@ -185,7 +191,7 @@ export function HomeLeaderboardTab({
                 style={({ pressed }) => [styles.lbCard, pressed && styles.lbCardPressed]}
               >
                 <View style={styles.playerRow}>
-                  <PlayerCardIcon player={player as any} size={34} borderRadius={8} />
+                  <PlayerCardIcon player={player} size={34} borderRadius={8} />
 
                   <View style={styles.lbPlayerInfo}>
                     <Text style={styles.lbName}>{player.name}</Text>

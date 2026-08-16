@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { AnalyticsRpcClient } from "@moonrakers/analytics-contract";
 
 import { getAnalyticsHome } from "../lib/cloud/analytics/getAnalyticsHome.ts";
 import { getChartDataset } from "../lib/cloud/analytics/getChartDataset.ts";
@@ -30,12 +31,12 @@ async function assertReadRecovery<TPayload>({
   readRpcName: string;
   readRpcArgs: Record<string, unknown>;
   successPayload: TPayload;
-  run: (client: { rpc: (name: string, args: Record<string, unknown>) => Promise<unknown> }) => Promise<TPayload>;
+  run: (client: AnalyticsRpcClient) => Promise<TPayload>;
 }) {
   const rpcCalls: RpcCall[] = [];
   let readAttempts = 0;
-  const client = {
-    async rpc(name: string, args: Record<string, unknown>) {
+  const client: AnalyticsRpcClient = {
+    async rpc<TResponse>(name: string, args: Record<string, unknown>) {
       rpcCalls.push({ name, args });
       if (name === readRpcName) {
         readAttempts += 1;
@@ -44,14 +45,14 @@ async function assertReadRecovery<TPayload>({
         }
 
         return {
-          data: successPayload,
+          data: successPayload as TResponse,
           error: null,
         };
       }
 
       if (name === "refresh_server_authored_analytics") {
         return {
-          data: { ok: true },
+          data: { ok: true } as TResponse,
           error: null,
         };
       }
@@ -106,7 +107,7 @@ async function main() {
       cards: [],
     },
     run: (client) =>
-      getAnalyticsHome(client as any, {
+      getAnalyticsHome(client, {
         profileId: "home-profile",
       }),
   });
@@ -139,7 +140,7 @@ async function main() {
       games: {},
     },
     run: (client) =>
-      getStatsScreen(client as any, {
+      getStatsScreen(client, {
         profileId: "stats-profile",
         focusPlayerId: null,
       }),
@@ -162,7 +163,7 @@ async function main() {
       correlations: {},
     },
     run: (client) =>
-      getInsightsScreen(client as any, {
+      getInsightsScreen(client, {
         profileId: "insights-profile",
       }),
   });
@@ -188,7 +189,7 @@ async function main() {
       data: {},
     },
     run: (client) =>
-      getChartDataset(client as any, {
+      getChartDataset(client, {
         chartKey: "elo",
         profileId: "chart-profile",
         focusPlayerId: "player-1",
@@ -206,7 +207,7 @@ async function main() {
     () =>
       getStatsScreen(
         {
-          async rpc(name: string) {
+          async rpc<_TPayload>(name: string) {
             if (name !== "get_stats_screen") {
               throw new Error(`unexpected RPC ${name}`);
             }
@@ -218,7 +219,7 @@ async function main() {
               },
             };
           },
-        } as any,
+        } satisfies AnalyticsRpcClient,
         {
           profileId: "stats-profile",
           focusPlayerId: null,

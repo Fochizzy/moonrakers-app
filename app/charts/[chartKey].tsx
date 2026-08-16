@@ -36,14 +36,19 @@ import ConsistencyBandChart from "@/components/charts/ConsistencyBandChart";
 import EfficiencyFailureScatter from "@/components/charts/EfficiencyFailureScatter";
 import HeadToHeadChart from "@/components/charts/HeadToHeadChart";
 import Heatmap from "@/components/charts/Heatmap";
-import LineChart from "@/components/charts/LineChart";
+import LineChart, { type LineMode } from "@/components/charts/LineChart";
 import EloChart from "@/components/charts/ELO/EloChart";
 import PrestigeOverTimeChart from "@/components/charts/PrestigeOverTimeChart";
 import RadarChart from "@/components/charts/RadarChart/RadarChart";
+import type { RadarStats } from "@/components/charts/RadarChart/useRadarChartModel";
 import ReplayChart from "@/components/charts/ReplayChart";
 import RivalryGraph from "@/components/charts/RivalryGraph";
 import Sparkline from "@/components/charts/Sparkline";
-import StackedBarChart from "@/components/charts/StackedBarChart";
+import type { SparkDatum } from "@/components/charts/sparklineTypes";
+import StackedBarChart, {
+  type StackedBarChartProps,
+} from "@/components/charts/StackedBarChart";
+import type { ReplayMetricKey } from "@/components/charts/useReplayAnalytics";
 import { loadCloudSnapshot } from "@/lib/cloud/loadCloudSnapshot";
 import { getChartDataset } from "@/lib/cloud/analytics/getChartDataset";
 import { useLiveAnalyticsQuery } from "@/lib/cloud/analytics/useLiveAnalyticsQuery";
@@ -52,8 +57,9 @@ import { useGames, usePlayers, useStore } from "@/store/useStore";
 import { APP_ROUTES, buildChartsRoute, buildHomeRoute } from "@/utils/appRoutes";
 import { buildLocalChartDetailState } from "@/utils/chartDetailLocalData";
 import { toNumberValue, toStringValue, toDisplayValue } from "@/utils/numbers";
-import { getSupportedMetricKeysForChart } from "@/utils/charts";
+import { getSupportedMetricKeysForChart, type NormalizedGame } from "@/utils/charts";
 import { getMetricOrFallback } from "@/utils/metricMap";
+import { hasMissingRoundByRoundDetail } from "@/utils/roundDetailAvailability";
 
 type PayloadRecord = Record<string, unknown>;
 type CloudFallbackSnapshot = Awaited<ReturnType<typeof loadCloudSnapshot>>;
@@ -62,6 +68,29 @@ type ChartMetricOption = {
   label: string;
   shortLabel?: string;
   category?: string;
+};
+// Boundary shapes for the Supabase chart payload rows. The RPC dataset arrives
+// as loose records, so these types state the structural claims the chart
+// components already make about their inputs.
+type ChartPlayerLike = {
+  id: string;
+  name: string;
+  color?: string;
+};
+type ChartSnapshotLike = {
+  round: number;
+  gameIndex: number;
+  label: string;
+  snapshot: Record<string, Record<string, number>>;
+};
+type ChartGameLike = {
+  id: string;
+  createdAt: number;
+  players: ChartPlayerLike[];
+  totals: Record<string, Record<string, number>>;
+  winnerId?: string;
+  selectedWinnerId?: string;
+  manualWinnerId?: string;
 };
 
 const DETAIL_METRIC_CONTROL_KEYS = new Set([
@@ -503,13 +532,13 @@ export default function ChartKeyScreen() {
     return candidate.length > 0 ? candidate : null;
   }, [datasetData.compareId, datasetMeta.comparePlayerId, routeCompareId]);
   const serverPlayerDirectory = useMemo(() => {
-    const directory = new Map<string, any>();
+    const directory = new Map<string, ChartPlayerLike>();
     [...serverChartPlayers, ...rpcFallbackPlayers].forEach((player) => {
       const id = String(player?.id ?? "").trim();
       if (!id || directory.has(id)) {
         return;
       }
-      directory.set(id, player);
+      directory.set(id, player as ChartPlayerLike);
     });
     return directory;
   }, [rpcFallbackPlayers, serverChartPlayers]);
@@ -737,7 +766,7 @@ export default function ChartKeyScreen() {
         return localChartData.radarPrimary ? (
           <RadarChart
             primary={localChartData.radarPrimary}
-            comparison={localChartData.radarComparison ? (localChartData.radarComparison as any) : undefined}
+            comparison={localChartData.radarComparison ?? undefined}
             comparisons={localChartData.radarComparisons.map((entry) => ({
               key: entry.player.id,
               label: entry.player.name || "Comparison",
@@ -756,8 +785,8 @@ export default function ChartKeyScreen() {
       case "compare":
         return (
           <CompareChart
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers}
             statKey={activeMetric ?? localChartData.metricKey}
             focusPlayerId={localChartData.selectedPlayer?.id ?? null}
             comparePlayerId={localChartData.comparePlayer?.id ?? null}
@@ -767,8 +796,8 @@ export default function ChartKeyScreen() {
       case "relationship_graph":
         return (
           <AssistNetworkOverview
-            games={unifiedGames as any}
-            players={resolvedPlayers as any}
+            games={unifiedGames}
+            players={resolvedPlayers}
             scopedPlayerIds={routeIds.length ? routeIds : scopedPlayerIds}
             exactScopePlayerIds={routeIds.length >= 2 ? routeIds : undefined}
             mode={routeMode}
@@ -777,10 +806,8 @@ export default function ChartKeyScreen() {
       case "head_to_head":
         return localChartData.selectedPlayer && localChartData.comparePlayer ? (
           <HeadToHeadChart
-            data={localChartData.snapshots as any}
-            players={
-              [localChartData.selectedPlayer, localChartData.comparePlayer] as any
-            }
+            data={localChartData.snapshots as ChartSnapshotLike[]}
+            players={[localChartData.selectedPlayer, localChartData.comparePlayer]}
             playerId={localChartData.selectedPlayer.id}
             compareId={localChartData.comparePlayer.id}
             scopedPlayerIds={[
@@ -798,8 +825,8 @@ export default function ChartKeyScreen() {
         return localChartData.selectedPlayer ? (
           <RivalryGraph
             playerId={localChartData.selectedPlayer.id}
-            games={localChartData.scopedGames as any}
-            players={localChartData.chartPlayers as any}
+            games={localChartData.scopedGames}
+            players={localChartData.chartPlayers as ChartPlayerLike[]}
           />
         ) : (
           <Text style={styles.emptyText}>No rivalry data is available yet.</Text>
@@ -811,8 +838,8 @@ export default function ChartKeyScreen() {
       case "multi-line":
         return (
           <LineChart
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers as ChartPlayerLike[]}
             statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             mode={routeLineMode}
@@ -823,16 +850,16 @@ export default function ChartKeyScreen() {
       case "prestige_over_time":
         return (
           <PrestigeOverTimeChart
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers as ChartPlayerLike[]}
             selectedPlayerIds={localChartData.scopedPlayerIds}
           />
         );
       case "stacked_bar_chart":
         return (
           <StackedBarChart
-            data={localChartData.stackedRows as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.stackedRows}
+            players={localChartData.chartPlayers}
             emptyText="No stacked chart data available yet."
             showCategorySelector={false}
             showHeader={false}
@@ -842,8 +869,8 @@ export default function ChartKeyScreen() {
       case "bar":
         return (
           <BarChart
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers}
             statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
@@ -852,8 +879,8 @@ export default function ChartKeyScreen() {
       case "heatmap":
         return (
           <Heatmap
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers as ChartPlayerLike[]}
             statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
@@ -862,8 +889,8 @@ export default function ChartKeyScreen() {
       case "elo":
         return (
           <EloChart
-            games={localChartData.scopedGames as any}
-            players={localChartData.chartPlayers as any}
+            games={localChartData.scopedGames}
+            players={localChartData.chartPlayers}
             primaryPlayerId={localChartData.selectedPlayer?.id ?? null}
             showHeader={false}
           />
@@ -871,16 +898,16 @@ export default function ChartKeyScreen() {
       case "efficiency_failure_scatter":
         return (
           <EfficiencyFailureScatter
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers}
             scopedPlayerIds={localChartData.scopedPlayerIds}
           />
         );
       case "bump_chart":
         return (
           <BumpChart
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers}
             statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
@@ -889,8 +916,8 @@ export default function ChartKeyScreen() {
       case "consistency_band":
         return (
           <ConsistencyBandChart
-            data={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
+            data={localChartData.snapshots}
+            players={localChartData.chartPlayers}
             statKey={activeMetric ?? localChartData.metricKey}
             scopedPlayerIds={localChartData.scopedPlayerIds}
             showHeader={false}
@@ -899,11 +926,14 @@ export default function ChartKeyScreen() {
       case "replay_chart":
         return (
           <ReplayChart
-            replay={localChartData.snapshots as any}
-            players={localChartData.chartPlayers as any}
-            statKey={(activeMetric ?? localChartData.metricKey) as any}
+            replay={localChartData.snapshots}
+            players={localChartData.chartPlayers as ChartPlayerLike[]}
+            statKey={(activeMetric ?? localChartData.metricKey) as ReplayMetricKey}
             title="Replay Chart"
             showHeader={false}
+            roundDetailUnavailable={hasMissingRoundByRoundDetail(
+              localChartData.selectedGame,
+            )}
           />
         );
       default:
@@ -919,8 +949,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <AssistNetworkOverview
-            games={relationshipGames as any}
-            players={relationshipPlayers as any}
+            games={relationshipGames as NormalizedGame[]}
+            players={relationshipPlayers as ChartPlayerLike[]}
             scopedPlayerIds={routeIds.length ? routeIds : scopedPlayerIds}
             exactScopePlayerIds={routeIds.length >= 2 ? routeIds : undefined}
             mode={routeMode}
@@ -932,8 +962,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <RadarChart
-            primary={serverPrimaryRadar as any}
-            comparison={serverComparisonRadar ? (serverComparisonRadar as any) : undefined}
+            primary={serverPrimaryRadar as RadarStats}
+            comparison={serverComparisonRadar ? (serverComparisonRadar as RadarStats) : undefined}
             primaryLabel={serverFocusPlayer?.name ?? "Player"}
             comparisonLabel={serverComparePlayer?.name ?? "Comparison"}
             title="Player Radar"
@@ -946,10 +976,10 @@ export default function ChartKeyScreen() {
         }
         return (
           <Sparkline
-            data={serverChartData as any}
-            comparisonData={serverComparisonData as any}
-            metricOptions={serverMetricOptions as any}
-            metricSeriesMap={serverMetricDataMap as any}
+            data={serverChartData as SparkDatum[]}
+            comparisonData={serverComparisonData as SparkDatum[]}
+            metricOptions={serverMetricOptions as ChartMetricOption[]}
+            metricSeriesMap={serverMetricDataMap as Record<string, SparkDatum[]>}
             activeMetricKey={activeMetric ?? undefined}
             defaultMetricKey={serverMetricKey}
             onChangeMetric={handleMetricChange}
@@ -973,9 +1003,9 @@ export default function ChartKeyScreen() {
         }
         return (
           <HeadToHeadChart
-            data={serverChartData as any}
-            games={serverChartGames as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            games={serverChartGames as ChartGameLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             playerId={serverFocusPlayerId}
             compareId={serverComparePlayerId}
@@ -993,8 +1023,8 @@ export default function ChartKeyScreen() {
         return (
           <RivalryGraph
             playerId={serverFocusPlayerId}
-            games={serverChartGames as any}
-            players={serverChartPlayers as any}
+            games={serverChartGames as ChartGameLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
           />
         );
       case "line_chart":
@@ -1007,12 +1037,12 @@ export default function ChartKeyScreen() {
         }
         return (
           <LineChart
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
-            mode={serverLineMode as any}
+            mode={serverLineMode as LineMode}
             showModeSelector={false}
             showHeader={false}
           />
@@ -1023,8 +1053,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <PrestigeOverTimeChart
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
           />
         );
@@ -1037,10 +1067,10 @@ export default function ChartKeyScreen() {
         }
         return (
           <StackedBarChart
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
-            metricDataMap={serverMetricDataMap as any}
-            metricOptions={serverMetricOptions as any}
+            data={serverChartData as StackedBarChartProps["data"]}
+            players={serverChartPlayers as ChartPlayerLike[]}
+            metricDataMap={serverMetricDataMap as StackedBarChartProps["metricDataMap"]}
+            metricOptions={serverMetricOptions as ChartMetricOption[]}
             activeMetricKey={activeMetric ?? undefined}
             onChangeMetric={handleMetricChange}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
@@ -1059,8 +1089,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <BarChart
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             showHeader={false}
@@ -1072,8 +1102,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <Heatmap
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             showHeader={false}
@@ -1085,8 +1115,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <EloChart
-            games={serverChartGames as any}
-            players={serverChartPlayers as any}
+            games={serverChartGames as ChartGameLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             primaryPlayerId={serverFocusPlayerId}
             showHeader={false}
           />
@@ -1097,8 +1127,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <EfficiencyFailureScatter
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
           />
         );
@@ -1108,8 +1138,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <BumpChart
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
@@ -1122,8 +1152,8 @@ export default function ChartKeyScreen() {
         }
         return (
           <ConsistencyBandChart
-            data={serverChartData as any}
-            players={serverChartPlayers as any}
+            data={serverChartData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
             statKey={activeMetric ?? serverMetricKey}
             scopedPlayerIds={serverScopeIds.length ? serverScopeIds : undefined}
             selectedPlayerIds={serverSelectedIds.length ? serverSelectedIds : undefined}
@@ -1136,11 +1166,14 @@ export default function ChartKeyScreen() {
         }
         return (
           <ReplayChart
-            replay={serverReplayData as any}
-            players={serverChartPlayers as any}
-            statKey={(activeMetric ?? serverMetricKey) as any}
+            replay={serverReplayData as ChartSnapshotLike[]}
+            players={serverChartPlayers as ChartPlayerLike[]}
+            statKey={(activeMetric ?? serverMetricKey) as ReplayMetricKey}
             title="Replay Chart"
             showHeader={false}
+            roundDetailUnavailable={hasMissingRoundByRoundDetail(
+              localChartData.selectedGame,
+            )}
           />
         );
       default:
@@ -1167,7 +1200,7 @@ export default function ChartKeyScreen() {
         }),
         setup: "true",
       },
-    } as any);
+    });
   }
 
   function openCommandPage() {

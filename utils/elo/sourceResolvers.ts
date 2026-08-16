@@ -1,9 +1,15 @@
 import { safeDivide, safeNum } from "./eloMath";
 
-export type AnyGame = Record<string, any>;
-export type AnyParticipant = Record<string, any>;
+export type AnyGame = Record<string, unknown>;
+export type AnyParticipant = Record<string, unknown>;
 
-export function toArray<T = any>(value: unknown): T[] {
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+export function toArray<T = unknown>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
 }
 
@@ -56,10 +62,11 @@ export function getGameParticipants(game: AnyGame): AnyParticipant[] {
   if (Array.isArray(game?.results) && game.results.length) return game.results;
   if (Array.isArray(game?.participants) && game.participants.length) return game.participants;
 
-  if (Array.isArray(game?.data?.players) && game.data.players.length) return game.data.players;
-  if (Array.isArray(game?.data?.playerStats) && game.data.playerStats.length) return game.data.playerStats;
-  if (Array.isArray(game?.data?.results) && game.data.results.length) return game.data.results;
-  if (Array.isArray(game?.data?.participants) && game.data.participants.length) return game.data.participants;
+  const data = asRecord(game?.data);
+  if (Array.isArray(data.players) && data.players.length) return data.players;
+  if (Array.isArray(data.playerStats) && data.playerStats.length) return data.playerStats;
+  if (Array.isArray(data.results) && data.results.length) return data.results;
+  if (Array.isArray(data.participants) && data.participants.length) return data.participants;
 
   return [];
 }
@@ -77,9 +84,11 @@ export function getParticipantId(p: AnyParticipant): string {
   );
 }
 
-export function getParticipantName(p: AnyParticipant, players: any[] = []): string {
+export function getParticipantName(p: AnyParticipant, players: unknown[] = []): string {
   const id = getParticipantId(p);
-  const fromStore = players.find((player) => String(player?.id) === id)?.name;
+  const fromStore = asRecord(
+    players.find((player) => String(asRecord(player).id) === id)
+  ).name;
 
   return String(
     firstDefined(
@@ -92,9 +101,11 @@ export function getParticipantName(p: AnyParticipant, players: any[] = []): stri
   );
 }
 
-export function getParticipantColor(p: AnyParticipant, players: any[] = []): string | undefined {
+export function getParticipantColor(p: AnyParticipant, players: unknown[] = []): string | undefined {
   const id = getParticipantId(p);
-  const fromStore = players.find((player) => String(player?.id) === id)?.color;
+  const fromStore = asRecord(
+    players.find((player) => String(asRecord(player).id) === id)
+  ).color;
 
   const color = firstDefined(
     p?.color,

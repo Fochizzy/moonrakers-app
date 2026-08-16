@@ -34,6 +34,14 @@ function normalizeId(value: unknown) {
   return String(value ?? "").trim();
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
 function toArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter(
@@ -46,19 +54,19 @@ function toArray(value: unknown) {
 function resolveWinnerId(
   game: Partial<LocalProfileGame> | RecentGameRecord | null | undefined,
 ) {
+  const record = asRecord(game);
   return normalizeId(
-    (game as any)?.winnerId ??
-      (game as any)?.selectedWinnerId ??
-      (game as any)?.manualWinnerId,
+    record.winnerId ?? record.selectedWinnerId ?? record.manualWinnerId,
   );
 }
 
 function getGameParticipantIds(
   game: Partial<LocalProfileGame> | RecentGameRecord | null | undefined,
 ) {
-  const fromPlayers = Array.isArray((game as any)?.players)
-    ? ((game as any).players as Array<Record<string, unknown>>)
-        .map((player) => normalizeId(player?.id))
+  const record = asRecord(game);
+  const fromPlayers = Array.isArray(record.players)
+    ? record.players
+        .map((player: unknown) => normalizeId(asRecord(player).id))
         .filter(Boolean)
     : [];
 
@@ -66,7 +74,7 @@ function getGameParticipantIds(
     return fromPlayers;
   }
 
-  const totals = (game as any)?.totals;
+  const totals = record.totals;
   if (totals && typeof totals === "object" && !Array.isArray(totals)) {
     return Object.keys(totals).map(normalizeId).filter(Boolean);
   }

@@ -505,11 +505,11 @@ export default function ChartsIndexScreen() {
     opponentId?: string | string[];
     setup?: string | string[];
   }>();
-  const authSession = useStore((state: any) => state.authSession);
-  const authProfile = useStore((state: any) => state?.authProfile ?? null);
-  const players = useStore((state: any) => state.players ?? []);
-  const games = useStore((state: any) => state?.games ?? []);
-  const groups = useStore((state: any) => state?.groups ?? []);
+  const authSession = useStore((state) => state.authSession);
+  const authProfile = useStore((state) => state?.authProfile ?? null);
+  const players = useStore((state) => state.players ?? []);
+  const games = useStore((state) => state?.games ?? []);
+  const groups = useStore((state) => state?.groups ?? []);
   const profileId = String(authProfile?.id ?? authSession?.user?.id ?? "").trim();
 
   const routeChartKey = normalizeChartHubSelection(
@@ -589,7 +589,7 @@ export default function ChartsIndexScreen() {
   });
   const setupPayload =
     chartSetupQuery.payload && typeof chartSetupQuery.payload === "object"
-      ? (chartSetupQuery.payload as Record<string, unknown>)
+      ? chartSetupQuery.payload
       : null;
   const setupLoading = chartSetupQuery.loading;
   const { error: setupError, freshness: setupFreshness } = useAnalyticsPresentation({
@@ -599,7 +599,9 @@ export default function ChartsIndexScreen() {
     showSourceBadgeWhenReady: false,
     staleEntityLabel: "chart setup payload",
   });
-  const [supabaseSetupFallbackPlayers, setSupabaseSetupFallbackPlayers] = useState<any[]>([]);
+  const [supabaseSetupFallbackPlayers, setSupabaseSetupFallbackPlayers] = useState<
+    Awaited<ReturnType<typeof loadRegisteredProfiles>>
+  >([]);
   const [supabaseSetupFallbackLoading, setSupabaseSetupFallbackLoading] = useState(false);
   const analyticsDirectory = useMemo(
     () => buildAnalyticsPlayerDirectory({ players, games, groups }),
@@ -616,7 +618,7 @@ export default function ChartsIndexScreen() {
     () =>
       buildLocalChartSetupPayload({
         chartKey: selectedChart.key,
-        players: localSetupPlayers as any,
+        players: localSetupPlayers,
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
         routePlayerId: routePlayerId ?? null,
@@ -645,7 +647,7 @@ export default function ChartsIndexScreen() {
     () =>
       needsChartSetupSupplement({
         chartKey: selectedChart.key,
-        publishedPayload: setupPayload as any,
+        publishedPayload: setupPayload,
         fallbackPayload: localSetupFallbackPayload,
       }),
     [localSetupFallbackPayload, selectedChart.key, setupPayload]
@@ -700,7 +702,7 @@ export default function ChartsIndexScreen() {
     () =>
       resolveEffectiveChartSetupPayload({
         chartKey: selectedChart.key,
-        publishedPayload: setupPayload as any,
+        publishedPayload: setupPayload,
         fallbackPayload: localSetupFallbackPayload,
       }),
     [localSetupFallbackPayload, selectedChart.key, setupPayload]
@@ -866,11 +868,11 @@ export default function ChartsIndexScreen() {
   const prioritizedFocusPlayerDirectoryPlayers = useMemo(
     () =>
       prioritizeSignedInPlayerOptions({
-        players: focusPlayerDirectoryPlayers as any,
-        games: analyticsDirectory.games as any,
+        players: focusPlayerDirectoryPlayers,
+        games: analyticsDirectory.games,
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
-        authProfilePlayer: authProfilePlayer as any,
+        authProfilePlayer: authProfilePlayer,
         commonPlayerLimit: 4,
         explicitPriorityPlayerIds: topCommonFocusPlayers.map((player) =>
           String(player.id)
@@ -891,7 +893,7 @@ export default function ChartsIndexScreen() {
         options: focusPlayerDirectoryPlayers,
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
-        authProfilePlayer: authProfilePlayer as any,
+        authProfilePlayer: authProfilePlayer,
       }),
     [
       authProfile?.id,
@@ -923,11 +925,11 @@ export default function ChartsIndexScreen() {
   const prioritizedScopePlayerDirectoryPlayers = useMemo(
     () =>
       prioritizeSignedInPlayerOptions({
-        players: scopePlayerDirectoryPlayers as any,
-        games: analyticsDirectory.games as any,
+        players: scopePlayerDirectoryPlayers,
+        games: analyticsDirectory.games,
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
-        authProfilePlayer: authProfilePlayer as any,
+        authProfilePlayer: authProfilePlayer,
         commonPlayerLimit: 3,
         explicitPriorityPlayerIds: topCommonScopePlayers.map((player) =>
           String(player.id)
@@ -948,7 +950,7 @@ export default function ChartsIndexScreen() {
         options: scopePlayerDirectoryPlayers,
         authProfileId: authProfile?.id,
         authSessionUserId: authSession?.user?.id,
-        authProfilePlayer: authProfilePlayer as any,
+        authProfilePlayer: authProfilePlayer,
       }),
     [
       authProfile?.id,
@@ -1865,7 +1867,7 @@ export default function ChartsIndexScreen() {
   }
 
   function replaceChartHubRoute(chart: ChartCatalogEntry, setupOpen: boolean) {
-    router.setParams(buildChartHubParams(chart, setupOpen) as any);
+    router.setParams(buildChartHubParams(chart, setupOpen));
   }
 
   function setChartSetupOpen(nextSetupOpen: boolean, chart: ChartCatalogEntry = selectedChart) {
@@ -1930,7 +1932,7 @@ export default function ChartsIndexScreen() {
       router.push({
         pathname: "/charts/[chartKey]",
         params: detailRouteParams,
-      } as any);
+      });
     });
   }
 

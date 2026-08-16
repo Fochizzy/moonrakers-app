@@ -141,6 +141,14 @@ type AssistTargetAggregate = {
   sampleSize: number;
 };
 
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -493,13 +501,15 @@ function buildObjectiveProfileSummary(
   };
 }
 
-function getRounds(game: Game): any[] {
-  if (Array.isArray((game as any)?.rounds)) {
-    return (game as any).rounds;
+function getRounds(game: Game): unknown[] {
+  const source = asRecord(game);
+
+  if (Array.isArray(source.rounds)) {
+    return source.rounds;
   }
 
-  if (Array.isArray((game as any)?.timeline)) {
-    return (game as any).timeline;
+  if (Array.isArray(source.timeline)) {
+    return source.timeline;
   }
 
   return [];
@@ -515,7 +525,7 @@ function buildBestSupportPartner(
 
   games.forEach((game) => {
     const playersInGame = Array.isArray(game?.players)
-      ? game.players.map((entry) => String((entry as any)?.id)).filter(Boolean)
+      ? game.players.map((entry) => String(entry?.id)).filter(Boolean)
       : Object.keys(game?.totals ?? {}).filter(Boolean);
 
     if (!playersInGame.includes(playerId)) {
@@ -603,21 +613,17 @@ function buildMostCommonAssistTarget(
     const rounds = getRounds(game);
     const playersInGame = new Set(
       (Array.isArray(game?.players) ? game.players : [])
-        .map((entry: any) => String(entry?.id))
+        .map((entry) => String(entry?.id))
         .filter(Boolean)
     );
 
     rounds.forEach((round) => {
-      if (String(round?.playerId) !== playerId) {
+      const roundRecord = asRecord(round);
+      if (String(roundRecord.playerId) !== playerId) {
         return;
       }
 
-      const recipients =
-        round?.assistRecipients &&
-        typeof round.assistRecipients === "object" &&
-        !Array.isArray(round.assistRecipients)
-          ? round.assistRecipients
-          : {};
+      const recipients = asRecord(roundRecord.assistRecipients);
 
       Object.entries(recipients).forEach(([targetId, rawValue]) => {
         const assistsSent = Number(rawValue) || 0;

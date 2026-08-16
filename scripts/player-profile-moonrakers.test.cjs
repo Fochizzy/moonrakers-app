@@ -748,7 +748,7 @@ const games = [
 {
   const profileSource = read(path.join("app", "player-profile", "[playerId].tsx"));
   assert.match(profileSource, /MoonrakersIntelSection/);
-  assert.match(profileSource, /<MoonrakersIntelSection profile=\{moonrakersIntel as any\} \/>/);
+  assert.match(profileSource, /<MoonrakersIntelSection profile=\{moonrakersIntel as MoonrakersIntelProfile\} \/>/);
 
   const componentSource = read(path.join("components", "player", "MoonrakersIntelSection.tsx"));
   assert.match(componentSource, /Moonrakers Intel/);

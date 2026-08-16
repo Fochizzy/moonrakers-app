@@ -15,16 +15,35 @@ import {
   getTopSynergyPairs,
 } from '@/utils/advancedStats';
 
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 type CorrelationStatsProps = {
-  games?: any[];
+  games?: UnknownRecord[];
   players?: Array<{
     id?: string;
     name?: string;
   }>;
-  relationships?: Record<string, any>;
-  serverData?: Record<string, any>;
+  relationships?: Record<string, unknown>;
+  serverData?: Record<string, unknown>;
   serverOnly?: boolean;
   view?: 'all' | 'pairing' | 'macro' | 'synergy';
+};
+
+type CorrelationRow = {
+  key?: string;
+  label: string;
+  value: number | null;
+  strength?: string;
 };
 
 function normalizeServerCorrelationRows(value: unknown) {
@@ -33,8 +52,8 @@ function normalizeServerCorrelationRows(value: unknown) {
   }
 
   return value
-    .filter((item: any) => item && typeof item === 'object')
-    .map((item: any) => {
+    .filter((item): item is UnknownRecord => Boolean(item) && typeof item === 'object')
+    .map((item) => {
       const numericValue = Number(item.value);
       const fallbackDelta = Number(item.delta);
 
@@ -103,16 +122,16 @@ function correlation(x: number[], y: number[]) {
   return numerator / denom;
 }
 
-function getWinnerId(game: any) {
+function getWinnerId(game: UnknownRecord): unknown {
   return game.winnerId || game.selectedWinnerId || game.manualWinnerId || null;
 }
 
-function getEarliestLeaderMap(game: any) {
+function getEarliestLeaderMap(game: UnknownRecord) {
   const result: Record<string, number> = {};
-  const players = Array.isArray(game?.players) ? game.players : [];
-  const rounds = Array.isArray(game?.rounds)
+  const players = asArray(game.players);
+  const rounds = Array.isArray(game.rounds)
     ? game.rounds
-    : Array.isArray(game?.timeline)
+    : Array.isArray(game.timeline)
       ? game.timeline
       : [];
 
@@ -120,28 +139,34 @@ function getEarliestLeaderMap(game: any) {
     return result;
   }
 
-  const firstRound = rounds[0];
+  const firstRound = asRecord(rounds[0]);
   const firstRoundTotals: Record<string, number> = {};
 
-  for (const player of players) {
-    const playerId = player?.id;
+  for (const rawPlayer of players) {
+    const playerId = asRecord(rawPlayer).id;
     if (!playerId) continue;
 
+    const playerKey = String(playerId);
+    const playerRoundTotals = asRecord(asRecord(firstRound.totals)[playerKey]);
     let value = 0;
 
-    if (firstRound?.totals?.[playerId]?.totalPrestige != null) {
-      value = Number(firstRound.totals[playerId].totalPrestige ?? 0);
-    } else if (firstRound?.totals?.[playerId]?.prestige != null) {
-      value = Number(firstRound.totals[playerId].prestige ?? 0);
-    } else if (Array.isArray(firstRound?.entries)) {
-      const entry = firstRound.entries.find((e: any) => e?.playerId === playerId);
-      value = Number(entry?.totalPrestige ?? entry?.prestige ?? 0);
-    } else if (Array.isArray(firstRound?.players)) {
-      const entry = firstRound.players.find((e: any) => e?.id === playerId);
-      value = Number(entry?.totalPrestige ?? entry?.prestige ?? 0);
+    if (playerRoundTotals.totalPrestige != null) {
+      value = Number(playerRoundTotals.totalPrestige ?? 0);
+    } else if (playerRoundTotals.prestige != null) {
+      value = Number(playerRoundTotals.prestige ?? 0);
+    } else if (Array.isArray(firstRound.entries)) {
+      const entry = asRecord(
+        firstRound.entries.find((e) => asRecord(e).playerId === playerId)
+      );
+      value = Number(entry.totalPrestige ?? entry.prestige ?? 0);
+    } else if (Array.isArray(firstRound.players)) {
+      const entry = asRecord(
+        firstRound.players.find((e) => asRecord(e).id === playerId)
+      );
+      value = Number(entry.totalPrestige ?? entry.prestige ?? 0);
     }
 
-    firstRoundTotals[playerId] = Number.isFinite(value) ? value : 0;
+    firstRoundTotals[playerKey] = Number.isFinite(value) ? value : 0;
   }
 
   const values = Object.values(firstRoundTotals);
@@ -149,16 +174,18 @@ function getEarliestLeaderMap(game: any) {
 
   const maxValue = Math.max(...values);
 
-  for (const player of players) {
-    const playerId = player?.id;
+  for (const rawPlayer of players) {
+    const playerId = asRecord(rawPlayer).id;
     if (!playerId) continue;
-    result[playerId] = firstRoundTotals[playerId] === maxValue && maxValue > 0 ? 1 : 0;
+    const playerKey = String(playerId);
+    result[playerKey] =
+      firstRoundTotals[playerKey] === maxValue && maxValue > 0 ? 1 : 0;
   }
 
   return result;
 }
 
-function computeGlobalMetaCorrelations(games: any[]) {
+function computeGlobalMetaCorrelations(games: UnknownRecord[]) {
   const contractsFailureRatio: number[] = [];
   const assistsGiven: number[] = [];
   const assistsReceived: number[] = [];
@@ -167,24 +194,24 @@ function computeGlobalMetaCorrelations(games: any[]) {
 
   for (const game of games ?? []) {
     const winnerId = getWinnerId(game);
-    const players = Array.isArray(game?.players) ? game.players : [];
+    const players = asArray(game.players);
     const earliestLeaderMap = getEarliestLeaderMap(game);
 
-    for (const player of players) {
-      const playerId = player?.id;
+    for (const rawPlayer of players) {
+      const playerId = asRecord(rawPlayer).id;
       if (!playerId) continue;
 
-      const totals = game?.totals?.[playerId] ?? {};
+      const totals = asRecord(asRecord(game.totals)[String(playerId)]);
 
-      const contracts = Number(totals?.contracts ?? 0);
-      const failures = Number(totals?.failures ?? 0);
-      const assists = Number(totals?.assists ?? 0);
-      const assistPrestigeReceived = Number(totals?.assistPrestigeReceived ?? 0);
+      const contracts = Number(totals.contracts ?? 0);
+      const failures = Number(totals.failures ?? 0);
+      const assists = Number(totals.assists ?? 0);
+      const assistPrestigeReceived = Number(totals.assistPrestigeReceived ?? 0);
 
       contractsFailureRatio.push(contracts / Math.max(1, failures));
       assistsGiven.push(assists);
       assistsReceived.push(assistPrestigeReceived);
-      earlyLead.push(Number(earliestLeaderMap[playerId] ?? 0));
+      earlyLead.push(Number(earliestLeaderMap[String(playerId)] ?? 0));
       wins.push(playerId === winnerId ? 1 : 0);
     }
   }
@@ -530,11 +557,11 @@ export default function CorrelationStats({
     return normalizeServerCorrelationRows(serverData?.items);
   }, [serverData?.items, serverData?.winLoseSplit]);
   const serverMacroCorrelations = useMemo(() => {
-    const macro = Array.isArray(serverData?.macro) ? serverData.macro : [];
+    const macro = asArray(serverData?.macro);
 
     return macro
-      .filter((item: any) => item && typeof item === 'object')
-      .map((item: any) => ({
+      .filter((item): item is UnknownRecord => Boolean(item) && typeof item === 'object')
+      .map((item) => ({
         key: String(item.key ?? item.metricKey ?? '').trim(),
         label: String(item.label ?? item.title ?? "Macro").trim() || "Macro",
         value: item.value === null
@@ -549,19 +576,17 @@ export default function CorrelationStats({
       }));
   }, [serverData?.macro]);
   const serverSynergyPairs = useMemo(() => {
-    const pairs = Array.isArray(serverData?.synergyPairs)
-      ? serverData.synergyPairs
-      : [];
+    const pairs = asArray(serverData?.synergyPairs);
 
     return pairs
-      .filter((item: any) => item && typeof item === 'object')
-      .map((item: any, index: number) => ({
+      .filter((item): item is UnknownRecord => Boolean(item) && typeof item === 'object')
+      .map((item, index) => ({
         a: String(item.a ?? item.leftPlayerId ?? item.leftId ?? `pair-a-${index}`),
         b: String(item.b ?? item.rightPlayerId ?? item.rightId ?? `pair-b-${index}`),
         score: Number.isFinite(Number(item.score)) ? Number(item.score) : 0,
       }));
   }, [serverData?.synergyPairs]);
-  const correlations = useMemo(() => {
+  const correlations = useMemo<CorrelationRow[]>(() => {
     if (serverPersonalCorrelations.length > 0 || serverPairingCorrelations.length > 0) {
       return [...serverPersonalCorrelations, ...serverPairingCorrelations];
     }
@@ -573,7 +598,12 @@ export default function CorrelationStats({
       return serverLegacyCorrelationItems;
     }
 
-    return buildCorrelationResults(games, relationships);
+    return buildCorrelationResults(
+      // Loose games arrive from storage/cloud payloads; the stats helper reads
+      // the same fields defensively at runtime.
+      games as Parameters<typeof buildCorrelationResults>[0],
+      relationships
+    );
   }, [
     games,
     relationships,
@@ -600,7 +630,7 @@ export default function CorrelationStats({
   }, [relationships, serverOnly, serverSynergyPairs]);
 
   const playerNameMap = useMemo(() => {
-    return new Map((players ?? []).map((player: any) => [player.id, player.name]));
+    return new Map((players ?? []).map((player) => [player.id, player.name]));
   }, [players]);
 
   return (
@@ -671,7 +701,7 @@ export default function CorrelationStats({
             </View>
           ) : (
             <View style={isTwoColumn ? styles.metricListTwoColumn : styles.metricList}>
-              {correlations.map((item: any) => (
+              {correlations.map((item) => (
                 <View
                   key={item.label}
                   style={isTwoColumn ? styles.metricCellTwoColumn : styles.metricCell}
@@ -746,7 +776,7 @@ export default function CorrelationStats({
             </View>
           ) : (
             <View style={styles.synergyList}>
-              {synergyPairs.map((pair: any, index: number) => (
+              {synergyPairs.map((pair, index) => (
                 <SynergyCard
                   key={`${pair.a}-${pair.b}`}
                   rank={index}

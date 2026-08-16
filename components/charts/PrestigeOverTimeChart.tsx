@@ -44,8 +44,8 @@ function PrestigeOverTimeChart({
 }: Props) {
   return (
     <LineChart
-      data={data as any}
-      players={players as any}
+      data={data as DataPoint[]}
+      players={players as Player[]}
       statKey={STAT_KEY}
       title={title}
       subtitle={subtitle}

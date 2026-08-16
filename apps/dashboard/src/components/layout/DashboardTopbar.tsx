@@ -1,6 +1,10 @@
  "use client";
 
-import { startTransition, useDeferredValue, useState } from "react";
+import {
+  useDeferredValue,
+  useState,
+  useTransition,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 
@@ -26,6 +30,7 @@ export function DashboardTopbar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [playerSearch, setPlayerSearch] = useState("");
+  const [isFocusPending, startFocusTransition] = useTransition();
   const deferredPlayerSearch = useDeferredValue(playerSearch);
   const profileAccent = favoriteColor?.trim() || "var(--gold)";
   const requestedFocusPlayerId =
@@ -69,7 +74,7 @@ export function DashboardTopbar({
 
     const nextHref = params.size > 0 ? `${pathname}?${params.toString()}` : pathname;
 
-    startTransition(() => {
+    startFocusTransition(() => {
       router.push(nextHref);
     });
   }
@@ -93,7 +98,9 @@ export function DashboardTopbar({
 
       {playerOptions.length > 0 ? (
         <div className="topbar__controls">
-          <span className="stat__label">Player focus</span>
+          <span aria-live="polite" className="stat__label" role="status">
+            {isFocusPending ? "Loading player focus..." : "Player focus"}
+          </span>
           <input
             aria-label="Search players"
             className="input"
@@ -104,9 +111,11 @@ export function DashboardTopbar({
           />
           <select
             aria-label="Focus player"
+            aria-busy={isFocusPending}
             className="select"
+            defaultValue={selectedOption?.id ?? ""}
+            key={requestedFocusPlayerId}
             onChange={(event) => updateFocusPlayer(event.target.value)}
-            value={selectedOption?.id ?? ""}
           >
             {filteredOptions.map((option) => (
               <option key={option.id} value={option.id}>

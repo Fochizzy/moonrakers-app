@@ -329,10 +329,11 @@ function collectAvailablePlayers(
     for (const [rawId, totals] of Object.entries(game?.totals ?? {})) {
       const id = normalizeId(rawId);
       if (!id || byId.has(id)) continue;
+      const extras: Record<string, unknown> = totals ?? {};
       byId.set(id, {
         id,
         name:
-          String((totals as any)?.name ?? (totals as any)?.playerName ?? "").trim() ||
+          String(extras.name ?? extras.playerName ?? "").trim() ||
           "Player",
       });
     }

@@ -243,9 +243,9 @@ function StatPill({
 
 export default function StatsScreen() {
   const router = useRouter();
-  const authSession = useStore((state: any) => state.authSession);
-  const players = useStore((state: any) => (Array.isArray(state?.players) ? state.players : []));
-  const games = useStore((state: any) => (Array.isArray(state?.games) ? state.games : []));
+  const authSession = useStore((state) => state.authSession);
+  const players = useStore((state) => (Array.isArray(state?.players) ? state.players : []));
+  const games = useStore((state) => (Array.isArray(state?.games) ? state.games : []));
   const profileId = String(authSession?.user?.id ?? "").trim();
   const [activeTab, setActiveTab] = useState<StatsTab>("overview");
   // Only an explicit pick belongs in the query key. The server's own default
@@ -940,7 +940,7 @@ export default function StatsScreen() {
       <PlaystyleSection
         authProfileId={profileId || null}
         players={players}
-        games={games as any}
+        games={games}
         leaderboard={players}
         selectedPlayerId={selectedPlayerId}
         onSelectPlayer={setSelectedPlayerId}

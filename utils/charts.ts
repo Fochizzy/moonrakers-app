@@ -33,8 +33,8 @@ export type ReplayMetricKey =
   | "failures";
 
 export type FlexibleStore = {
-  games?: any[];
-  importedGames?: any[];
+  games?: unknown[];
+  importedGames?: unknown[];
 };
 
 export type StorePlayer = {
@@ -260,9 +260,9 @@ function normalizePercentValue(value: unknown): number {
   return Math.abs(parsed) <= 1 ? parsed * 100 : parsed;
 }
 
-function ensureObject(value: unknown): Record<string, any> {
+function ensureObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, any>)
+    ? (value as Record<string, unknown>)
     : {};
 }
 
@@ -298,11 +298,12 @@ function collectComparableNameKeys(option: SignedInComparableOption | null | und
   ].filter(Boolean);
 }
 
-function getInitials(player: any): string {
-  const explicit = String(player?.initials ?? "").trim();
+function getInitials(player: unknown): string {
+  const source = ensureObject(player);
+  const explicit = String(source.initials ?? "").trim();
   if (explicit) return explicit.charAt(0).toUpperCase();
 
-  const name = String(player?.name ?? "").trim();
+  const name = String(source.name ?? "").trim();
   return name ? name.charAt(0).toUpperCase() : "?";
 }
 
@@ -697,49 +698,51 @@ function getMetricValue(
   }
 }
 
-function normalizeRound(round: any, fallbackIndex: number): NormalizedRound | null {
-  const playerId = String(round?.playerId ?? "").trim();
+function normalizeRound(round: unknown, fallbackIndex: number): NormalizedRound | null {
+  const source = ensureObject(round);
+  const playerId = String(source.playerId ?? "").trim();
   if (!playerId) return null;
 
   const directPrestige =
-    toNumber(round?.directPrestige) ||
-    toNumber(round?.prestige);
+    toNumber(source.directPrestige) ||
+    toNumber(source.prestige);
 
   return {
-    id: String(round?.id ?? `round-${fallbackIndex + 1}`),
+    id: String(source.id ?? `round-${fallbackIndex + 1}`),
     playerId,
-    prestige: toNumber(round?.prestige) || directPrestige,
+    prestige: toNumber(source.prestige) || directPrestige,
     directPrestige,
-    assistPrestigeReceived: toNumber(round?.assistPrestigeReceived),
-    objectivePrestige: toNumber(round?.objectivePrestige ?? round?.objectiveCount),
-    contracts: toNumber(round?.contracts),
-    failures: toNumber(round?.failures),
-    assists: toNumber(round?.assists),
-    createdAt: toNumber(round?.createdAt),
-    assistRecipients: normalizeAssistMap(round?.assistRecipients),
-    assistPrestigeRecipients: normalizeAssistMap(round?.assistPrestigeRecipients),
+    assistPrestigeReceived: toNumber(source.assistPrestigeReceived),
+    objectivePrestige: toNumber(source.objectivePrestige ?? source.objectiveCount),
+    contracts: toNumber(source.contracts),
+    failures: toNumber(source.failures),
+    assists: toNumber(source.assists),
+    createdAt: toNumber(source.createdAt),
+    assistRecipients: normalizeAssistMap(source.assistRecipients),
+    assistPrestigeRecipients: normalizeAssistMap(source.assistPrestigeRecipients),
   };
 }
 
-function normalizePlayer(player: any, fallbackIndex: number): NormalizedPlayer | null {
-  const id = String(player?.id ?? player?.playerId ?? "").trim();
-  const name = String(player?.name ?? "").trim();
+function normalizePlayer(player: unknown, fallbackIndex: number): NormalizedPlayer | null {
+  const source = ensureObject(player);
+  const id = String(source.id ?? source.playerId ?? "").trim();
+  const name = String(source.name ?? "").trim();
   if (!id && !name) return null;
 
   return {
-    ...player,
+    ...source,
     id: id || `player-${fallbackIndex + 1}`,
     name: name || "Player",
     initials: getInitials(player),
-    color: typeof player?.color === "string" ? player.color : undefined,
+    color: typeof source.color === "string" ? source.color : undefined,
     assignedCardArtIndex:
-      typeof player?.assignedCardArtIndex === "number" &&
-      Number.isFinite(player.assignedCardArtIndex)
-        ? player.assignedCardArtIndex
+      typeof source.assignedCardArtIndex === "number" &&
+      Number.isFinite(source.assignedCardArtIndex)
+        ? source.assignedCardArtIndex
         : null,
     artIndex:
-      typeof player?.artIndex === "number" && Number.isFinite(player.artIndex)
-        ? player.artIndex
+      typeof source.artIndex === "number" && Number.isFinite(source.artIndex)
+        ? source.artIndex
         : null,
   };
 }
@@ -752,38 +755,39 @@ export function normalizeStoreGames(store: FlexibleStore): NormalizedGame[] {
 
   return merged
     .filter(Boolean)
-    .map((game: any, index: number) => {
-      const players = (Array.isArray(game?.players) ? game.players : [])
-        .map((player: any, playerIndex: number) => normalizePlayer(player, playerIndex))
-        .filter((player: NormalizedPlayer | null): player is NormalizedPlayer => Boolean(player));
+    .map((rawGame, index: number) => {
+      const game = ensureObject(rawGame);
+      const players = (Array.isArray(game.players) ? game.players : [])
+        .map((player, playerIndex) => normalizePlayer(player, playerIndex))
+        .filter((player): player is NormalizedPlayer => Boolean(player));
 
-      const rounds = (Array.isArray(game?.rounds) ? game.rounds : [])
-        .map((round: any, roundIndex: number) => normalizeRound(round, roundIndex))
-        .filter((round: NormalizedRound | null): round is NormalizedRound => Boolean(round));
+      const rounds = (Array.isArray(game.rounds) ? game.rounds : [])
+        .map((round, roundIndex) => normalizeRound(round, roundIndex))
+        .filter((round): round is NormalizedRound => Boolean(round));
 
       const timelineSource =
-        Array.isArray(game?.timeline) && game.timeline.length > 0
+        Array.isArray(game.timeline) && game.timeline.length > 0
           ? game.timeline
           : rounds;
 
       const timeline = (Array.isArray(timelineSource) ? timelineSource : [])
-        .map((round: any, roundIndex: number) => normalizeRound(round, roundIndex))
-        .filter((round: NormalizedRound | null): round is NormalizedRound => Boolean(round));
+        .map((round, roundIndex) => normalizeRound(round, roundIndex))
+        .filter((round): round is NormalizedRound => Boolean(round));
 
       return {
         ...game,
-        id: String(game?.id ?? `game-${index + 1}`),
-        createdAt: toNumber(game?.createdAt) || index + 1,
+        id: String(game.id ?? `game-${index + 1}`),
+        createdAt: toNumber(game.createdAt) || index + 1,
         players,
-        totals: ensureObject(game?.totals),
+        totals: ensureObject(game.totals) as Record<string, PlayerTotals>,
         rounds,
         timeline,
-        winnerId: typeof game?.winnerId === "string" ? game.winnerId : undefined,
+        winnerId: typeof game.winnerId === "string" ? game.winnerId : undefined,
         selectedWinnerId:
-          typeof game?.selectedWinnerId === "string" ? game.selectedWinnerId : undefined,
+          typeof game.selectedWinnerId === "string" ? game.selectedWinnerId : undefined,
         manualWinnerId:
-          typeof game?.manualWinnerId === "string" ? game.manualWinnerId : undefined,
-        roundCount: toNumber(game?.roundCount) || rounds.length || timeline.length,
+          typeof game.manualWinnerId === "string" ? game.manualWinnerId : undefined,
+        roundCount: toNumber(game.roundCount) || rounds.length || timeline.length,
       } as NormalizedGame;
     })
     .filter((game) => game.players.length > 0 || Object.keys(game.totals).length > 0);
@@ -1101,7 +1105,7 @@ export function buildCommonOpponentOptions(args: {
 export function buildRecentGameOpponentOptions(args: {
   playerId?: string | null;
   players: StorePlayer[];
-  recentGames: Array<Record<string, any>>;
+  recentGames: Array<Record<string, unknown>>;
   limit?: number;
 }): CommonOpponentOption[] {
   const { playerId, players, recentGames, limit = 5 } = args;
@@ -1125,8 +1129,9 @@ export function buildRecentGameOpponentOptions(args: {
     const seenGamePlayerIds = new Set<string>();
     let includesFocusPlayer = false;
 
-    for (const gamePlayer of gamePlayers) {
-      const normalizedId = normalizeId(gamePlayer?.id ?? gamePlayer?.profileId);
+    for (const rawGamePlayer of gamePlayers) {
+      const gamePlayer = ensureObject(rawGamePlayer);
+      const normalizedId = normalizeId(gamePlayer.id ?? gamePlayer.profileId);
       if (!normalizedId || seenGamePlayerIds.has(normalizedId)) {
         continue;
       }
@@ -1137,11 +1142,11 @@ export function buildRecentGameOpponentOptions(args: {
         playerMap.set(normalizedId, {
           id: normalizedId,
           name:
-            String(gamePlayer?.name ?? gamePlayer?.displayName ?? gamePlayer?.playerName ?? "").trim() ||
+            String(gamePlayer.name ?? gamePlayer.displayName ?? gamePlayer.playerName ?? "").trim() ||
             "Player",
-          color: typeof gamePlayer?.color === "string" ? gamePlayer.color : undefined,
+          color: typeof gamePlayer.color === "string" ? gamePlayer.color : undefined,
           assignedCardArtIndex:
-            typeof gamePlayer?.assignedCardArtIndex === "number" &&
+            typeof gamePlayer.assignedCardArtIndex === "number" &&
             Number.isFinite(gamePlayer.assignedCardArtIndex)
               ? gamePlayer.assignedCardArtIndex
               : null,
@@ -1216,13 +1221,15 @@ function createPlayerMatcher(players: StorePlayer[]) {
   }
 
   return {
-    resolve(rawPlayer: any, totalsEntry?: any): StorePlayer | null {
-      const rawId = String(rawPlayer?.id ?? rawPlayer?.playerId ?? "").trim();
-      const rawNameKey = normalizeLooseName(rawPlayer?.name);
-      const rawLegacyAwareNameKey = normalizeLegacyAwareNameKey(rawPlayer?.name);
-      const totalsNameKey = normalizeLooseName(totalsEntry?.name ?? totalsEntry?.playerName);
+    resolve(rawPlayer: unknown, totalsEntry?: unknown): StorePlayer | null {
+      const playerSource = ensureObject(rawPlayer);
+      const totalsSource = ensureObject(totalsEntry);
+      const rawId = String(playerSource.id ?? playerSource.playerId ?? "").trim();
+      const rawNameKey = normalizeLooseName(playerSource.name);
+      const rawLegacyAwareNameKey = normalizeLegacyAwareNameKey(playerSource.name);
+      const totalsNameKey = normalizeLooseName(totalsSource.name ?? totalsSource.playerName);
       const totalsLegacyAwareNameKey = normalizeLegacyAwareNameKey(
-        totalsEntry?.name ?? totalsEntry?.playerName
+        totalsSource.name ?? totalsSource.playerName
       );
 
       if (rawId && byId.has(rawId)) return byId.get(rawId)!;
@@ -1256,7 +1263,7 @@ function mapAssistSourceKeys(
 }
 
 function normalizeTotalsEntry(
-  entry: any,
+  entry: PlayerTotals,
   rawPlayerId: string,
   canonicalPlayerId: string,
   idMap: Record<string, string>
@@ -1328,8 +1335,8 @@ function mergeAssistMaps(...maps: Array<Record<string, number> | undefined>) {
 }
 
 function mergeTotalsEntry(existing: PlayerTotals | undefined, incoming: PlayerTotals): PlayerTotals {
-  const a = ensureObject(existing);
-  const b = ensureObject(incoming);
+  const a = ensureObject(existing) as PlayerTotals;
+  const b = ensureObject(incoming) as PlayerTotals;
 
   const directPrestige = toNumber(a.directPrestige) + toNumber(b.directPrestige);
   const assistPrestigeReceived =
@@ -1416,7 +1423,7 @@ function canonicalizeGameAgainstPlayers(
   }
 
   for (const [rawPlayerId, rawEntry] of Object.entries(game.totals ?? {})) {
-    const entry = ensureObject(rawEntry);
+    const entry = ensureObject(rawEntry) as PlayerTotals;
     const linkedPlayer =
       (game.players ?? []).find((player) => String(player.id) === String(rawPlayerId)) ??
       null;
@@ -1603,7 +1610,7 @@ export function buildRadarStatsForPlayer(
   };
 }
 
-function getAssistSourceMap(entry?: Record<string, any>): Record<string, number> {
+function getAssistSourceMap(entry?: PlayerTotals | null): Record<string, number> {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return {};
 
   const candidates = [
@@ -1637,7 +1644,7 @@ export function buildRelationships(
 
   for (const game of games ?? []) {
     for (const [recipientId, entry] of Object.entries(game?.totals ?? {})) {
-      const sourceMap = getAssistSourceMap(entry as Record<string, any>);
+      const sourceMap = getAssistSourceMap(entry);
 
       for (const [sourceId, amount] of Object.entries(sourceMap)) {
         if (!sourceId || sourceId === recipientId || toNumber(amount) <= 0) continue;
@@ -1705,14 +1712,14 @@ export function buildUnifiedSnapshots(
         playerId,
         playerName: String(
           player?.name ??
-          (totals as any)?.playerName ??
-          (totals as any)?.name ??
+          totals?.playerName ??
+          totals?.name ??
           "Player"
         ),
         label: String(
           player?.name ??
-          (totals as any)?.playerName ??
-          (totals as any)?.name ??
+          totals?.playerName ??
+          totals?.name ??
           "Player"
         ),
         color: String(player?.color ?? ""),

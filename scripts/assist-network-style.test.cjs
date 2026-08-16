@@ -364,7 +364,7 @@ run("Relationship graph source uses geometric assist arrowheads instead of a fix
 
   assert.match(
     relationshipGraphSource,
-    /buildArrowPath\(\s*edgeInput as any,\s*safeNum\(edge\.arrowSize,\s*EDGE_ARROW_SIZE\)\s*\)/,
+    /buildArrowPath\(\s*edgeInput,\s*safeNum\(edge\.arrowSize,\s*EDGE_ARROW_SIZE\)\s*\)/,
     "expected assist-network arrows to be drawn from the path geometry so reciprocal arrows can point in separate directions"
   );
 });

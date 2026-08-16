@@ -29,38 +29,52 @@ export type PlaystyleSample = {
   stayAtBaseRate: number | null;
 };
 
-function getRounds(game: Game): any[] {
-  if (Array.isArray((game as any)?.rounds)) {
-    return (game as any).rounds;
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+function getRounds(game: Game): unknown[] {
+  const source = asRecord(game);
+
+  if (Array.isArray(source.rounds)) {
+    return source.rounds;
   }
 
-  if (Array.isArray((game as any)?.timeline)) {
-    return (game as any).timeline;
+  if (Array.isArray(source.timeline)) {
+    return source.timeline;
   }
 
   return [];
 }
 
-function isBonusRound(round: any) {
-  return !isPlayableTurnMetaType(round?.metaType);
+function isBonusRound(round: unknown) {
+  return !isPlayableTurnMetaType(
+    asRecord(round).metaType as string | null | undefined
+  );
 }
 
-function getStayAtBaseTurnsForRound(round: any) {
+function getStayAtBaseTurnsForRound(round: unknown) {
   if (isBonusRound(round)) return 0;
-  return toNumber(round?.contracts) === 0 && toNumber(round?.failures) === 0 ? 1 : 0;
+  const source = asRecord(round);
+  return toNumber(source.contracts) === 0 && toNumber(source.failures) === 0 ? 1 : 0;
 }
 
 function getObjectivePointsForPlayer(
   playerId: string,
-  rounds: any[],
-  totals: any
+  rounds: unknown[],
+  totals: unknown
 ): number {
   const roundSum = rounds
-    .filter((round) => round?.playerId === playerId)
-    .reduce((sum, round) => {
+    .filter((round) => asRecord(round).playerId === playerId)
+    .reduce((sum: number, round) => {
+      const source = asRecord(round);
       const objective = Math.max(
         0,
-        Math.floor(toNumber(round?.objectiveCount ?? round?.objectivePrestige))
+        Math.floor(toNumber(source.objectiveCount ?? source.objectivePrestige))
       );
 
       return sum + objective;
@@ -73,11 +87,12 @@ function getObjectivePointsForPlayer(
   return getObjectiveCountFromTotals(totals);
 }
 
-function getAssistsGivenForPlayer(playerId: string, rounds: any[]) {
+function getAssistsGivenForPlayer(playerId: string, rounds: unknown[]) {
   return rounds
-    .filter((round) => round?.playerId === playerId && !isBonusRound(round))
-    .reduce((sum, round) => {
-      const assistCount = Object.values(round?.assistRecipients ?? {}).reduce(
+    .filter((round) => asRecord(round).playerId === playerId && !isBonusRound(round))
+    .reduce((sum: number, round) => {
+      const recipients = (asRecord(round).assistRecipients ?? {}) as UnknownRecord;
+      const assistCount = Object.values(recipients).reduce(
         (inner: number, value) => inner + toNumber(value),
         0
       );
@@ -86,13 +101,14 @@ function getAssistsGivenForPlayer(playerId: string, rounds: any[]) {
     }, 0);
 }
 
-function getAssistsReceivedForPlayer(playerId: string, rounds: any[]) {
-  return rounds.reduce((sum, round) => {
+function getAssistsReceivedForPlayer(playerId: string, rounds: unknown[]) {
+  return rounds.reduce((sum: number, round) => {
     if (isBonusRound(round)) {
       return sum;
     }
 
-    return sum + toNumber(round?.assistRecipients?.[playerId]);
+    const recipients = asRecord(round).assistRecipients as UnknownRecord | undefined;
+    return sum + toNumber(recipients?.[playerId]);
   }, 0);
 }
 
@@ -114,13 +130,13 @@ export function buildPlaystyleSamples(
       const normalizedTotals = normalizeTotals(rawTotals);
       const gamePlayer = (game.players ?? []).find((entry) => entry.id === playerId);
       const playerRounds = rounds.filter(
-        (round) => round?.playerId === playerId && !isBonusRound(round)
+        (round) => asRecord(round).playerId === playerId && !isBonusRound(round)
       );
       const roundsStayAtBaseTurns = playerRounds.reduce(
-        (sum, round) => sum + getStayAtBaseTurnsForRound(round),
+        (sum: number, round) => sum + getStayAtBaseTurnsForRound(round),
         0
       );
-      const importedStayAtBaseTurns = Math.max(0, toNumber((rawTotals as any)?.turnsAtBase));
+      const importedStayAtBaseTurns = Math.max(0, toNumber(asRecord(rawTotals).turnsAtBase));
       const stayAtBaseTurns =
         playerRounds.length > 0 ? roundsStayAtBaseTurns : importedStayAtBaseTurns;
       const playableTurns =
@@ -135,7 +151,8 @@ export function buildPlaystyleSamples(
       return {
         gameId: String(game?.id ?? ''),
         playerId,
-        playerName: player?.name ?? (gamePlayer as any)?.name ?? 'Player',
+        playerName:
+          player?.name ?? (asRecord(gamePlayer).name as string | undefined) ?? 'Player',
         tableSize,
         seat: getRecordedSeat(gamePlayer),
         winFlag: winnerId === playerId ? 1 : 0,

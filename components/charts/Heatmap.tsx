@@ -32,7 +32,7 @@ type SnapshotPoint = {
   winnerId?: string;
   selectedWinnerId?: string;
   manualWinnerId?: string;
-  snapshot: Record<string, any>;
+  snapshot: Record<string, unknown>;
 };
 
 type Props = {

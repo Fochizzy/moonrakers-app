@@ -106,7 +106,7 @@ export default function HeadToHeadMissionScreen() {
 
   async function persistSelection(nextFirstPlaceId: string | null, nextSecondPlaceId: string | null) {
     if (!activeGame) {
-      router.replace(APP_ROUTES.game as any);
+      router.replace(APP_ROUTES.game);
       return;
     }
 
@@ -173,7 +173,7 @@ export default function HeadToHeadMissionScreen() {
           <Text style={styles.subtitle}>
             Start a tracked game before setting a head-to-head mission.
           </Text>
-          <Pressable onPress={() => router.replace(APP_ROUTES.game as any)} style={styles.primaryAction}>
+          <Pressable onPress={() => router.replace(APP_ROUTES.game)} style={styles.primaryAction}>
             <Text style={styles.primaryActionText}>Back to Game</Text>
           </Pressable>
         </View>

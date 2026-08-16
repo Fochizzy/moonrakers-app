@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 
 import { buildAssistNetworkDataset } from "../components/charts/AssistNetworkOverview/buildAssistNetworkDataset.ts";
+import type { NormalizedGame } from "../utils/charts.ts";
 
-const game = {
+const game: NormalizedGame = {
   id: "game-1",
   createdAt: 1,
   players: [
@@ -34,7 +35,7 @@ const game = {
     },
   ],
   timeline: [],
-} as any;
+};
 
 const focusedDataset = buildAssistNetworkDataset({
   games: [game],
@@ -61,7 +62,7 @@ const exactDataset = buildAssistNetworkDataset({
   games: [game],
   scopedPlayerIds: ["p1", "p2", "p3", "p4"],
   exactScopePlayerIds: ["p1", "p2", "p3", "p4"],
-} as any);
+});
 
 assert.equal(
   exactDataset.exactScopeApplied,

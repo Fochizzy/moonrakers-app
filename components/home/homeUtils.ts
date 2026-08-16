@@ -1,10 +1,18 @@
-import type { GameLike, GroupLike, PlayerLike, PlayerTotals, SortMetric, Tab } from "./homeTypes";
+import type { GameLike, GamePlayer, GroupLike, PlayerLike, PlayerTotals, SortMetric, Tab } from "./homeTypes";
 import { normalizeId } from "@/utils/strings";
 
 export { normalizeId };
 
-export function asArray<T = any>(value: any): T[] {
-  return Array.isArray(value) ? value : [];
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : {};
+}
+
+export function asArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 
 export function n(value: unknown): number {
@@ -26,121 +34,131 @@ export function getInitials(name?: string, fallback?: string) {
   return `${first[0] ?? ""}${second[0] ?? ""}`.toUpperCase();
 }
 
-export function normalizePlayer(raw: any, index: number): PlayerLike | null {
+export function normalizePlayer(raw: unknown, index: number): PlayerLike | null {
   if (!raw) return null;
 
+  const source = asRecord(raw);
+
   const id =
-    normalizeId(raw.id) ||
-    normalizeId(raw.playerId) ||
-    normalizeId(raw.uuid) ||
+    normalizeId(source.id) ||
+    normalizeId(source.playerId) ||
+    normalizeId(source.uuid) ||
     `player-${index}`;
 
   const name =
-    normalizeName(raw.name) ||
-    normalizeName(raw.playerName) ||
-    normalizeName(raw.displayName) ||
-    normalizeName(raw.label) ||
+    normalizeName(source.name) ||
+    normalizeName(source.playerName) ||
+    normalizeName(source.displayName) ||
+    normalizeName(source.label) ||
     `Player ${index + 1}`;
 
   return {
-    ...raw,
+    ...source,
     id,
     name,
-    color: normalizeName(raw.color) || undefined,
+    color: normalizeName(source.color) || undefined,
     initials:
-      normalizeName(raw.initials) || getInitials(name, `P${index + 1}`),
+      normalizeName(source.initials) || getInitials(name, `P${index + 1}`),
     assignedCardArtIndex:
-      typeof raw.assignedCardArtIndex === "number" &&
-      Number.isFinite(raw.assignedCardArtIndex)
-        ? raw.assignedCardArtIndex
+      typeof source.assignedCardArtIndex === "number" &&
+      Number.isFinite(source.assignedCardArtIndex)
+        ? source.assignedCardArtIndex
         : null,
   };
 }
 
-export function normalizeGroup(raw: any, index: number): GroupLike | null {
+export function normalizeGroup(raw: unknown, index: number): GroupLike | null {
   if (!raw) return null;
 
+  const source = asRecord(raw);
+
   const id =
-    normalizeId(raw.id) ||
-    normalizeId(raw.groupId) ||
-    normalizeId(raw.uuid) ||
+    normalizeId(source.id) ||
+    normalizeId(source.groupId) ||
+    normalizeId(source.uuid) ||
     `group-${index}`;
 
   const name =
-    normalizeName(raw.name) ||
-    normalizeName(raw.groupName) ||
-    normalizeName(raw.label) ||
-    normalizeName(raw.title) ||
+    normalizeName(source.name) ||
+    normalizeName(source.groupName) ||
+    normalizeName(source.label) ||
+    normalizeName(source.title) ||
     `Group ${index + 1}`;
 
   const playerIdsRaw =
-    raw.playerIds ??
-    raw.players ??
-    raw.memberIds ??
-    raw.members ??
-    raw.roster ??
+    source.playerIds ??
+    source.players ??
+    source.memberIds ??
+    source.members ??
+    source.roster ??
     [];
 
   const playerIds = asArray(playerIdsRaw)
-    .map((item: any) =>
-      typeof item === "string"
-        ? normalizeId(item)
-        : normalizeId(item?.id ?? item?.playerId ?? item?.uuid)
-    )
+    .map((item) => {
+      if (typeof item === "string") return normalizeId(item);
+      const member = asRecord(item);
+      return normalizeId(member.id ?? member.playerId ?? member.uuid);
+    })
     .filter(Boolean);
 
   return {
-    ...raw,
+    ...source,
     id,
     name,
     playerIds,
     createdAt:
-      typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
-        ? raw.createdAt
+      typeof source.createdAt === "number" && Number.isFinite(source.createdAt)
+        ? source.createdAt
         : undefined,
     objectiveStatsEligible:
-      typeof raw.objectiveStatsEligible === "boolean"
-        ? raw.objectiveStatsEligible
+      typeof source.objectiveStatsEligible === "boolean"
+        ? source.objectiveStatsEligible
         : undefined,
   };
 }
 
-export function normalizeGame(raw: any): GameLike | null {
+export function normalizeGame(raw: unknown): GameLike | null {
   if (!raw || typeof raw !== "object") return null;
 
-  const players = asArray(raw.players).map((p: any) => ({
-    id: normalizeId(p?.id),
-    playerId: normalizeId(p?.playerId),
-    name: normalizeName(p?.name),
-    color: normalizeName(p?.color) || undefined,
-    initials: normalizeName(p?.initials) || undefined,
-    assignedCardArtIndex:
-      typeof p?.assignedCardArtIndex === "number" ? p.assignedCardArtIndex : null,
-    score: n(p?.score),
-    prestige: n(p?.prestige),
-    totalPrestige: n(p?.totalPrestige),
-    directPrestige: n(p?.directPrestige),
-    assistPrestigeReceived: n(p?.assistPrestigeReceived),
-  }));
+  const source = asRecord(raw);
+
+  const players = asArray(source.players).map((rawPlayer) => {
+    const p = asRecord(rawPlayer);
+
+    return {
+      id: normalizeId(p.id),
+      playerId: normalizeId(p.playerId),
+      name: normalizeName(p.name),
+      color: normalizeName(p.color) || undefined,
+      initials: normalizeName(p.initials) || undefined,
+      assignedCardArtIndex:
+        typeof p.assignedCardArtIndex === "number" ? p.assignedCardArtIndex : null,
+      score: n(p.score),
+      prestige: n(p.prestige),
+      totalPrestige: n(p.totalPrestige),
+      directPrestige: n(p.directPrestige),
+      assistPrestigeReceived: n(p.assistPrestigeReceived),
+    };
+  });
 
   return {
-    id: normalizeId(raw.id) || undefined,
-    groupId: normalizeId(raw.groupId) || undefined,
-    groupName: normalizeName(raw.groupName) || undefined,
+    id: normalizeId(source.id) || undefined,
+    groupId: normalizeId(source.groupId) || undefined,
+    groupName: normalizeName(source.groupName) || undefined,
     createdAt:
-      typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
-        ? raw.createdAt
+      typeof source.createdAt === "number" && Number.isFinite(source.createdAt)
+        ? source.createdAt
         : undefined,
-    winnerId: normalizeId(raw.winnerId) || undefined,
-    selectedWinnerId: normalizeId(raw.selectedWinnerId) || undefined,
-    manualWinnerId: normalizeId(raw.manualWinnerId) || undefined,
-    totals: raw.totals,
+    winnerId: normalizeId(source.winnerId) || undefined,
+    selectedWinnerId: normalizeId(source.selectedWinnerId) || undefined,
+    manualWinnerId: normalizeId(source.manualWinnerId) || undefined,
+    totals: source.totals as GameLike["totals"],
     players,
   };
 }
 
 export function getGamePlayerIds(game: GameLike): string[] {
-  return asArray(game.players)
+  return asArray<GamePlayer>(game.players)
     .map((p) => normalizeId(p.id ?? p.playerId))
     .filter(Boolean);
 }
