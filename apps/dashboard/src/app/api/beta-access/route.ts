@@ -60,6 +60,15 @@ export async function POST(request: Request) {
   const config = readBrevoConfig(process.env);
   const notifyTo = process.env.BETA_NOTIFY_TO?.trim() || "info@moonrakersapp.org";
 
+  // A missing key is survivable — the address is already saved — but it is not
+  // normal, and skipping quietly is how every confirmation for a live signup
+  // went unsent without anything showing up in the logs.
+  if (!config) {
+    console.error(
+      "[beta-access] BREVO_API_KEY is not set: request recorded, no email sent",
+    );
+  }
+
   // Both sends are awaited together: neither should block the other, and the
   // applicant's confirmation is not more important than the notification.
   const [applicantResult, notificationResult] = await Promise.all([
@@ -82,22 +91,18 @@ export async function POST(request: Request) {
     );
   }
 
-  if (applicantResult.ok && !applicantResult.skipped) {
-    const { error: stampError } = await supabase
-      .from("beta_access_requests")
-      .update({ notified_at: new Date().toISOString() })
-      .eq("email", email);
-
-    if (stampError) {
-      // Only affects the "who still needs a confirmation" query, so it is not
-      // worth failing a request that otherwise succeeded.
-      console.warn("[beta-access] could not stamp notified_at", stampError);
-    }
-  }
+  // Nothing is stamped back onto the row: the table has no delivery column, and
+  // the anon role that gets here is insert-only, so an update would fail the
+  // column check and RLS both. Brevo's dashboard is the delivery record.
+  const confirmationSent = applicantResult.ok && !applicantResult.skipped;
 
   return NextResponse.json({
     ok: true,
     alreadyRequested: false,
-    message: "Request received. Check your inbox for a confirmation.",
+    // Only promise an inbox when one was actually written to. Saying "check
+    // your inbox" after a skipped send is how a broken key looks like success.
+    message: confirmationSent
+      ? "Request received. Check your inbox for a confirmation."
+      : "Request received — you are on the list. The invite comes by email.",
   });
 }
