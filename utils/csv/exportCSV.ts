@@ -1,4 +1,4 @@
-﻿import * as FileSystem from 'expo-file-system/legacy';
+﻿import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import {
   buildPlayerMetrics,
@@ -267,13 +267,6 @@ export async function exportGamesToCSV(
   input: ExportInput,
   fileName = 'MoonrakersBackup.json'
 ): Promise<string> {
-  const writableDir =
-    FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
-
-  if (!writableDir) {
-    throw new Error('No writable local directory is available.');
-  }
-
   const trimmedName = String(fileName ?? '').trim();
   const normalizedFileName = trimmedName
     ? trimmedName.toLowerCase().endsWith('.json')
@@ -281,23 +274,20 @@ export async function exportGamesToCSV(
       : `${trimmedName}.json`
     : 'MoonrakersBackup.json';
 
-  const fileUri = `${writableDir}${normalizedFileName}`;
+  const file = new File(Paths.cache, normalizedFileName);
   const payload = buildHybridExportPayload(input);
 
-  await FileSystem.writeAsStringAsync(
-    fileUri,
-    JSON.stringify(payload, null, 2),
-    { encoding: FileSystem.EncodingType.UTF8 }
-  );
+  file.create({ intermediates: true, overwrite: true });
+  file.write(JSON.stringify(payload, null, 2));
 
   const sharingAvailable = await Sharing.isAvailableAsync();
   if (sharingAvailable) {
-    await Sharing.shareAsync(fileUri, {
+    await Sharing.shareAsync(file.uri, {
       mimeType: 'application/json',
       dialogTitle: 'Choose where to export your backup',
       UTI: 'public.json',
     });
   }
 
-  return fileUri;
+  return file.uri;
 }

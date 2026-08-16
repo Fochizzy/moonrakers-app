@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import * as FileSystem from "expo-file-system/legacy";
+import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 import ActionButton from "@/components/ui/ActionButton";
@@ -127,20 +127,15 @@ export default function DataBackupScreen() {
 
     setBusy("players");
     try {
-      const writableDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
-      if (!writableDir) {
-        throw new Error("No writable local directory is available.");
-      }
-
-      const fileUri = `${writableDir}Moonrakers-players-${timestampSlug(new Date())}.csv`;
-      await FileSystem.writeAsStringAsync(
-        fileUri,
-        buildPlayersCsv(players as never),
-        { encoding: FileSystem.EncodingType.UTF8 },
+      const file = new File(
+        Paths.cache,
+        `Moonrakers-players-${timestampSlug(new Date())}.csv`,
       );
+      file.create({ intermediates: true, overwrite: true });
+      file.write(buildPlayersCsv(players as never));
 
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, {
+        await Sharing.shareAsync(file.uri, {
           mimeType: "text/csv",
           dialogTitle: "Choose where to send your roster CSV",
           UTI: "public.comma-separated-values-text",

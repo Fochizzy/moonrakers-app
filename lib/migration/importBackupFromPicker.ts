@@ -1,5 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
 
 import { parseBackupPayload } from "../../utils/backup";
 import { buildLegacyMigrationPayload } from "./buildLegacyMigrationPayload";
@@ -30,9 +30,8 @@ export async function importBackupFromPicker(input: {
     throw new Error("Selected backup did not include a readable file URI.");
   }
 
-  const raw = await FileSystem.readAsStringAsync(asset.uri, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  // copyToCacheDirectory gives us a plain file:// URI the File API can read.
+  const raw = await new File(asset.uri).text();
   const backup = parseBackupPayload(JSON.parse(raw));
   const payload = buildLegacyMigrationPayload({
     signedInProfileId: input.signedInProfileId,

@@ -1,6 +1,10 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system';
 
 export const BACKUP_FILE_NAME = 'moonrakers_backup.json';
+
+function getBackupFile() {
+  return new File(Paths.document, BACKUP_FILE_NAME);
+}
 
 export type PlayerColor =
   | 'Green'
@@ -445,11 +449,7 @@ export function parseBackupPayload(data: unknown): BackupPayload {
 }
 
 export function getBackupFileUri() {
-  const base = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? null;
-  if (!base) {
-    throw new Error('No writable file directory is available.');
-  }
-  return `${base}${BACKUP_FILE_NAME}`;
+  return getBackupFile().uri;
 }
 
 export async function writeBackupFile(data: {
@@ -457,7 +457,7 @@ export async function writeBackupFile(data: {
   groups: Group[];
   games: Game[];
 }) {
-  const uri = getBackupFileUri();
+  const file = getBackupFile();
 
   const payload: BackupPayload = sanitizeBackupPayload({
     version: 2,
@@ -467,25 +467,20 @@ export async function writeBackupFile(data: {
     games: data.games,
   });
 
-  const json = JSON.stringify(payload, null, 2);
-  await FileSystem.writeAsStringAsync(uri, json, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  file.create({ intermediates: true, overwrite: true });
+  file.write(JSON.stringify(payload, null, 2));
 
-  return uri;
+  return file.uri;
 }
 
 export async function readBackupFile<T = BackupPayload>() {
-  const uri = getBackupFileUri();
-  const info = await FileSystem.getInfoAsync(uri);
+  const file = getBackupFile();
 
-  if (!info.exists) {
+  if (!file.exists) {
     return null;
   }
 
-  const raw = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  const raw = await file.text();
 
   if (!raw.trim()) {
     return null;
@@ -496,7 +491,5 @@ export async function readBackupFile<T = BackupPayload>() {
 }
 
 export async function backupFileExists() {
-  const uri = getBackupFileUri();
-  const info = await FileSystem.getInfoAsync(uri);
-  return info.exists;
+  return getBackupFile().exists;
 }
