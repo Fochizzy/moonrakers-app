@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
+const { readGameScreenSource } = require("./support/game-screen-source.cjs");
 
 for (const extension of [".ts", ".tsx"]) {
   require.extensions[extension] = function compileTypeScript(mod, filename) {
@@ -143,7 +144,7 @@ assert.equal(
   "expected the centered leaderboard offset to clamp the last card to the right edge",
 );
 
-const gameSource = read(path.join("app", "game.tsx"));
+const gameSource = readGameScreenSource();
 
 assert.match(
   gameSource,

@@ -1,16 +1,14 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readGameScreenSource } = require("./support/game-screen-source.cjs");
 
 const projectRoot = path.resolve(__dirname, "..");
 const routesSource = fs.readFileSync(
   path.join(projectRoot, "utils", "appRoutes.ts"),
   "utf8",
 );
-const gameSource = fs.readFileSync(
-  path.join(projectRoot, "app", "game.tsx"),
-  "utf8",
-);
+const gameSource = readGameScreenSource();
 const missionScreenPath = path.join(projectRoot, "app", "head-to-head-mission.tsx");
 
 assert.match(

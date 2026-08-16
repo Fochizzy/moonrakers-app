@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readGameScreenSource } = require("./support/game-screen-source.cjs");
 
 const projectRoot = path.resolve(__dirname, "..");
 
@@ -9,7 +10,7 @@ function read(relPath) {
 }
 
 const controllerSource = read(path.join("lib", "game-session", "useGameSessionController.ts"));
-const gameSource = read(path.join("app", "game.tsx"));
+const gameSource = readGameScreenSource();
 
 assert.match(
   controllerSource,
