@@ -129,11 +129,11 @@ run("Analytics and players hubs expose the consolidated navigation model", () =>
   const bridgeCards = getBridgeDestinations();
   assert.deepEqual(
     bridgeCards.map((card) => card.key),
-    ["history", "analytics", "players", "definitions", "manage-user-groups"]
+    ["history", "analytics", "players", "definitions", "data-backup", "manage-user-groups"]
   );
   assert.deepEqual(
     bridgeCards.map((card) => card.iconKey),
-    ["miss", "shield", "orangePerson", "thruster", "missionHub"]
+    ["miss", "shield", "orangePerson", "thruster", "reactor", "missionHub"]
   );
   assert.equal(
     bridgeCards.find((card) => card.key === "players")?.title,

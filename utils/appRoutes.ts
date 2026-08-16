@@ -18,6 +18,7 @@ export const APP_ROUTES = {
   elo: "/elo",
   insights: "/insights",
   definitions: "/definitions",
+  dataBackup: "/data-backup",
   roster: "/add-players",
   playerDirectory: "/player-profile",
   playerProfileDetail: "/player-profile/[playerId]",

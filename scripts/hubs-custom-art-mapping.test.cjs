@@ -83,8 +83,8 @@ const bridgeIconKeys = [...bridgeBlock[1].matchAll(/iconKey:\s*"([^"]+)"/g)].map
 
 assert.equal(
   bridgeIconKeys.length,
-  5,
-  "expected five bridge destination icon assignments"
+  6,
+  "expected six bridge destination icon assignments"
 );
 
 assert.equal(

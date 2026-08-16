@@ -137,6 +137,15 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
     bestFor: "Metric lookup",
   },
   {
+    key: "data-backup",
+    title: "Backup & Export",
+    description: "",
+    route: APP_ROUTES.dataBackup,
+    iconKey: "reactor",
+    eyebrow: "Data",
+    bestFor: "Taking your history with you",
+  },
+  {
     key: "manage-user-groups",
     title: "Manage User/Groups",
     description: "",
