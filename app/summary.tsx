@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, Share, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import ActionButton from "@/components/ui/ActionButton";
@@ -21,6 +21,9 @@ import {
 } from "@/utils/gameTotals";
 import { toNumber } from "@/utils/numbers";
 import { buildReplayAssistSummary } from "@/utils/replayAssists";
+import { buildGameResultShareText } from "@/utils/shareGameResult";
+import { buildGamePace, formatDuration } from "@/utils/turnPace";
+import { commitFeedback, warningFeedback } from "@/utils/haptics";
 
 type Player = {
   id: string;
@@ -273,6 +276,52 @@ export default function SummaryScreen() {
   }, [game, players]);
 
   const replayRows = useMemo(() => buildReplayRows(game), [game]);
+
+  const pace = useMemo(() => {
+    if (!game) return null;
+    const source =
+      Array.isArray(game.timeline) && game.timeline.length > 0
+        ? game.timeline
+        : Array.isArray(game.rounds)
+          ? game.rounds
+          : [];
+
+    return buildGamePace(source as never, (game.players ?? []) as never);
+  }, [game]);
+
+  async function handleShareResult() {
+    if (!rankedPlayers.length) {
+      warningFeedback();
+      return;
+    }
+
+    try {
+      const message = buildGameResultShareText({
+        gameTitle,
+        playedAt: game?.createdAt ? formatDate(game.createdAt) : null,
+        groupName: game?.groupName ?? null,
+        winnerName,
+        roundsCount,
+        durationLabel: pace ? formatDuration(pace.gameDurationMs) : null,
+        standings: rankedPlayers.map((player) => ({
+          name: player.name,
+          totalPrestige: player.totalPrestige,
+          contracts: player.contracts,
+          assists: player.assists,
+          failures: player.failures,
+        })),
+      });
+
+      const result = await Share.share({ message });
+      if (result.action === Share.sharedAction) {
+        commitFeedback();
+      }
+    } catch (error) {
+      console.error("Share result failed:", error);
+      warningFeedback();
+    }
+  }
+
   const topPerformer = rankedPlayers[0] ?? null;
   const mostContracts =
     [...rankedPlayers].sort((left, right) => right.contracts - left.contracts)[0] ??
@@ -336,11 +385,20 @@ export default function SummaryScreen() {
         size="compact"
         variant="stat"
         actions={
-          <ActionButton
-            title="Back to History"
-            variant="secondary"
-            onPress={() => router.back()}
-          />
+          <View style={styles.heroActions}>
+            <ActionButton
+              title="Share Result"
+              variant="primary"
+              onPress={() => {
+                void handleShareResult();
+              }}
+            />
+            <ActionButton
+              title="Back to History"
+              variant="secondary"
+              onPress={() => router.back()}
+            />
+          </View>
         }
       >
         <View style={styles.heroMetaRow}>
@@ -408,6 +466,48 @@ export default function SummaryScreen() {
           />
         </View>
       </SectionCard>
+
+      {pace ? (
+        <SectionCard
+          style={styles.sectionCard}
+          title="Pace"
+          subtitle="Time between saved turns"
+          actions={<SectionActions badge={formatDuration(pace.gameDurationMs)} />}
+        >
+          <View style={styles.paceStatRow}>
+            <View style={styles.paceStatCard}>
+              <Text style={styles.paceStatLabel}>Game length</Text>
+              <Text style={styles.paceStatValue}>
+                {formatDuration(pace.gameDurationMs)}
+              </Text>
+            </View>
+            <View style={styles.paceStatCard}>
+              <Text style={styles.paceStatLabel}>Median turn</Text>
+              <Text style={styles.paceStatValue}>
+                {formatDuration(pace.medianTurnMs)}
+              </Text>
+            </View>
+            <View style={styles.paceStatCard}>
+              <Text style={styles.paceStatLabel}>Longest turn</Text>
+              <Text style={styles.paceStatValue}>
+                {formatDuration(pace.longestTurnMs)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.paceList}>
+            {pace.players.map((player) => (
+              <View key={player.playerId} style={styles.paceRow}>
+                <Text style={styles.paceName}>{player.name}</Text>
+                <Text style={styles.paceMeta}>
+                  {formatDuration(player.medianTurnMs)} median · {player.turns} turns ·{" "}
+                  {Math.round(player.tableShare * 100)}% of table time
+                </Text>
+              </View>
+            ))}
+          </View>
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         style={styles.sectionCard}
@@ -657,6 +757,9 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
+  heroActions: {
+    gap: 8,
+  },
   metricPill: {
     minWidth: 92,
     borderRadius: 14,
@@ -757,6 +860,49 @@ const styles = StyleSheet.create({
     color: "#F8FAFC",
     fontSize: 18,
     fontWeight: "900",
+  },
+  paceStatRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  paceStatCard: {
+    flex: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "rgba(9, 15, 31, 0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.14)",
+    gap: 4,
+  },
+  paceStatLabel: {
+    color: "#8EA3C7",
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  paceStatValue: {
+    color: "#F8FAFC",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  paceList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  paceRow: {
+    gap: 2,
+  },
+  paceName: {
+    color: "#E2E8F0",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  paceMeta: {
+    color: "rgba(226,232,240,0.62)",
+    fontSize: 11,
+    fontWeight: "500",
   },
   groupTag: {
     alignSelf: "flex-start",
