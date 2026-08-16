@@ -363,7 +363,7 @@ export default function Game() {
     if (latestCurrentRef.current !== current) {
       commitGameplayPatch({ current: latestCurrentRef.current });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- flush once per draft arrival
+    // Keyed to draftId alone on purpose: flush pending taps once per draft arrival.
   }, [gameDraft?.draftId]);
 
   function commitGameplayPatch(
