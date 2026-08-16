@@ -7,10 +7,10 @@ export const styles = StyleSheet.create({
     backgroundColor: '#050814',
   },
   backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.34)',
   },
   overlayGlowTopRight: {

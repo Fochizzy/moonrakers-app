@@ -1424,7 +1424,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
   },
   cropImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
   },
@@ -1448,7 +1448,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   profileCardBadgeDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   profileCardBadgeText: {
@@ -1620,7 +1620,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   metricMiniCardBadgeDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   metricMiniCardBadgeText: {

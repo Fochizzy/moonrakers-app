@@ -977,14 +977,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   colorOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     paddingHorizontal: 18,
     paddingVertical: 24,
     zIndex: 20,
   },
   colorOverlayScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(3, 8, 22, 0.78)",
   },
   colorOverlayCard: {
@@ -1059,7 +1059,7 @@ const styles = StyleSheet.create({
     maxWidth: 72,
   },
   launchOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(4, 8, 22, 0.54)",
     alignItems: "center",
     justifyContent: "center",

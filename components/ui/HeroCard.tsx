@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     minHeight: 180,
   },
   artOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   inner: {
     gap: 10,

@@ -33,6 +33,9 @@ module.exports = {
     plugins: [
       'expo-router',
       'expo-secure-store',
+      'expo-sharing',
+      'expo-status-bar',
+      'expo-web-browser',
       [
         'expo-build-properties',
         {

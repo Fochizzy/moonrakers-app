@@ -34,7 +34,7 @@ export function SelectionShimmer({
   return (
     <View
       pointerEvents="none"
-      style={[StyleSheet.absoluteFillObject, styles.shimmerWrap, { borderRadius }]}
+      style={[StyleSheet.absoluteFill, styles.shimmerWrap, { borderRadius }]}
     >
       <View style={[styles.shimmerGlow, { borderRadius }]} />
       <Animated.View
@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   shimmerGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.22)",
     backgroundColor: "rgba(255,255,255,0.02)",

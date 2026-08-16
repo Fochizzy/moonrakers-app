@@ -953,10 +953,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#081120",
   },
   backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
   screenContent: {
@@ -1213,7 +1213,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   heroArtDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.12)",
   },
   heroInitialWrap: {
@@ -1241,7 +1241,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
   },
   cropImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
   },
@@ -1254,7 +1254,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   smallArtDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.1)",
   },
   smallArtInitialWrap: {

@@ -237,13 +237,13 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   outerAura: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 28,
     transform: [{ scale: 1.03 }],
     shadowOffset: { width: 0, height: 0 },
   },
   background: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 24,
   },
   card: {
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     minHeight: 72,
   },
   surfaceGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   ring: {
     position: 'absolute',

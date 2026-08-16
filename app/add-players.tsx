@@ -1017,7 +1017,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#030712",
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(2,6,17,0.58)",
   },
   container: {

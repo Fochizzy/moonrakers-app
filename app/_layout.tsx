@@ -221,7 +221,7 @@ function AppNavigator() {
     >
       <AppBackground />
 
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar style="light" />
 
       <Stack
         screenOptions={{
@@ -282,11 +282,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   baseBg: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#02030A",
   },
   starField: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0.32,
   },
   star: {
@@ -364,11 +364,11 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "-18deg" }],
   },
   gridFade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(255,255,255,0.015)",
   },
   overlayBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,

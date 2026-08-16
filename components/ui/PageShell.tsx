@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   shellBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   shellTopGlow: {
     position: "absolute",

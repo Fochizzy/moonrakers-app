@@ -15,10 +15,10 @@ export const styles = StyleSheet.create({
     backgroundColor: UI.black,
   },
   starfieldDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   pageWash: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   container: {
     paddingHorizontal: 8,

@@ -973,10 +973,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
   },
   backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   backgroundDim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(5,10,22,0.70)",
   },
   scroll: {
