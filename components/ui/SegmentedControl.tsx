@@ -40,6 +40,7 @@ export default function SegmentedControl<T extends string>({
         },
         style,
       ]}
+      accessibilityRole="tablist"
     >
       {items.map((item) => {
         const selected = item.key === value;
@@ -48,6 +49,9 @@ export default function SegmentedControl<T extends string>({
           <Pressable
             key={item.key}
             onPress={() => onChange(item.key)}
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected }}
             style={[
               styles.segment,
               {

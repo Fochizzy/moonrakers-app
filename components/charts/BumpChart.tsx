@@ -394,6 +394,8 @@ export default function BumpChart({
           .map((series) => (
             <Pressable
               key={`legend-${series.playerId}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Focus ${series.name ?? series.playerId}`}
               onPress={() =>
                 setFocusedPlayerIdState((current) =>
                   current === series.playerId ? null : series.playerId

@@ -637,6 +637,8 @@ function LineChart({
                       <Pressable
                         key={`tap-${index}`}
                         onPress={() => setSelectedIndexState(index)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Data point ${index + 1} of ${data.length}`}
                         style={[
                           styles.touchSlot,
                           {

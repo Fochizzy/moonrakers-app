@@ -13,6 +13,9 @@ import { useTheme } from "@/theme";
 type ActionButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 type ActionButtonProps = {
+  accessibilityHint?: string;
+  /** Overrides the label derived from title + subtitle. */
+  accessibilityLabel?: string;
   disabled?: boolean;
   icon?: React.ReactNode;
   onPress?: (event: GestureResponderEvent) => void;
@@ -69,6 +72,8 @@ function getTone(variant: ActionButtonVariant) {
 }
 
 export default function ActionButton({
+  accessibilityHint,
+  accessibilityLabel,
   disabled = false,
   icon,
   onPress,
@@ -84,6 +89,12 @@ export default function ActionButton({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      // Title and subtitle are separate Text nodes; joining them gives a
+      // screen reader the whole button in one announcement.
+      accessibilityLabel={accessibilityLabel ?? [title, subtitle].filter(Boolean).join(". ")}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: Boolean(disabled) }}
       style={({ pressed }) => [
         styles.base,
         {

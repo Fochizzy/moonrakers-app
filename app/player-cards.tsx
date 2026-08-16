@@ -403,7 +403,7 @@ function PressableRow({
   onPress: () => void;
 }) {
   return (
-    <ActionLikeCard active={active} onPress={onPress}>
+    <ActionLikeCard active={active} label={label} onPress={onPress}>
       <View style={styles.searchResultCopy}>
         <Text style={[styles.searchResultName, active && styles.searchResultNameActive]}>
           {label}
@@ -420,15 +420,20 @@ function PressableRow({
 function ActionLikeCard({
   active,
   children,
+  label,
   onPress,
 }: {
   active: boolean;
   children: React.ReactNode;
+  label: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
       style={({ pressed }) => [
         styles.searchResultCard,
         active && styles.searchResultCardActive,

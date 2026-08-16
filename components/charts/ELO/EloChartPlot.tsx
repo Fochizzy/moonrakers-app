@@ -405,6 +405,8 @@ export default function EloChartPlot({
                 <Pressable
                   key={`tap-${index}`}
                   onPress={() => onSelectGame?.(index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Game ${index + 1} of ${totalGames}`}
                   style={[
                     styles.touchSlot,
                     {

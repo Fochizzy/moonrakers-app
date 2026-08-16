@@ -90,7 +90,12 @@ export default function PlayerSearchPicker({
           autoCorrect={autoCorrect}
         />
         {query.trim().length > 0 && onClearQuery ? (
-          <Pressable onPress={onClearQuery} style={styles.clearButton}>
+          <Pressable
+            onPress={onClearQuery}
+            accessibilityRole="button"
+            accessibilityLabel={clearLabel}
+            style={styles.clearButton}
+          >
             <Text style={styles.clearButtonText}>{clearLabel}</Text>
           </Pressable>
         ) : null}
@@ -109,6 +114,9 @@ export default function PlayerSearchPicker({
                 return (
                   <Pressable
                     key={item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={[item.label, item.badge].filter(Boolean).join(", ")}
+                    accessibilityState={{ selected: active }}
                     style={[
                       styles.railItem,
                       item.kind === "action" && styles.railItemAction,
@@ -161,6 +169,9 @@ export default function PlayerSearchPicker({
                   return (
                     <Pressable
                       key={item.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={[item.label, item.meta].filter(Boolean).join(", ")}
+                      accessibilityState={{ selected: active }}
                       style={[
                         styles.listItem,
                         active && styles.listItemActive,

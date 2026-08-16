@@ -52,6 +52,9 @@ export default function DefinitionsJumpLink({
           }),
         )
       }
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      accessibilityHint="Opens the definitions reference"
       style={({ pressed }) => [
         styles.link,
         pressed && styles.linkPressed,

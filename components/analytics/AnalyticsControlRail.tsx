@@ -80,6 +80,9 @@ export default function AnalyticsControlRail({
               <Pressable
                 key={tab.key}
                 onPress={onTabChange ? () => onTabChange(tab.key) : undefined}
+                accessibilityRole="tab"
+                accessibilityLabel={tab.label}
+                accessibilityState={{ selected: tab.key === activeTabKey }}
                 style={[
                   styles.tabButton,
                   tabVariant === "stacked" && styles.tabButtonStacked,

@@ -7,6 +7,10 @@ type ScalePressableProps = {
   style?: any;
   children: React.ReactNode;
   disabled?: boolean;
+  accessibilityHint?: string;
+  accessibilityLabel?: string;
+  accessibilityRole?: "button" | "link" | "checkbox" | "radio" | "tab";
+  accessibilityState?: { disabled?: boolean; selected?: boolean; checked?: boolean };
 };
 
 export default function ScalePressable({
@@ -15,6 +19,10 @@ export default function ScalePressable({
   style,
   children,
   disabled,
+  accessibilityHint,
+  accessibilityLabel,
+  accessibilityRole = "button",
+  accessibilityState,
 }: ScalePressableProps) {
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -33,6 +41,10 @@ export default function ScalePressable({
         disabled={disabled}
         onPress={onPress}
         onLongPress={onLongPress}
+        accessibilityRole={accessibilityRole}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={{ disabled: Boolean(disabled), ...(accessibilityState ?? {}) }}
         onPressIn={() => animateTo(0.985)}
         onPressOut={() => animateTo(1)}
       >

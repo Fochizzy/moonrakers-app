@@ -35,6 +35,9 @@ export default function HubTileCard({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="link"
+      // The tile's icon carries no text, so the label has to come from the copy.
+      accessibilityLabel={[title, description, badge].filter(Boolean).join(". ")}
       style={({ pressed }) => [
         styles.card,
         isLarge ? styles.cardLarge : null,

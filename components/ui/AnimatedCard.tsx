@@ -19,6 +19,8 @@ type Props = {
   onPress?: () => void;
   disabled?: boolean;
   hitSlop?: Insets;
+  accessibilityHint?: string;
+  accessibilityLabel?: string;
   pressScale?: number;
   glowColor?: string;
   starCount?: number;
@@ -104,6 +106,8 @@ function AnimatedCard({
   onPress,
   disabled = false,
   hitSlop,
+  accessibilityHint,
+  accessibilityLabel,
   pressScale = 0.965,
   glowColor = chartColors.purple,
   starCount = 26,
@@ -133,6 +137,10 @@ function AnimatedCard({
       onPress={onPress}
       disabled={disabled}
       hitSlop={hitSlop}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={onPress ? { disabled: Boolean(disabled) } : undefined}
       style={getPressableStyle}
     >
       {/* `hovered` is a react-native-web addition that RN's types omit. */}

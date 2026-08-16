@@ -802,6 +802,8 @@ function Sparkline({
                 <Pressable
                   key={`tap-${point.index}`}
                   onPress={() => selectIndex(point.index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Data point ${point.index + 1} of ${geometry.points.length}`}
                   style={[
                     styles.touchSlot,
                     {

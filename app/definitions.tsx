@@ -317,6 +317,9 @@ export default function DefinitionsScreen() {
                                 <Pressable
                                   key={`${item.key}-${relatedItem.key}`}
                                   disabled={isCurrentTerm}
+                                  accessibilityRole="link"
+                                  accessibilityLabel={relatedItem.title}
+                                  accessibilityHint="Opens this related definition"
                                   accessibilityState={{
                                     disabled: isCurrentTerm,
                                     selected: isCurrentTerm,
