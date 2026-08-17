@@ -38,8 +38,8 @@ assert.match(
 
 assert.match(
   screenSource,
-  /await createSharedGroup\(/,
-  "expected add-players.tsx to create signed-in groups through the shared Supabase helper",
+  /await createVerifiedSharedGroup\(/,
+  "expected add-players.tsx to create passcode-verified groups through the shared Supabase helper",
 );
 
 assert.match(

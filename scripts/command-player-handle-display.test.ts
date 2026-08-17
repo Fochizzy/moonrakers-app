@@ -6,8 +6,9 @@ import {
   resolvePlayerInitials,
 } from "@/utils/playerDisplayName";
 
-// Shape the Command page actually receives: player_name merged with the
-// registered profile's display_name, plus initials built from the table name.
+// Until the migration is applied, production still has old names in
+// player_name and canonical usernames in display_name. The compatibility
+// resolver must publish the username during that window.
 const LEAGUE = [
   { id: "1", name: "Izzy", displayName: "Fochizzy", initials: "I" },
   { id: "2", name: "Corey", displayName: "Lurker", initials: "C" },
@@ -15,7 +16,7 @@ const LEAGUE = [
   { id: "4", name: "James", displayName: "RevLoki", initials: "J" },
 ];
 
-// The handle is what gets published, never the name at the table.
+// The username is what gets published.
 for (const player of LEAGUE) {
   assert.equal(
     resolvePlayerDisplayName(player),
@@ -28,13 +29,12 @@ for (const player of LEAGUE) {
 assert.equal(resolvePlayerDisplayName({ name: "Sam" }), "Sam");
 assert.equal(resolvePlayerDisplayName({}), "Unknown");
 
-// Initials follow the handle, not the stored value derived from the table name,
-// and stay one letter per single-word handle so the group card still fits.
+// Initials follow the username, not a cached legacy initial.
 assert.equal(resolvePlayerInitials(LEAGUE[0]), "F");
 assert.equal(resolvePlayerInitials(LEAGUE[3]), "R");
 assert.equal(resolvePlayerInitials({ name: "Ada Lovelace" }), "AL");
 
-// Searching matches the handle, case-insensitively and on partials.
+// Searching matches the username, case-insensitively and on partials.
 for (const [query, expected] of [
   ["lurk", "Lurker"],
   ["FOCH", "Fochizzy"],
@@ -50,8 +50,7 @@ for (const [query, expected] of [
   );
 }
 
-// The table name is not a search field. Only handles and their initials are
-// matched, so a name that shares no substring with its handle finds nothing.
+// Legacy display names are not a search field.
 for (const realName of ["Corey", "James"]) {
   assert.deepEqual(
     LEAGUE.filter((player) => matchesPlayerNameQuery(player, realName)),
@@ -60,10 +59,7 @@ for (const realName of ["Corey", "James"]) {
   );
 }
 
-// "Izzy" and "Greg" still match, but only because their handles happen to
-// contain them as substrings — "Fochizzy" ends in "izzy", "GregMtG" starts with
-// "greg". That is the handle matching itself, not the table name leaking back
-// in, and it stays true however profiles.player_name is stored.
+// Partial username matching still works.
 assert.deepEqual(
   LEAGUE.filter((player) => matchesPlayerNameQuery(player, "Izzy")).map(
     (player) => player.displayName,
@@ -75,7 +71,7 @@ assert.deepEqual(
     (player) => player.displayName,
   ),
   ["GregMtG"],
-  "expected the match to survive with the table name absent entirely",
+  "expected username matching without the old player_name field",
 );
 
 // An empty query keeps the full roster rather than clearing it.

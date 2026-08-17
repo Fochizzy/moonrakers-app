@@ -25,8 +25,13 @@ assert.match(
 
 assert.match(
   homeSource,
-  /draftId:\s*gameDraft\?\.draftId\s*\?\?\s*createUuid\(\)/,
-  "expected new synced drafts to stop using timestamp strings for draft ids",
+  /const\s+selectionDraftId\s*=\s*useRef\(gameDraft\?\.draftId\s*\?\?\s*createUuid\(\)\)\.current/,
+  "expected player authorization to receive a stable UUID before the draft is saved",
+);
+assert.match(
+  homeSource,
+  /draftId:\s*gameDraft\?\.draftId\s*\?\?\s*selectionDraftId/,
+  "expected the saved draft to reuse the UUID used for player authorization",
 );
 
 assert.match(

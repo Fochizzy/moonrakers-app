@@ -1,11 +1,7 @@
 /**
- * Profiles carry two names: `name` (the name at the table, from
- * `profiles.player_name`) and `displayName` (the handle, from
- * `profiles.display_name`). Player-facing surfaces publish the handle, so the
- * same person is not "Izzy" on the Command page and "Fochizzy" one screen over.
- *
- * Resolution lives here rather than inline at each call site, matching the
- * dashboard's `apps/dashboard/src/lib/playerName.ts`.
+ * `name` is the profile username after the migration. Before that migration,
+ * the same username is still present in the legacy `displayName` field, so it
+ * temporarily wins as a compatibility source.
  */
 
 export type PlayerNameSource = {
@@ -26,9 +22,7 @@ export function resolvePlayerDisplayName(
 }
 
 /**
- * Derived from the published name, not the stored `initials`. That field was
- * built from the table name when the profile was created, so it still reads "I"
- * for Fochizzy and would leak the first letter of a name we no longer show.
+ * Derived from the username rather than trusting cached initials.
  */
 export function resolvePlayerInitials(
   source: PlayerNameSource | null | undefined,
@@ -45,9 +39,7 @@ export function resolvePlayerInitials(
 }
 
 /**
- * Matches only what the card actually shows. Searching the table name is
- * deliberately not supported: typing "Izzy" should not surface Fochizzy, because
- * the table name is not a thing this app publishes any more.
+ * Matches only the username the card actually shows.
  */
 export function matchesPlayerNameQuery(
   source: PlayerNameSource | null | undefined,

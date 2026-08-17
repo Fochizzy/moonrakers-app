@@ -6,6 +6,8 @@ type RawRegisteredProfile = {
   display_name?: unknown;
   favorite_color?: unknown;
   assigned_card_art_index?: unknown;
+  is_guest?: unknown;
+  has_passcode?: unknown;
 };
 
 export type RegisteredProfile = {
@@ -15,6 +17,8 @@ export type RegisteredProfile = {
   color?: string;
   assignedCardArtIndex?: number | null;
   hasSavedGames: boolean;
+  isGuest: boolean;
+  hasPasscode: boolean;
 };
 
 function normalizeString(value: unknown) {
@@ -52,8 +56,9 @@ export function normalizeRegisteredProfiles(
   const normalizedProfiles = (Array.isArray(input) ? input : [])
     .map<RegisteredProfile | null>((row) => {
       const id = normalizeString(row?.id);
-      const name = normalizeString(row?.player_name);
+      const storedName = normalizeString(row?.player_name);
       const displayName = normalizeString(row?.display_name);
+      const name = displayName || storedName;
 
       if (!id || !name) {
         return null;
@@ -70,6 +75,8 @@ export function normalizeRegisteredProfiles(
             ? row.assigned_card_art_index
             : null,
         hasSavedGames: false,
+        isGuest: row?.is_guest === true,
+        hasPasscode: row?.has_passcode === true,
       };
     })
     .filter((profile): profile is RegisteredProfile => Boolean(profile));

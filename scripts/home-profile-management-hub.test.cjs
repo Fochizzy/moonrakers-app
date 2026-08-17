@@ -26,16 +26,24 @@ run("Hubs tab exposes the Profile Management tile through shared hub metadata", 
   const hubsSource = read("utils/appHubs.ts");
 
   expectIncludes(hubsSource, 'key: "profile-management"', "profile management key");
-  expectIncludes(hubsSource, 'title: "Profile Management"', "profile management title");
-  expectIncludes(hubsSource, 'description: "Profile Picture"', "profile management description");
+  expectIncludes(hubsSource, 'title: "Manage Users/Groups"', "profile management title");
+  expectIncludes(hubsSource, 'description: "Username, passcode & groups"', "profile management description");
   expectIncludes(hubsSource, "route: APP_ROUTES.roster", "profile management route");
-  expectIncludes(hubsSource, 'iconKey: "billBendo"', "profile management icon");
+  expectIncludes(hubsSource, 'iconKey: "moneyHub"', "profile management icon");
   expectIncludes(
     hubsSource,
     'layout: "graphic-horizontal"',
     "profile management horizontal layout"
   );
   expectIncludes(hubsSource, "fullWidth: true", "profile management wide layout");
+  expectIncludes(hubsSource, "PROFILE_MANAGEMENT_CARD,", "visible Hubs destination");
+
+  const iconsSource = read("utils/iconAccess.ts");
+  expectIncludes(
+    iconsSource,
+    'moneyHub: require("../assets/icons/Money.png")',
+    "Money.png icon registration"
+  );
 });
 
 if (process.exitCode > 0) {

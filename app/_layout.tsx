@@ -1,6 +1,6 @@
 import "react-native-gesture-handler";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -15,6 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import MissingPasscodePrompt from "@/components/auth/MissingPasscodePrompt";
 import RootErrorBoundary from "@/components/status/RootErrorBoundary";
 import Text from "@/components/ui/Text";
 import { installErrorReporting } from "@/lib/telemetry/errorReporting";
@@ -25,6 +26,8 @@ import {
 import { useSharedCloudBootstrap } from "@/lib/auth/useSharedCloudBootstrap";
 import { reconcileStaleRollupOnForeground } from "@/lib/cloud/analytics/reconcileStaleRollup";
 import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
+import { setMyPlayerPasscode } from "@/lib/cloud/playerAccess";
+import { formatSupabaseConfigError } from "@/lib/supabase";
 import { useStore } from "@/store/useStore";
 import { ThemeProvider, useTheme } from "@/theme";
 import { APP_ROUTES } from "@/utils/appRoutes";
@@ -152,6 +155,61 @@ function AppNavigator() {
   const setGroups = useStore((state) => state.setGroups);
   const setGames = useStore((state) => state.setGames);
   const hydrateAuthBootstrap = useStore((state) => state.hydrateAuthBootstrap);
+  const players = useStore((state) => state.players);
+  const upsertRegisteredProfile = useStore(
+    (state) => state.upsertRegisteredProfile,
+  );
+  const [dismissedPasscodePromptFor, setDismissedPasscodePromptFor] = useState<
+    string | null
+  >(null);
+  const [savingRequiredPasscode, setSavingRequiredPasscode] = useState(false);
+  const [requiredPasscodeError, setRequiredPasscodeError] = useState<
+    string | null
+  >(null);
+
+  const signedInProfilePlayer = useMemo(() => {
+    const profileId = String(authSession?.user?.id ?? "").trim();
+    return players.find((player) => player.id === profileId) ?? null;
+  }, [authSession?.user?.id, players]);
+
+  const shouldPromptForPasscode = Boolean(
+    authBootstrapStatus === "ready" &&
+      !showBlockingOverlay &&
+      authSession?.user?.id &&
+      authProfile?.player_name &&
+      signedInProfilePlayer?.isGuest !== true &&
+      signedInProfilePlayer?.hasPasscode === false &&
+      dismissedPasscodePromptFor !== authSession.user.id,
+  );
+
+  useEffect(() => {
+    setDismissedPasscodePromptFor(null);
+    setRequiredPasscodeError(null);
+  }, [authSession?.user?.id]);
+
+  async function handleRequiredPasscodeSave(passcode: string) {
+    if (!signedInProfilePlayer || !authSession?.user?.id) return;
+
+    setSavingRequiredPasscode(true);
+    setRequiredPasscodeError(null);
+    try {
+      await setMyPlayerPasscode(passcode);
+      upsertRegisteredProfile({
+        id: signedInProfilePlayer.id,
+        name: signedInProfilePlayer.name,
+        displayName: signedInProfilePlayer.displayName,
+        color: signedInProfilePlayer.color,
+        assignedCardArtIndex: signedInProfilePlayer.assignedCardArtIndex,
+        hasSavedGames: signedInProfilePlayer.hasSavedGames,
+        isGuest: false,
+        hasPasscode: true,
+      });
+    } catch (error) {
+      setRequiredPasscodeError(formatSupabaseConfigError(error));
+    } finally {
+      setSavingRequiredPasscode(false);
+    }
+  }
 
   useEffect(() => {
     if (authBootstrapStatus !== "ready") return;
@@ -263,6 +321,23 @@ function AppNavigator() {
           onAction={handleOverlayEscape}
         />
       ) : null}
+
+      <MissingPasscodePrompt
+        visible={shouldPromptForPasscode}
+        username={
+          signedInProfilePlayer?.name ??
+          String(authProfile?.player_name ?? "Signed-in player")
+        }
+        busy={savingRequiredPasscode}
+        error={requiredPasscodeError}
+        onSave={(passcode) => {
+          void handleRequiredPasscodeSave(passcode);
+        }}
+        onDismiss={() => {
+          setRequiredPasscodeError(null);
+          setDismissedPasscodePromptFor(authSession?.user?.id ?? null);
+        }}
+      />
     </View>
   );
 }
