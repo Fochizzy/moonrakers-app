@@ -13,6 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import ProfileAppearancePicker from "@/components/player/ProfileAppearancePicker";
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
+import PlayerAccessModal, {
+  type PlayerAccessOption,
+} from "@/components/home/PlayerAccessModal";
 import ActionButton from "@/components/ui/ActionButton";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
 import HeroCard from "@/components/ui/HeroCard";
@@ -25,9 +28,21 @@ import { runSignOutFlow } from "@/lib/auth/signOutFlow";
 import { canResumeDraft } from "@/lib/game-draft/phase";
 import { useSyncedGameDraft } from "@/lib/game-draft/useSyncedGameDraft";
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
+import {
+  isValidPlayerPasscode,
+  isValidPlayerUsername,
+  removeMyPlayerPasscode,
+  setMyPlayerName,
+  setMyPlayerPasscode,
+  verifyPlayerForGame,
+} from "@/lib/cloud/playerAccess";
 import { deleteOwnProfile } from "@/lib/cloud/deleteOwnProfile";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
-import { createSharedGroup, deleteSharedGroup } from "@/lib/cloud/sharedGroups";
+import {
+  createVerifiedSharedGroup,
+  deleteSharedGroup,
+} from "@/lib/cloud/sharedGroups";
+import { createUuid } from "@/lib/ids/uuid";
 import { formatSupabaseConfigError, supabase } from "@/lib/supabase";
 import {
   useClearAuthState,
@@ -62,6 +77,8 @@ type PlayerLike = {
   color?: string;
   displayName?: string;
   hasSavedGames?: boolean;
+  isGuest?: boolean;
+  hasPasscode?: boolean;
   assignedCardArtIndex?: number | null;
 };
 
@@ -90,6 +107,15 @@ type GameLike = {
 type AddPlayersRouteParams = {
   profileSetup?: string | string[];
   tab?: string | string[];
+};
+
+type PendingVerifiedGroupSave = {
+  name: string;
+  playerIds: string[];
+  draftId: string;
+  currentPlayerId: string;
+  remainingPlayerIds: string[];
+  totalPasscodes: number;
 };
 
 const HISTORY_REPLACEMENT_NAME = "Mx. Doe";
@@ -222,6 +248,11 @@ export default function AddPlayersScreen() {
     profileSetupHandoff,
   );
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [playerUsername, setPlayerUsername] = useState("");
+  const [savingPasscode, setSavingPasscode] = useState(false);
+  const [playerPasscode, setPlayerPasscode] = useState("");
+  const [confirmPlayerPasscode, setConfirmPlayerPasscode] = useState("");
   const [deletingProfile, setDeletingProfile] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
@@ -230,6 +261,11 @@ export default function AddPlayersScreen() {
   const [groupSortMode, setGroupSortMode] = useState<GroupSortMode>("most-played");
   const [selectedGroupPlayerIds, setSelectedGroupPlayerIds] = useState<string[]>([]);
   const [showAllGroupPlayers, setShowAllGroupPlayers] = useState(false);
+  const [pendingVerifiedGroup, setPendingVerifiedGroup] =
+    useState<PendingVerifiedGroupSave | null>(null);
+  const [groupVerificationBusy, setGroupVerificationBusy] = useState(false);
+  const [groupVerificationError, setGroupVerificationError] =
+    useState<string | null>(null);
 
   const currentFavoriteColor = useMemo(
     () => normalizePreferredProfileColor(authProfile?.favorite_color),
@@ -340,19 +376,33 @@ export default function AddPlayersScreen() {
 
   useEffect(() => {
     const validPlayerIds = new Set(sortedPlayers.map((player) => player.id));
-    setSelectedGroupPlayerIds((current) =>
-      current.filter((playerId) => validPlayerIds.has(playerId)).slice(0, 5),
-    );
-  }, [sortedPlayers]);
+    setSelectedGroupPlayerIds((current) => {
+      const validSelection = current.filter((playerId) => validPlayerIds.has(playerId));
+      const next = signedInUserId
+        ? [signedInUserId, ...validSelection.filter((id) => id !== signedInUserId)].slice(
+            0,
+            5,
+          )
+        : validSelection.slice(0, 5);
+
+      return next.length === current.length && next.every((id, index) => id === current[index])
+        ? current
+        : next;
+    });
+  }, [signedInUserId, sortedPlayers]);
 
   const activePlayerId = signedInUserId;
   const profileReady = Boolean(signedInUserId && authProfile?.player_name);
   const profileName =
     String(authProfile?.player_name ?? "").trim() ||
-    String(authProfile?.display_name ?? "").trim() ||
     "Signed-in player";
   const profileAccent = getPlayerAccentColor(favoriteColor ?? currentFavoriteColor ?? "blue");
   const existingProfilePlayer = players.find((player) => player.id === signedInUserId) ?? null;
+
+  useEffect(() => {
+    setPlayerUsername(profileName);
+  }, [profileName, signedInUserId]);
+
   const unregisteredSelectedPlayers = useMemo(
     () =>
       sortedPlayers.filter(
@@ -362,6 +412,17 @@ export default function AddPlayersScreen() {
       ),
     [selectedGroupPlayerIds, sortedPlayers],
   );
+  const pendingGroupPlayer = pendingVerifiedGroup
+    ? (playersById.get(pendingVerifiedGroup.currentPlayerId) as
+        | PlayerAccessOption
+        | undefined) ?? null
+    : null;
+  const groupVerificationProgress = pendingVerifiedGroup
+    ? `${
+        pendingVerifiedGroup.totalPasscodes -
+        pendingVerifiedGroup.remainingPlayerIds.length
+      } of ${pendingVerifiedGroup.totalPasscodes}`
+    : null;
   const draftedPlayerIds = useMemo(() => {
     if (!canResumeDraft(gameDraft)) {
       return new Set<string>();
@@ -380,6 +441,19 @@ export default function AddPlayersScreen() {
     hasProfileChanges &&
     !savingProfile &&
     !deletingProfile;
+  const hasPlayerPasscode = Boolean(existingProfilePlayer?.hasPasscode);
+  const normalizedPlayerUsername = playerUsername.trim();
+  const hasUsernameChanges = normalizedPlayerUsername !== profileName;
+  const canSaveUsername =
+    profileReady &&
+    isValidPlayerUsername(normalizedPlayerUsername) &&
+    hasUsernameChanges &&
+    !savingUsername &&
+    !deletingProfile;
+  const canSavePasscode =
+    isValidPlayerPasscode(playerPasscode) &&
+    playerPasscode === confirmPlayerPasscode &&
+    !savingPasscode;
 
   function handleFavoriteColorChange(nextColor: CardColor) {
     setFavoriteColor(nextColor);
@@ -426,7 +500,7 @@ export default function AddPlayersScreen() {
     try {
       const payload = buildProfileAppearanceSavePayload({
         playerName: profileName,
-        displayName: String(authProfile?.display_name ?? ""),
+        displayName: null,
         favoriteColor,
         assignedCardArtIndex,
       });
@@ -462,7 +536,7 @@ export default function AddPlayersScreen() {
         buildSavedAuthProfile(
           signedInUserId,
           payload.player_name,
-          payload.display_name ?? "",
+          "",
           payload.favorite_color,
           payload.assigned_card_art_index,
         ),
@@ -471,10 +545,11 @@ export default function AddPlayersScreen() {
       upsertRegisteredProfile?.({
         id: signedInUserId,
         name: payload.player_name,
-        displayName: payload.display_name ?? undefined,
         color: payload.favorite_color ?? undefined,
         assignedCardArtIndex: payload.assigned_card_art_index ?? null,
         hasSavedGames: Boolean(existingProfilePlayer?.hasSavedGames),
+        isGuest: false,
+        hasPasscode: hasPlayerPasscode,
       });
 
       setShowProfileSetupCallout(false);
@@ -484,6 +559,108 @@ export default function AddPlayersScreen() {
     } finally {
       setSavingProfile(false);
     }
+  }
+
+  async function handleSaveUsername() {
+    if (!canSaveUsername || !signedInUserId || !authProfile) return;
+
+    setSavingUsername(true);
+    try {
+      const savedUsername = await setMyPlayerName(normalizedPlayerUsername);
+      setAuthProfile({
+        ...authProfile,
+        id: signedInUserId,
+        player_name: savedUsername,
+        display_name: null,
+      });
+      upsertRegisteredProfile({
+        id: signedInUserId,
+        name: savedUsername,
+        color: favoriteColor ?? currentFavoriteColor ?? undefined,
+        assignedCardArtIndex,
+        hasSavedGames: Boolean(existingProfilePlayer?.hasSavedGames),
+        isGuest: false,
+        hasPasscode: hasPlayerPasscode,
+      });
+      setPlayerUsername(savedUsername);
+      Alert.alert(
+        "Username changed",
+        `Your username is now ${savedUsername}.`,
+      );
+    } catch (error) {
+      Alert.alert("Couldn't change username", formatSupabaseConfigError(error));
+    } finally {
+      setSavingUsername(false);
+    }
+  }
+
+  function syncPlayerPasscodeState(hasPasscode: boolean) {
+    if (!signedInUserId) return;
+    upsertRegisteredProfile({
+      id: signedInUserId,
+      name: profileName,
+      color: favoriteColor ?? currentFavoriteColor ?? undefined,
+      assignedCardArtIndex,
+      hasSavedGames: Boolean(existingProfilePlayer?.hasSavedGames),
+      isGuest: false,
+      hasPasscode,
+    });
+  }
+
+  async function handleSavePlayerPasscode() {
+    if (!canSavePasscode) return;
+
+    setSavingPasscode(true);
+    try {
+      await setMyPlayerPasscode(playerPasscode);
+      syncPlayerPasscodeState(true);
+      setPlayerPasscode("");
+      setConfirmPlayerPasscode("");
+      Alert.alert(
+        hasPlayerPasscode ? "Passcode changed" : "Passcode set",
+        "Other hosts can now verify this username when adding it to a game.",
+      );
+    } catch (error) {
+      Alert.alert("Couldn't save passcode", formatSupabaseConfigError(error));
+    } finally {
+      setSavingPasscode(false);
+    }
+  }
+
+  async function confirmRemovePlayerPasscode() {
+    setSavingPasscode(true);
+    try {
+      await removeMyPlayerPasscode();
+      syncPlayerPasscodeState(false);
+      setPlayerPasscode("");
+      setConfirmPlayerPasscode("");
+      Alert.alert(
+        "Passcode removed",
+        "Other hosts cannot add this player until a new passcode is set.",
+      );
+    } catch (error) {
+      Alert.alert("Couldn't remove passcode", formatSupabaseConfigError(error));
+    } finally {
+      setSavingPasscode(false);
+    }
+  }
+
+  function handleRemovePlayerPasscode() {
+    if (!hasPlayerPasscode || savingPasscode) return;
+    Alert.alert(
+      "Remove player passcode?",
+      "This immediately revokes unused game authorizations for this player.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove Passcode",
+          style: "destructive",
+          onPress: () => {
+            void confirmRemovePlayerPasscode();
+          },
+        },
+      ],
+    );
   }
 
   async function confirmDeleteProfile() {
@@ -547,6 +724,10 @@ export default function AddPlayersScreen() {
   }
 
   function toggleGroupPlayer(playerId: string) {
+    if (playerId === signedInUserId) {
+      return;
+    }
+
     setSelectedGroupPlayerIds((current) =>
       current.includes(playerId)
         ? current.filter((id) => id !== playerId)
@@ -563,7 +744,16 @@ export default function AddPlayersScreen() {
       return;
     }
 
-    if (selectedGroupPlayerIds.length < 2) {
+    if (!ensureSharedGroupAccess()) {
+      return;
+    }
+
+    const groupPlayerIds = [
+      signedInUserId,
+      ...selectedGroupPlayerIds.filter((playerId) => playerId !== signedInUserId),
+    ].slice(0, 5);
+
+    if (groupPlayerIds.length < 2) {
       Alert.alert("More players needed", "Select at least 2 players for a group.");
       return;
     }
@@ -578,30 +768,109 @@ export default function AddPlayersScreen() {
       return;
     }
 
-    if (!ensureSharedGroupAccess()) {
+    const playersWithoutPasscodes = groupPlayerIds
+      .filter((playerId) => playerId !== signedInUserId)
+      .flatMap((playerId) => {
+        const player = playersById.get(playerId);
+        return player?.hasPasscode === true ? [] : [player?.name ?? "Unknown player"];
+      });
+
+    if (playersWithoutPasscodes.length > 0) {
+      Alert.alert(
+        "Passcode required",
+        `${playersWithoutPasscodes.join(", ")} must set a passcode before this group can be saved.`,
+      );
+      return;
+    }
+
+    const playersToVerify = groupPlayerIds.filter(
+      (playerId) => playerId !== signedInUserId,
+    );
+    const [currentPlayerId, ...remainingPlayerIds] = playersToVerify;
+
+    if (!currentPlayerId || !playersById.has(currentPlayerId)) {
+      Alert.alert("Couldn't save group", "A selected player is no longer available.");
       return;
     }
 
     setSavingGroup(true);
+    setGroupVerificationError(null);
+    setPendingVerifiedGroup({
+      name: trimmed,
+      playerIds: groupPlayerIds,
+      draftId: createUuid(),
+      currentPlayerId,
+      remainingPlayerIds,
+      totalPasscodes: playersToVerify.length,
+    });
+  }
+
+  function closeGroupVerification() {
+    if (groupVerificationBusy) {
+      return;
+    }
+
+    setPendingVerifiedGroup(null);
+    setGroupVerificationError(null);
+    setSavingGroup(false);
+  }
+
+  async function handleVerifyGroupPlayer(passcode: string) {
+    if (!pendingVerifiedGroup || !pendingGroupPlayer || groupVerificationBusy) {
+      return;
+    }
+
+    setGroupVerificationBusy(true);
+    setGroupVerificationError(null);
 
     try {
-      await createSharedGroup({
+      const verified = await verifyPlayerForGame({
+        draftId: pendingVerifiedGroup.draftId,
+        profileId: pendingVerifiedGroup.currentPlayerId,
+        passcode,
+      });
+
+      if (!verified) {
+        setGroupVerificationError("Incorrect passcode.");
+        return;
+      }
+
+      const [nextPlayerId, ...remainingPlayerIds] =
+        pendingVerifiedGroup.remainingPlayerIds;
+
+      if (nextPlayerId) {
+        setPendingVerifiedGroup({
+          ...pendingVerifiedGroup,
+          currentPlayerId: nextPlayerId,
+          remainingPlayerIds,
+        });
+        return;
+      }
+
+      await createVerifiedSharedGroup({
         createdBy: signedInUserId,
-        name: trimmed,
-        playerIds: selectedGroupPlayerIds,
+        name: pendingVerifiedGroup.name,
+        playerIds: pendingVerifiedGroup.playerIds,
+        draftId: pendingVerifiedGroup.draftId,
       });
       setGroupName("");
-      setSelectedGroupPlayerIds([]);
+      setSelectedGroupPlayerIds(signedInUserId ? [signedInUserId] : []);
+      setPendingVerifiedGroup(null);
+      setSavingGroup(false);
 
       try {
         await refreshCloudGroupState();
+        Alert.alert(
+          "Group saved",
+          `${pendingVerifiedGroup.name} is ready for passcode-free group selection.`,
+        );
       } catch {
         Alert.alert("Group saved", "Saved, but couldn't refresh yet.");
       }
     } catch (error) {
-      Alert.alert("Couldn't save group", formatSupabaseConfigError(error));
+      setGroupVerificationError(formatSupabaseConfigError(error));
     } finally {
-      setSavingGroup(false);
+      setGroupVerificationBusy(false);
     }
   }
 
@@ -738,6 +1007,39 @@ export default function AddPlayersScreen() {
                   </View>
                 </View>
 
+                <View style={styles.usernamePanel}>
+                  <Text style={styles.passcodeTitle}>Username</Text>
+                  <Text style={styles.passcodeHelp}>
+                    Change the username shown in player lists and future games.
+                  </Text>
+                  <TextInput
+                    value={playerUsername}
+                    onChangeText={setPlayerUsername}
+                    placeholder="Username"
+                    placeholderTextColor="#7D9BC4"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={20}
+                    style={styles.input}
+                    onSubmitEditing={() => {
+                      if (canSaveUsername) void handleSaveUsername();
+                    }}
+                  />
+                  {normalizedPlayerUsername &&
+                  !isValidPlayerUsername(normalizedPlayerUsername) ? (
+                    <Text style={styles.passcodeError}>
+                      Use 3–20 letters, numbers, dashes or underscores.
+                    </Text>
+                  ) : null}
+                  <ActionButton
+                    title={savingUsername ? "Saving..." : "Change username"}
+                    disabled={!canSaveUsername}
+                    onPress={() => {
+                      void handleSaveUsername();
+                    }}
+                  />
+                </View>
+
                 <ProfileAppearancePicker
                   title={showProfileSetupCallout ? "Choose your player card" : "Appearance"}
                   subtitle={
@@ -758,6 +1060,75 @@ export default function AddPlayersScreen() {
                   onPress={() => { void handleSaveProfile(); }}
                   style={hasProfileChanges && canSaveProfile ? styles.saveButtonPending : undefined}
                 />
+
+                <View style={styles.passcodePanel}>
+                  <View style={styles.passcodeHeader}>
+                    <View style={styles.flexGrow}>
+                      <Text style={styles.passcodeTitle}>Player passcode</Text>
+                      <Text style={styles.passcodeHelp}>
+                        {hasPlayerPasscode
+                          ? "Set. Enter and confirm a new code to change it."
+                          : "Required when another host adds this username to a game."}
+                      </Text>
+                    </View>
+                    <Text style={styles.passcodeStatus}>
+                      {hasPlayerPasscode ? "SET" : "NOT SET"}
+                    </Text>
+                  </View>
+                  <TextInput
+                    value={playerPasscode}
+                    onChangeText={setPlayerPasscode}
+                    placeholder={
+                      hasPlayerPasscode
+                        ? "New passcode (3–8 letters or numbers)"
+                        : "Passcode (3–8 letters or numbers)"
+                    }
+                    placeholderTextColor="#7D9BC4"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    secureTextEntry
+                    style={styles.input}
+                  />
+                  <TextInput
+                    value={confirmPlayerPasscode}
+                    onChangeText={setConfirmPlayerPasscode}
+                    placeholder="Confirm passcode"
+                    placeholderTextColor="#7D9BC4"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    secureTextEntry
+                    style={styles.input}
+                  />
+                  {confirmPlayerPasscode &&
+                  playerPasscode !== confirmPlayerPasscode ? (
+                    <Text style={styles.passcodeError}>Passcodes do not match.</Text>
+                  ) : null}
+                  <View style={styles.passcodeActions}>
+                    <ActionButton
+                      title={
+                        savingPasscode
+                          ? "Saving..."
+                          : hasPlayerPasscode
+                            ? "Change passcode"
+                            : "Set passcode"
+                      }
+                      disabled={!canSavePasscode}
+                      onPress={() => {
+                        void handleSavePlayerPasscode();
+                      }}
+                      style={styles.passcodeAction}
+                    />
+                    {hasPlayerPasscode ? (
+                      <ActionButton
+                        title="Remove passcode"
+                        variant="danger"
+                        disabled={savingPasscode}
+                        onPress={handleRemovePlayerPasscode}
+                        style={styles.passcodeAction}
+                      />
+                    ) : null}
+                  </View>
+                </View>
 
                 <ActionButton
                   title="Assign card art to other players"
@@ -800,7 +1171,7 @@ export default function AddPlayersScreen() {
           <SectionCard
             style={styles.panel}
             title="Create saved group"
-            subtitle="Build a five-seat table you can reuse from game setup."
+            subtitle="Enter each member's passcode once, then reuse the unchanged group from game setup without entering them again."
           >
             <TextInput
               value={groupName}
@@ -879,7 +1250,7 @@ export default function AddPlayersScreen() {
             </View>
 
             <ActionButton
-              title={savingGroup ? "Saving..." : "Save Group"}
+              title={savingGroup ? "Verifying..." : "Verify & Save Group"}
               disabled={savingGroup}
               onPress={() => { void handleCreateGroup(); }}
             />
@@ -1013,6 +1384,21 @@ export default function AddPlayersScreen() {
           </SectionCard>
         </ScrollView>
       )}
+      <PlayerAccessModal
+        mode={pendingVerifiedGroup ? "passcode" : null}
+        purpose="group"
+        verificationProgress={groupVerificationProgress}
+        candidates={[]}
+        pendingPlayer={pendingGroupPlayer}
+        busy={groupVerificationBusy}
+        error={groupVerificationError}
+        onClose={closeGroupVerification}
+        onSelectExisting={() => {}}
+        onCreateGuest={() => {}}
+        onVerify={(passcode) => {
+          void handleVerifyGroupPlayer(passcode);
+        }}
+      />
     </PageShell>
     </SafeAreaView>
   );
@@ -1196,6 +1582,58 @@ const styles = StyleSheet.create({
     fontSize: 17,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  passcodePanel: {
+    gap: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.22)",
+    backgroundColor: "rgba(8,20,38,0.78)",
+    padding: 14,
+  },
+  usernamePanel: {
+    gap: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.22)",
+    backgroundColor: "rgba(8,20,38,0.78)",
+    padding: 14,
+  },
+  passcodeHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  passcodeTitle: {
+    color: "#F8FBFF",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  passcodeHelp: {
+    color: "#A9C1E7",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  passcodeStatus: {
+    color: "#67E8F9",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+  passcodeError: {
+    color: "#FCA5A5",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  passcodeActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  passcodeAction: {
+    flexGrow: 1,
+    minWidth: 150,
   },
   groupSelectionSummary: {
     borderRadius: 18,

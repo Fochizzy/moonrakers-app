@@ -73,17 +73,42 @@ const migrationSource = fs.readFileSync(
   ),
   "utf8",
 );
+const usernameMigrationSource = fs.readFileSync(
+  path.join(
+    projectRoot,
+    "supabase",
+    "migrations",
+    "20260817210532_moonrakers_guest_player_authorization.sql",
+  ),
+  "utf8",
+);
 
-assert.match(
+assert.doesNotMatch(
   registerSource,
   /buildDuplicateDisplayNameMessage|findDisplayNameConflict/,
-  "expected register.tsx to use the shared duplicate display-name guard before saving a profile",
+  "expected username-only registration to stop validating a second display name",
+);
+assert.doesNotMatch(
+  registerSource,
+  /Display name \(optional\)/,
+  "expected username-only registration to remove the display-name field",
 );
 
 assert.match(
   migrationSource,
   /create or replace function public\.enforce_unique_profile_display_name\(\)/i,
   "expected the migration to add a database guard for unique profile display names",
+);
+
+assert.match(
+  usernameMigrationSource,
+  /create unique index if not exists profiles_active_player_name_lower_key[\s\S]*lower\(btrim\(player_name\)\)/i,
+  "expected active usernames to be unique case-insensitively",
+);
+assert.match(
+  usernameMigrationSource,
+  /profiles_username_only_check[\s\S]*display_name is null or btrim\(display_name\) = btrim\(player_name\)/i,
+  "expected the compatibility display_name column to stop carrying a second identity",
 );
 
 assert.match(

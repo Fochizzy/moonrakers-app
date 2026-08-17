@@ -23,7 +23,7 @@ describe("GameEntryPreview", () => {
     expect(totalsFor("Lurker")).toHaveTextContent("S: 54");
     expect(totalsFor("GregMtG")).toHaveTextContent("P: 12");
     expect(totalsFor("Fochizzy")).toHaveTextContent("P: 11");
-    expect(totalsFor("Revloki")).toHaveTextContent("P: 12");
+    expect(totalsFor("RevLoki")).toHaveTextContent("P: 12");
   });
 
   it("moves the active player's totals as direct prestige is entered", async () => {
@@ -53,10 +53,10 @@ describe("GameEntryPreview", () => {
     render(<GameEntryPreview />);
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Revloki assisted" }),
+      screen.getByRole("button", { name: "RevLoki assisted" }),
     );
 
-    expect(totalsFor("Revloki")).toHaveTextContent("P: 13");
+    expect(totalsFor("RevLoki")).toHaveTextContent("P: 13");
     // Lurker banks the assist itself, worth 3 score.
     expect(totalsFor("Lurker")).toHaveTextContent("S: 57");
   });
@@ -80,10 +80,10 @@ describe("GameEntryPreview", () => {
     render(<GameEntryPreview />);
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Increase Objectives for Revloki" }),
+      screen.getByRole("button", { name: "Increase Objectives for RevLoki" }),
     );
 
-    expect(totalsFor("Revloki")).toHaveTextContent("P: 13");
+    expect(totalsFor("RevLoki")).toHaveTextContent("P: 13");
   });
 
   it("keeps the standings strip in leaderboard order", async () => {

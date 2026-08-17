@@ -18,6 +18,8 @@ export type Player = {
   color?: string;
   displayName?: string;
   hasSavedGames?: boolean;
+  isGuest?: boolean;
+  hasPasscode?: boolean;
   assignedCardArtIndex?: number | null;
 };
 
@@ -560,6 +562,8 @@ type RegisteredProfileInput = {
   color?: string;
   assignedCardArtIndex?: number | null;
   hasSavedGames?: boolean;
+  isGuest?: boolean;
+  hasPasscode?: boolean;
 };
 
 type Store = {

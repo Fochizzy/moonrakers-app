@@ -40,8 +40,8 @@ assert.doesNotMatch(
 
 assert.match(
   screenSource,
-  /eyebrow="Mission Prep"[\s\S]*title="Players"/s,
-  "expected Mission Prep to appear before the heavier Players picker block",
+  /title="Players in this game"[\s\S]*eyebrow="Mission Prep"[\s\S]*title="Add to game"/s,
+  "expected the live game roster, then Mission Prep, before the heavier Add to game picker block",
 );
 
 console.log("home-command-hierarchy.test.cjs passed");

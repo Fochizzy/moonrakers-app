@@ -28,18 +28,22 @@ function run(name, fn) {
   }
 }
 
-run("Hubs tab fills the page with the four bridge cards in a 2x2 fit-screen layout", () => {
+run("Hubs tab fits five bridge cards into three flexible rows on one page", () => {
   const indexSource = read("app/index.tsx");
 
   expectIncludes(indexSource, 'viewport="fit"', "fit home viewport");
   expectIncludes(
     indexSource,
     "const bridgeRows = useMemo(",
-    "paired hub rows for the 2x2 grid"
+    "paired hub rows for the fit-screen grid"
   );
   expectIncludes(indexSource, "bridgeDestinations.slice(index, index + 2)", "two tiles per hub row");
   expectIncludes(indexSource, "layout={card.layout ?? (card.iconKey ? \"graphic\" : \"text\")}", "shared hub layout hint");
-  expectIncludes(indexSource, 'emphasis="large"', "large hubs emphasis");
+  expectIncludes(
+    indexSource,
+    'emphasis={bridgeDestinations.length > 4 ? "default" : "large"}',
+    "compact emphasis when the management tile is present"
+  );
   expectIncludes(indexSource, "style={[styles.hubTileBase, styles.hubTile]}", "hubs tile style");
   expectIncludes(indexSource, "hubsPanel: {\n    flex: 1,", "hubs panel claims the whole tab body");
   expectIncludes(indexSource, "hubGridRow: {\n    flex: 1,", "hub rows split the panel height evenly");
@@ -58,11 +62,12 @@ run("Hubs tab fills the page with the four bridge cards in a 2x2 fit-screen layo
   expectNotIncludes(indexSource, "marginBottom: 10", "old stacked hub gap");
 });
 
-run("Hubs tab exposes exactly the four bridge destinations", () => {
+run("Hubs tab exposes the management destination without adding scrolling", () => {
   const hubsSource = read("utils/appHubs.ts");
 
   expectNotIncludes(hubsSource, '"data-backup"', "backup & export bridge tile");
-  expectNotIncludes(hubsSource, '"manage-user-groups"', "manage user/groups bridge tile");
+  expectIncludes(hubsSource, 'title: "Manage Users/Groups"', "manage user/groups bridge tile");
+  expectIncludes(hubsSource, 'iconKey: "moneyHub"', "Money.png management icon");
 });
 
 if (process.exitCode > 0) {

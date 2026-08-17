@@ -5,6 +5,8 @@ type ExistingPlayerLike = {
   displayName?: string;
   color?: string;
   hasSavedGames?: boolean;
+  isGuest?: boolean;
+  hasPasscode?: boolean;
   assignedCardArtIndex?: number | null;
 };
 
@@ -14,6 +16,8 @@ type RegisteredProfilePlayerLike = {
   displayName?: string;
   color?: string;
   hasSavedGames?: boolean;
+  isGuest?: boolean;
+  hasPasscode?: boolean;
   assignedCardArtIndex?: number | null;
 };
 
@@ -24,6 +28,8 @@ export type MergedRegisteredProfilePlayer = {
   displayName?: string;
   color?: string;
   hasSavedGames?: boolean;
+  isGuest?: boolean;
+  hasPasscode?: boolean;
   assignedCardArtIndex?: number | null;
 };
 
@@ -134,6 +140,8 @@ function mergeDuplicateSelectablePlayers(
       .find(Boolean),
     color: ordered.map((player) => normalizeOptionalString(player?.color)).find(Boolean),
     hasSavedGames: ordered.some((player) => Boolean(player?.hasSavedGames)),
+    isGuest: ordered.some((player) => player?.isGuest === true),
+    hasPasscode: ordered.some((player) => player?.hasPasscode === true),
     assignedCardArtIndex:
       ordered
         .map((player) => normalizeAssignedCardArtIndex(player?.assignedCardArtIndex))
@@ -192,6 +200,14 @@ export function mergeRegisteredProfileIntoPlayer(
       typeof profile?.hasSavedGames === "boolean"
         ? profile.hasSavedGames
         : Boolean(existing?.hasSavedGames),
+    isGuest:
+      typeof profile?.isGuest === "boolean"
+        ? profile.isGuest
+        : Boolean(existing?.isGuest),
+    hasPasscode:
+      typeof profile?.hasPasscode === "boolean"
+        ? profile.hasPasscode
+        : Boolean(existing?.hasPasscode),
     assignedCardArtIndex:
       incomingAssignedCardArtIndex ?? existingAssignedCardArtIndex ?? null,
   };

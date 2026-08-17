@@ -63,10 +63,10 @@ const ANALYTICS_HUB_CARDS: HubCard[] = [
 
 export const PROFILE_MANAGEMENT_CARD: HubCard = {
   key: "profile-management",
-  title: "Profile Management",
-  description: "Profile Picture",
+  title: "Manage Users/Groups",
+  description: "Username, passcode & groups",
   route: APP_ROUTES.roster,
-  iconKey: "billBendo",
+  iconKey: "moneyHub",
   eyebrow: "Account",
   layout: "graphic-horizontal",
   fullWidth: true,
@@ -136,6 +136,7 @@ const BRIDGE_DESTINATIONS: HubCard[] = [
     eyebrow: "Reference",
     bestFor: "Metric lookup",
   },
+  PROFILE_MANAGEMENT_CARD,
 ];
 
 function clone(cards: HubCard[]) {

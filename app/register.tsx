@@ -14,18 +14,19 @@ import AppHeader from "@/components/ui/AppHeader";
 import ProfileAppearancePicker from "@/components/player/ProfileAppearancePicker";
 import PageShell from "@/components/ui/PageShell";
 import SectionCard from "@/components/ui/SectionCard";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 import Text from "@/components/ui/Text";
-import {
-  buildDuplicateDisplayNameMessage,
-  findDisplayNameConflict,
-} from "@/lib/auth/displayNameUniqueness";
 import {
   buildSavedAuthProfile,
   getImmediateProfileUserId,
 } from "@/lib/auth/registerFlow";
 import { clearPendingAuthIntent } from "@/lib/auth/pendingAuthIntent";
 import { loadHydratedCloudState } from "@/lib/cloud/loadHydratedCloudState";
-import { loadRegisteredProfiles } from "@/lib/cloud/loadRegisteredProfiles";
+import {
+  claimGuestProfile,
+  isValidPlayerPasscode,
+  isValidPlayerUsername,
+} from "@/lib/cloud/playerAccess";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import {
   buildSupabaseRedirectUrl,
@@ -46,6 +47,13 @@ function normalizePlayerName(value: string) {
   return value.trim();
 }
 
+type ProfileMode = "new-player" | "claim-guest";
+
+const PROFILE_MODE_ITEMS = [
+  { key: "new-player" as ProfileMode, label: "New player" },
+  { key: "claim-guest" as ProfileMode, label: "Claim guest" },
+];
+
 export default function RegisterScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -62,7 +70,8 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [playerName, setPlayerName] = useState(authProfile?.player_name ?? "");
-  const [displayName, setDisplayName] = useState(authProfile?.display_name ?? "");
+  const [guestPasscode, setGuestPasscode] = useState("");
+  const [profileMode, setProfileMode] = useState<ProfileMode>("new-player");
   const [favoriteColor, setFavoriteColor] = useState<CardColor | null>(
     normalizePreferredProfileColor(authProfile?.favorite_color),
   );
@@ -75,20 +84,28 @@ export default function RegisterScreen() {
   const canSubmit = useMemo(() => {
     const normalizedPlayerName = normalizePlayerName(playerName);
 
-    if (!normalizedPlayerName) {
+    if (!isValidPlayerUsername(normalizedPlayerName)) {
       return false;
     }
 
-    if (!favoriteColor) {
+    if (profileMode === "claim-guest" && !isValidPlayerPasscode(guestPasscode)) {
       return false;
     }
 
-    if (needsProfileOnly) {
-      return true;
+    if (profileMode === "new-player" && !favoriteColor) {
+      return false;
     }
 
-    return email.trim().length > 0 && password.trim().length >= 6;
-  }, [email, favoriteColor, needsProfileOnly, password, playerName]);
+    return needsProfileOnly || (email.trim().length > 0 && password.trim().length >= 6);
+  }, [
+    email,
+    favoriteColor,
+    guestPasscode,
+    needsProfileOnly,
+    password,
+    playerName,
+    profileMode,
+  ]);
 
   const assignedCardArtIndex = useMemo(
     () =>
@@ -106,20 +123,10 @@ export default function RegisterScreen() {
   ) {
     const payload = buildProfileAppearanceSavePayload({
       playerName,
-      displayName,
+      displayName: null,
       favoriteColor: nextFavoriteColor,
       assignedCardArtIndex: nextAssignedCardArtIndex,
     });
-
-    const conflictingProfile = findDisplayNameConflict({
-      displayName: payload.display_name,
-      currentUserId: userId,
-      profiles: await loadRegisteredProfiles(),
-    });
-
-    if (conflictingProfile) {
-      throw new Error(buildDuplicateDisplayNameMessage(payload.display_name));
-    }
 
     let { error } = await supabase.from("profiles").upsert(
       {
@@ -158,24 +165,37 @@ export default function RegisterScreen() {
     setMessage(null);
 
     try {
-      if (!favoriteColor) {
+      if (profileMode === "new-player" && !favoriteColor) {
         setMessage("Choose a preferred color first.");
         return;
       }
 
       if (needsProfileOnly && authSession?.user?.id) {
+        if (profileMode === "claim-guest") {
+          await claimGuestProfile({
+            username: playerName,
+            passcode: guestPasscode,
+          });
+          const hydratedSnapshot = await loadHydratedCloudState(authSession);
+          hydrateCloudSnapshot(hydratedSnapshot);
+          setPasswordRecoveryPending(false);
+          await clearPendingAuthIntent();
+          router.replace(buildHomeRoute());
+          return;
+        }
+
+        if (!favoriteColor) return;
         await saveProfile(authSession.user.id, favoriteColor, assignedCardArtIndex);
         const savedProfile = buildSavedAuthProfile(
           authSession.user.id,
           playerName,
-          displayName,
+          "",
           favoriteColor,
           assignedCardArtIndex,
         );
         const savedRegisteredProfile = {
           id: authSession.user.id,
           name: normalizePlayerName(playerName),
-          displayName: displayName.trim() || undefined,
           color: favoriteColor,
           assignedCardArtIndex,
           hasSavedGames: false,
@@ -209,10 +229,13 @@ export default function RegisterScreen() {
             type: "email",
           }),
           data: {
-            player_name: normalizePlayerName(playerName),
-            display_name: displayName.trim() || undefined,
-            favorite_color: favoriteColor,
-            assigned_card_art_index: assignedCardArtIndex ?? undefined,
+            ...(profileMode === "new-player"
+              ? {
+                  player_name: normalizePlayerName(playerName),
+                  favorite_color: favoriteColor,
+                  assigned_card_art_index: assignedCardArtIndex ?? undefined,
+                }
+              : {}),
           },
         },
       });
@@ -224,18 +247,34 @@ export default function RegisterScreen() {
       const userId = getImmediateProfileUserId(data);
 
       if (userId) {
-        await saveProfile(userId, favoriteColor, assignedCardArtIndex);
-        setAuthSession({
+        const nextSession = {
           user: {
             id: userId,
             email: data.session?.user?.email ?? email.trim(),
           },
-        });
+        };
+        setAuthSession(nextSession);
+
+        if (profileMode === "claim-guest") {
+          await claimGuestProfile({
+            username: playerName,
+            passcode: guestPasscode,
+          });
+          const hydratedSnapshot = await loadHydratedCloudState(nextSession);
+          hydrateCloudSnapshot(hydratedSnapshot);
+          setPasswordRecoveryPending(false);
+          await clearPendingAuthIntent();
+          router.replace(buildHomeRoute());
+          return;
+        }
+
+        if (!favoriteColor) return;
+        await saveProfile(userId, favoriteColor, assignedCardArtIndex);
         setAuthProfile(
           buildSavedAuthProfile(
             userId,
             playerName,
-            displayName,
+            "",
             favoriteColor,
             assignedCardArtIndex,
           ),
@@ -243,7 +282,6 @@ export default function RegisterScreen() {
         upsertRegisteredProfile({
           id: userId,
           name: normalizePlayerName(playerName),
-          displayName: displayName.trim() || undefined,
           color: favoriteColor,
           assignedCardArtIndex,
           hasSavedGames: false,
@@ -254,7 +292,11 @@ export default function RegisterScreen() {
         return;
       }
 
-      setMessage("Account created. Check your email, then log in to finish profile setup.");
+      setMessage(
+        profileMode === "claim-guest"
+          ? "Account created. Check your email, then log in and claim the guest with its username and passcode."
+          : "Account created. Check your email, then log in to finish profile setup.",
+      );
     } catch (error) {
       setMessage(formatSupabaseConfigError(error));
     } finally {
@@ -287,8 +329,22 @@ export default function RegisterScreen() {
 
           <SectionCard
             eyebrow={needsProfileOnly ? "Commander Profile" : "Account Setup"}
-            title={needsProfileOnly ? "Finish profile" : "Create account"}
+            title={
+              profileMode === "claim-guest"
+                ? "Claim guest profile"
+                : needsProfileOnly
+                  ? "Finish profile"
+                  : "Create account"
+            }
           >
+            <SegmentedControl
+              items={PROFILE_MODE_ITEMS}
+              value={profileMode}
+              onChange={(nextMode) => {
+                setProfileMode(nextMode);
+                setMessage(null);
+              }}
+            />
             {!needsProfileOnly ? (
               <>
                 <TextInput
@@ -332,7 +388,9 @@ export default function RegisterScreen() {
             <TextInput
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="Public player name"
+              placeholder={
+                profileMode === "claim-guest" ? "Guest username" : "Username"
+              }
               placeholderTextColor={theme.colors.text.muted}
               style={[
                 styles.input,
@@ -346,32 +404,41 @@ export default function RegisterScreen() {
               onChangeText={setPlayerName}
             />
 
-            <TextInput
-              autoCapitalize="words"
-              autoCorrect={false}
-              placeholder="Display name (optional)"
-              placeholderTextColor={theme.colors.text.muted}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.colors.surface.alloy,
-                  borderColor: theme.colors.border.subtle,
-                  color: theme.colors.text.primary,
-                },
-              ]}
-              value={displayName}
-              onChangeText={setDisplayName}
-            />
-
-            <ProfileAppearancePicker
-              title="Color"
-              subtitle="Card matches color."
-              favoriteColor={favoriteColor}
-              assignedCardArtIndex={assignedCardArtIndex}
-              onSelectFavoriteColor={setFavoriteColor}
-              allowCardSelection={false}
-              autoAssignHint="Card matches color."
-            />
+            {profileMode === "claim-guest" ? (
+              <>
+                <TextInput
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="Guest passcode"
+                  placeholderTextColor={theme.colors.text.muted}
+                  secureTextEntry
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: theme.colors.surface.alloy,
+                      borderColor: theme.colors.border.subtle,
+                      color: theme.colors.text.primary,
+                    },
+                  ]}
+                  value={guestPasscode}
+                  onChangeText={setGuestPasscode}
+                />
+                <Text style={styles.message}>
+                  The guest's games, stats, color, and card art move with the profile.
+                  Your signed-in email becomes its account login.
+                </Text>
+              </>
+            ) : (
+              <ProfileAppearancePicker
+                title="Color"
+                subtitle="Card matches color."
+                favoriteColor={favoriteColor}
+                assignedCardArtIndex={assignedCardArtIndex}
+                onSelectFavoriteColor={setFavoriteColor}
+                allowCardSelection={false}
+                autoAssignHint="Card matches color."
+              />
+            )}
 
             {message ? (
               <Text
@@ -392,11 +459,15 @@ export default function RegisterScreen() {
                 onPress={handleRegister}
                 title={
                   submitting
-                    ? needsProfileOnly
-                      ? "Saving Profile..."
+                    ? profileMode === "claim-guest"
+                      ? "Claiming Guest..."
+                      : needsProfileOnly
+                        ? "Saving Profile..."
                       : "Creating Account..."
-                    : needsProfileOnly
-                      ? "Save Profile"
+                    : profileMode === "claim-guest"
+                      ? "Claim Guest"
+                      : needsProfileOnly
+                        ? "Save Profile"
                       : "Create Account"
                 }
                 icon={

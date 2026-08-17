@@ -129,11 +129,11 @@ run("Analytics and players hubs expose the consolidated navigation model", () =>
   const bridgeCards = getBridgeDestinations();
   assert.deepEqual(
     bridgeCards.map((card) => card.key),
-    ["history", "analytics", "players", "definitions"]
+    ["history", "analytics", "players", "definitions", "profile-management"]
   );
   assert.deepEqual(
     bridgeCards.map((card) => card.iconKey),
-    ["miss", "shield", "orangePerson", "thruster"]
+    ["miss", "shield", "orangePerson", "thruster", "moneyHub"]
   );
   assert.equal(
     bridgeCards.find((card) => card.key === "players")?.title,
@@ -143,10 +143,10 @@ run("Analytics and players hubs expose the consolidated navigation model", () =>
     bridgeCards.find((card) => card.key === "analytics")?.route,
     APP_ROUTES.analytics
   );
-  // The hubs tab is a 2x2 grid of equal tiles, so nothing may claim a full row.
-  assert.ok(
-    bridgeCards.every((card) => !card.fullWidth),
-    "Expected every bridge destination to be a half-width tile"
+  assert.equal(
+    bridgeCards.find((card) => card.key === "profile-management")?.fullWidth,
+    true,
+    "Expected Manage Users/Groups to use the final full-width row"
   );
 });
 

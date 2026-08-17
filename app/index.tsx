@@ -13,6 +13,10 @@ import {
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
 import BugReportModal from "@/components/support/BugReportModal";
+import PlayerAccessModal, {
+  type PlayerAccessMode,
+  type PlayerAccessOption,
+} from "@/components/home/PlayerAccessModal";
 import ActionButton from "@/components/ui/ActionButton";
 import AppHeader from "@/components/ui/AppHeader";
 import EmptyStateCard from "@/components/ui/EmptyStateCard";
@@ -26,6 +30,15 @@ import { runSignOutFlow } from "@/lib/auth/signOutFlow";
 import { getAppVersion } from "@/lib/telemetry/errorReporting";
 import { getEloScreen } from "@/lib/cloud/analytics/getEloScreen";
 import {
+  createGuestProfile,
+  verifyPlayerForGame,
+} from "@/lib/cloud/playerAccess";
+import {
+  authorizeSharedGroupForFastSetup,
+  isGroupFastSetupAuthorized,
+} from "@/lib/cloud/sharedGroups";
+import { formatSupabaseConfigError } from "@/lib/supabase";
+import {
   useAuthBootstrapStatus,
   useAuthSession,
   useAuthProfile,
@@ -36,6 +49,7 @@ import {
   useGroups,
   usePlayers,
   useActiveGame,
+  useStore,
 } from "@/store/useStore";
 import { getBridgeDestinations, type HubCard } from "@/utils/appHubs";
 import {
@@ -48,6 +62,10 @@ import {
   ensureRequiredPlayerSelection,
   filterGroupsForSignedInPlayer,
 } from "@/utils/homeCommandSelection";
+import {
+  matchesPlayerNameQuery,
+  resolvePlayerDisplayName,
+} from "@/utils/playerDisplayName";
 import { buildPlayerSelectionPreview } from "@/utils/playerSelectionPreview";
 import { buildCloudPlayableCommandDirectory } from "@/utils/registeredProfilePlayer";
 
@@ -84,6 +102,9 @@ export default function HomeScreen() {
   const rawGroups = useGroups() ?? [];
   const rawGames = useGames() ?? [];
   const activeGame = useActiveGame();
+  const upsertRegisteredProfile = useStore(
+    (state) => state.upsertRegisteredProfile,
+  );
   const {
     gameDraft,
     replaceDraft,
@@ -114,6 +135,19 @@ export default function HomeScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<GroupLike | null>(null);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const [playerAccessMode, setPlayerAccessMode] =
+    useState<PlayerAccessMode>(null);
+  const [pendingAccessPlayer, setPendingAccessPlayer] =
+    useState<PlayerAccessOption | null>(null);
+  const [pendingAccessIds, setPendingAccessIds] = useState<string[]>([]);
+  const [pendingAccessGroup, setPendingAccessGroup] =
+    useState<GroupLike | null>(null);
+  const [authorizedPlayerIds, setAuthorizedPlayerIds] = useState<string[]>([]);
+  const [playerAccessBusy, setPlayerAccessBusy] = useState(false);
+  const [playerAccessError, setPlayerAccessError] = useState<string | null>(null);
+  const [playerAccessNotice, setPlayerAccessNotice] = useState<string | null>(null);
+  const [checkingGroupId, setCheckingGroupId] = useState<string | null>(null);
+  const selectionDraftId = useRef(gameDraft?.draftId ?? createUuid()).current;
 
   const startPulse = useRef(new Animated.Value(1)).current;
   const startGlowOpacity = useRef(new Animated.Value(0)).current;
@@ -250,6 +284,24 @@ export default function HomeScreen() {
     return "";
   }, [authProfile?.id, authSession?.user?.id, commandPlayers, playerIdAliases]);
 
+  const existingPlayerOptions = useMemo(
+    () =>
+      rankedPlayers.filter(
+        (player) =>
+          !player.isGuest &&
+          player.id !== signedInPlayerId &&
+          !selectedIds.includes(player.id),
+      ),
+    [rankedPlayers, selectedIds, signedInPlayerId],
+  );
+  const existingGuestOptions = useMemo(
+    () =>
+      rankedPlayers.filter(
+        (player) => player.isGuest && !selectedIds.includes(player.id),
+      ),
+    [rankedPlayers, selectedIds],
+  );
+
   const visibleGroups = useMemo(
     () => filterGroupsForSignedInPlayer(rankedGroups, signedInPlayerId),
     [rankedGroups, signedInPlayerId]
@@ -259,15 +311,19 @@ export default function HomeScreen() {
     () => rankedPlayers.filter((player) => selectedIds.includes(player.id)),
     [rankedPlayers, selectedIds]
   );
+  const selectedPlayersInOrder = useMemo(
+    () =>
+      selectedIds.flatMap((playerId) => {
+        const player = playersById[playerId];
+        return player ? [player] : [];
+      }),
+    [playersById, selectedIds],
+  );
 
   const filteredPlayers = useMemo(() => {
-    const query = playerSearch.trim().toLowerCase();
+    const query = playerSearch.trim();
     if (!query) return rankedPlayers;
-    return rankedPlayers.filter((player) =>
-      [player.name, player.initials].some((value) =>
-        String(value ?? "").toLowerCase().includes(query)
-      )
-    );
+    return rankedPlayers.filter((player) => matchesPlayerNameQuery(player, query));
   }, [playerSearch, rankedPlayers]);
   const collapsedPlayerPreview = useMemo(
     () =>
@@ -319,7 +375,7 @@ export default function HomeScreen() {
       return groupKey === selectedCrewKey;
     }) ?? null;
   }, [playerIdAliases, selectedCrewKey, selectedGroup, visibleGroups]);
-  const selectedCrewLabel = selectedPlayers
+  const selectedCrewLabel = selectedPlayersInOrder
     .map((player) => player.name?.trim())
     .filter((name): name is string => Boolean(name))
     .join(" • ");
@@ -496,28 +552,254 @@ export default function HomeScreen() {
     ]).start();
   };
 
-  const togglePlayer = (id: string) => {
-    setSelectedGroup(null);
-    setSelectedIds((prev) => {
-      const exists = prev.includes(id);
-      if (exists) {
-        if (id === signedInPlayerId) return prev;
-        triggerRemovePulse();
-        return prev.filter((x) => x !== id);
-      }
-      if (prev.length >= 5) return prev;
-      return ensureRequiredPlayerSelection([...prev, id], signedInPlayerId);
-    });
+  const announcePlayerAdded = (message: string) => {
+    setPlayerAccessNotice(message);
+    Alert.alert("Added to game", message);
   };
 
-  const loadGroup = (group: GroupLike) => {
+  const closePlayerAccess = () => {
+    if (playerAccessBusy) return;
+    setPlayerAccessMode(null);
+    setPendingAccessPlayer(null);
+    setPendingAccessIds([]);
+    setPendingAccessGroup(null);
+    setPlayerAccessError(null);
+  };
+
+  const openPlayerVerification = (
+    player: PlayerAccessOption,
+    remainingIds: string[] = [],
+    group: GroupLike | null = null,
+  ) => {
+    setPendingAccessPlayer(player);
+    setPendingAccessIds(remainingIds);
+    setPendingAccessGroup(group);
+    setPlayerAccessError(null);
+    setPlayerAccessMode("passcode");
+  };
+
+  const removePlayerFromGame = (player: PlayerLike) => {
+    if (player.id === signedInPlayerId) return;
+
+    setSelectedGroup(null);
+    setSelectedIds((current) => current.filter((id) => id !== player.id));
+    setAuthorizedPlayerIds((current) =>
+      current.filter((id) => id !== player.id),
+    );
+    setPlayerAccessNotice(
+      `${resolvePlayerDisplayName(player)} removed from the game.`,
+    );
+    triggerRemovePulse();
+  };
+
+  const requestPlayerAccess = (player: PlayerLike) => {
+    if (selectedIds.includes(player.id)) {
+      removePlayerFromGame(player);
+      return;
+    }
+
+    if (selectedIds.length >= 5) return;
+
+    if (player.id === signedInPlayerId) {
+      setSelectedIds((current) =>
+        ensureRequiredPlayerSelection([...current, player.id], signedInPlayerId),
+      );
+      return;
+    }
+
+    openPlayerVerification(player);
+  };
+
+  const togglePlayer = (id: string) => {
+    const player = rankedPlayers.find((candidate) => candidate.id === id);
+    if (!player) return;
+    requestPlayerAccess(player);
+  };
+
+  const loadGroup = async (group: GroupLike) => {
+    if (checkingGroupId || playerAccessBusy) {
+      return;
+    }
+
+    const groupPlayerIds = ensureRequiredPlayerSelection(
+      group.playerIds,
+      signedInPlayerId,
+    ).slice(0, 5);
+
+    setCheckingGroupId(group.id);
+
+    try {
+      const hasFastSetup = await isGroupFastSetupAuthorized(group.id);
+
+      if (hasFastSetup) {
+        setSelectedGroup(group);
+        setSelectedIds(groupPlayerIds);
+        announcePlayerAdded(`${group.name} added to the game.`);
+        return;
+      }
+
+      const idsNeedingAccess = groupPlayerIds.filter(
+        (id) =>
+          id !== signedInPlayerId && !authorizedPlayerIds.includes(id),
+      );
+
+      if (!idsNeedingAccess.length) {
+        await authorizeSharedGroupForFastSetup({
+          draftId: gameDraft?.draftId ?? selectionDraftId,
+          groupId: group.id,
+        });
+        setSelectedGroup(group);
+        setSelectedIds(groupPlayerIds);
+        announcePlayerAdded(`${group.name} added to the game.`);
+        return;
+      }
+
+      const [firstId, ...remainingIds] = idsNeedingAccess;
+      const firstPlayer = rankedPlayers.find((player) => player.id === firstId);
+      if (!firstPlayer) {
+        throw new Error("A member of this saved group is no longer available.");
+      }
+      openPlayerVerification(firstPlayer, remainingIds, group);
+    } catch (error) {
+      Alert.alert("Couldn't load group", formatSupabaseConfigError(error));
+    } finally {
+      setCheckingGroupId(null);
+    }
+  };
+
+  const finishPendingGroupAuthorization = async (group: GroupLike) => {
+    await authorizeSharedGroupForFastSetup({
+      draftId: gameDraft?.draftId ?? selectionDraftId,
+      groupId: group.id,
+    });
+
     setSelectedGroup(group);
-    setSelectedIds(ensureRequiredPlayerSelection(group.playerIds, signedInPlayerId));
+    setSelectedIds(
+      ensureRequiredPlayerSelection(group.playerIds, signedInPlayerId).slice(0, 5),
+    );
+    announcePlayerAdded(`${group.name} added to the game.`);
+  };
+
+  const closeCompletedPlayerAccess = () => {
+    setPlayerAccessMode(null);
+    setPendingAccessPlayer(null);
+    setPendingAccessIds([]);
+    setPendingAccessGroup(null);
+  };
+
+  const handleVerifyPlayer = async (passcode: string) => {
+    if (!pendingAccessPlayer || playerAccessBusy) return;
+
+    setPlayerAccessBusy(true);
+    setPlayerAccessError(null);
+
+    try {
+      const verified = await verifyPlayerForGame({
+        draftId: gameDraft?.draftId ?? selectionDraftId,
+        profileId: pendingAccessPlayer.id,
+        passcode,
+      });
+
+      if (!verified) {
+        setPlayerAccessError("Incorrect passcode.");
+        return;
+      }
+
+      setAuthorizedPlayerIds((current) =>
+        current.includes(pendingAccessPlayer.id)
+          ? current
+          : [...current, pendingAccessPlayer.id],
+      );
+
+      const remainingPlayers = pendingAccessIds.flatMap((id) => {
+        const player = rankedPlayers.find((candidate) => candidate.id === id);
+        return player ? [player] : [];
+      });
+      const [nextPlayer, ...remaining] = remainingPlayers;
+
+      if (nextPlayer) {
+        openPlayerVerification(
+          nextPlayer,
+          remaining.map((player) => player.id),
+          pendingAccessGroup,
+        );
+        return;
+      }
+
+      if (pendingAccessGroup) {
+        await finishPendingGroupAuthorization(pendingAccessGroup);
+      } else {
+        setSelectedGroup(null);
+        setSelectedIds((current) =>
+          ensureRequiredPlayerSelection(
+            [...current, pendingAccessPlayer.id],
+            signedInPlayerId,
+          ).slice(0, 5),
+        );
+        announcePlayerAdded(
+          `${resolvePlayerDisplayName(pendingAccessPlayer)} added to the game.`,
+        );
+      }
+
+      closeCompletedPlayerAccess();
+    } catch (error) {
+      setPlayerAccessError(formatSupabaseConfigError(error));
+    } finally {
+      setPlayerAccessBusy(false);
+    }
+  };
+
+  const handleCreateGuest = async (input: {
+    username: string;
+    passcode: string;
+  }) => {
+    if (playerAccessBusy || selectedIds.length >= 5) return;
+
+    setPlayerAccessBusy(true);
+    setPlayerAccessError(null);
+
+    try {
+      const guest = await createGuestProfile(input);
+      const verified = await verifyPlayerForGame({
+        draftId: gameDraft?.draftId ?? selectionDraftId,
+        profileId: guest.id,
+        passcode: input.passcode,
+      });
+
+      if (!verified) {
+        throw new Error("The guest was created but could not be authorized.");
+      }
+
+      upsertRegisteredProfile({
+        id: guest.id,
+        name: guest.player_name,
+        color: guest.favorite_color ?? undefined,
+        assignedCardArtIndex: guest.assigned_card_art_index ?? null,
+        hasSavedGames: false,
+        isGuest: true,
+        hasPasscode: true,
+      });
+      setAuthorizedPlayerIds((current) => [...current, guest.id]);
+      setSelectedGroup(null);
+      setSelectedIds((current) =>
+        ensureRequiredPlayerSelection(
+          [...current, guest.id],
+          signedInPlayerId,
+        ).slice(0, 5),
+      );
+      announcePlayerAdded(`${guest.player_name} added to the game.`);
+      setPlayerAccessMode(null);
+    } catch (error) {
+      setPlayerAccessError(formatSupabaseConfigError(error));
+    } finally {
+      setPlayerAccessBusy(false);
+    }
   };
 
   const clearSelection = () => {
     setSelectedGroup(null);
     setSelectedIds(ensureRequiredPlayerSelection([], signedInPlayerId));
+    setPlayerAccessNotice(null);
     triggerRemovePulse();
   };
 
@@ -591,7 +873,7 @@ export default function HomeScreen() {
 
     await replaceDraft({
       profileId: authSession.user.id,
-      draftId: gameDraft?.draftId ?? createUuid(),
+      draftId: gameDraft?.draftId ?? selectionDraftId,
       phase: "setup",
       revision: gameDraft?.revision ?? 0,
       updatedAt: timestamp,
@@ -635,8 +917,7 @@ export default function HomeScreen() {
     String(authProfile?.id ?? authSession?.user?.id ?? "").trim() || null;
   const reporterName =
     String(
-      authProfile?.display_name ??
-        authProfile?.player_name ??
+      authProfile?.player_name ??
         authSession?.user?.email ??
         "",
     ).trim() || "Unknown player";
@@ -705,6 +986,59 @@ export default function HomeScreen() {
                 </SectionCard>
               ) : null}
                 <SectionCard
+                  eyebrow="Current Game"
+                  title="Players in this game"
+                  subtitle={`${selectedPlayersInOrder.length} of 5 seats filled`}
+                >
+                  {playerAccessNotice ? (
+                    <View style={styles.playerAddedNotice}>
+                      <Text style={styles.playerAddedNoticeText}>
+                        {playerAccessNotice}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.gameRosterList}>
+                    {selectedPlayersInOrder.map((player, index) => {
+                      const isHost = player.id === signedInPlayerId;
+                      return (
+                        <Pressable
+                          key={player.id}
+                          accessibilityRole={isHost ? undefined : "button"}
+                          accessibilityLabel={
+                            isHost
+                              ? `${resolvePlayerDisplayName(player)}, host`
+                              : `Remove ${resolvePlayerDisplayName(player)} from game`
+                          }
+                          disabled={isHost}
+                          onPress={() => removePlayerFromGame(player)}
+                          style={({ pressed }) => [
+                            styles.gameRosterRow,
+                            !isHost && styles.gameRosterRowRemovable,
+                            pressed && !isHost && styles.gameRosterRowPressed,
+                          ]}
+                        >
+                          <View style={styles.gameRosterNumber}>
+                            <Text style={styles.gameRosterNumberText}>{index + 1}</Text>
+                          </View>
+                          <Text style={styles.gameRosterName}>
+                            {resolvePlayerDisplayName(player)}
+                          </Text>
+                          <Text
+                            style={
+                              isHost
+                                ? styles.gameRosterHost
+                                : styles.gameRosterRemove
+                            }
+                          >
+                            {isHost ? "HOST" : "REMOVE"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </SectionCard>
+
+                <SectionCard
                   eyebrow="Mission Prep"
                   title={commandPrepTitle}
                   actions={
@@ -732,13 +1066,45 @@ export default function HomeScreen() {
                 </View>
               </SectionCard>
 
-              <SectionCard title="Players">
+              <SectionCard
+                title="Add to game"
+                subtitle="Every player or guest verifies with their own passcode."
+              >
+                <View style={styles.addToGameActions}>
+                  <ActionButton
+                    title="Existing player"
+                    variant="secondary"
+                    disabled={selectedIds.length >= 5}
+                    onPress={() => {
+                      setPlayerAccessError(null);
+                      setPlayerAccessMode("existing-player");
+                    }}
+                    style={styles.addToGameButton}
+                  />
+                  <ActionButton
+                    title="Existing guest"
+                    variant="secondary"
+                    disabled={selectedIds.length >= 5}
+                    onPress={() => {
+                      setPlayerAccessError(null);
+                      setPlayerAccessMode("existing-guest");
+                    }}
+                    style={styles.addToGameButton}
+                  />
+                  <ActionButton
+                    title="New guest"
+                    disabled={selectedIds.length >= 5}
+                    onPress={() => {
+                      setPlayerAccessError(null);
+                      setPlayerAccessMode("new-guest");
+                    }}
+                    style={styles.addToGameButton}
+                  />
+                </View>
                 {rankedPlayers.length === 0 ? (
                   <EmptyStateCard
                     message="No player profiles found."
-                    hint="Create profiles in the Roster to get started."
-                    actionLabel="Open Roster"
-                    onAction={() => router.push(APP_ROUTES.roster)}
+                    hint="Create a new guest here or register a player account."
                   />
                 ) : (
                   <View style={styles.commandPlayerPicker}>
@@ -754,7 +1120,7 @@ export default function HomeScreen() {
                     />
 
                     <Text style={styles.commandPlayerHint}>
-                      Tap to select. Hold to open a profile.
+                      Tap to select or remove. Hold to open a profile.
                     </Text>
                     <View style={styles.commandPlayerMetaRow}>
                       <Text style={styles.commandPlayerMetaText}>
@@ -833,7 +1199,9 @@ export default function HomeScreen() {
                           key={group.id}
                           group={group}
                           selected={activeSelectedGroup?.id === group.id}
-                          onPress={() => loadGroup(group)}
+                          onPress={() => {
+                            void loadGroup(group);
+                          }}
                           playersById={playersById}
                         />
                     ))}
@@ -865,7 +1233,7 @@ export default function HomeScreen() {
                     key={card.key}
                     title={card.title}
                     description={card.description}
-                    emphasis="large"
+                    emphasis={bridgeDestinations.length > 4 ? "default" : "large"}
                     iconKey={card.iconKey ?? null}
                     layout={card.layout ?? (card.iconKey ? "graphic" : "text")}
                     tint={
@@ -903,11 +1271,105 @@ export default function HomeScreen() {
         reporterName={reporterName}
         visible={bugReportOpen}
       />
+      <PlayerAccessModal
+        mode={playerAccessMode}
+        candidates={
+          playerAccessMode === "existing-guest"
+            ? existingGuestOptions
+            : existingPlayerOptions
+        }
+        pendingPlayer={pendingAccessPlayer}
+        busy={playerAccessBusy}
+        error={playerAccessError}
+        onClose={closePlayerAccess}
+        onSelectExisting={(player) => openPlayerVerification(player)}
+        onCreateGuest={(input) => {
+          void handleCreateGuest(input);
+        }}
+        onVerify={(passcode) => {
+          void handleVerifyPlayer(passcode);
+        }}
+      />
     </PageShell>
   );
 }
 
 const styles = StyleSheet.create({
+  addToGameActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  addToGameButton: {
+    flexGrow: 1,
+    minWidth: 130,
+  },
+  playerAddedNotice: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(52,211,153,0.38)",
+    backgroundColor: "rgba(16,185,129,0.14)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  playerAddedNoticeText: {
+    color: "#A7F3D0",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  gameRosterList: {
+    gap: 8,
+  },
+  gameRosterRow: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  gameRosterRowRemovable: {
+    borderColor: "rgba(248,113,113,0.18)",
+  },
+  gameRosterRowPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.99 }],
+  },
+  gameRosterNumber: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(96,165,250,0.18)",
+  },
+  gameRosterNumberText: {
+    color: "#BFDBFE",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  gameRosterName: {
+    flex: 1,
+    color: "#F8FBFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  gameRosterHost: {
+    color: "#67E8F9",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+  gameRosterRemove: {
+    color: "#FCA5A5",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
   homeShellContent: {
     flex: 1,
   },
