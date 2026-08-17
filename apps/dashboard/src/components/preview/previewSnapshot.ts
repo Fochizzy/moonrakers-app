@@ -31,7 +31,7 @@ export type PreviewPlayer = {
 
 /** Colour is each player's most recent `color_snapshot`. */
 export const PREVIEW_PLAYERS: PreviewPlayer[] = [
-  { id: "revloki", name: "Revloki", colorName: "yellow", accent: "#ecc58a" },
+  { id: "revloki", name: "RevLoki", colorName: "yellow", accent: "#ecc58a" },
   { id: "gregmtg", name: "GregMtG", colorName: "blue", accent: "#40acc9" },
   { id: "fochizzy", name: "Fochizzy", colorName: "purple", accent: "#d082d7" },
   { id: "lurker", name: "Lurker", colorName: "green", accent: "#96c260" },

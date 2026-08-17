@@ -88,7 +88,7 @@ describe("PreviewView", () => {
     expect(within(crew).getByText("Lurker")).toBeInTheDocument();
     expect(within(crew).getByText("GregMtG")).toBeInTheDocument();
     expect(within(crew).getByText("Fochizzy")).toBeInTheDocument();
-    expect(within(crew).getByText("Revloki")).toBeInTheDocument();
+    expect(within(crew).getByText("RevLoki")).toBeInTheDocument();
   });
 
   it("leads with the chart gallery and renders the selected chart", () => {
