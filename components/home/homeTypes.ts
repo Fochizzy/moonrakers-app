@@ -3,6 +3,8 @@ export type Tab = "game" | "leaderboard" | "hubs";
 export type PlayerLike = {
   id: string;
   name?: string;
+  /** The handle from `profiles.display_name`; this is what gets published. */
+  displayName?: string;
   color?: string;
   initials?: string;
   assignedCardArtIndex?: number | null;

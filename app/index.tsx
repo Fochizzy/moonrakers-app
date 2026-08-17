@@ -48,6 +48,7 @@ import {
   ensureRequiredPlayerSelection,
   filterGroupsForSignedInPlayer,
 } from "@/utils/homeCommandSelection";
+import { matchesPlayerNameQuery } from "@/utils/playerDisplayName";
 import { buildPlayerSelectionPreview } from "@/utils/playerSelectionPreview";
 import { buildCloudPlayableCommandDirectory } from "@/utils/registeredProfilePlayer";
 
@@ -261,13 +262,9 @@ export default function HomeScreen() {
   );
 
   const filteredPlayers = useMemo(() => {
-    const query = playerSearch.trim().toLowerCase();
+    const query = playerSearch.trim();
     if (!query) return rankedPlayers;
-    return rankedPlayers.filter((player) =>
-      [player.name, player.initials].some((value) =>
-        String(value ?? "").toLowerCase().includes(query)
-      )
-    );
+    return rankedPlayers.filter((player) => matchesPlayerNameQuery(player, query));
   }, [playerSearch, rankedPlayers]);
   const collapsedPlayerPreview = useMemo(
     () =>

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import PlayerCardIcon from "@/components/player/PlayerCardIcon";
 import Text from "@/components/ui/Text";
+import { resolvePlayerDisplayName } from "@/utils/playerDisplayName";
 import { getPlayerAccentColor } from "@/utils/turnTheme";
 import { SelectionShimmer } from "./SelectionShimmer";
 import type { PlayerLike } from "./homeTypes";
@@ -70,7 +71,7 @@ export function PlayerSelectionCard({
             ]}
             numberOfLines={1}
           >
-            {player.name ?? "Unknown"}
+            {resolvePlayerDisplayName(player)}
           </Text>
         </View>
 

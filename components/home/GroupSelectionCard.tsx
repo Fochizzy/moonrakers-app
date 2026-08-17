@@ -2,8 +2,8 @@ import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import Text from "@/components/ui/Text";
+import { resolvePlayerInitials } from "@/utils/playerDisplayName";
 import { SelectionShimmer } from "./SelectionShimmer";
-import { getInitials } from "./homeUtils";
 import type { GroupLike, PlayerLike } from "./homeTypes";
 
 export function GroupSelectionCard({
@@ -40,7 +40,7 @@ export function GroupSelectionCard({
 
         <View style={styles.groupInitialsRow}>
           <Text style={styles.groupInitialsText} numberOfLines={1} ellipsizeMode="tail">
-            {visiblePlayers.map((p) => p.initials || getInitials(p.name)).join(" ")}
+            {visiblePlayers.map((p) => resolvePlayerInitials(p)).join(" ")}
           </Text>
         </View>
       </View>
