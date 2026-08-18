@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,7 +26,10 @@ import {
   claimGuestProfile,
   isValidPlayerPasscode,
   isValidPlayerUsername,
+  lookupClaimableGuest,
+  type ClaimableGuestPreview,
 } from "@/lib/cloud/playerAccess";
+import { useNameAvailability } from "@/lib/cloud/useNameAvailability";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import {
   buildSupabaseRedirectUrl,
@@ -77,9 +80,54 @@ export default function RegisterScreen() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [guestPreview, setGuestPreview] = useState<ClaimableGuestPreview | null>(
+    null,
+  );
+  const [guestLookup, setGuestLookup] = useState<
+    "idle" | "checking" | "found" | "missing"
+  >("idle");
 
   const needsProfileOnly =
     Boolean(authSession?.user?.id) && !authProfile?.player_name;
+
+  const nameAvailability = useNameAvailability(
+    profileMode === "new-player" && !needsProfileOnly ? playerName : "",
+  );
+
+  // Claiming is one-way and cannot be replayed, so the guest is looked up and
+  // shown back before the form will commit to it.
+  useEffect(() => {
+    if (profileMode !== "claim-guest" || !isValidPlayerUsername(playerName)) {
+      setGuestPreview(null);
+      setGuestLookup("idle");
+      return undefined;
+    }
+
+    let active = true;
+    setGuestLookup("checking");
+
+    const timer = setTimeout(() => {
+      lookupClaimableGuest(playerName)
+        .then((preview) => {
+          if (!active) {
+            return;
+          }
+          setGuestPreview(preview);
+          setGuestLookup(preview ? "found" : "missing");
+        })
+        .catch(() => {
+          if (active) {
+            setGuestPreview(null);
+            setGuestLookup("idle");
+          }
+        });
+    }, 350);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [playerName, profileMode]);
 
   const canSubmit = useMemo(() => {
     const normalizedPlayerName = normalizePlayerName(playerName);
@@ -88,7 +136,18 @@ export default function RegisterScreen() {
       return false;
     }
 
-    if (profileMode === "claim-guest" && !isValidPlayerPasscode(guestPasscode)) {
+    if (profileMode === "claim-guest") {
+      if (!isValidPlayerPasscode(guestPasscode)) {
+        return false;
+      }
+
+      // Nothing is committed to a guest the lookup could not find.
+      if (guestLookup !== "found") {
+        return false;
+      }
+    }
+
+    if (profileMode === "new-player" && nameAvailability === "taken") {
       return false;
     }
 
@@ -100,7 +159,9 @@ export default function RegisterScreen() {
   }, [
     email,
     favoriteColor,
+    guestLookup,
     guestPasscode,
+    nameAvailability,
     needsProfileOnly,
     password,
     playerName,
@@ -405,6 +466,38 @@ export default function RegisterScreen() {
             />
 
             {profileMode === "claim-guest" ? (
+              guestLookup === "checking" ? (
+                <Text style={[styles.note, { color: theme.colors.text.muted }]}>
+                  Looking for that guest…
+                </Text>
+              ) : guestLookup === "missing" ? (
+                <Text style={[styles.note, styles.noteWarn]}>
+                  No unclaimed guest called {playerName.trim()}. Check the spelling
+                  with the host who created it.
+                </Text>
+              ) : guestPreview ? (
+                <View style={styles.previewCard}>
+                  <Text style={styles.previewTitle}>{guestPreview.username}</Text>
+                  <Text style={[styles.note, { color: theme.colors.text.secondary }]}>
+                    {guestPreview.gamesPlayed === 0
+                      ? "No games played yet."
+                      : `${guestPreview.gamesPlayed} game${
+                          guestPreview.gamesPlayed === 1 ? "" : "s"
+                        } will move to this account. This cannot be undone.`}
+                  </Text>
+                </View>
+              ) : null
+            ) : nameAvailability === "taken" ? (
+              <Text style={[styles.note, styles.noteWarn]}>
+                {playerName.trim()} is already taken.
+              </Text>
+            ) : nameAvailability === "free" ? (
+              <Text style={[styles.note, styles.noteOk]}>
+                {playerName.trim()} is free.
+              </Text>
+            ) : null}
+
+            {profileMode === "claim-guest" ? (
               <>
                 <TextInput
                   autoCapitalize="none"
@@ -493,6 +586,29 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
+  note: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  noteWarn: {
+    color: "#FCA5A5",
+  },
+  noteOk: {
+    color: "#6EE7B7",
+  },
+  previewCard: {
+    gap: 4,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: "rgba(103,232,249,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(103,232,249,0.34)",
+  },
+  previewTitle: {
+    color: "#F8FBFF",
+    fontSize: 17,
+    fontWeight: "800",
+  },
   pageContentFit: {
     flex: 1,
     justifyContent: "center",
