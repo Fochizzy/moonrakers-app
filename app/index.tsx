@@ -144,6 +144,10 @@ export default function HomeScreen() {
     useState<GroupLike | null>(null);
   const [authorizedPlayerIds, setAuthorizedPlayerIds] = useState<string[]>([]);
   const [playerAccessBusy, setPlayerAccessBusy] = useState(false);
+  const [createdGuest, setCreatedGuest] = useState<{
+    username: string;
+    passcode: string;
+  } | null>(null);
   const [playerAccessError, setPlayerAccessError] = useState<string | null>(null);
   const [playerAccessNotice, setPlayerAccessNotice] = useState<string | null>(null);
   const [checkingGroupId, setCheckingGroupId] = useState<string | null>(null);
@@ -564,6 +568,7 @@ export default function HomeScreen() {
     setPendingAccessIds([]);
     setPendingAccessGroup(null);
     setPlayerAccessError(null);
+    setCreatedGuest(null);
   };
 
   const openPlayerVerification = (
@@ -788,7 +793,14 @@ export default function HomeScreen() {
         ).slice(0, 5),
       );
       announcePlayerAdded(`${guest.player_name} added to the game.`);
-      setPlayerAccessMode(null);
+      // Getting these two strings to another person is the whole point of
+      // creating a guest, and the passcode is never recoverable afterwards --
+      // so the modal stays open on the handoff rather than closing.
+      setCreatedGuest({
+        username: guest.player_name,
+        passcode: input.passcode.trim(),
+      });
+      setPlayerAccessMode("guest-created");
     } catch (error) {
       setPlayerAccessError(formatSupabaseConfigError(error));
     } finally {
@@ -1279,6 +1291,7 @@ export default function HomeScreen() {
             : existingPlayerOptions
         }
         pendingPlayer={pendingAccessPlayer}
+        createdGuest={createdGuest}
         busy={playerAccessBusy}
         error={playerAccessError}
         onClose={closePlayerAccess}

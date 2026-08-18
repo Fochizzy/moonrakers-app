@@ -30,6 +30,10 @@ const playerAccessSource = fs.readFileSync(
   path.join(projectRoot, "lib", "cloud", "playerAccess.ts"),
   "utf8",
 );
+const accessModalSource = fs.readFileSync(
+  path.join(projectRoot, "components", "home", "PlayerAccessModal.tsx"),
+  "utf8",
+);
 
 for (const username of ["RevLoki", "Fochizzy", "GregMtG", "Lurker", "Cpl_Baloo"]) {
   assert.ok(
@@ -68,7 +72,7 @@ assert.match(
 );
 
 for (const label of ["Existing player", "Existing guest", "New guest"]) {
-  assert.ok(homeSource.includes(`title=\"${label}\"`), `expected Add to game action ${label}`);
+  assert.ok(homeSource.includes(`title="${label}"`), `expected Add to game action ${label}`);
 }
 assert.ok(
   homeSource.includes("verifyPlayerForGame"),
@@ -112,6 +116,48 @@ assert.ok(
     missingPasscodePromptSource.includes("Add a player passcode") &&
     missingPasscodePromptSource.includes("Confirm passcode"),
   "expected login hydration to prompt usernames that have no passcode",
+);
+
+// --- naming a collision, and recognising a guest, before submit -------------
+
+// Both username namespaces are global and neither is browsable, so a collision
+// discovered on submit names a profile the user cannot see. The check has to
+// happen while the field is still being typed.
+assert.ok(
+  playerAccessSource.includes('supabase.rpc("is_player_name_available"'),
+  "expected an availability check the username fields can call while typing",
+);
+
+assert.ok(
+  accessModalSource.includes('usernameAvailability === "taken"') &&
+    accessModalSource.includes('usernameAvailability !== "taken"'),
+  "expected the new-guest form to report and refuse a taken username",
+);
+
+assert.ok(
+  registerSource.includes('nameAvailability === "taken"'),
+  "expected registration to report a taken username",
+);
+
+// Claiming is one-way and cannot be replayed, so the guest is shown back before
+// the form will commit to it.
+assert.ok(
+  playerAccessSource.includes('supabase.rpc("lookup_claimable_guest"'),
+  "expected a lookup that resolves a guest username before the claim runs",
+);
+
+assert.ok(
+  registerSource.includes("lookupClaimableGuest(playerName)") &&
+    registerSource.includes('guestLookup !== "found"'),
+  "expected claiming to be blocked until the guest actually resolves",
+);
+
+// The passcode is never recoverable afterwards, and getting it to another
+// person is the entire point of creating a guest.
+assert.ok(
+  accessModalSource.includes('mode === "guest-created"') &&
+    accessModalSource.includes("shareGuestCredentials"),
+  "expected the new guest's credentials to stay on screen with a way to send them",
 );
 
 console.log("player-access-contract.test.cjs passed");
