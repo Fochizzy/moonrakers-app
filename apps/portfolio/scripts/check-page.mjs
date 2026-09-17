@@ -45,6 +45,16 @@ for (const tag of blankTargets) {
   }
 }
 
+// Every project and app card must carry the build attribution — that claim is
+// the point of the page, so a card added without it is a bug, not a style nit.
+const cards = (html.match(/<a\b[^>]*class="card"/g) ?? []).length;
+const attributions = (html.match(/class="card__built"/g) ?? []).length;
+if (cards !== attributions) {
+  problems.push(
+    `${cards} cards but ${attributions} "Built with Codex + Claude Code" lines — every card needs one`,
+  );
+}
+
 if (!/<meta name="viewport"/.test(html)) problems.push('missing viewport meta tag');
 if (!/<title>[^<]+<\/title>/.test(html)) problems.push('missing <title>');
 
@@ -53,4 +63,7 @@ if (problems.length) {
   for (const p of problems) console.error(`error ${p}`);
   process.exit(1);
 }
-console.log(`ok    ${expected.length} links, ${blankTargets.length} external anchors, meta present`);
+console.log(
+  `ok    ${expected.length} links, ${blankTargets.length} external anchors, ` +
+  `${cards} cards all attributed, meta present`,
+);

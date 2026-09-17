@@ -155,6 +155,14 @@ a.card:hover,a.card:focus-visible{
 a.card:hover .card__arrow,a.card:focus-visible .card__arrow{transform:translate(3px,-3px); color:var(--teal)}
 .card p{font-size:.875rem; color:var(--sub)}
 .card__tags{display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; padding-top:4px}
+/* Repeated on every card on purpose: the whole point of the portfolio is that
+   the same two tools built all nine of these. */
+.card__built{
+  display:flex; align-items:center; gap:7px; margin-top:2px; padding-top:12px;
+  border-top:1px solid var(--border); font-family:var(--mono); font-size:.625rem;
+  letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+}
+.card__built svg{color:var(--accent); flex:none}
 
 /* ---------- apps ---------- */
 .note{
@@ -205,9 +213,9 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
       <span class="eyebrow">Izzy Hodnett &nbsp;·&nbsp; github.com/Fochizzy</span>
       <h1>I ship real software with <span class="grad">AI coding agents</span>.</h1>
       <p class="hero__lede">
-        Six live sites and three Android apps — specced, built and released using
-        <strong>Codex</strong> and <strong>Claude&nbsp;Code</strong> as the implementation
-        layer, and served from <strong>Cloudflare's edge</strong>. Not demos. Things people use.
+        Six live sites and three Android apps. Every one of them specced, built and
+        released with <strong>Codex</strong> and <strong>Claude&nbsp;Code</strong>, and served
+        from <strong>Cloudflare's edge</strong>. Not demos. Things people use.
       </p>
       <div class="hero__tags">
         <span class="chip chip--cf">Cloudflare Workers</span>
@@ -302,6 +310,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip">Next.js</span>
           <span class="chip">Supabase</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
       <a class="card" href="https://www.tm-stats.com/" target="_blank" rel="noopener noreferrer">
@@ -318,6 +327,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
           <span class="chip">Custom domain</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
       <a class="card" href="https://dnd4eparse.org/" target="_blank" rel="noopener noreferrer">
@@ -334,6 +344,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
           <span class="chip">Custom domain</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
       <a class="card" href="https://adnd-bestiary.fochizzy.workers.dev/" target="_blank" rel="noopener noreferrer">
@@ -350,6 +361,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
           <span class="chip">Reference tool</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
       <a class="card" href="https://lotus-blossom-district-atlas.fochizzy.workers.dev/" target="_blank" rel="noopener noreferrer">
@@ -366,6 +378,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
           <span class="chip">Worldbuilding</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
       <a class="card" href="https://standards.social-current.org/" target="_blank" rel="noopener noreferrer">
@@ -382,6 +395,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip">Public sector</span>
           <span class="chip">Reference tool</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
     </div>
@@ -420,6 +434,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
           <span class="chip">React Native</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
       <a class="card" href="https://play.google.com/store/apps/details?id=com.fochizzy87.valeriarandom" target="_blank" rel="noopener noreferrer">
@@ -436,6 +451,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
           <span class="chip">React Native</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
 
       <a class="card" href="https://play.google.com/store/apps/details?id=com.fochizzy87.valeriascore" target="_blank" rel="noopener noreferrer">
@@ -452,6 +468,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
           <span class="chip">React Native</span>
         </div>
+        <div class="card__built"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5 9.8 12.2 3.5 10l6.3-1.7z"/></svg>Built with Codex + Claude Code</div>
       </a>
     </div>
   </div>

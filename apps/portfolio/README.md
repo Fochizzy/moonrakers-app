@@ -70,6 +70,10 @@ Everything is in `public/index.html`:
 - **Project blurbs** — one `<p>` inside each `.card`.
 - **Links** — the `href` on each `.card`. If you change one, update the
   `expected` list in `scripts/check-page.mjs` so the check keeps guarding it.
+- **Build attribution** — every card ends with a `.card__built` line reading
+  "Built with Codex + Claude Code". It is repeated on all nine deliberately:
+  the same two tools built everything on the page, and seeing it on each card
+  is the claim. `check-page.mjs` fails if a card is added without one.
 - **Stat strip** — the four `.stat` blocks under the hero. These are hand-counted
   (6 sites, 5 of them on Cloudflare Workers, 3 Android apps), so bump them when
   you ship something new.
