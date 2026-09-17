@@ -85,6 +85,28 @@ p{margin:0}
   transition:border-color .18s ease, color .18s ease, transform .18s ease;
 }
 .btn:hover,.btn:focus-visible{border-color:var(--teal); color:var(--teal); transform:translateY(-2px)}
+.cta{
+  padding:36px 28px; text-align:center; border-radius:var(--r-lg);
+  border:1px solid rgba(168,85,247,.28);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(168,85,247,.16), transparent 70%),
+    var(--card);
+}
+.cta h2{font-size:1.5rem; margin:10px 0 12px}
+.cta p{color:var(--sub); font-size:.9375rem; max-width:56ch; margin:0 auto 24px}
+.cta__row{display:flex; flex-wrap:wrap; gap:10px; justify-content:center}
+.btn--go{border-color:var(--accent); background:var(--accent-soft)}
+.btn--go:hover,.btn--go:focus-visible{border-color:var(--teal)}
+
+.offers{display:grid; grid-template-columns:1fr; gap:14px}
+.offer{padding:22px; background:var(--card); border:1px solid var(--border); border-radius:var(--r-lg)}
+.offer__icon{
+  width:34px; height:34px; border-radius:10px; display:grid; place-items:center;
+  background:var(--accent-soft); color:var(--accent); margin-bottom:13px;
+}
+.offer h3{font-size:1rem; margin-bottom:6px}
+.offer p{font-size:.875rem; color:var(--sub)}
+
 .callout{
   display:flex; gap:13px; padding:18px 20px; margin:0 0 16px;
   background:var(--accent-soft); border:1px solid rgba(168,85,247,.32);
@@ -133,7 +155,10 @@ p{margin:0}
 }
 .portrait__img{
   position:absolute; inset:0; width:100%; height:100%;
-  object-fit:cover; object-position:center 22%; display:block;
+  object-fit:cover; display:block;
+  /* Square source into a square frame means object-position has nothing to do.
+     Scaling creates the overflow, and the origin puts the face in the middle. */
+  transform:scale(1.18); transform-origin:56% 34%;
 }
 
 /* ---------- stats ---------- */
@@ -229,6 +254,9 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
   .steps{grid-template-columns:repeat(4,1fr)}
   .grid--three{grid-template-columns:repeat(3,1fr)}
 }
+@media (min-width:640px){
+  .offers{grid-template-columns:1fr 1fr}
+}
 @media (prefers-reduced-motion:reduce){
   *{animation:none !important; transition:none !important}
   a.card:hover,a.card:focus-visible{transform:none}
@@ -249,6 +277,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
         <strong>Claude&nbsp;Code</strong>, served from <strong>Cloudflare's edge</strong>.
       </p>
       <div class="hero__tags">
+        <span class="chip chip--live"><span class="dot"></span>Open to work</span>
         <span class="chip chip--cf">Cloudflare Workers</span>
         <span class="chip">Codex</span>
         <span class="chip">Claude Code</span>
@@ -354,6 +383,50 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           <span class="fact__v">Supervisor of the Year, Forestdale Inc, 2016</span>
         </div>
       </aside>
+    </div>
+  </div>
+</section>
+
+
+<section class="section" id="offer">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="eyebrow">What I offer</span>
+      <h2>From "where would this even help?" to staff actually using it.</h2>
+      <p>I'm not the developer. I'm the person who knows the work well enough to say what should
+         be built — and who stays with it until people are using it.</p>
+    </div>
+    <div class="offers">
+
+      <article class="offer">
+        <div class="offer__icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg></div>
+        <h3>Find where it fits</h3>
+        <p>I know what the organization actually does, day to day. That is what tells you which
+           work AI can take on, which it can't, and which it would quietly make worse.</p>
+      </article>
+
+      <article class="offer">
+        <div class="offer__icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div>
+        <h3>Brief the developers</h3>
+        <p>I translate between the people who know the program and the people who write the code.
+           They build it; I make sure what gets built matches the work it is meant to carry.</p>
+      </article>
+
+      <article class="offer">
+        <div class="offer__icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></div>
+        <h3>Make it effective</h3>
+        <p>Shipped is not the same as working. Once it exists I tune it against real cases until
+           the output is good enough for staff to trust — the same review discipline I already
+           apply to case records.</p>
+      </article>
+
+      <article class="offer">
+        <div class="offer__icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <h3>Teach the staff</h3>
+        <p>Adoption is where most of this fails. I train the people who will use it every day, in
+           their language, so it becomes how the work gets done instead of a login nobody opens.</p>
+      </article>
+
     </div>
   </div>
 </section>
@@ -606,6 +679,27 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
       <span class="chip">Vitest</span>
       <span class="chip">Playwright</span>
       <span class="chip">Recharts</span>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta">
+      <span class="eyebrow">Open to work</span>
+      <h2>Looking for a role helping a non-profit integrate AI.</h2>
+      <p>If your organization is trying to work out where AI fits — or has already built
+         something and cannot get anyone to use it — that is the work I want.</p>
+      <div class="cta__row">
+        <a class="btn btn--go" href="mailto:izzy.hodnett@gmail.com">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
+          izzy.hodnett@gmail.com
+        </a>
+        <a class="btn" href="resume.html">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          Read the résumé
+        </a>
+      </div>
     </div>
   </div>
 </section>
