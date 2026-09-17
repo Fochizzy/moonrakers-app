@@ -11,10 +11,17 @@
     "not_found_handling": "404-page"
   },
 
-  // Ships to https://portfolio.<your-subdomain>.workers.dev.
-  // To put it on a custom domain, add:
-  //   "routes": [{ "pattern": "yourdomain.com", "custom_domain": true }]
-  // and keep workers_dev as the fallback (see apps/dashboard/wrangler.jsonc).
+  // Cloudflare creates the DNS record and edge certificate for each hostname on
+  // deploy. Both are custom domains rather than one plus a redirect, so the apex
+  // and www each serve the site directly with no extra rule to maintain.
+  // Requires the izzyhodnett.com zone to be active in the account.
+  "routes": [
+    { "pattern": "izzyhodnett.com", "custom_domain": true },
+    { "pattern": "www.izzyhodnett.com", "custom_domain": true }
+  ],
+
+  // Declaring routes makes wrangler default workers_dev to false, which would
+  // take portfolio.<subdomain>.workers.dev offline. Keep it as a fallback.
   "workers_dev": true,
 
   "observability": {
