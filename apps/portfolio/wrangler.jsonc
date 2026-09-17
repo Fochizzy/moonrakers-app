@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "portfolio",
+  "compatibility_date": "2026-07-04",
+
+  // Assets-only Worker: there is no "main", so Cloudflare serves ./public
+  // straight off the edge. No build step, no runtime, no cold starts.
+  // Unmatched paths get the nearest 404.html rather than a soft 404.
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page"
+  },
+
+  // Ships to https://portfolio.<your-subdomain>.workers.dev.
+  // To put it on a custom domain, add:
+  //   "routes": [{ "pattern": "yourdomain.com", "custom_domain": true }]
+  // and keep workers_dev as the fallback (see apps/dashboard/wrangler.jsonc).
+  "workers_dev": true,
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

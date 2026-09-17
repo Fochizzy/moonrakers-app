@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Izzy Hodnett — Built with Codex &amp; Claude Code</title>
+<meta name="description" content="Six live sites and two Android apps, designed and built with Codex and Claude Code, and deployed to Cloudflare's edge.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081120'/%3E%3Cpath d='M20 22 L12 32 L20 42' fill='none' stroke='%23a855f7' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M44 22 L52 32 L44 42' fill='none' stroke='%232dd4bf' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 18 L28 46' fill='none' stroke='%233b82f6' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+
+<meta property="og:title" content="Izzy Hodnett — Built with Codex &amp; Claude Code">
+<meta property="og:description" content="Six live sites and two Android apps, designed and built with AI coding agents, and deployed to Cloudflare's edge.">
+<meta property="og:type" content="website">
+
+<style>
+:root{
+  --bg:#081120; --bg-deep:#040814;
+  --card:rgba(12,18,38,.92); --card-hover:rgba(18,27,54,.96);
+  --text:#e2e8f0; --text-strong:#f8fbff; --sub:#94a3b8; --muted:#7d8ca3;
+  --accent:#a855f7; --accent-soft:rgba(168,85,247,.18);
+  --blue:#3b82f6;   --blue-soft:rgba(59,130,246,.18);
+  --teal:#2dd4bf;   --teal-soft:rgba(45,212,191,.16);
+  --green:#22c55e;  --green-soft:rgba(34,197,94,.16);
+  --amber:#f59e0b;  --amber-soft:rgba(245,158,11,.16);
+  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.16);
+  --r-md:.75rem; --r-lg:1rem; --r-pill:999px;
+  --sans:"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --mono:"Cascadia Mono","SFMono-Regular",Consolas,ui-monospace,monospace;
+  --gutter:16px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; min-height:100%; color:var(--text); font-family:var(--sans);
+  font-size:16px; line-height:1.6; overflow-x:hidden;
+  background:
+    radial-gradient(circle at 14% 8%, rgba(168,85,247,.16), transparent 34%),
+    radial-gradient(circle at 86% 10%, rgba(59,130,246,.13), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(45,212,191,.09), transparent 40%),
+    linear-gradient(180deg,#081120 0%,#040814 100%);
+  background-attachment:fixed;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(circle at 50% 22%,#000,transparent 78%);
+  -webkit-mask-image:radial-gradient(circle at 50% 22%,#000,transparent 78%);
+}
+.wrap{position:relative; z-index:1; max-width:1080px; margin:0 auto; padding:0 var(--gutter)}
+a{color:inherit}
+h1,h2,h3{color:var(--text-strong); line-height:1.2; margin:0; text-wrap:balance}
+p{margin:0}
+
+/* ---------- shared bits ---------- */
+.eyebrow{
+  font-family:var(--mono); font-size:.6875rem; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--muted);
+}
+.section{padding:72px 0; border-top:1px solid var(--border)}
+.section__head{margin-bottom:28px; max-width:62ch}
+.section__head h2{font-size:1.5rem; margin:10px 0 8px}
+.section__head p{color:var(--sub); font-size:.9375rem}
+
+.chip{
+  display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
+  border:1px solid var(--border-strong); border-radius:var(--r-pill);
+  font-family:var(--mono); font-size:.6875rem; letter-spacing:.04em; color:var(--sub);
+  background:rgba(255,255,255,.03); white-space:nowrap;
+}
+.chip--cf{color:#fbbf7a; border-color:rgba(245,158,11,.38); background:var(--amber-soft)}
+.chip--live{color:#7ee2a8; border-color:rgba(34,197,94,.34); background:var(--green-soft)}
+.chip--test{color:#fbbf7a; border-color:rgba(245,158,11,.34); background:var(--amber-soft)}
+.dot{width:6px; height:6px; border-radius:50%; background:currentColor; flex:none}
+
+/* ---------- hero ---------- */
+.hero{padding:64px 0 8px}
+.hero__grid{display:grid; grid-template-columns:1fr; gap:36px; align-items:center}
+.hero h1{font-size:clamp(2rem,6vw,3.25rem); letter-spacing:-.02em; margin:16px 0 0}
+.hero h1 .grad{
+  background:linear-gradient(100deg,var(--accent) 0%,var(--blue) 52%,var(--teal) 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.hero__lede{margin-top:18px; font-size:1.0625rem; color:var(--sub); max-width:54ch}
+.hero__lede strong{color:var(--text-strong); font-weight:600}
+.hero__tags{display:flex; flex-wrap:wrap; gap:8px; margin-top:24px}
+
+.portrait{
+  position:relative; width:min(230px,58vw); aspect-ratio:1; margin:0 auto;
+  border-radius:50%; padding:4px; flex:none;
+  background:conic-gradient(from 210deg,var(--accent),var(--blue),var(--teal),var(--accent));
+  box-shadow:0 22px 60px -22px rgba(168,85,247,.6);
+}
+.portrait__inner{
+  position:relative; width:100%; height:100%; border-radius:50%; overflow:hidden;
+  background:linear-gradient(160deg,#141f3d,#0a1126);
+  display:grid; place-items:center;
+}
+.portrait__monogram{
+  font-family:var(--mono); font-size:3rem; letter-spacing:.06em; color:var(--muted);
+  user-select:none;
+}
+.portrait__img{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:cover; object-position:center 22%; display:block;
+}
+
+/* ---------- stats ---------- */
+.stats{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:44px}
+.stat{
+  padding:16px; border:1px solid var(--border); border-radius:var(--r-md);
+  background:var(--card);
+}
+.stat__n{font-size:1.75rem; font-weight:700; color:var(--text-strong); line-height:1.1}
+.stat__l{font-size:.75rem; color:var(--muted); margin-top:4px}
+
+/* ---------- method ---------- */
+.steps{display:grid; grid-template-columns:1fr; gap:12px; counter-reset:step}
+.step{
+  position:relative; padding:20px 20px 20px 58px; background:var(--card);
+  border:1px solid var(--border); border-radius:var(--r-md);
+}
+.step::before{
+  counter-increment:step; content:counter(step,decimal-leading-zero);
+  position:absolute; left:20px; top:20px; font-family:var(--mono); font-size:.75rem;
+  color:var(--accent); border:1px solid var(--accent-soft); border-radius:6px;
+  width:26px; height:26px; display:grid; place-items:center; background:var(--accent-soft);
+}
+.step h3{font-size:.9375rem; margin-bottom:5px}
+.step p{font-size:.875rem; color:var(--sub)}
+
+/* ---------- projects ---------- */
+.grid{display:grid; grid-template-columns:1fr; gap:14px}
+.card{
+  display:flex; flex-direction:column; gap:12px; padding:22px; text-decoration:none;
+  background:var(--card); border:1px solid var(--border); border-radius:var(--r-lg);
+  transition:transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+a.card:hover,a.card:focus-visible{
+  transform:translateY(-3px); border-color:var(--border-strong);
+  background:var(--card-hover); box-shadow:0 20px 44px -26px rgba(0,0,0,.9);
+}
+.card__top{display:flex; align-items:flex-start; justify-content:space-between; gap:14px}
+.card h3{font-size:1.0625rem}
+.card__host{
+  font-family:var(--mono); font-size:.6875rem; color:var(--muted);
+  margin-top:5px;
+  /* Long *.workers.dev hostnames must wrap, but prefer breaking at the dots
+     and hyphens before splitting a word mid-character. */
+  overflow-wrap:anywhere; word-break:normal;
+}
+.card__arrow{flex:none; color:var(--muted); transition:transform .18s ease, color .18s ease}
+a.card:hover .card__arrow,a.card:focus-visible .card__arrow{transform:translate(3px,-3px); color:var(--teal)}
+.card p{font-size:.875rem; color:var(--sub)}
+.card__tags{display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; padding-top:4px}
+
+/* ---------- apps ---------- */
+.note{
+  display:flex; gap:12px; padding:16px 18px; margin-bottom:20px;
+  background:var(--teal-soft); border:1px solid rgba(45,212,191,.28); border-radius:var(--r-md);
+  font-size:.875rem; color:var(--text);
+}
+.note svg{flex:none; color:var(--teal); margin-top:2px}
+.note strong{color:var(--text-strong)}
+
+/* ---------- stack ---------- */
+.stack{display:flex; flex-wrap:wrap; gap:8px}
+.stack .chip{font-size:.75rem; padding:7px 13px; color:var(--text)}
+
+/* ---------- footer ---------- */
+footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
+.foot{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
+.foot p{font-size:.8125rem; color:var(--muted)}
+.foot a{color:var(--sub); text-decoration:none; border-bottom:1px solid var(--border-strong)}
+.foot a:hover{color:var(--teal); border-color:var(--teal)}
+
+:where(a,button):focus-visible{outline:2px solid var(--teal); outline-offset:3px; border-radius:6px}
+
+@media (min-width:640px){
+  .stats{grid-template-columns:repeat(4,1fr)}
+  .grid{grid-template-columns:repeat(2,1fr)}
+  .steps{grid-template-columns:repeat(2,1fr)}
+}
+@media (min-width:880px){
+  .hero{padding:88px 0 8px}
+  .hero__grid{grid-template-columns:1fr auto; gap:56px}
+  .portrait{width:250px; margin:0}
+  .section{padding:84px 0}
+  .steps{grid-template-columns:repeat(4,1fr)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important; transition:none !important}
+  a.card:hover,a.card:focus-visible{transform:none}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap hero__grid">
+    <div>
+      <span class="eyebrow">Izzy Hodnett &nbsp;·&nbsp; github.com/Fochizzy</span>
+      <h1>I ship real software with <span class="grad">AI coding agents</span>.</h1>
+      <p class="hero__lede">
+        Six live sites and two Android apps — specced, built and released using
+        <strong>Codex</strong> and <strong>Claude&nbsp;Code</strong> as the implementation
+        layer, and served from <strong>Cloudflare's edge</strong>. Not demos. Things people use.
+      </p>
+      <div class="hero__tags">
+        <span class="chip chip--cf">Cloudflare Workers</span>
+        <span class="chip">Codex</span>
+        <span class="chip">Claude Code</span>
+        <span class="chip">TypeScript</span>
+        <span class="chip">React Native</span>
+      </div>
+    </div>
+
+    <div class="portrait">
+      <div class="portrait__inner">
+        <!-- Monogram sits behind the photo; if portrait.jpg is missing the img
+             removes itself and the monogram shows instead of a broken image. -->
+        <span class="portrait__monogram" aria-hidden="true">IH</span>
+        <img class="portrait__img" src="media/portrait.jpg"
+             alt="Izzy Hodnett" width="250" height="250"
+             onerror="this.remove()">
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat"><div class="stat__n">6</div><div class="stat__l">Live sites</div></div>
+      <div class="stat"><div class="stat__n">5</div><div class="stat__l">On Cloudflare Workers</div></div>
+      <div class="stat"><div class="stat__n">2</div><div class="stat__l">Android apps in testing</div></div>
+      <div class="stat"><div class="stat__n">0</div><div class="stat__l">Servers to babysit</div></div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="eyebrow">Method</span>
+      <h2>How these actually get built</h2>
+      <p>The agents write most of the code. That only works because everything around the
+         writing is tight — and reviewing the diff is the real job.</p>
+    </div>
+    <div class="steps">
+      <article class="step">
+        <h3>Spec before code</h3>
+        <p>Decide the product, the data model and what "done" means first. A vague prompt
+           produces a vague codebase, fast.</p>
+      </article>
+      <article class="step">
+        <h3>Agents implement</h3>
+        <p>Codex and Claude Code do the typing — features, refactors, test suites — working
+           against the repo's own conventions.</p>
+      </article>
+      <article class="step">
+        <h3>Review is the work</h3>
+        <p>Every diff gets read. Typecheck, unit tests, lint and Playwright runs gate the
+           merge, not vibes.</p>
+      </article>
+      <article class="step">
+        <h3>Ship to the edge</h3>
+        <p><code>wrangler deploy</code> and it's live worldwide. No VPS, no container, no
+           3am pager.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="eyebrow">Live on the web</span>
+      <h2>Projects</h2>
+      <p>Board game companions, tabletop reference tools and a public standards library.
+         All of them online right now.</p>
+    </div>
+
+    <div class="grid">
+
+      <a class="card" href="https://www.moonrakersapp.org/" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>Moonrakers Command</h3>
+            <div class="card__host">www.moonrakersapp.org</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>Companion and analytics platform for the Moonrakers board game: build your crew,
+           track a live game turn by turn, then dig into charts, Elo ratings, player
+           comparisons and playstyle profiles afterwards.</p>
+        <div class="card__tags">
+          <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
+          <span class="chip">Next.js</span>
+          <span class="chip">Supabase</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://www.tm-stats.com/" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>TM Stats</h3>
+            <div class="card__host">www.tm-stats.com</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>Statistics for Terraforming Mars — log your games, then see how corporations,
+           maps and table sizes actually shake out across a real play history.</p>
+        <div class="card__tags">
+          <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
+          <span class="chip">Custom domain</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://dnd4eparse.org/" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>D&amp;D 4e Parser</h3>
+            <div class="card__host">dnd4eparse.org</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>Takes D&amp;D 4th Edition character files and turns them into a clean, readable
+           character sheet you can actually use at the table.</p>
+        <div class="card__tags">
+          <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
+          <span class="chip">Custom domain</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://adnd-bestiary.fochizzy.workers.dev/" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>AD&amp;D Bestiary</h3>
+            <div class="card__host">adnd-bestiary.fochizzy.workers.dev</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>A fast, searchable monster reference for Advanced Dungeons &amp; Dragons — built
+           for looking something up mid-session without losing the thread.</p>
+        <div class="card__tags">
+          <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
+          <span class="chip">Reference tool</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://lotus-blossom-district-atlas.fochizzy.workers.dev/" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>Lotus Blossom District Atlas</h3>
+            <div class="card__host">lotus-blossom-district-atlas.fochizzy.workers.dev</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>A navigable atlas for a tabletop campaign setting — the places, the people and
+           the connections between them, kept in one place the whole table can browse.</p>
+        <div class="card__tags">
+          <span class="chip chip--cf"><span class="dot"></span>Cloudflare</span>
+          <span class="chip">Worldbuilding</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://standards.social-current.org/" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>Social Current Standards</h3>
+            <div class="card__host">standards.social-current.org</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>A public, browsable home for Social Current's accreditation standards — turning
+           a dense reference document into something an organisation can navigate.</p>
+        <div class="card__tags">
+          <span class="chip">Public sector</span>
+          <span class="chip">Reference tool</span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="eyebrow">Google Play</span>
+      <h2>Android apps</h2>
+      <p>Both are in <strong>closed testing</strong> on Google Play — access available on request.</p>
+    </div>
+
+    <div class="note">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      <div>
+        <strong>Built with the publishers in the loop.</strong> The makers of both Moonrakers
+        and Valeria are aware of these apps and the companion site, and the work has been
+        shared with them directly.
+      </div>
+    </div>
+
+    <div class="grid">
+      <a class="card" href="https://play.google.com/store/apps/details?id=com.fochizzy.moonrakers" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>Moonrakers Command</h3>
+            <div class="card__host">com.fochizzy.moonrakers</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>The Moonrakers companion on your phone — crew selection, turn order and live game
+           tracking at the table, syncing with the same analytics that power the web app.</p>
+        <div class="card__tags">
+          <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
+          <span class="chip">React Native</span>
+          <span class="chip">Expo</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://play.google.com/store/apps/details?id=com.fochizzy87.valeriarandom" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>Valeria Randomiser</h3>
+            <div class="card__host">com.fochizzy87.valeriarandom</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>Randomised setups for Valeria — deal a fresh, valid combination of cards and
+           components so no two games open the same way.</p>
+        <div class="card__tags">
+          <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
+          <span class="chip">React Native</span>
+          <span class="chip">Expo</span>
+        </div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="eyebrow">Stack</span>
+      <h2>What it all runs on</h2>
+      <p>Cloudflare Workers end to end. Static assets and rendered apps sit on the same
+         edge network, deploy from the same CLI, and cost roughly nothing at rest.</p>
+    </div>
+    <div class="stack">
+      <span class="chip chip--cf">Cloudflare Workers</span>
+      <span class="chip chip--cf">Workers Static Assets</span>
+      <span class="chip chip--cf">Wrangler</span>
+      <span class="chip chip--cf">Custom domains &amp; edge TLS</span>
+      <span class="chip">Next.js</span>
+      <span class="chip">OpenNext</span>
+      <span class="chip">React</span>
+      <span class="chip">React Native + Expo</span>
+      <span class="chip">TypeScript</span>
+      <span class="chip">Supabase</span>
+      <span class="chip">Vitest</span>
+      <span class="chip">Playwright</span>
+      <span class="chip">Recharts</span>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <p>Izzy Hodnett · Built with Codex &amp; Claude Code · Deployed on Cloudflare Workers</p>
+    <p><a href="https://github.com/Fochizzy" target="_blank" rel="noopener noreferrer">github.com/Fochizzy</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

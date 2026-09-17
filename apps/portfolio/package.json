@@ -1,0 +1,14 @@
+{
+  "name": "@moonrakers/portfolio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal portfolio page - static assets served by a Cloudflare Worker.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node ./scripts/check-page.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.107.0"
+  }
+}
