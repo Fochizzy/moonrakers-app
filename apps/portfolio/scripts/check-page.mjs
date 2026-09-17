@@ -31,6 +31,7 @@ const expected = [
   'https://standards.social-current.org/',
   'https://play.google.com/store/apps/details?id=com.fochizzy.moonrakers',
   'https://play.google.com/store/apps/details?id=com.fochizzy87.valeriarandom',
+  'https://play.google.com/store/apps/details?id=com.fochizzy87.valeriascore',
 ];
 for (const url of expected) {
   if (!html.includes(`href="${url}"`)) problems.push(`missing link: ${url}`);

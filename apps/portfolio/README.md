@@ -71,7 +71,7 @@ Everything is in `public/index.html`:
 - **Links** — the `href` on each `.card`. If you change one, update the
   `expected` list in `scripts/check-page.mjs` so the check keeps guarding it.
 - **Stat strip** — the four `.stat` blocks under the hero. These are hand-counted
-  (6 sites, 5 of them on Cloudflare Workers, 2 Android apps), so bump them when
+  (6 sites, 5 of them on Cloudflare Workers, 3 Android apps), so bump them when
   you ship something new.
 - **Colours** — the `:root` custom properties at the top of the `<style>` block.
   They mirror the tokens in `apps/dashboard/src/app/globals.css`, so the

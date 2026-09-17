@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Izzy Hodnett — Built with Codex &amp; Claude Code</title>
-<meta name="description" content="Six live sites and two Android apps, designed and built with Codex and Claude Code, and deployed to Cloudflare's edge.">
+<meta name="description" content="Six live sites and three Android apps, designed and built with Codex and Claude Code, and deployed to Cloudflare's edge.">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081120'/%3E%3Cpath d='M20 22 L12 32 L20 42' fill='none' stroke='%23a855f7' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M44 22 L52 32 L44 42' fill='none' stroke='%232dd4bf' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 18 L28 46' fill='none' stroke='%233b82f6' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
 
 <meta property="og:title" content="Izzy Hodnett — Built with Codex &amp; Claude Code">
-<meta property="og:description" content="Six live sites and two Android apps, designed and built with AI coding agents, and deployed to Cloudflare's edge.">
+<meta property="og:description" content="Six live sites and three Android apps, designed and built with AI coding agents, and deployed to Cloudflare's edge.">
 <meta property="og:type" content="website">
 
 <style>
@@ -189,6 +189,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
   .portrait{width:250px; margin:0}
   .section{padding:84px 0}
   .steps{grid-template-columns:repeat(4,1fr)}
+  .grid--three{grid-template-columns:repeat(3,1fr)}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation:none !important; transition:none !important}
@@ -204,7 +205,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
       <span class="eyebrow">Izzy Hodnett &nbsp;·&nbsp; github.com/Fochizzy</span>
       <h1>I ship real software with <span class="grad">AI coding agents</span>.</h1>
       <p class="hero__lede">
-        Six live sites and two Android apps — specced, built and released using
+        Six live sites and three Android apps — specced, built and released using
         <strong>Codex</strong> and <strong>Claude&nbsp;Code</strong> as the implementation
         layer, and served from <strong>Cloudflare's edge</strong>. Not demos. Things people use.
       </p>
@@ -233,7 +234,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
     <div class="stats">
       <div class="stat"><div class="stat__n">6</div><div class="stat__l">Live sites</div></div>
       <div class="stat"><div class="stat__n">5</div><div class="stat__l">On Cloudflare Workers</div></div>
-      <div class="stat"><div class="stat__n">2</div><div class="stat__l">Android apps in testing</div></div>
+      <div class="stat"><div class="stat__n">3</div><div class="stat__l">Android apps in testing</div></div>
       <div class="stat"><div class="stat__n">0</div><div class="stat__l">Servers to babysit</div></div>
     </div>
   </div>
@@ -392,7 +393,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
     <div class="section__head">
       <span class="eyebrow">Google Play</span>
       <h2>Android apps</h2>
-      <p>Both are in <strong>closed testing</strong> on Google Play — access available on request.</p>
+      <p>All three are in <strong>closed testing</strong> on Google Play — access available on request.</p>
     </div>
 
     <div class="note">
@@ -404,7 +405,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
       </div>
     </div>
 
-    <div class="grid">
+    <div class="grid grid--three">
       <a class="card" href="https://play.google.com/store/apps/details?id=com.fochizzy.moonrakers" target="_blank" rel="noopener noreferrer">
         <div class="card__top">
           <div>
@@ -418,7 +419,6 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
         <div class="card__tags">
           <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
           <span class="chip">React Native</span>
-          <span class="chip">Expo</span>
         </div>
       </a>
 
@@ -435,7 +435,22 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
         <div class="card__tags">
           <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
           <span class="chip">React Native</span>
-          <span class="chip">Expo</span>
+        </div>
+      </a>
+
+      <a class="card" href="https://play.google.com/store/apps/details?id=com.fochizzy87.valeriascore" target="_blank" rel="noopener noreferrer">
+        <div class="card__top">
+          <div>
+            <h3>Valeria Score</h3>
+            <div class="card__host">com.fochizzy87.valeriascore</div>
+          </div>
+          <svg class="card__arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+        </div>
+        <p>Scorepad for Valeria — runs the end-game tally across every scoring
+           category so the maths doesn't fall to whoever is quickest with a pen.</p>
+        <div class="card__tags">
+          <span class="chip chip--test"><span class="dot"></span>Closed testing</span>
+          <span class="chip">React Native</span>
         </div>
       </a>
     </div>
