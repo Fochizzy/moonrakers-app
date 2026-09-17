@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Elizabeth (Izzy) Hodnett — Résumé</title>
-<meta name="description" content="Résumé of Elizabeth (Izzy) Hodnett — Manager of Accreditation at Social Current, with fourteen years in child welfare.">
+<meta name="description" content="Résumé of Elizabeth (Izzy) Hodnett — Manager of Accreditation at Social Current, moving into AI integration for non-profits.">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081120'/%3E%3Cpath d='M20 22 L12 32 L20 42' fill='none' stroke='%23a855f7' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M44 22 L52 32 L44 42' fill='none' stroke='%232dd4bf' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 18 L28 46' fill='none' stroke='%233b82f6' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
 
@@ -48,7 +48,26 @@ h1{
   font-size:clamp(1.75rem,5vw,2.5rem); letter-spacing:-.02em; margin:0 0 10px;
   color:var(--text-strong); line-height:1.15;
 }
+.tagline{
+  font-size:.9375rem; color:var(--accent); margin:0 0 10px;
+  font-weight:600; letter-spacing:.01em;
+}
 .contact{display:flex; flex-wrap:wrap; gap:8px 18px; font-size:.875rem; color:var(--sub)}
+.skillgroup{margin-bottom:16px}
+.skillgroup:last-child{margin-bottom:0}
+.skillgroup__k{
+  font-family:var(--mono); font-size:.625rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); display:block; margin-bottom:8px;
+}
+.work{margin-bottom:12px}
+.work__lead{font-size:.875rem; color:var(--sub); margin:0 0 14px}
+.proj{
+  padding:14px 16px; margin-bottom:9px; background:var(--card);
+  border:1px solid var(--border); border-radius:.75rem;
+}
+.proj__k{font-size:.9375rem; font-weight:600; color:var(--text-strong)}
+.proj__u{font-family:var(--mono); font-size:.6875rem; color:var(--muted); margin-top:2px}
+.proj__d{font-size:.8125rem; color:var(--sub); margin-top:6px}
 .contact a{color:var(--sub)}
 .contact a:hover{color:var(--teal)}
 
@@ -122,6 +141,15 @@ footer{padding:32px 0 56px; border-top:1px solid var(--border); font-size:.8125r
   .job li::before{color:#666}
   .skills li::before{color:#666}
   .pair{background:none !important; border:0; padding:0; break-inside:avoid}
+  .proj{
+    background:none !important; border:0; border-left:2px solid #ccc; border-radius:0;
+    padding:0 0 0 10pt; margin-bottom:9pt; break-inside:avoid;
+  }
+  .proj__k{color:#000}
+  .proj__u,.proj__d{color:#444}
+  .work__lead{color:#333}
+  .tagline{color:#000; font-size:10.5pt; margin-bottom:5pt}
+  .skillgroup__k{color:#555}
   .pair__k{color:#000}
   .pairs{gap:8pt}
   footer{display:none}
@@ -147,6 +175,7 @@ footer{padding:32px 0 56px; border-top:1px solid var(--border); font-size:.8125r
 
   <header class="top">
     <h1>Elizabeth (Izzy) Hodnett</h1>
+    <p class="tagline">Accreditation Manager · AI integration for non-profits</p>
     <div class="contact">
       <a href="mailto:izzy.hodnett@gmail.com">izzy.hodnett@gmail.com</a>
       <span>Richmond Hill, NY</span>
@@ -156,28 +185,74 @@ footer{padding:32px 0 56px; border-top:1px solid var(--border); font-size:.8125r
   <section>
     <h2>Summary</h2>
     <p class="summary">
-      Program Director with extensive experience in program development and enhancement.
-      Expertise in strategic planning, team leadership, and operational management to achieve
-      program objectives. Proficient in conflict resolution and stakeholder engagement,
-      fostering collaboration across departments. Demonstrated ability to thrive in fast-paced
-      environments by prioritizing tasks and solving complex problems.
+      Accreditation manager moving into AI integration for non-profits. Fourteen years inside
+      the sector — casework, supervision and accreditation management — and the operational
+      knowledge to tell where AI genuinely helps from where it only adds a system nobody updates.
+      Identified an AI opportunity at Social Current, developed the proposal and secured approval
+      to integrate it into departmental operations. Ships production software independently using
+      Claude Code and Codex, so briefs to developers are grounded in what the tools actually do.
+      Program development, strategic planning, team leadership and stakeholder engagement across
+      all of it.
     </p>
   </section>
 
   <section>
     <h2>Skills</h2>
-    <ul class="skills">
-      <li>Case Record Review</li>
-      <li>Child Welfare Expertise</li>
-      <li>Solution Based Casework</li>
-      <li>Quality assessment</li>
-      <li>Accreditation Management</li>
-      <li>Continuous improvement</li>
-      <li>Budget Development</li>
-      <li>Expert in Microsoft Office Suite</li>
-      <li>Policy Writing</li>
-      <li>Skilled in Salesforce</li>
-    </ul>
+    <div class="skillgroup">
+      <span class="skillgroup__k">AI integration &amp; technology</span>
+      <ul class="skills">
+        <li>Identifying where AI fits in operations</li>
+        <li>Briefing and working with developers</li>
+        <li>Evaluating and tuning AI output</li>
+        <li>Staff training and adoption</li>
+        <li>Claude Code and Codex</li>
+        <li>Cloudflare Workers deployment</li>
+      </ul>
+    </div>
+    <div class="skillgroup">
+      <span class="skillgroup__k">Child welfare &amp; accreditation</span>
+      <ul class="skills">
+        <li>Accreditation Management</li>
+        <li>Child Welfare Expertise</li>
+        <li>Case Record Review</li>
+        <li>Quality assessment (PQI/CQI)</li>
+        <li>Solution Based Casework</li>
+        <li>Continuous improvement</li>
+        <li>Budget Development</li>
+        <li>Policy Writing</li>
+        <li>Skilled in Salesforce</li>
+        <li>Expert in Microsoft Office Suite</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Selected Software</h2>
+    <p class="work__lead">
+      Nine products designed, built and released independently using Claude Code and Codex — six
+      live websites, all deployed on Cloudflare Workers, and three Android apps in closed testing
+      on Google Play.
+    </p>
+    <div class="proj">
+      <div class="proj__k">Social Current Standards</div>
+      <div class="proj__u">standards.social-current.org</div>
+      <div class="proj__d">A public, browsable home for accreditation standards, turning a dense
+        reference document into something an organization can navigate.</div>
+    </div>
+    <div class="proj">
+      <div class="proj__k">Moonrakers Command</div>
+      <div class="proj__u">www.moonrakersapp.org · Android, closed testing</div>
+      <div class="proj__d">Companion and analytics platform for a published board game: live game
+        tracking, charts, Elo ratings and player comparison, on web and Android. Shared with the
+        game's publisher.</div>
+    </div>
+    <div class="proj">
+      <div class="proj__k">Six further projects</div>
+      <div class="proj__u">tm-stats.com · dnd4eparse.org · and four more</div>
+      <div class="proj__d">TM Stats, D&amp;D 4e Parser, AD&amp;D Bestiary, Lotus Blossom District
+        Atlas, and the Valeria Randomizer and Valeria Score Android apps — real tools with real
+        users, built to solve real problems rather than to demonstrate a stack.</div>
+    </div>
   </section>
 
   <section>
