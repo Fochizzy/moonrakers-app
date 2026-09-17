@@ -39,10 +39,10 @@ Drop your photo in at that exact path and it appears in the hero. Until then the
 page falls back to an `IH` monogram rather than a broken image, so it is always
 safe to deploy.
 
-A square crop around 500×500 or larger works best — the hero renders it in a
-circle at 250px and crops slightly above centre (`object-position: center 22%`)
-so faces sit correctly. If your crop needs a different framing, adjust that one
-value in `index.html`.
+The photo in place is 720×720, which is comfortably above what the 250px circle
+needs on a high-density screen. A square source is cropped not at all — swap in
+a non-square one and `object-position: center 22%` on `.portrait__img` decides
+which part survives the crop.
 
 ## Run it locally
 
