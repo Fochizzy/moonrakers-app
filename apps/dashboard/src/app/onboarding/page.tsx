@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { normalizeDashboardProfile } from "@/lib/auth/profileReadiness";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -25,18 +26,14 @@ export default async function OnboardingPage() {
   const profile = normalizeDashboardProfile(profileRow);
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: "2rem 1.25rem",
-      }}
-    >
-      <OnboardingForm
-        action={saveOnboardingProfile}
-        initialProfile={profile}
-      />
-    </main>
+    <div className="centered-shell">
+      <main className="centered-shell__body">
+        <OnboardingForm
+          action={saveOnboardingProfile}
+          initialProfile={profile}
+        />
+      </main>
+      <SiteFooter />
+    </div>
   );
 }

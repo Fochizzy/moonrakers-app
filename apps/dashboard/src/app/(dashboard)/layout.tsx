@@ -1,5 +1,6 @@
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { DashboardTopbar } from "@/components/layout/DashboardTopbar";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { requireDashboardAccess } from "@/lib/auth/serverAccess";
 import { resolvePlayerName } from "@/lib/playerName";
 
@@ -35,6 +36,7 @@ export default async function DashboardLayout({
           signedInPlayerId={userId}
         />
         <main className="dashboard-main-slot">{children}</main>
+        <SiteFooter />
       </div>
     </div>
   );

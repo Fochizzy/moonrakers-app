@@ -156,6 +156,60 @@ button:active {
   align-content: start;
 }
 
+/* --------------------------------------------------------------- footer -- */
+
+/* Every shell ends on this, so it stays quiet: the credit is the smallest
+   readable step on the type scale and the disclaimer a step quieter again. */
+.site-footer {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  padding: var(--s5) var(--s4) var(--s3);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  text-align: center;
+}
+
+.site-footer__line,
+.site-footer__note {
+  margin: 0;
+}
+
+.site-footer__note {
+  font-size: var(--t-micro);
+}
+
+.site-footer__dot {
+  color: var(--border-strong);
+}
+
+.site-footer__link {
+  color: var(--sub);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 0.2em;
+}
+
+.site-footer__link:hover {
+  color: var(--text-strong);
+  text-decoration-color: currentColor;
+}
+
+/* The centred shells hand their footer the bottom row so it sits under the
+   panel instead of being centred alongside it. */
+.centered-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.centered-shell__body {
+  display: grid;
+  place-items: center;
+  padding: var(--s8) var(--s5);
+}
+
 /* --------------------------------------------------------------- panels -- */
 
 .panel {

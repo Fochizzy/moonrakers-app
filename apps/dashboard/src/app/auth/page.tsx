@@ -1,16 +1,13 @@
 import { AuthPanel } from "@/components/auth/AuthPanel";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 
 export default function AuthPage() {
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: "2rem 1.25rem",
-      }}
-    >
-      <AuthPanel />
-    </main>
+    <div className="centered-shell">
+      <main className="centered-shell__body">
+        <AuthPanel />
+      </main>
+      <SiteFooter />
+    </div>
   );
 }

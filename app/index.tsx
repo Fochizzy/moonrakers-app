@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
+import AboutCreditsModal from "@/components/support/AboutCreditsModal";
 import BugReportModal from "@/components/support/BugReportModal";
 import PlayerAccessModal, {
   type PlayerAccessMode,
@@ -68,6 +69,7 @@ import {
 } from "@/utils/playerDisplayName";
 import { buildPlayerSelectionPreview } from "@/utils/playerSelectionPreview";
 import { buildCloudPlayableCommandDirectory } from "@/utils/registeredProfilePlayer";
+import { CREDIT_LINE_PREFIX } from "@/utils/siteCredits";
 
 import { GroupSelectionCard } from "@/components/home/GroupSelectionCard";
 import { HomeLeaderboardTab } from "@/components/home/HomeLeaderboardTab";
@@ -131,6 +133,7 @@ export default function HomeScreen() {
   });
   const [tab, setTab] = useState<Tab>(normalizeHomeTab(params.initialTab));
   const [bugReportOpen, setBugReportOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [playerSearch, setPlayerSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<GroupLike | null>(null);
@@ -1260,6 +1263,21 @@ export default function HomeScreen() {
             onPress={() => setBugReportOpen(true)}
             accessibilityHint="Opens a form to describe a problem with the app"
           />
+
+          {/* Deliberately the smallest thing on the page: the credit belongs
+              here, but not at the size of a control. The tap opens the same
+              text the website's footer carries. */}
+          <Pressable
+            accessibilityHint="Opens the credits and the affiliation notice"
+            accessibilityRole="button"
+            onPress={() => setCreditsOpen(true)}
+            style={({ pressed }) => [
+              styles.creditsLink,
+              pressed && styles.creditsLinkPressed,
+            ]}
+          >
+            <Text style={styles.creditsLinkText}>{CREDIT_LINE_PREFIX}</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -1270,6 +1288,10 @@ export default function HomeScreen() {
         profileId={reporterProfileId}
         reporterName={reporterName}
         visible={bugReportOpen}
+      />
+      <AboutCreditsModal
+        onClose={() => setCreditsOpen(false)}
+        visible={creditsOpen}
       />
       <PlayerAccessModal
         mode={playerAccessMode}
@@ -1508,6 +1530,22 @@ const styles = StyleSheet.create({
   bugReportFooter: {
     paddingTop: 10,
     paddingHorizontal: 2,
+    gap: 6,
+  },
+  creditsLink: {
+    alignSelf: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  creditsLinkPressed: {
+    opacity: 0.7,
+  },
+  creditsLinkText: {
+    color: "rgba(148,163,184,0.72)",
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+    textDecorationLine: "underline",
   },
   hubsPanel: {
     flex: 1,

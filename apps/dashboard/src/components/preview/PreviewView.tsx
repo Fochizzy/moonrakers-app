@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { DashboardPanel } from "@/components/ui/DashboardPanel";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { formatCount } from "@/lib/formatNumber";
@@ -326,6 +327,8 @@ export function PreviewView({
           </div>
         </DashboardPanel>
       </main>
+
+      <SiteFooter />
 
       <BetaAccessDialog onClose={() => setBetaOpen(false)} open={betaOpen} />
     </div>
