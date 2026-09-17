@@ -6,9 +6,25 @@ import { dirname, resolve } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(resolve(root, 'public/index.html'), 'utf8');
+const resume = readFileSync(resolve(root, 'public/resume.html'), 'utf8');
 
 const problems = [];
 const warnings = [];
+
+// This repository is PUBLIC. The résumé is published with the email but without
+// the phone number, deliberately. Matched as a shape rather than a literal so
+// the number itself is never committed here to check against.
+const PHONE = /\b(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/;
+for (const [name, source] of [['index.html', html], ['resume.html', resume]]) {
+  const hit = source.match(PHONE);
+  if (hit) problems.push(`${name} contains what looks like a phone number: ${hit[0]}`);
+}
+if (!resume.includes('izzy.hodnett@gmail.com')) {
+  problems.push('resume.html is missing the contact email');
+}
+if (!html.includes('href="resume.html"')) {
+  problems.push('index.html does not link to the résumé');
+}
 
 // The photo is the one asset that can go missing without breaking the build:
 // index.html degrades to an "IH" monogram, which is easy to ship by accident.
@@ -65,5 +81,5 @@ if (problems.length) {
 }
 console.log(
   `ok    ${expected.length} links, ${blankTargets.length} external anchors, ` +
-  `${cards} cards all attributed, meta present`,
+  `${cards} cards all attributed, meta present, no phone number in either page`,
 );

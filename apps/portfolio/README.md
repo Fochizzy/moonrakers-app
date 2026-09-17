@@ -3,9 +3,29 @@
 A single-page portfolio of the things I've shipped with Codex and Claude Code,
 served as static assets from a Cloudflare Worker.
 
-No framework, no build step, no dependencies at runtime — `public/index.html` is
-the whole site. Cloudflare serves it straight off the edge, so there is no
-Worker script to cold-start.
+No framework, no build step, no dependencies at runtime. Cloudflare serves
+`public/` straight off the edge, so there is no Worker script to cold-start.
+
+Two pages:
+
+- `public/index.html` — the portfolio.
+- `public/resume.html` — the full résumé, at `/resume`. Dark on screen and
+  black-on-white when printed, so the browser's own "Save as PDF" produces a
+  clean paper copy. There is no .docx or .pdf checked in; this page is the
+  résumé.
+
+## A note on what is published
+
+This repository is **public**, and so is everything in `public/`.
+
+The résumé carries the contact email but **no phone number**, on purpose.
+`scripts/check-page.mjs` fails the check if anything phone-number-shaped
+appears in either page — matched as a pattern rather than a literal, so the
+number itself never has to be committed here to check against. The street-level
+detail is trimmed to city and state for the same reason.
+
+If you ever want the phone number on the published résumé, remove that check
+first; do not work around it.
 
 ## Add the photo
 
@@ -80,3 +100,6 @@ Everything is in `public/index.html`:
 - **Colours** — the `:root` custom properties at the top of the `<style>` block.
   They mirror the tokens in `apps/dashboard/src/app/globals.css`, so the
   portfolio and the Moonrakers dashboard read as the same hand.
+- **About section** — `#about` in `index.html`, with the credential panel in
+  `.facts` beside it. The résumé itself lives in `public/resume.html`; keep the
+  two in step when a role or certification changes.

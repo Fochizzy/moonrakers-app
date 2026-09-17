@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elizabeth (Izzy) Hodnett — Résumé</title>
+<meta name="description" content="Résumé of Elizabeth (Izzy) Hodnett — Manager of Accreditation at Social Current, with fourteen years in child welfare.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081120'/%3E%3Cpath d='M20 22 L12 32 L20 42' fill='none' stroke='%23a855f7' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M44 22 L52 32 L44 42' fill='none' stroke='%232dd4bf' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 18 L28 46' fill='none' stroke='%233b82f6' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+
+<style>
+:root{
+  --bg:#081120; --card:rgba(12,18,38,.92);
+  --text:#e2e8f0; --text-strong:#f8fbff; --sub:#94a3b8; --muted:#7d8ca3;
+  --accent:#a855f7; --blue:#3b82f6; --teal:#2dd4bf;
+  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.16);
+  --sans:"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --mono:"Cascadia Mono","SFMono-Regular",Consolas,ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; color:var(--text); font-family:var(--sans); font-size:16px; line-height:1.6;
+  background:
+    radial-gradient(circle at 16% 6%, rgba(168,85,247,.14), transparent 32%),
+    radial-gradient(circle at 84% 8%, rgba(59,130,246,.11), transparent 28%),
+    linear-gradient(180deg,#081120 0%,#040814 100%);
+  background-attachment:fixed;
+}
+.wrap{max-width:840px; margin:0 auto; padding:0 16px}
+
+.bar{padding:20px 0; border-bottom:1px solid var(--border); margin-bottom:40px}
+.bar .wrap{display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:center}
+.back{
+  font-family:var(--mono); font-size:.75rem; color:var(--sub); text-decoration:none;
+  display:inline-flex; align-items:center; gap:7px;
+}
+.back:hover,.back:focus-visible{color:var(--teal)}
+.btn{
+  display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:999px;
+  font-size:.8125rem; text-decoration:none; color:var(--text-strong); cursor:pointer;
+  border:1px solid var(--border-strong); background:rgba(255,255,255,.04);
+  font-family:var(--sans);
+}
+.btn:hover,.btn:focus-visible{border-color:var(--teal); color:var(--teal)}
+
+header.top{margin-bottom:36px}
+h1{
+  font-size:clamp(1.75rem,5vw,2.5rem); letter-spacing:-.02em; margin:0 0 10px;
+  color:var(--text-strong); line-height:1.15;
+}
+.contact{display:flex; flex-wrap:wrap; gap:8px 18px; font-size:.875rem; color:var(--sub)}
+.contact a{color:var(--sub)}
+.contact a:hover{color:var(--teal)}
+
+section{margin-bottom:38px}
+h2{
+  font-family:var(--mono); font-size:.6875rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 16px; padding-bottom:9px; border-bottom:1px solid var(--border);
+}
+.summary{font-size:.9375rem; color:var(--sub); margin:0}
+
+.skills{
+  display:grid; grid-template-columns:1fr; gap:6px 28px;
+  margin:0; padding:0; list-style:none; font-size:.875rem; color:var(--sub);
+}
+.skills li{display:flex; gap:9px; align-items:baseline}
+.skills li::before{content:"▪"; color:var(--teal); font-size:.6875rem; flex:none}
+
+.job{
+  padding:18px 20px; margin-bottom:12px; background:var(--card);
+  border:1px solid var(--border); border-radius:.75rem;
+}
+.job__head{display:flex; flex-wrap:wrap; gap:4px 16px; justify-content:space-between; align-items:baseline}
+.job__org{
+  font-family:var(--mono); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted); width:100%;
+}
+.job__role{font-size:1rem; font-weight:600; color:var(--text-strong)}
+.job__when{font-family:var(--mono); font-size:.75rem; color:var(--muted); white-space:nowrap}
+.job ul{margin:12px 0 0; padding:0; list-style:none; display:grid; gap:7px}
+.job li{display:flex; gap:10px; font-size:.875rem; color:var(--sub); align-items:baseline}
+.job li::before{content:"–"; color:var(--blue); flex:none}
+
+.pairs{display:grid; grid-template-columns:1fr; gap:14px}
+.pair{
+  padding:16px 18px; background:var(--card); border:1px solid var(--border); border-radius:.75rem;
+}
+.pair__k{font-size:.9375rem; font-weight:600; color:var(--text-strong)}
+.pair__v{font-size:.8125rem; color:var(--muted); margin-top:3px}
+
+footer{padding:32px 0 56px; border-top:1px solid var(--border); font-size:.8125rem; color:var(--muted)}
+:where(a,button):focus-visible{outline:2px solid var(--teal); outline-offset:3px; border-radius:6px}
+
+@media (min-width:640px){
+  .skills{grid-template-columns:1fr 1fr}
+  .pairs{grid-template-columns:1fr 1fr}
+}
+
+/* Save as PDF from the browser and it comes out as a clean paper résumé. */
+@media print{
+  @page{margin:14mm}
+  body{
+    background:#fff !important; color:#111; font-size:10.5pt; line-height:1.4;
+  }
+  .wrap{max-width:none; padding:0}
+  .no-print{display:none !important}
+  h1{color:#000; font-size:20pt; margin-bottom:6pt}
+  .contact{color:#333; font-size:9pt}
+  .contact a{color:#333; text-decoration:none}
+  h2{
+    color:#000; border-bottom:1px solid #999; font-size:8.5pt;
+    margin:0 0 8pt; padding-bottom:3pt;
+  }
+  section{margin-bottom:14pt; break-inside:avoid}
+  .summary,.skills,.job li,.pair__v{color:#333}
+  .job{
+    background:none !important; border:0; border-left:2px solid #ccc; border-radius:0;
+    padding:0 0 0 10pt; margin-bottom:11pt; break-inside:avoid;
+  }
+  .job__role{color:#000; font-size:11pt}
+  .job__org,.job__when{color:#555}
+  .job li::before{color:#666}
+  .skills li::before{color:#666}
+  .pair{background:none !important; border:0; padding:0; break-inside:avoid}
+  .pair__k{color:#000}
+  .pairs{gap:8pt}
+  footer{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="bar no-print">
+  <div class="wrap">
+    <a class="back" href="/">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 5l-7 7 7 7"/></svg>
+      Back to portfolio
+    </a>
+    <button class="btn" type="button" onclick="window.print()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+      Save as PDF
+    </button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="top">
+    <h1>Elizabeth (Izzy) Hodnett</h1>
+    <div class="contact">
+      <a href="mailto:izzy.hodnett@gmail.com">izzy.hodnett@gmail.com</a>
+      <span>Richmond Hill, NY</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Summary</h2>
+    <p class="summary">
+      Program Director with extensive experience in program development and enhancement.
+      Expertise in strategic planning, team leadership, and operational management to achieve
+      program objectives. Proficient in conflict resolution and stakeholder engagement,
+      fostering collaboration across departments. Demonstrated ability to thrive in fast-paced
+      environments by prioritizing tasks and solving complex problems.
+    </p>
+  </section>
+
+  <section>
+    <h2>Skills</h2>
+    <ul class="skills">
+      <li>Case Record Review</li>
+      <li>Child Welfare Expertise</li>
+      <li>Solution Based Casework</li>
+      <li>Quality assessment</li>
+      <li>Accreditation Management</li>
+      <li>Continuous improvement</li>
+      <li>Budget Development</li>
+      <li>Expert in Microsoft Office Suite</li>
+      <li>Policy Writing</li>
+      <li>Skilled in Salesforce</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Experience</h2>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">Graham Windham</span>
+        <span class="job__role">Part-Time Case Record Reviewer</span>
+        <span class="job__when">02/2023 – Current</span>
+      </div>
+      <ul>
+        <li>Support Prevention and Family Foster Care (FFC) programs through case record reviews to assess model fidelity to Solution Based Casework (SBC) and the quality of practice.</li>
+      </ul>
+    </article>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">Council on Accreditation / Social Current</span>
+        <span class="job__role">Manager of Emerging Programs / Manager of Accreditation</span>
+        <span class="job__when">09/2018 – Current</span>
+      </div>
+      <ul>
+        <li>Oversees the accreditation process for assigned business lines including direct reviews as necessary.</li>
+        <li>Supervises a team of Accreditation Coordinators with specialized business lines, including OTP, Public Agency Accreditation, and Child and Youth Development.</li>
+        <li>Develops the budget for the Public and CYD business lines.</li>
+        <li>Works to help facilitate organizational growth through market research.</li>
+        <li>Participates in active marketing including conference attendance and conducting training.</li>
+        <li>Assists in standard updates in area of expertise, Child Welfare.</li>
+        <li>Maintains documentation within Salesforce.</li>
+        <li>Guides organizations through their PQI/CQI process through one-on-one guidance or group trainings.</li>
+      </ul>
+    </article>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">Forestdale Foster Care Agency</span>
+        <span class="job__role">Consultant</span>
+        <span class="job__when">10/2018 – 01/2019</span>
+      </div>
+      <ul>
+        <li>Contracted to use subject matter expertise to write procedures for common foster care for the Best Casework Model project.</li>
+      </ul>
+    </article>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">Forestdale Foster Care Agency</span>
+        <span class="job__role">Senior Case Planner Supervisor</span>
+        <span class="job__when">06/2016 – 09/2018</span>
+      </div>
+      <ul>
+        <li>Supervised a staff of four case planners as well as one foster care supervisor.</li>
+        <li>Provided weekly supervision.</li>
+        <li>Facilitated PFS and SBC certification.</li>
+        <li>Participated in developing new employee training and other program development.</li>
+        <li>Worked as task supervisor for MSW interns and site supervisor for BSW interns.</li>
+      </ul>
+    </article>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">Forestdale Foster Care Agency</span>
+        <span class="job__role">Advocacy Liaison</span>
+        <span class="job__when">02/2016 – 09/2018</span>
+      </div>
+      <ul>
+        <li>Attended press conferences and advocacy events.</li>
+        <li>Worked alongside assembly members and state senators to address funding needs within Child Welfare.</li>
+      </ul>
+    </article>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">Forestdale Foster Care Agency</span>
+        <span class="job__role">Case Planner Supervisor</span>
+        <span class="job__when">03/2015 – 06/2016</span>
+      </div>
+      <ul>
+        <li>Supervised a staff of four caseworkers, ensuring they made home visits and safety assessments, followed court orders, and enabled permanency.</li>
+        <li>Read and edited all documentation in Connections to ensure ACS compliance.</li>
+        <li>Held crisis intervention meetings to ensure the safety and forward motion of foster care cases.</li>
+        <li>Assisted staff in being trained and certified in Solution Based Casework and Sanctuary models.</li>
+      </ul>
+    </article>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">MercyFirst Foster Care Agency</span>
+        <span class="job__role">Casework Supervisor III</span>
+        <span class="job__when">02/2014 – 03/2015</span>
+      </div>
+      <ul>
+        <li>Supervised a staff of five caseworkers, ensuring they made home visits and safety assessments, followed court orders, and enabled permanency.</li>
+        <li>Read and edited all documentation in Connections to ensure ACS compliance.</li>
+        <li>Held crisis intervention meetings to ensure the safety and forward motion of foster care cases.</li>
+        <li>Assisted staff in being trained and certified in Solution Based Casework and Sanctuary models.</li>
+      </ul>
+    </article>
+
+    <article class="job">
+      <div class="job__head">
+        <span class="job__org">MercyFirst Foster Care Agency</span>
+        <span class="job__role">Caseworker II</span>
+        <span class="job__when">01/2012 – 02/2014</span>
+      </div>
+      <ul>
+        <li>Helped provide services to promote permanency for children with high needs in the foster care system — including children with developmental disabilities, mental illnesses and backgrounds involving trauma — using the Sanctuary and Solution Based Casework models.</li>
+      </ul>
+    </article>
+  </section>
+
+  <section>
+    <h2>Education</h2>
+    <div class="pairs">
+      <div class="pair">
+        <div class="pair__k">MA in Psychology</div>
+        <div class="pair__v">Pace University, New York, NY · 05/2011</div>
+      </div>
+      <div class="pair">
+        <div class="pair__k">BA in Psychology</div>
+        <div class="pair__v">Wagner College, Staten Island, NY · 05/2009</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Certification &amp; Awards</h2>
+    <div class="pairs">
+      <div class="pair">
+        <div class="pair__k">Solution Based Casework</div>
+        <div class="pair__v">Certified 2018</div>
+      </div>
+      <div class="pair">
+        <div class="pair__k">Partnering for Success</div>
+        <div class="pair__v">Certified 2016</div>
+      </div>
+      <div class="pair">
+        <div class="pair__k">Supervisor of the Year</div>
+        <div class="pair__v">Forestdale Inc, 2016</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer class="no-print">
+  <div class="wrap">Elizabeth (Izzy) Hodnett · <a href="/" style="color:var(--sub)">Back to portfolio</a></div>
+</footer>
+
+</body>
+</html>

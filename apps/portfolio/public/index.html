@@ -60,6 +60,7 @@ p{margin:0}
   text-transform:uppercase; color:var(--muted);
 }
 .section{padding:72px 0; border-top:1px solid var(--border)}
+.section--first{border-top:0; padding-top:56px}
 .section__head{margin-bottom:28px; max-width:62ch}
 .section__head h2{font-size:1.5rem; margin:10px 0 8px}
 .section__head p{color:var(--sub); font-size:.9375rem}
@@ -71,6 +72,26 @@ p{margin:0}
   background:rgba(255,255,255,.03); white-space:nowrap;
 }
 .chip--cf{color:#fbbf7a; border-color:rgba(245,158,11,.38); background:var(--amber-soft)}
+
+/* ---------- about ---------- */
+.about{display:grid; grid-template-columns:1fr; gap:22px}
+.about__prose p{color:var(--sub); font-size:.9375rem; margin-bottom:16px; max-width:62ch}
+.about__prose p:last-of-type{margin-bottom:22px}
+.about__prose strong{color:var(--text-strong); font-weight:600}
+.btn{
+  display:inline-flex; align-items:center; gap:9px; padding:10px 20px; border-radius:var(--r-pill);
+  font-size:.875rem; text-decoration:none; color:var(--text-strong);
+  border:1px solid var(--border-strong); background:rgba(255,255,255,.04);
+  transition:border-color .18s ease, color .18s ease, transform .18s ease;
+}
+.btn:hover,.btn:focus-visible{border-color:var(--teal); color:var(--teal); transform:translateY(-2px)}
+.facts{display:grid; gap:10px; align-content:start}
+.fact{padding:14px 16px; background:var(--card); border:1px solid var(--border); border-radius:var(--r-md)}
+.fact__k{
+  font-family:var(--mono); font-size:.625rem; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); display:block;
+}
+.fact__v{font-size:.8125rem; color:var(--sub); margin-top:5px; display:block}
 .chip--live{color:#7ee2a8; border-color:rgba(34,197,94,.34); background:var(--green-soft)}
 .chip--test{color:#fbbf7a; border-color:rgba(245,158,11,.34); background:var(--amber-soft)}
 .dot{width:6px; height:6px; border-radius:50%; background:currentColor; flex:none}
@@ -192,6 +213,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
   .steps{grid-template-columns:repeat(2,1fr)}
 }
 @media (min-width:880px){
+  .about{grid-template-columns:1.5fr 1fr; gap:44px}
   .hero{padding:88px 0 8px}
   .hero__grid{grid-template-columns:1fr auto; gap:56px}
   .portrait{width:250px; margin:0}
@@ -249,6 +271,72 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
 </header>
 
 <main>
+
+<section class="section section--first" id="about">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="eyebrow">About</span>
+      <h2>Child welfare by profession. Software by method.</h2>
+    </div>
+
+    <div class="about">
+      <div class="about__prose">
+        <p>
+          Since 2018 I've been <strong>Manager of Accreditation at Social Current</strong>
+          (formerly the Council on Accreditation), running accreditation for the Public Agency,
+          Opioid Treatment and Child &amp; Youth Development business lines — supervising a team
+          of coordinators, owning the budget for two of those lines, and helping update the child
+          welfare standards themselves. Before that, six years in foster care at MercyFirst and
+          Forestdale as a caseworker, supervisor and advocacy liaison. I still review case records
+          part-time at Graham Windham to stay close to practice.
+        </p>
+        <p>
+          None of that is a software background. What changed is that Claude Code and Codex
+          shrank the distance between knowing exactly what a tool should do and having that tool
+          exist. The domain knowledge turned out to be the scarce part.
+        </p>
+        <p>
+          The rest is a habit the day job already built. <strong>Reviewing work against a
+          standard is what I do</strong> — case records for fidelity to the casework model,
+          organisations for fidelity to accreditation standards. Reading an agent's diff is the
+          same instinct pointed at a different artifact.
+        </p>
+        <p>
+          Which is why a public standards library sits on this page beside the board game
+          companions. Same method throughout; the difference on that one is that I already knew
+          the standards by heart.
+        </p>
+        <a class="btn" href="resume.html">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          Read the full résumé
+        </a>
+      </div>
+
+      <aside class="facts">
+        <div class="fact">
+          <span class="fact__k">Now</span>
+          <span class="fact__v">Manager of Accreditation, Social Current · since 2018</span>
+        </div>
+        <div class="fact">
+          <span class="fact__k">Also</span>
+          <span class="fact__v">Case Record Reviewer, Graham Windham · since 2023</span>
+        </div>
+        <div class="fact">
+          <span class="fact__k">Education</span>
+          <span class="fact__v">MA Psychology, Pace University · BA Psychology, Wagner College</span>
+        </div>
+        <div class="fact">
+          <span class="fact__k">Certified</span>
+          <span class="fact__v">Solution Based Casework (2018) · Partnering for Success (2016)</span>
+        </div>
+        <div class="fact">
+          <span class="fact__k">Recognition</span>
+          <span class="fact__v">Supervisor of the Year, Forestdale Inc, 2016</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
 
 <section class="section">
   <div class="wrap">
@@ -505,7 +593,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
 <footer>
   <div class="wrap foot">
     <p>Izzy Hodnett · Built with Codex &amp; Claude Code · Deployed on Cloudflare Workers</p>
-    <p><a href="https://github.com/Fochizzy" target="_blank" rel="noopener noreferrer">github.com/Fochizzy</a></p>
+    <p><a href="resume.html">Résumé</a> &nbsp;·&nbsp; <a href="mailto:izzy.hodnett@gmail.com">izzy.hodnett@gmail.com</a> &nbsp;·&nbsp; <a href="https://github.com/Fochizzy" target="_blank" rel="noopener noreferrer">github.com/Fochizzy</a></p>
   </div>
 </footer>
 
