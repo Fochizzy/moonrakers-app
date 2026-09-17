@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Izzy Hodnett — Child welfare, accreditation, shipped software</title>
-<meta name="description" content="Fourteen years in child welfare and accreditation. Six live sites and three Android apps, built with Codex and Claude Code and deployed to Cloudflare's edge.">
+<title>Izzy Hodnett — Helping non-profits integrate AI</title>
+<meta name="description" content="Fourteen years in child welfare and accreditation. I help non-profits work out where AI fits — and I build, so I know what the tools can actually do.">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081120'/%3E%3Cpath d='M20 22 L12 32 L20 42' fill='none' stroke='%23a855f7' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M44 22 L52 32 L44 42' fill='none' stroke='%232dd4bf' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 18 L28 46' fill='none' stroke='%233b82f6' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
 
-<meta property="og:title" content="Izzy Hodnett — Child welfare, accreditation, shipped software">
-<meta property="og:description" content="Fourteen years in child welfare and accreditation, and nine shipped products built with Codex and Claude Code.">
+<meta property="og:title" content="Izzy Hodnett — Helping non-profits integrate AI">
+<meta property="og:description" content="I help non-profits work out where AI fits. Fourteen years in child welfare and accreditation, and nine shipped products built with Codex and Claude Code.">
 <meta property="og:type" content="website">
 
 <style>
@@ -85,6 +85,13 @@ p{margin:0}
   transition:border-color .18s ease, color .18s ease, transform .18s ease;
 }
 .btn:hover,.btn:focus-visible{border-color:var(--teal); color:var(--teal); transform:translateY(-2px)}
+.callout{
+  display:flex; gap:13px; padding:18px 20px; margin:0 0 16px;
+  background:var(--accent-soft); border:1px solid rgba(168,85,247,.32);
+  border-radius:var(--r-md); font-size:.875rem; color:var(--text);
+}
+.callout svg{flex:none; color:var(--accent); margin-top:3px}
+.callout strong{color:var(--text-strong); display:block; margin-bottom:4px}
 .facts{display:grid; gap:10px; align-content:start}
 .fact{padding:14px 16px; background:var(--card); border:1px solid var(--border); border-radius:var(--r-md)}
 .fact__k{
@@ -234,12 +241,12 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
   <div class="wrap hero__grid">
     <div>
       <span class="eyebrow">Izzy Hodnett &nbsp;·&nbsp; github.com/Fochizzy</span>
-      <h1><span class="h1__a">I know how non-profits run.</span> I build <span class="grad">the software they need</span>.</h1>
+      <h1><span class="h1__a">I know how non-profits run.</span> I help them <span class="grad">integrate AI</span>.</h1>
       <p class="hero__lede">
-        Fourteen years in child welfare and accreditation. Six live sites and three Android
-        apps, every one specced, built and released with <strong>Codex</strong> and
-        <strong>Claude&nbsp;Code</strong>, and served from <strong>Cloudflare's edge</strong>.
-        Not demos. Things people use.
+        Fourteen years in child welfare and accreditation, and a department now adopting AI on
+        a proposal I wrote. The six live sites and three Android apps below are how I know what
+        these tools can and cannot do — every one built with <strong>Codex</strong> and
+        <strong>Claude&nbsp;Code</strong>, served from <strong>Cloudflare's edge</strong>.
       </p>
       <div class="hero__tags">
         <span class="chip chip--cf">Cloudflare Workers</span>
@@ -264,10 +271,10 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
 
   <div class="wrap">
     <div class="stats">
+      <div class="stat"><div class="stat__n">14</div><div class="stat__l">Years in the sector</div></div>
       <div class="stat"><div class="stat__n">6</div><div class="stat__l">Live sites</div></div>
-      <div class="stat"><div class="stat__n">5</div><div class="stat__l">On Cloudflare Workers</div></div>
       <div class="stat"><div class="stat__n">3</div><div class="stat__l">Android apps in testing</div></div>
-      <div class="stat"><div class="stat__n">0</div><div class="stat__l">Servers to babysit</div></div>
+      <div class="stat"><div class="stat__n">5</div><div class="stat__l">On Cloudflare Workers</div></div>
     </div>
   </div>
 </header>
@@ -278,7 +285,7 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
   <div class="wrap">
     <div class="section__head">
       <span class="eyebrow">About</span>
-      <h2>Why I know where software fits.</h2>
+      <h2>Why I know where AI fits.</h2>
     </div>
 
     <div class="about">
@@ -298,9 +305,19 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
           therefore tell the difference between software that takes work off the table and one
           more system nobody updates. That combination is hard to hire for.
         </p>
+        <div class="callout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l2.4 6.9L21.5 11l-6.6 2.3L12 20.5 9.1 13.3 2.5 11l7.1-2.1z"/></svg>
+          <div>
+            <strong>And not only on side projects.</strong>
+            At Social Current I spotted where AI could fit in my own department, made the case for
+            it, and had the proposal approved. Same judgement, applied inside an organisation
+            rather than to a weekend build — and it had to survive the people who would live with
+            the result.
+          </div>
+        </div>
         <p>
-          Claude Code and Codex closed the last gap. Knowing where software fits used to end at a
-          recommendation; now it ends at something deployed. And reviewing work against a standard
+          Claude Code and Codex closed the last gap. Knowing where it fits used to end at a
+          recommendation; now it ends at something working. And reviewing work against a standard
           was already the day job — reading an agent's diff is the same instinct pointed at a
           different artifact.
         </p>
@@ -346,8 +363,9 @@ footer{padding:44px 0 64px; border-top:1px solid var(--border); margin-top:16px}
     <div class="section__head">
       <span class="eyebrow">Method</span>
       <h2>How these actually get built</h2>
-      <p>The agents write most of the code. That only works because everything around the
-         writing is tight — and reviewing the diff is the real job.</p>
+      <p>I don't advise on tools I haven't used in anger. The agents write most of the code;
+         that only works because everything around the writing is tight — and reviewing the diff
+         is the real job.</p>
     </div>
     <div class="steps">
       <article class="step">
