@@ -39,10 +39,19 @@ Drop your photo in at that exact path and it appears in the hero. Until then the
 page falls back to an `IH` monogram rather than a broken image, so it is always
 safe to deploy.
 
-The photo in place is 720×720, which is comfortably above what the 250px circle
-needs on a high-density screen. A square source is cropped not at all — swap in
-a non-square one and `object-position: center 22%` on `.portrait__img` decides
-which part survives the crop.
+The photo in place is 2544×3392 (3:4). Because it is taller than the square
+frame, `object-fit: cover` crops it vertically and `object-position: center 0%`
+picks the band containing the face. A subject still sits high in a 3:4 frame, so
+`.portrait__img` also scales to 1.35 about `center 30%` to fill the circle
+without cutting into the hair or the chin.
+
+Swapping in a photo with a different aspect ratio or framing means re-tuning that
+scale and origin. Render the hero and look at it rather than guessing — a square
+source, for instance, never overflows at all, so `object-position` does nothing
+and only the scale has any effect.
+
+Nothing but the site's own files belongs in `public/` — everything there is
+served at a public URL, this README included if it were left in there.
 
 ## Run it locally
 
