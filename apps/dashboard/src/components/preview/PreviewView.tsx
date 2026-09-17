@@ -327,6 +327,12 @@ export function PreviewView({
         </DashboardPanel>
       </main>
 
+      <footer className="preview-footer">
+        <span>Built by Izzy Hodnett</span>
+        <span aria-hidden="true">·</span>
+        <a href="https://izzyhodnett.com">Portfolio</a>
+      </footer>
+
       <BetaAccessDialog onClose={() => setBetaOpen(false)} open={betaOpen} />
     </div>
   );

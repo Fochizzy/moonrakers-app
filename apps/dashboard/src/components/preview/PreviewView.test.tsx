@@ -237,4 +237,13 @@ describe("PreviewView", () => {
 
     expect(authLinks.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("links to the author's portfolio", () => {
+    renderPreview();
+
+    expect(screen.getByRole("link", { name: "Portfolio" })).toHaveAttribute(
+      "href",
+      "https://izzyhodnett.com",
+    );
+  });
 });

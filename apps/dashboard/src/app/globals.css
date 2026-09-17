@@ -2249,6 +2249,26 @@ a.tile:hover {
   flex-wrap: wrap;
 }
 
+.preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.preview-footer a {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.preview-footer a:hover {
+  color: var(--text-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 /* ------------------------------------------------- preview: game screen -- */
 
 /* A reproduction of the phone game screen, so the colours and spacing are the
