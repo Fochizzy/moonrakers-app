@@ -97,7 +97,7 @@ Everything is in `public/index.html`:
 - **Stat strip** — the four `.stat` blocks under the hero. These are hand-counted
   (6 sites, 5 of them on Cloudflare Workers, 3 Android apps), so bump them when
   you ship something new.
-- **Colours** — the `:root` custom properties at the top of the `<style>` block.
+- **Colors** — the `:root` custom properties at the top of the `<style>` block.
   They mirror the tokens in `apps/dashboard/src/app/globals.css`, so the
   portfolio and the Moonrakers dashboard read as the same hand.
 - **About section** — `#about` in `index.html`, with the credential panel in

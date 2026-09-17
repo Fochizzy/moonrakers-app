@@ -8,5 +8,5 @@ safe to deploy — but `npm run check --workspace @moonrakers/portfolio` will wa
 while it is still missing.
 
 A square crop of roughly 500×500 or larger is ideal. The hero renders it in a
-250px circle, cropped slightly above centre so a face sits correctly; adjust
+250px circle, cropped slightly above center so a face sits correctly; adjust
 `object-position` on `.portrait__img` if your crop needs different framing.

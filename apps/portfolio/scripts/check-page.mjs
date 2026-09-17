@@ -71,6 +71,20 @@ if (cards !== attributions) {
   );
 }
 
+// American spellings throughout. The CSS `color` property is unaffected — only
+// the British `colour` matches — so this can scan the whole file safely.
+const BRITICISMS = new RegExp(
+  '\\b(?:organis\\w*|judgement|colour\\w*|centre|behaviour\\w*|recognis\\w*|analyse\\w*' +
+  '|optimis\\w*|customis\\w*|randomis\\w*|licence|defence|catalogue|favourite|honour\\w*' +
+  '|apologis\\w*|realis\\w*|summaris\\w*|prioritis\\w*|utilis\\w*|specialis\\w*' +
+  '|artefact\\w*|whilst|amongst|learnt|programme|travelling|cancelled|labelled|modelling)\\b',
+  'gi',
+);
+for (const [name, source] of [['index.html', html], ['resume.html', resume]]) {
+  const hits = [...new Set(source.match(BRITICISMS) ?? [])];
+  if (hits.length) problems.push(`${name} uses British spelling: ${hits.join(', ')}`);
+}
+
 if (!/<meta name="viewport"/.test(html)) problems.push('missing viewport meta tag');
 if (!/<title>[^<]+<\/title>/.test(html)) problems.push('missing <title>');
 
@@ -81,5 +95,5 @@ if (problems.length) {
 }
 console.log(
   `ok    ${expected.length} links, ${blankTargets.length} external anchors, ` +
-  `${cards} cards all attributed, meta present, no phone number in either page`,
+  `${cards} cards all attributed, meta present, US spelling, no phone number`,
 );
