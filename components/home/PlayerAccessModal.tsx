@@ -51,6 +51,8 @@ type Props = {
   onVerify: (passcode: string) => void;
 };
 
+function keepOpen() {}
+
 export default function PlayerAccessModal({
   mode,
   candidates,
@@ -92,6 +94,11 @@ export default function PlayerAccessModal({
     passcode === confirmPasscode &&
     usernameAvailability !== "taken";
 
+  // The guest-created card holds the only copy of the new guest's passcode, so
+  // a stray tap outside it or the Android back button must not throw that away.
+  // Only Done or the close button, both deliberate, dismiss it.
+  const dismissFromOutside = mode === "guest-created" ? keepOpen : onClose;
+
   const isPicker = mode === "existing-player" || mode === "existing-guest";
   const title =
     mode === "existing-player"
@@ -124,13 +131,13 @@ export default function PlayerAccessModal({
       visible={mode !== null}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={dismissFromOutside}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.overlay}
       >
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={dismissFromOutside} />
         <View style={styles.card}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>

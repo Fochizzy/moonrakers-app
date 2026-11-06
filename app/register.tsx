@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,9 +26,8 @@ import {
   claimGuestProfile,
   isValidPlayerPasscode,
   isValidPlayerUsername,
-  lookupClaimableGuest,
-  type ClaimableGuestPreview,
 } from "@/lib/cloud/playerAccess";
+import { useClaimableGuest } from "@/lib/cloud/useClaimableGuest";
 import { useNameAvailability } from "@/lib/cloud/useNameAvailability";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import {
@@ -80,54 +79,20 @@ export default function RegisterScreen() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [guestPreview, setGuestPreview] = useState<ClaimableGuestPreview | null>(
-    null,
-  );
-  const [guestLookup, setGuestLookup] = useState<
-    "idle" | "checking" | "found" | "missing"
-  >("idle");
 
   const needsProfileOnly =
     Boolean(authSession?.user?.id) && !authProfile?.player_name;
 
+  // Finish Profile picks a brand-new username too, so it gets the same check
+  // as Create Account: the signed-in user has no name yet to collide with.
   const nameAvailability = useNameAvailability(
-    profileMode === "new-player" && !needsProfileOnly ? playerName : "",
+    profileMode === "new-player" ? playerName : "",
   );
 
-  // Claiming is one-way and cannot be replayed, so the guest is looked up and
-  // shown back before the form will commit to it.
-  useEffect(() => {
-    if (profileMode !== "claim-guest" || !isValidPlayerUsername(playerName)) {
-      setGuestPreview(null);
-      setGuestLookup("idle");
-      return undefined;
-    }
-
-    let active = true;
-    setGuestLookup("checking");
-
-    const timer = setTimeout(() => {
-      lookupClaimableGuest(playerName)
-        .then((preview) => {
-          if (!active) {
-            return;
-          }
-          setGuestPreview(preview);
-          setGuestLookup(preview ? "found" : "missing");
-        })
-        .catch(() => {
-          if (active) {
-            setGuestPreview(null);
-            setGuestLookup("idle");
-          }
-        });
-    }, 350);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [playerName, profileMode]);
+  const guestLookup = useClaimableGuest(
+    profileMode === "claim-guest" ? playerName : "",
+  );
+  const guestLookupStatus = guestLookup.status;
 
   const canSubmit = useMemo(() => {
     const normalizedPlayerName = normalizePlayerName(playerName);
@@ -141,8 +106,11 @@ export default function RegisterScreen() {
         return false;
       }
 
-      // Nothing is committed to a guest the lookup could not find.
-      if (guestLookup !== "found") {
+      // Nothing is committed to a guest the server says does not exist, or to
+      // one it is still looking up. A lookup that failed is not an answer: the
+      // claim checks the passcode itself, so it is let through rather than
+      // leaving a disabled button with nothing to explain it.
+      if (guestLookupStatus !== "found" && guestLookupStatus !== "error") {
         return false;
       }
     }
@@ -159,7 +127,7 @@ export default function RegisterScreen() {
   }, [
     email,
     favoriteColor,
-    guestLookup,
+    guestLookupStatus,
     guestPasscode,
     nameAvailability,
     needsProfileOnly,
@@ -466,23 +434,28 @@ export default function RegisterScreen() {
             />
 
             {profileMode === "claim-guest" ? (
-              guestLookup === "checking" ? (
+              guestLookup.status === "checking" ? (
                 <Text style={[styles.note, { color: theme.colors.text.muted }]}>
                   Looking for that guest…
                 </Text>
-              ) : guestLookup === "missing" ? (
+              ) : guestLookup.status === "missing" ? (
                 <Text style={[styles.note, styles.noteWarn]}>
                   No unclaimed guest called {playerName.trim()}. Check the spelling
                   with the host who created it.
                 </Text>
-              ) : guestPreview ? (
+              ) : guestLookup.status === "error" ? (
+                <Text style={[styles.note, { color: theme.colors.text.muted }]}>
+                  Could not check that guest just now. You can still claim it
+                  with its passcode.
+                </Text>
+              ) : guestLookup.status === "found" ? (
                 <View style={styles.previewCard}>
-                  <Text style={styles.previewTitle}>{guestPreview.username}</Text>
+                  <Text style={styles.previewTitle}>{guestLookup.guest.username}</Text>
                   <Text style={[styles.note, { color: theme.colors.text.secondary }]}>
-                    {guestPreview.gamesPlayed === 0
+                    {guestLookup.guest.gamesPlayed === 0
                       ? "No games played yet."
-                      : `${guestPreview.gamesPlayed} game${
-                          guestPreview.gamesPlayed === 1 ? "" : "s"
+                      : `${guestLookup.guest.gamesPlayed} game${
+                          guestLookup.guest.gamesPlayed === 1 ? "" : "s"
                         } will move to this account. This cannot be undone.`}
                   </Text>
                 </View>

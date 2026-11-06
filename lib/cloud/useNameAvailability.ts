@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
-
-import { isPlayerNameAvailable, isValidPlayerUsername } from "@/lib/cloud/playerAccess";
+import { isPlayerNameAvailable } from "@/lib/cloud/playerAccess";
+import { useUsernameLookup } from "@/lib/cloud/useUsernameLookup";
 
 export type NameAvailability = "idle" | "checking" | "free" | "taken";
 
@@ -11,38 +10,17 @@ export type NameAvailability = "idle" | "checking" | "free" | "taken";
  * typed is the only way to make "that username is already taken" actionable.
  */
 export function useNameAvailability(username: string): NameAvailability {
-  const [state, setState] = useState<NameAvailability>("idle");
+  const lookup = useUsernameLookup(username, isPlayerNameAvailable);
 
-  useEffect(() => {
-    if (!isValidPlayerUsername(username)) {
-      setState("idle");
-      return undefined;
-    }
+  if (lookup.status === "done") {
+    return lookup.value ? "free" : "taken";
+  }
 
-    let active = true;
-    setState("checking");
+  if (lookup.status === "checking") {
+    return "checking";
+  }
 
-    const timer = setTimeout(() => {
-      isPlayerNameAvailable(username)
-        .then((available) => {
-          if (active) {
-            setState(available ? "free" : "taken");
-          }
-        })
-        .catch(() => {
-          // A lookup that cannot run must not block a name that may be fine;
-          // the server still has the final say on submit.
-          if (active) {
-            setState("idle");
-          }
-        });
-    }, 350);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [username]);
-
-  return state;
+  // A lookup that cannot run must not block a name that may be fine; the
+  // server still has the final say on submit.
+  return "idle";
 }

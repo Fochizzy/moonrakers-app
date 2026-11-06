@@ -34,6 +34,20 @@ const accessModalSource = fs.readFileSync(
   path.join(projectRoot, "components", "home", "PlayerAccessModal.tsx"),
   "utf8",
 );
+const usernameLookupSource = fs.readFileSync(
+  path.join(projectRoot, "lib", "cloud", "useUsernameLookup.ts"),
+  "utf8",
+);
+const claimableGuestSource = fs.readFileSync(
+  path.join(projectRoot, "lib", "cloud", "useClaimableGuest.ts"),
+  "utf8",
+);
+const migrationsDir = path.join(projectRoot, "supabase", "migrations");
+const allMigrationsSql = fs
+  .readdirSync(migrationsDir)
+  .filter((file) => file.endsWith(".sql"))
+  .map((file) => fs.readFileSync(path.join(migrationsDir, file), "utf8"))
+  .join("\n");
 
 for (const username of ["RevLoki", "Fochizzy", "GregMtG", "Lurker", "Cpl_Baloo"]) {
   assert.ok(
@@ -147,9 +161,27 @@ assert.ok(
 );
 
 assert.ok(
-  registerSource.includes("lookupClaimableGuest(playerName)") &&
-    registerSource.includes('guestLookup !== "found"'),
-  "expected claiming to be blocked until the guest actually resolves",
+  registerSource.includes("useClaimableGuest(") &&
+    registerSource.includes(
+      'guestLookupStatus !== "found" && guestLookupStatus !== "error"',
+    ),
+  "expected claiming to wait until the guest resolves or the lookup could not run",
+);
+
+// "Could not ask" is not "no such guest". Folding a failed request into either
+// "missing" or "idle" leaves the claim button disabled with nothing on screen
+// to explain it.
+assert.ok(
+  usernameLookupSource.includes('setState({ status: "error" })') &&
+    claimableGuestSource.includes('{ status: "missing" }') &&
+    registerSource.includes('guestLookup.status === "error"'),
+  "expected a failed guest lookup to be reported apart from a missing guest",
+);
+
+// Finish Profile chooses a brand-new username exactly as Create Account does.
+assert.ok(
+  !registerSource.includes("!needsProfileOnly ? playerName"),
+  "expected Finish Profile to check username availability while typing",
 );
 
 // The passcode is never recoverable afterwards, and getting it to another
@@ -159,5 +191,31 @@ assert.ok(
     accessModalSource.includes("shareGuestCredentials"),
   "expected the new guest's credentials to stay on screen with a way to send them",
 );
+
+assert.ok(
+  accessModalSource.includes('mode === "guest-created" ? keepOpen : onClose') &&
+    accessModalSource.includes("onRequestClose={dismissFromOutside}") &&
+    accessModalSource.includes("onPress={dismissFromOutside}"),
+  "expected the guest-created card to ignore taps outside it and the back button",
+);
+
+// --- every RPC the client calls is defined in a committed migration ---------
+
+// Functions applied straight to production and never committed leave any
+// database rebuilt from supabase/migrations unable to serve the client.
+const calledRpcs = [
+  ...new Set(
+    [...playerAccessSource.matchAll(/supabase\.rpc\("([a-z_]+)"/g)].map(
+      (match) => match[1],
+    ),
+  ),
+];
+assert.ok(calledRpcs.length > 0, "expected to find the client's RPC calls");
+for (const rpc of calledRpcs) {
+  assert.ok(
+    new RegExp(`function (public\\.)?${rpc}\\(`).test(allMigrationsSql),
+    `expected a committed migration to define ${rpc}, which playerAccess.ts calls`,
+  );
+}
 
 console.log("player-access-contract.test.cjs passed");
