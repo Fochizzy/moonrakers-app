@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   TextInput,
   View,
@@ -16,12 +17,15 @@ import {
   isValidPlayerPasscode,
   isValidPlayerUsername,
 } from "@/lib/cloud/playerAccess";
+import { useNameAvailability } from "@/lib/cloud/useNameAvailability";
 import { matchesPlayerNameQuery } from "@/utils/playerDisplayName";
 
 export type PlayerAccessMode =
   | "existing-player"
   | "existing-guest"
   | "new-guest"
+  /** The credentials the new guest needs, held on screen until dismissed. */
+  | "guest-created"
   | "passcode"
   | null;
 
@@ -36,6 +40,7 @@ type Props = {
   mode: PlayerAccessMode;
   candidates: PlayerAccessOption[];
   pendingPlayer: PlayerAccessOption | null;
+  createdGuest?: { username: string; passcode: string } | null;
   purpose?: "game" | "group";
   verificationProgress?: string | null;
   busy: boolean;
@@ -46,10 +51,13 @@ type Props = {
   onVerify: (passcode: string) => void;
 };
 
+function keepOpen() {}
+
 export default function PlayerAccessModal({
   mode,
   candidates,
   pendingPlayer,
+  createdGuest = null,
   purpose = "game",
   verificationProgress = null,
   busy,
@@ -76,10 +84,20 @@ export default function PlayerAccessModal({
     [candidates, query],
   );
 
+  const usernameAvailability = useNameAvailability(
+    mode === "new-guest" ? username : "",
+  );
+
   const newGuestReady =
     isValidPlayerUsername(username) &&
     isValidPlayerPasscode(passcode) &&
-    passcode === confirmPasscode;
+    passcode === confirmPasscode &&
+    usernameAvailability !== "taken";
+
+  // The guest-created card holds the only copy of the new guest's passcode, so
+  // a stray tap outside it or the Android back button must not throw that away.
+  // Only Done or the close button, both deliberate, dismiss it.
+  const dismissFromOutside = mode === "guest-created" ? keepOpen : onClose;
 
   const isPicker = mode === "existing-player" || mode === "existing-guest";
   const title =
@@ -89,20 +107,37 @@ export default function PlayerAccessModal({
         ? "Existing guest"
         : mode === "new-guest"
           ? "New guest"
-          : `Verify ${pendingPlayer?.name ?? "player"}`;
+          : mode === "guest-created"
+            ? "Guest added"
+            : `Verify ${pendingPlayer?.name ?? "player"}`;
+
+  async function shareGuestCredentials() {
+    if (!createdGuest) {
+      return;
+    }
+
+    try {
+      await Share.share({
+        message: `Your seat in Moonraker's Analytics is ready.\n\nUsername: ${createdGuest.username}\nPasscode: ${createdGuest.passcode}\n\nKeep both — you will need them to claim your games when you make an account.`,
+      });
+    } catch {
+      // Dismissing the share sheet is not a failure worth reporting; the card
+      // is still on screen to read from.
+    }
+  }
 
   return (
     <Modal
       visible={mode !== null}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={dismissFromOutside}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.overlay}
       >
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={dismissFromOutside} />
         <View style={styles.card}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>
@@ -180,6 +215,13 @@ export default function PlayerAccessModal({
                 autoCorrect={false}
                 style={styles.input}
               />
+              {usernameAvailability === "taken" ? (
+                <Text style={styles.errorText}>
+                  {username.trim()} is already taken by a player or another guest.
+                </Text>
+              ) : usernameAvailability === "free" ? (
+                <Text style={styles.okText}>{username.trim()} is free.</Text>
+              ) : null}
               <TextInput
                 value={passcode}
                 onChangeText={setPasscode}
@@ -208,6 +250,39 @@ export default function PlayerAccessModal({
                 disabled={!newGuestReady || busy}
                 onPress={() => onCreateGuest({ username, passcode })}
               />
+            </View>
+          ) : null}
+
+          {mode === "guest-created" && createdGuest ? (
+            <View style={styles.form}>
+              <Text style={styles.helpText}>
+                {createdGuest.username} is in the game. Give them both of these —
+                the passcode is not shown again, and they will need the pair to
+                claim their games when they make an account.
+              </Text>
+
+              <View style={styles.handoffCard}>
+                <View style={styles.handoffRow}>
+                  <Text style={styles.handoffLabel}>Username</Text>
+                  <Text selectable style={styles.handoffValue}>
+                    {createdGuest.username}
+                  </Text>
+                </View>
+                <View style={styles.handoffRow}>
+                  <Text style={styles.handoffLabel}>Passcode</Text>
+                  <Text selectable style={styles.handoffValue}>
+                    {createdGuest.passcode}
+                  </Text>
+                </View>
+              </View>
+
+              <ActionButton
+                title="Share"
+                onPress={() => {
+                  void shareGuestCredentials();
+                }}
+              />
+              <ActionButton title="Done" variant="ghost" onPress={onClose} />
             </View>
           ) : null}
 
@@ -340,4 +415,26 @@ const styles = StyleSheet.create({
   form: { gap: 12 },
   helpText: { color: "#C6D8F6", fontSize: 13, lineHeight: 19 },
   errorText: { color: "#FCA5A5", fontSize: 12, lineHeight: 18, fontWeight: "700" },
+  okText: { color: "#6EE7B7", fontSize: 12, lineHeight: 18, fontWeight: "700" },
+  handoffCard: {
+    gap: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(103,232,249,0.34)",
+    backgroundColor: "rgba(103,232,249,0.10)",
+    padding: 14,
+  },
+  handoffRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  handoffLabel: { color: "#9CB5D8", fontSize: 12, fontWeight: "700" },
+  handoffValue: {
+    color: "#F8FBFF",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
 });

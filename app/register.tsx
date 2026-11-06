@@ -27,6 +27,8 @@ import {
   isValidPlayerPasscode,
   isValidPlayerUsername,
 } from "@/lib/cloud/playerAccess";
+import { useClaimableGuest } from "@/lib/cloud/useClaimableGuest";
+import { useNameAvailability } from "@/lib/cloud/useNameAvailability";
 import { isDeletedAtColumnMissingError } from "@/lib/cloud/profileSoftDeleteCompat";
 import {
   buildSupabaseRedirectUrl,
@@ -81,6 +83,17 @@ export default function RegisterScreen() {
   const needsProfileOnly =
     Boolean(authSession?.user?.id) && !authProfile?.player_name;
 
+  // Finish Profile picks a brand-new username too, so it gets the same check
+  // as Create Account: the signed-in user has no name yet to collide with.
+  const nameAvailability = useNameAvailability(
+    profileMode === "new-player" ? playerName : "",
+  );
+
+  const guestLookup = useClaimableGuest(
+    profileMode === "claim-guest" ? playerName : "",
+  );
+  const guestLookupStatus = guestLookup.status;
+
   const canSubmit = useMemo(() => {
     const normalizedPlayerName = normalizePlayerName(playerName);
 
@@ -88,7 +101,21 @@ export default function RegisterScreen() {
       return false;
     }
 
-    if (profileMode === "claim-guest" && !isValidPlayerPasscode(guestPasscode)) {
+    if (profileMode === "claim-guest") {
+      if (!isValidPlayerPasscode(guestPasscode)) {
+        return false;
+      }
+
+      // Nothing is committed to a guest the server says does not exist, or to
+      // one it is still looking up. A lookup that failed is not an answer: the
+      // claim checks the passcode itself, so it is let through rather than
+      // leaving a disabled button with nothing to explain it.
+      if (guestLookupStatus !== "found" && guestLookupStatus !== "error") {
+        return false;
+      }
+    }
+
+    if (profileMode === "new-player" && nameAvailability === "taken") {
       return false;
     }
 
@@ -100,7 +127,9 @@ export default function RegisterScreen() {
   }, [
     email,
     favoriteColor,
+    guestLookupStatus,
     guestPasscode,
+    nameAvailability,
     needsProfileOnly,
     password,
     playerName,
@@ -405,6 +434,43 @@ export default function RegisterScreen() {
             />
 
             {profileMode === "claim-guest" ? (
+              guestLookup.status === "checking" ? (
+                <Text style={[styles.note, { color: theme.colors.text.muted }]}>
+                  Looking for that guest…
+                </Text>
+              ) : guestLookup.status === "missing" ? (
+                <Text style={[styles.note, styles.noteWarn]}>
+                  No unclaimed guest called {playerName.trim()}. Check the spelling
+                  with the host who created it.
+                </Text>
+              ) : guestLookup.status === "error" ? (
+                <Text style={[styles.note, { color: theme.colors.text.muted }]}>
+                  Could not check that guest just now. You can still claim it
+                  with its passcode.
+                </Text>
+              ) : guestLookup.status === "found" ? (
+                <View style={styles.previewCard}>
+                  <Text style={styles.previewTitle}>{guestLookup.guest.username}</Text>
+                  <Text style={[styles.note, { color: theme.colors.text.secondary }]}>
+                    {guestLookup.guest.gamesPlayed === 0
+                      ? "No games played yet."
+                      : `${guestLookup.guest.gamesPlayed} game${
+                          guestLookup.guest.gamesPlayed === 1 ? "" : "s"
+                        } will move to this account. This cannot be undone.`}
+                  </Text>
+                </View>
+              ) : null
+            ) : nameAvailability === "taken" ? (
+              <Text style={[styles.note, styles.noteWarn]}>
+                {playerName.trim()} is already taken.
+              </Text>
+            ) : nameAvailability === "free" ? (
+              <Text style={[styles.note, styles.noteOk]}>
+                {playerName.trim()} is free.
+              </Text>
+            ) : null}
+
+            {profileMode === "claim-guest" ? (
               <>
                 <TextInput
                   autoCapitalize="none"
@@ -493,6 +559,29 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
+  note: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  noteWarn: {
+    color: "#FCA5A5",
+  },
+  noteOk: {
+    color: "#6EE7B7",
+  },
+  previewCard: {
+    gap: 4,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: "rgba(103,232,249,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(103,232,249,0.34)",
+  },
+  previewTitle: {
+    color: "#F8FBFF",
+    fontSize: 17,
+    fontWeight: "800",
+  },
   pageContentFit: {
     flex: 1,
     justifyContent: "center",

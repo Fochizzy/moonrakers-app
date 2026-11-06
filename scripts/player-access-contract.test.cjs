@@ -30,6 +30,24 @@ const playerAccessSource = fs.readFileSync(
   path.join(projectRoot, "lib", "cloud", "playerAccess.ts"),
   "utf8",
 );
+const accessModalSource = fs.readFileSync(
+  path.join(projectRoot, "components", "home", "PlayerAccessModal.tsx"),
+  "utf8",
+);
+const usernameLookupSource = fs.readFileSync(
+  path.join(projectRoot, "lib", "cloud", "useUsernameLookup.ts"),
+  "utf8",
+);
+const claimableGuestSource = fs.readFileSync(
+  path.join(projectRoot, "lib", "cloud", "useClaimableGuest.ts"),
+  "utf8",
+);
+const migrationsDir = path.join(projectRoot, "supabase", "migrations");
+const allMigrationsSql = fs
+  .readdirSync(migrationsDir)
+  .filter((file) => file.endsWith(".sql"))
+  .map((file) => fs.readFileSync(path.join(migrationsDir, file), "utf8"))
+  .join("\n");
 
 for (const username of ["RevLoki", "Fochizzy", "GregMtG", "Lurker", "Cpl_Baloo"]) {
   assert.ok(
@@ -68,7 +86,7 @@ assert.match(
 );
 
 for (const label of ["Existing player", "Existing guest", "New guest"]) {
-  assert.ok(homeSource.includes(`title=\"${label}\"`), `expected Add to game action ${label}`);
+  assert.ok(homeSource.includes(`title="${label}"`), `expected Add to game action ${label}`);
 }
 assert.ok(
   homeSource.includes("verifyPlayerForGame"),
@@ -113,5 +131,137 @@ assert.ok(
     missingPasscodePromptSource.includes("Confirm passcode"),
   "expected login hydration to prompt usernames that have no passcode",
 );
+
+// --- naming a collision, and recognising a guest, before submit -------------
+
+// Both username namespaces are global and neither is browsable, so a collision
+// discovered on submit names a profile the user cannot see. The check has to
+// happen while the field is still being typed.
+assert.ok(
+  playerAccessSource.includes('supabase.rpc("is_player_name_available"'),
+  "expected an availability check the username fields can call while typing",
+);
+
+assert.ok(
+  accessModalSource.includes('usernameAvailability === "taken"') &&
+    accessModalSource.includes('usernameAvailability !== "taken"'),
+  "expected the new-guest form to report and refuse a taken username",
+);
+
+assert.ok(
+  registerSource.includes('nameAvailability === "taken"'),
+  "expected registration to report a taken username",
+);
+
+// Claiming is one-way and cannot be replayed, so the guest is shown back before
+// the form will commit to it.
+assert.ok(
+  playerAccessSource.includes('supabase.rpc("lookup_claimable_guest"'),
+  "expected a lookup that resolves a guest username before the claim runs",
+);
+
+assert.ok(
+  registerSource.includes("useClaimableGuest(") &&
+    registerSource.includes(
+      'guestLookupStatus !== "found" && guestLookupStatus !== "error"',
+    ),
+  "expected claiming to wait until the guest resolves or the lookup could not run",
+);
+
+// "Could not ask" is not "no such guest". Folding a failed request into either
+// "missing" or "idle" leaves the claim button disabled with nothing on screen
+// to explain it.
+assert.ok(
+  usernameLookupSource.includes('setState({ status: "error" })') &&
+    claimableGuestSource.includes('{ status: "missing" }') &&
+    registerSource.includes('guestLookup.status === "error"'),
+  "expected a failed guest lookup to be reported apart from a missing guest",
+);
+
+// Finish Profile chooses a brand-new username exactly as Create Account does.
+assert.ok(
+  !registerSource.includes("!needsProfileOnly ? playerName"),
+  "expected Finish Profile to check username availability while typing",
+);
+
+// The passcode is never recoverable afterwards, and getting it to another
+// person is the entire point of creating a guest.
+assert.ok(
+  accessModalSource.includes('mode === "guest-created"') &&
+    accessModalSource.includes("shareGuestCredentials"),
+  "expected the new guest's credentials to stay on screen with a way to send them",
+);
+
+assert.ok(
+  accessModalSource.includes('mode === "guest-created" ? keepOpen : onClose') &&
+    accessModalSource.includes("onRequestClose={dismissFromOutside}") &&
+    accessModalSource.includes("onPress={dismissFromOutside}"),
+  "expected the guest-created card to ignore taps outside it and the back button",
+);
+
+// --- guest passcodes are limited across every account ----------------------
+
+// A claimer has no profile, so failures keyed by the claimer's profile id were
+// rejected by the foreign key and claiming had no limit at all; and per-caller
+// limits on verify reset with every new account. Both now share one count per
+// guest.
+const guestLimitMigration = fs.readFileSync(
+  path.join(
+    migrationsDir,
+    "20261106160849_moonrakers_guest_passcode_cross_account_limit.sql",
+  ),
+  "utf8",
+);
+const claimBody = guestLimitMigration.slice(
+  guestLimitMigration.indexOf("function public.claim_guest_profile"),
+  guestLimitMigration.indexOf("function public.verify_player_passcode"),
+);
+const verifyBody = guestLimitMigration.slice(
+  guestLimitMigration.indexOf("function public.verify_player_passcode"),
+  guestLimitMigration.indexOf("function public.lookup_claimable_guest"),
+);
+const lookupBody = guestLimitMigration.slice(
+  guestLimitMigration.indexOf("function public.lookup_claimable_guest"),
+);
+
+assert.ok(
+  guestLimitMigration.includes("create table private.guest_passcode_failures") &&
+    guestLimitMigration.includes("guest_profile_id uuid primary key"),
+  "expected wrong guest passcodes to be counted per guest, not per caller",
+);
+assert.ok(
+  claimBody.includes("private.guest_passcode_locked(v_guest.id)") &&
+    claimBody.includes("private.record_guest_passcode_failure(v_guest.id)") &&
+    !claimBody.includes("player_passcode_failures"),
+  "expected claiming to use the per-guest limit, never the per-profile table a claimer cannot be in",
+);
+assert.ok(
+  verifyBody.includes("v_is_guest and private.guest_passcode_locked(p_profile_id)") &&
+    verifyBody.includes("perform private.record_guest_passcode_failure(p_profile_id)"),
+  "expected verifying a guest to count toward the same limit, so it is no way round the claim's",
+);
+assert.ok(
+  !lookupBody.includes("favoriteColor") && !lookupBody.includes("assignedCardArtIndex"),
+  "expected the anon-callable guest lookup to return nothing the claim form does not show",
+);
+
+// --- every RPC the client calls is defined in a committed migration ---------
+
+// Functions applied straight to production and never committed leave any
+// database rebuilt from supabase/migrations unable to serve the client.
+const calledRpcs = [
+  ...new Set(
+    [...playerAccessSource.matchAll(/supabase\.rpc\("([a-z_]+)"/g)].map(
+      (match) => match[1],
+    ),
+  ),
+];
+assert.ok(calledRpcs.length > 0, "expected to find the client's RPC calls");
+for (const rpc of calledRpcs) {
+  assert.ok(
+    new RegExp(`function (public\\.)?${rpc}\\(`).test(allMigrationsSql),
+    `expected a committed migration to define ${rpc}, which playerAccess.ts calls`,
+  );
+}
 
 console.log("player-access-contract.test.cjs passed");

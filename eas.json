@@ -30,6 +30,12 @@
     }
   },
   "submit": {
+    "internal": {
+      "android": {
+        "track": "internal",
+        "serviceAccountKeyPath": "./credentials/play-service-account.json"
+      }
+    },
     "production": {
       "android": {
         "track": "production",
