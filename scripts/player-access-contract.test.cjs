@@ -199,6 +199,52 @@ assert.ok(
   "expected the guest-created card to ignore taps outside it and the back button",
 );
 
+// --- guest passcodes are limited across every account ----------------------
+
+// A claimer has no profile, so failures keyed by the claimer's profile id were
+// rejected by the foreign key and claiming had no limit at all; and per-caller
+// limits on verify reset with every new account. Both now share one count per
+// guest.
+const guestLimitMigration = fs.readFileSync(
+  path.join(
+    migrationsDir,
+    "20261106160849_moonrakers_guest_passcode_cross_account_limit.sql",
+  ),
+  "utf8",
+);
+const claimBody = guestLimitMigration.slice(
+  guestLimitMigration.indexOf("function public.claim_guest_profile"),
+  guestLimitMigration.indexOf("function public.verify_player_passcode"),
+);
+const verifyBody = guestLimitMigration.slice(
+  guestLimitMigration.indexOf("function public.verify_player_passcode"),
+  guestLimitMigration.indexOf("function public.lookup_claimable_guest"),
+);
+const lookupBody = guestLimitMigration.slice(
+  guestLimitMigration.indexOf("function public.lookup_claimable_guest"),
+);
+
+assert.ok(
+  guestLimitMigration.includes("create table private.guest_passcode_failures") &&
+    guestLimitMigration.includes("guest_profile_id uuid primary key"),
+  "expected wrong guest passcodes to be counted per guest, not per caller",
+);
+assert.ok(
+  claimBody.includes("private.guest_passcode_locked(v_guest.id)") &&
+    claimBody.includes("private.record_guest_passcode_failure(v_guest.id)") &&
+    !claimBody.includes("player_passcode_failures"),
+  "expected claiming to use the per-guest limit, never the per-profile table a claimer cannot be in",
+);
+assert.ok(
+  verifyBody.includes("v_is_guest and private.guest_passcode_locked(p_profile_id)") &&
+    verifyBody.includes("perform private.record_guest_passcode_failure(p_profile_id)"),
+  "expected verifying a guest to count toward the same limit, so it is no way round the claim's",
+);
+assert.ok(
+  !lookupBody.includes("favoriteColor") && !lookupBody.includes("assignedCardArtIndex"),
+  "expected the anon-callable guest lookup to return nothing the claim form does not show",
+);
+
 // --- every RPC the client calls is defined in a committed migration ---------
 
 // Functions applied straight to production and never committed leave any
